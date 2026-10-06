@@ -8,6 +8,7 @@ import type {
 import { isLuxorCollectedLineItem } from './luxorPaymentOwnership'
 import { formatCatalogTime } from './luxorPricingCatalog'
 import { proposalEventTiming } from './luxorProposalTerms'
+import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from './luxorDecorCatalog'
 
 export type LuxorProposalPackageId =
   | 'rental_only'
@@ -39,7 +40,11 @@ export type LuxorProposalAddOnQuote = {
   label: string
   category: string
   /** Mutually exclusive service family used for replacement semantics. */
-  group: 'decor' | 'catering' | 'dj' | 'photo_booth' | 'bar'
+  group: 'decor' | 'catering' | 'dj' | 'photo_booth' | 'bar' | 'decor_package' | 'decor_add_on'
+  unitPrice?: number
+  quantity?: number
+  minimumQuantity?: number
+  unit?: string
   /** Concrete catalog choice within the service family. */
   kind: string
   rateTier: 'retail' | 'all_inclusive'
@@ -65,6 +70,10 @@ export type LuxorProposalSelection = {
   rentalPeriod?: LuxorRentalPeriod | string | null
   addOns?: string[] | null
   add_ons?: string[] | null
+  decorPackageId?: string | null
+  decor_package_id?: string | null
+  decorAddOnQuantities?: Record<string, number> | null
+  decor_add_on_quantities?: Record<string, number> | null
   removedServiceIds?: string[] | null
   removed_service_ids?: string[] | null
   /** Only the server resolves this to a saved promotion and its exact terms. */
@@ -1263,6 +1272,53 @@ function preferredQuote(config: PricingRecord, option: ServiceQuoteOption, guest
   return { id: option.id, label: option.label, category: option.category, group: option.group, kind: option.kind, rateTier: 'retail', available: true, total, lineItems: [vendorLine], quoteBreakdown: vendorLine.quoteBreakdown, state: 'available' }
 }
 
+function officialDecorSelection(selection: LuxorProposalSelection, config: PricingRecord) {
+  const errors: string[] = []
+  const rawPackage = selection.decorPackageId ?? selection.decor_package_id
+  const packageId = typeof rawPackage === 'string' ? rawPackage.trim() : ''
+  const selectedPackage = getOfficialDecorService(packageId)
+  if ((rawPackage != null && typeof rawPackage !== 'string') || (packageId && selectedPackage?.category !== 'decor_packages')) {
+    errors.push('Choose one approved decor package.')
+  }
+  const rawQuantities = selection.decorAddOnQuantities ?? selection.decor_add_on_quantities
+  const quantities: Record<string, number> = {}
+  if (rawQuantities != null && !record(rawQuantities)) errors.push('Decor add-on quantities must be a list of service quantities.')
+  for (const [id, value] of Object.entries(record(rawQuantities) || {})) {
+    const service = getOfficialDecorService(id)
+    if (!service || service.category !== 'decor_add_ons') {
+      errors.push('Choose only approved decor add-ons.')
+      continue
+    }
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || (value > 0 && value < service.minimumQuantity)) {
+      errors.push(`${service.name} requires a whole quantity of at least ${service.minimumQuantity}, or zero to remove it.`)
+      continue
+    }
+    if (value > 0) quantities[id] = value
+  }
+  const items: LuxorInvoiceLineItem[] = []
+  const quotes: LuxorProposalAddOnQuote[] = OFFICIAL_DECOR_SERVICES.map((service) => {
+    const isPackage = service.category === 'decor_packages'
+    const selected = isPackage ? packageId === service.id : Boolean(quantities[service.id])
+    const quantity = isPackage ? 1 : quantities[service.id] || service.minimumQuantity
+    const amount = readNumber(config, 'official_decor', service.id, 'amount')
+    const available = amount !== undefined && amount > 0 && Number.isSafeInteger(Math.round(amount * 100))
+    const total = available ? rounded(quantity * amount) : null
+    const validTotal = total !== null && Number.isSafeInteger(Math.round(total * 100))
+    const includedQuantity = selectedPackage?.includedAddOnQuantities?.[service.id] || 0
+    const detail = isPackage
+      ? `${service.description}. Included with package: ${service.inclusions.join('; ')}. The package price includes all listed items.`
+      : `${quantity} ${service.unit === 'letter' ? (quantity === 1 ? 'letter' : 'letters') : (quantity === 1 ? 'item' : 'items')} at $${amount ?? 0} / ${service.unit}. ${includedQuantity ? `${includedQuantity} already included with ${selectedPackage?.name}; this quantity is additional.` : 'Additional decor selection.'} Official Luxor charge.`
+    const lineItems: LuxorInvoiceLineItem[] = available && validTotal ? [{
+      ...lineItem({ id: service.id, category: isPackage ? 'Decor' : 'Decor Add-ons', description: `${includedQuantity ? 'Additional ' : ''}${service.name}`, quantity, unitPrice: amount, detail, pricingRole: 'add_on', pricingRuleId: `official_decor.${service.id}.amount`, paymentBucket: 'venue', quoteBreakdown: { quantity, unit_price: amount, subtotal: total! } }),
+      costClassification: 'luxor_charge',
+    }] : []
+    if (selected && !lineItems.length) errors.push(`${service.name} is unavailable in this proposal's saved approved catalog.`)
+    if (selected) items.push(...lineItems)
+    return { id: service.id, label: service.name, category: isPackage ? 'Decor Packages' : 'Decor Add-ons', group: isPackage ? 'decor_package' : 'decor_add_on', kind: service.id, rateTier: 'retail', available: available && validTotal, total: validTotal ? total : null, lineItems, ...(available ? { unitPrice: amount } : {}), quantity, minimumQuantity: service.minimumQuantity, unit: service.unit, state: selected ? 'selected' : 'available' }
+  })
+  return { errors, items, quotes, packageId, quantities, subtotal: rounded(items.reduce((sum, item) => sum + item.total, 0)) }
+}
+
 function calculatePreferredVendorProposal(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig, options: LuxorProposalCalculationOptions): LuxorProposalCalculation {
   const luxor = readRecord(config, 'luxor_costs') || config
   const errors: string[] = []
@@ -1333,6 +1389,9 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   }
   confirmed.push(lineItem({ id: 'included-tables-chairs', category: 'Included with venue rental', description: 'Tables and chairs', unitPrice: 0, included: true, pricingRole: 'included', paymentBucket: 'venue', detail: 'Included with the confirmed Luxor venue rental.' }))
   confirmed.push(...confirmedCustom)
+  const decor = officialDecorSelection(selection, luxor)
+  errors.push(...decor.errors)
+  confirmed.push(...decor.items)
   const requestedPromotionId = trimmedString(selection.promotionId ?? selection.promotion_id)
   const promotion = promotionFromOptions(options.promotion)
   if (requestedPromotionId && !promotion) errors.push('The selected promotion could not be verified. Refresh promotions and choose an active saved promotion.')
@@ -1357,8 +1416,9 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
     if (prior && prior !== id) quoteErrors.push(`Choose one ${option.group === 'photo_booth' ? 'photo booth' : option.group === 'bar' ? 'bar service' : option.group} option.`)
     else selectedByGroup.set(option.group, id)
   }
-  const addOnQuotes = ADD_ON_QUOTE_OPTIONS.map((option) => preferredQuote(config, option, guestCount))
-  const selectedVendorEstimateLines = addOnQuotes.filter((quote) => selectedIds.includes(quote.id)).flatMap((quote) => quote.lineItems).concat(vendorCustomItems)
+  const vendorQuotes = ADD_ON_QUOTE_OPTIONS.map((option) => preferredQuote(config, option, guestCount))
+  const addOnQuotes = [...vendorQuotes, ...decor.quotes]
+  const selectedVendorEstimateLines = vendorQuotes.filter((quote) => selectedIds.includes(quote.id)).flatMap((quote) => quote.lineItems).concat(vendorCustomItems)
   applyComplimentary(selectedVendorEstimateLines, promotion, 'vendor')
   const estimatedVendorTotal = rounded(selectedVendorEstimateLines.reduce((sum, item) => sum + item.total, 0))
   const securityDeposit = readNumber(luxor, 'security_deposit', 'amount') || 750
@@ -1367,6 +1427,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   const publicationErrors = paymentPlan ? [] : [PAYMENT_PLAN_REQUIRED]
   const finalContext: LuxorProposalContext = {
     version: 2, package_id: 'luxor_venue_proposal', package_name: 'Luxor Venue Proposal', event_date: eventDate, expected_guest_count: guestCount, rental_period: safePeriod,
+    decor_package_id: decor.packageId || null, decor_add_on_quantities: decor.quantities, decor_subtotal: decor.subtotal,
     event_access: eventAccessLabel(luxor, safePeriod),
     guest_arrival_time: trimmedString(selection.guest_arrival_time ?? selection.guestArrivalTime) || undefined,
     guestArrivalTime: trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time) || undefined,
@@ -1393,6 +1454,10 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
       securityHours: numberValue(selection.securityHours ?? selection.security_hours) || undefined,
       security_hours: numberValue(selection.security_hours ?? selection.securityHours) || undefined,
       addOns: selectedIds,
+      decorPackageId: decor.packageId || null,
+      decor_package_id: decor.packageId || null,
+      decorAddOnQuantities: decor.quantities,
+      decor_add_on_quantities: decor.quantities,
       ...(promotion ? { promotionId: promotion.id, promotion_id: promotion.id } : {}),
       customItems: selection.customItems ?? selection.custom_items ?? [],
       ...(paymentPlan ? { paymentPlan } : {}),
@@ -1418,6 +1483,9 @@ function calculateProposal(
   const requestedRentalPeriod = normalizeRentalPeriod(selection.rentalPeriod)
   const baseErrors: string[] = []
   const baseWarnings: string[] = []
+  if (selection.decorPackageId || selection.decor_package_id || Object.values(record(selection.decorAddOnQuantities ?? selection.decor_add_on_quantities) || {}).some(Boolean)) {
+    baseErrors.push('Official decor is unavailable in this saved legacy catalog. Start a new proposal to use the current decor offerings.')
+  }
   const requestedPromotionId = trimmedString(selection.promotionId ?? selection.promotion_id)
   const resolvedPromotion = promotionFromOptions(options.promotion)
   const legacyDiscount = rawLegacyDiscount(selection)

@@ -1,4 +1,5 @@
 import type { LuxorInvoice, LuxorInvoiceLineItem } from './luxorInquiryTypes'
+import { getOfficialDecorService } from './luxorDecorCatalog'
 
 /** New proposals use this marker so locked legacy payment behavior remains unchanged. */
 export const LUXOR_PAYMENT_COLLECTION_SCOPE = 'luxor_services_only'
@@ -17,6 +18,7 @@ export function isLuxorCollectedLineItem(item: LuxorInvoiceLineItem) {
   // vendor-estimate bucket merely because it does not use a catalog service ID.
   if (item.pricingRole === 'custom' && item.costClassification !== 'preferred_vendor_estimate') return true
   if (LUXOR_SERVICE_IDS.has(lineId(item))) return true
+  if (getOfficialDecorService(lineId(item))) return true
   const text = `${item.category || ''} ${item.description || ''}`.toLowerCase()
   return /venue\s+rental|required\s+cleaning|required\s+security|essential\s+decor/.test(text)
 }

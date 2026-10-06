@@ -2,7 +2,7 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
 import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
-import { getLuxorProposalPricingSummary } from './luxorProposalEmailServer'
+import { decorQuantityLabel, getLuxorProposalPricingSummary } from './luxorProposalEmailServer'
 import { formatLuxorDate } from './luxorDateFormatting'
 import { formatCatalogTime } from './luxorPricingCatalog'
 
@@ -114,7 +114,7 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   const drawTableHeader = () => {
     page.drawRectangle({ x: margin, y: y - 18, width: contentRight - margin, height: 18, color: rgb(0.88, 0.84, 0.76) })
     text('YOUR PACKAGE', margin + 6, y - 12, 7, bold, muted)
-    rightText('QTY', contentRight - 6, y - 12, 7, bold, muted)
+    rightText(summary.decorSubtotal !== null ? 'QTY / AMOUNT' : 'QTY', contentRight - 6, y - 12, 7, bold, muted)
     y -= 27
   }
 
@@ -190,9 +190,11 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   }
 
   for (const item of summary.lines) {
-    const categoryLines = wrap(item.category.toUpperCase(), bold, 7.5, 450)
-    const itemTitle = item.detail && !item.service.includes('|') ? `${item.service} (${item.detail})` : item.service
-    const serviceLines = wrap(itemTitle, regular, 9.2, 450)
+    const rowWidth = item.officialDecor ? 365 : 450
+    const categoryLines = wrap(item.category.toUpperCase(), bold, 7.5, rowWidth)
+    const titleWithDetail = item.detail && !item.service.includes('|') ? `${item.service} (${item.detail})` : item.service
+    const itemTitle = decorQuantityLabel(item) ? `${titleWithDetail} | ${decorQuantityLabel(item)}` : titleWithDetail
+    const serviceLines = wrap(itemTitle, regular, 9.2, rowWidth)
     const rowHeight = categoryLines.length * 10 + serviceLines.length * 12 + 15
     if (y - rowHeight < 76) {
       startNewPage(true)
@@ -201,9 +203,16 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
     drawCheckmark(margin + 7, y - 14)
     drawLines(categoryLines, margin + 24, y - 11, 7.5, bold, muted, 10)
     drawLines(serviceLines, margin + 24, y - 11 - categoryLines.length * 10, 9.2, regular, ink, 12)
-    rightText(displayQuantity(item.quantity), contentRight - 6, y - 11, 9, regular, muted)
+    rightText(item.officialDecor ? money(item.lineTotal) : displayQuantity(item.quantity), contentRight - 6, y - 11, 9, regular, muted)
     page.drawLine({ start: { x: margin, y: y - rowHeight }, end: { x: contentRight, y: y - rowHeight }, thickness: 0.45, color: line })
     y -= rowHeight
+  }
+
+  if (summary.decorSubtotal !== null) {
+    ensureSpace(32, true)
+    text('Total Decor Investment (before tax)', margin + 6, y - 14, 9, bold, ink)
+    rightText(money(summary.decorSubtotal), contentRight - 6, y - 14, 9, bold, darkGold)
+    y -= 32
   }
 
   const hasPromotion = summary.approvedDiscount > 0.004

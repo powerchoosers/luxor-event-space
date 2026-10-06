@@ -242,6 +242,19 @@ function hasProposalRemovedServiceIds(value: unknown) {
   return Array.isArray(record?.removedServiceIds) || Array.isArray(record?.removed_service_ids)
 }
 
+/** Empty selections are deliberate removals and must survive calculation races and save. */
+function proposalDecorSelection(value: unknown) {
+  const selection = asProposalRecord(value) || {}
+  const hasPackage = 'decor_package_id' in selection || 'decorPackageId' in selection
+  const hasQuantities = 'decor_add_on_quantities' in selection || 'decorAddOnQuantities' in selection
+  const packageId = 'decor_package_id' in selection ? selection.decor_package_id : selection.decorPackageId
+  const quantities = 'decor_add_on_quantities' in selection ? selection.decor_add_on_quantities : selection.decorAddOnQuantities
+  return {
+    ...(hasPackage ? { decorPackageId: packageId, decor_package_id: packageId } : {}),
+    ...(hasQuantities ? { decorAddOnQuantities: quantities, decor_add_on_quantities: quantities } : {}),
+  }
+}
+
 function getCurrentFinalProposal(invoices: LuxorInvoice[]) {
   return [...invoices]
     .filter((invoice) => (!invoice.invoice_kind || invoice.invoice_kind === 'event') && invoice.status !== 'cancelled' && invoice.offer_status !== 'withdrawn')
@@ -2002,6 +2015,7 @@ export default function LeadDetailPage({
         pricing_selection: {
           ...currentSelection,
           ...calculatedSelection,
+          ...proposalDecorSelection(currentSelection),
           ...(currentCustomItems ? { customItems: currentCustomItems } : {}),
           ...(currentRemovedServiceIds ? {
             removedServiceIds: currentRemovedServiceIds,
@@ -2047,6 +2061,8 @@ export default function LeadDetailPage({
       eventType: activeEventForDisplay?.event_type || lead?.event_type || context.event_type || null,
       rentalPeriod,
       addOns,
+      ...proposalDecorSelection(calculationSelection),
+      ...proposalDecorSelection(contextSelection),
       ...(hasProposalRemovedServiceIds(contextSelection) || removedServiceIds.length ? { removedServiceIds } : {}),
       ...(promotionId ? { promotionId } : {}),
       taxRate: invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0),

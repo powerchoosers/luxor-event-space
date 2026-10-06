@@ -16,6 +16,7 @@ import {
   type LuxorProposalSelection,
 } from '@/lib/luxorProposalPricing'
 import { catalogNumber, catalogValue } from '@/lib/luxorPricingCatalog'
+import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
 
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -137,6 +138,15 @@ export async function PATCH(request: NextRequest) {
     }
     const current = await getDefaultLuxorProposalPricing()
     if (current.id !== id || current.version !== version) return NextResponse.json({ error: 'The active pricing configuration changed. Refresh and try again.' }, { status: 409 })
+    const currentCosts = object(current.config.luxor_costs) || current.config
+    if (currentCosts.official_decor || luxorCosts.official_decor) {
+      for (const service of OFFICIAL_DECOR_SERVICES) {
+        const amount = catalogNumber(luxorCosts, 'official_decor', service.id, 'amount')
+        if (amount === undefined || amount <= 0 || !Number.isSafeInteger(Math.round(amount * 100))) {
+          return NextResponse.json({ error: `Set a valid official Luxor price for ${service.name}.` }, { status: 400 })
+        }
+      }
+    }
     return NextResponse.json(await updateDefaultLuxorProposalPricing({
       id,
       version: Number(current.version || 1) + 1,

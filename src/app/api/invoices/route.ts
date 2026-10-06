@@ -150,12 +150,14 @@ function normaliseCalculatedLineItems(value: unknown): LuxorInvoiceLineItem[] {
       : undefined
 
     return {
+      ...(stringValue(line.id) ? { id: stringValue(line.id) as string } : {}),
       ...(stringValue(line.catalogId) ? { catalogId: stringValue(line.catalogId) as string } : {}),
       ...(stringValue(line.category) ? { category: stringValue(line.category) as string } : {}),
       ...(line.included === true ? { included: true } : {}),
       ...(pricingRole ? { pricingRole } : {}),
       ...(stringValue(line.pricingRuleId ?? line.pricing_rule_id) ? { pricingRuleId: stringValue(line.pricingRuleId ?? line.pricing_rule_id) as string } : {}),
       ...(paymentBucket ? { paymentBucket } : {}),
+      ...(line.costClassification === 'luxor_charge' || line.costClassification === 'preferred_vendor_estimate' ? { costClassification: line.costClassification } : {}),
       ...(line.required === true ? { required: true } : {}),
       ...(stringValue(line.detail) ? { detail: stringValue(line.detail) as string } : {}),
       ...(quoteBreakdown ? { quoteBreakdown } : {}),
@@ -244,8 +246,9 @@ async function calculateServerProposal(selection: LuxorProposalSelection, existi
   const total = nonNegativeMoney(record.total ?? rawContext?.final_event_price)
   const discountAmount = nonNegativeMoney(record.discountAmount ?? record.discount_amount ?? record.discount) ?? 0
   const taxAmount = nonNegativeMoney(record.taxAmount ?? record.tax_amount ?? record.tax) ?? 0
-  const configuredTaxRate = nonNegativeMoney(record.taxRate ?? record.tax_rate ?? rawContext?.tax_rate)
-  const taxRate = configuredTaxRate === null ? 0 : Math.min(1, configuredTaxRate > 1 ? configuredTaxRate / 100 : configuredTaxRate)
+  // A rate is not a currency amount: rounding 0.0825 to cents changes 8.25% to 8%.
+  const configuredTaxRate = Number(record.taxRate ?? record.tax_rate ?? rawContext?.tax_rate ?? 0)
+  const taxRate = !Number.isFinite(configuredTaxRate) ? 0 : Math.max(0, Math.min(1, configuredTaxRate > 1 ? configuredTaxRate / 100 : configuredTaxRate))
   const subtotal = nonNegativeMoney(record.netSubtotal ?? record.net_subtotal) ?? (total === null ? null : Math.max(0, roundMoney(total - taxAmount)))
   const originalSubtotal = nonNegativeMoney(record.originalSubtotal ?? record.original_subtotal ?? record.subtotal) ?? (subtotal === null ? null : roundMoney(subtotal + discountAmount))
   const originalTotal = nonNegativeMoney(record.originalTotal ?? record.original_total) ?? (originalSubtotal === null ? null : roundMoney(originalSubtotal * (1 + taxRate)))

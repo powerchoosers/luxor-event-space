@@ -410,7 +410,7 @@ export async function ensureLuxorDepositInvoice(input: {
     category: 'Booking Payment', paymentBucket: 'venue', required: true,
   }]
   const notes = collection.scoped
-    ? `Internal collection note: Stripe collects Luxor-controlled services only (rental, cleaning, security, and Essential Decor). Planner-managed event services remain on the complete contract total and are collected separately. Luxor-controlled total: ${luxorServicesTotal.toFixed(2)}; planner-managed total: ${collection.plannerServicesTotal.toFixed(2)}. The refundable security deposit is billed separately.`
+    ? `Internal collection note: Stripe collects the confirmed Luxor services, including selected official decor charges. Planner-managed event services are collected separately. Luxor-controlled total: ${luxorServicesTotal.toFixed(2)}; planner-managed total: ${collection.plannerServicesTotal.toFixed(2)}. The refundable security deposit is billed separately.`
     : 'Amount due after the signed Event Agreement: the initial booking payment only. The refundable security deposit is billed separately, held through post-event inspection, and is not part of the Event Price.'
   const promotion = inheritedProposalPromotion(input.masterInvoice)
   if (existing) {

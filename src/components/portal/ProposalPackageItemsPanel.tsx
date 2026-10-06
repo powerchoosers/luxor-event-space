@@ -27,6 +27,11 @@ export type ProposalPackageServiceOption = {
   /** A visible package/required row that can be inspected but never changed here. */
   locked?: boolean
   required?: boolean
+  officialDecorCategory?: 'decor_packages' | 'decor_add_ons'
+  inclusions?: readonly string[]
+  minimumQuantity?: number
+  unit?: string
+  includedQuantity?: number
 }
 
 export type ProposalPackageOption = {
@@ -50,6 +55,7 @@ type CustomItemDraft = {
 
 type ProposalServiceQuote = {
   total?: number | null
+  unitPrice?: number
   available?: boolean
   error?: string
   quoteBreakdown?: {
@@ -88,6 +94,8 @@ type ProposalPackageItemsPanelProps = {
   /** Package replacements or incompatible services that need an approved pricing rule. */
   unavailableServiceIds?: string[]
   selectedServiceIds: string[]
+  serviceQuantities?: Record<string, number>
+  onServiceQuantityChange?: (serviceId: string, quantity: number) => void
   /** Exact current price for each selectable service, supplied by the pricing calculator. */
   servicePrices?: Record<string, number | null>
   /** Rich quote metadata supports transparent per-guest and minimum-price math. */
@@ -207,6 +215,8 @@ export function ProposalPackageItemsPanel({
   lockedServiceIds,
   unavailableServiceIds,
   selectedServiceIds,
+  serviceQuantities,
+  onServiceQuantityChange,
   includedServiceIds,
   servicePrices,
   serviceQuotes,
@@ -240,6 +250,9 @@ export function ProposalPackageItemsPanel({
     : lineItems.filter((item) => item.pricingRole !== 'custom')
   const proposalItems = useMemo(() => [...calculatedLineItems, ...(customItems || [])], [calculatedLineItems, customItems])
   const itemGroups = useMemo(() => groupByCategory(proposalItems), [proposalItems])
+  const decorItemIds = new Set(allServices.filter((service) => service.officialDecorCategory).map((service) => service.id))
+  const decorItems = proposalItems.filter((item) => item.catalogId && decorItemIds.has(item.catalogId))
+  const decorSubtotal = decorItems.reduce((total, item) => total + lineAmount(item), 0)
   const customItemIds = useMemo(() => new Set((customItems || []).map((item) => item.id).filter((id): id is string => Boolean(id))), [customItems])
 
   const beginCustomItem = (item?: LuxorInvoiceLineItem) => {
@@ -344,12 +357,15 @@ export function ProposalPackageItemsPanel({
                     const covered = required || includedInPackage
                     const active = selected || includedInPackage
                     const quote = serviceQuotes?.[service.id]
-                    const needsPricingReview = !required && (unavailableServiceIdsSet.has(service.id) || quote?.available === false)
+                    const needsPricingReview = !required && (unavailableServiceIdsSet.has(service.id) || quote?.available === false || Boolean(service.officialDecorCategory && !quote))
                     const canToggle = !required && !needsPricingReview && (selected || includedInPackage || addableServiceIdsSet.has(service.id))
                     const price = libraryPrice(service, calculatedLineItems, servicePrices)
                     const serviceState = required ? 'Required' : service.serviceLevel === 'upgrade' ? 'Upgrade' : service.serviceLevel === 'basic' ? 'Basic' : selected ? 'Added' : 'Add'
                     const perGuestMath = quoteMath(quote)
-                    const displayPrice = covered && price === 0
+                    const unitPrice = quote?.unitPrice ?? quote?.quoteBreakdown?.unitPrice ?? quote?.quoteBreakdown?.unit_price
+                    const displayPrice = service.officialDecorCategory === 'decor_add_ons' && typeof unitPrice === 'number'
+                      ? `${formatMoney(unitPrice)} / ${service.unit || 'each'}`
+                      : covered && price === 0
                       ? 'Included'
                       : price !== null && price > 0
                         ? formatMoney(price)
@@ -378,6 +394,29 @@ export function ProposalPackageItemsPanel({
                             {needsPricingReview ? <span className="inline-flex rounded-full border border-amber-500/25 bg-amber-500/8 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-amber-800 dark:text-amber-200">Pricing rule needed</span> : null}
                             {perGuestMath ? <span className="basis-full text-[10px] leading-4 text-[color:var(--portal-muted)]">{perGuestMath}</span> : null}
                           </div>
+                          {service.inclusions?.length ? (
+                            <details className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]" open={selected || undefined}>
+                              <summary className="cursor-pointer font-semibold text-[color:var(--portal-text)]">Included with package</summary>
+                              <ul className="mt-1 list-disc space-y-0.5 pl-4">{service.inclusions.map((inclusion) => <li key={inclusion}>{inclusion}</li>)}</ul>
+                              <p className="mt-2">One fixed package price. Included items do not create extra charges.</p>
+                            </details>
+                          ) : null}
+                          {service.officialDecorCategory === 'decor_add_ons' ? (
+                            <div className="mt-2 space-y-2 text-xs leading-5 text-[color:var(--portal-muted)]">
+                              {service.includedQuantity ? <p>{service.includedQuantity} included with your decor package. Only additional quantities entered here are charged.</p> : null}
+                              {selected && onServiceQuantityChange ? (
+                                <label className="flex flex-wrap items-center gap-2">
+                                  <span>{service.includedQuantity ? 'Additional quantity' : `Quantity (${service.unit || 'each'})`}</span>
+                                  <input type="number" min={service.minimumQuantity || 1} step={1} value={serviceQuantities?.[service.id] ?? service.minimumQuantity ?? 1}
+                                    aria-label={`${service.name} ${service.includedQuantity ? 'additional quantity' : 'quantity'}`}
+                                    onChange={(event) => { const value = Number(event.target.value); if (Number.isSafeInteger(value) && value >= (service.minimumQuantity || 1)) onServiceQuantityChange(service.id, value) }}
+                                    className="w-20 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-1.5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/15" />
+                                  {typeof unitPrice === 'number' ? <span>{formatMoney((serviceQuantities?.[service.id] ?? service.minimumQuantity ?? 1) * unitPrice)}</span> : null}
+                                </label>
+                              ) : null}
+                              {(service.minimumQuantity || 1) > 1 ? <p>Minimum {service.minimumQuantity} {service.unit}s.</p> : null}
+                            </div>
+                          ) : null}
                         </div>
                         {canToggle ? (
                           <button
@@ -386,7 +425,7 @@ export function ProposalPackageItemsPanel({
                             aria-pressed={active}
                             className={`inline-flex h-8 shrink-0 items-center gap-1.5 self-center rounded-lg border px-2 text-[9px] font-black uppercase tracking-[0.1em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${active ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a] hover:bg-rose-500/10 hover:text-rose-700 dark:hover:text-rose-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/40 hover:text-[color:var(--portal-text)]'}`}
                           >
-                            {active ? <><X size={12} /> Remove</> : <><Plus size={12} /> {service.serviceLevel === 'upgrade' ? 'Add upgrade' : service.serviceLevel === 'basic' ? 'Add basic' : 'Add'}</>}
+                            {active ? <><X size={12} /> Remove</> : <><Plus size={12} /> {service.officialDecorCategory === 'decor_packages' ? 'Select' : service.includedQuantity ? 'Add extra' : service.serviceLevel === 'upgrade' ? 'Add upgrade' : service.serviceLevel === 'basic' ? 'Add basic' : 'Add'}</>}
                           </button>
                         ) : (
                           <span className="inline-flex h-8 shrink-0 items-center self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">{needsPricingReview ? 'Pricing review' : required ? 'Required' : covered ? 'Included' : serviceState}</span>
@@ -506,6 +545,7 @@ export function ProposalPackageItemsPanel({
             </div>
           )}
 
+          {pricingReady && decorItems.length ? <div className="flex flex-wrap justify-between gap-3 border-t border-[color:var(--portal-border)] px-4 py-4 sm:px-5"><span className="text-sm font-semibold">Total Decor Investment <span className="font-normal text-[color:var(--portal-muted)]">(before tax)</span></span><span className="font-mono text-sm font-bold">{formatMoney(decorSubtotal)}</span></div> : null}
           <div className="grid gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-4 sm:grid-cols-2 sm:p-5">
             <div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Price treatment</p><p className="mt-1 text-xs font-semibold">Confirmed Luxor charges are separate from preferred-vendor planning estimates.</p></div>
             <div className="sm:text-right"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Refundable security deposit</p><p className="mt-1 font-mono text-sm font-black text-[color:var(--portal-text)]">{formatMoney(refundableSecurityDeposit ?? 750)}</p><p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">Collected separately after the agreement is signed.</p></div>

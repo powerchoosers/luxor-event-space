@@ -26,6 +26,7 @@ import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
 import { PromotionTermsFields, type PromotionTermsDraft } from './PromotionTermsFields'
 import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
+import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from '@/lib/luxorDecorCatalog'
 
 const PROPOSAL_TIME_OPTIONS = [
   { value: '06:00', label: '6:00 AM' },
@@ -89,6 +90,11 @@ export type ProposalServiceOption = {
   quantityLabel?: string
   locked?: boolean
   required?: boolean
+  officialDecorCategory?: 'decor_packages' | 'decor_add_ons'
+  inclusions?: readonly string[]
+  minimumQuantity?: number
+  unit?: string
+  includedQuantity?: number
 }
 
 type CalculatedPackage = {
@@ -120,6 +126,10 @@ export type ProposalPricingCalculation = {
   }
   addOnQuotes?: Array<{
     id?: string
+    unitPrice?: number
+    quantity?: number
+    minimumQuantity?: number
+    unit?: string
     total?: number | null
     available?: boolean
     error?: string
@@ -243,7 +253,7 @@ const DEFAULT_SERVICE_LIBRARY: ProposalServiceOption[] = [
 
 const STEPS = [
   { id: 'details', label: 'Details', icon: ClipboardList },
-  { id: 'services', label: 'Preferred vendors', icon: PackageCheck },
+  { id: 'services', label: 'Services & decor', icon: PackageCheck },
   { id: 'compare', label: 'Investment', icon: ReceiptText },
   { id: 'review', label: 'Selected proposal', icon: FileText },
   { id: 'payment', label: 'Payment plan', icon: Handshake },
@@ -522,7 +532,7 @@ function selectedServiceIdsFrom(context: ProposalBuilderContext, items: LuxorInv
   // every included service as an upgrade.
   for (const candidate of [selection.service_ids, selection.services, selection.add_ons, selection.addOns]) {
     if (Array.isArray(candidate)) {
-      return candidate.filter((value): value is string => typeof value === 'string' && Boolean(value))
+      return candidate.filter((value): value is string => typeof value === 'string' && Boolean(value) && !getOfficialDecorService(value))
     }
   }
   // Legacy saved line items do not reliably say whether a row came from the
@@ -533,7 +543,7 @@ function selectedServiceIdsFrom(context: ProposalBuilderContext, items: LuxorInv
   return items
     .filter((item) => item.pricingRole === 'add_on')
     .map((item) => item.catalogId)
-    .filter((id): id is string => Boolean(id))
+    .filter((id): id is string => Boolean(id) && !getOfficialDecorService(id || ''))
 }
 
 function removedServiceIdsFrom(context: ProposalBuilderContext) {
@@ -767,6 +777,24 @@ export function ProposalBuilderModal({
   const optionalServices = useMemo(() => selectedPackageOption ? availableServices : [], [availableServices, selectedPackageOption])
   const paymentPlanDraft = getPaymentPlanDraft(effectiveContext)
   const pricingSelection = asRecord(effectiveContext.pricing_selection)
+  const selectedDecorPackageId = asString(pricingSelection && 'decor_package_id' in pricingSelection ? pricingSelection.decor_package_id : pricingSelection?.decorPackageId ?? effectiveContext.decor_package_id) || ''
+  const decorAddOnQuantities = useMemo(() => {
+    const saved = asRecord(pricingSelection?.decor_add_on_quantities ?? pricingSelection?.decorAddOnQuantities ?? effectiveContext.decor_add_on_quantities) || {}
+    return Object.fromEntries(Object.entries(saved).filter((entry): entry is [string, number] => typeof entry[1] === 'number'))
+  }, [pricingSelection, effectiveContext.decor_add_on_quantities])
+  const decorServices: ProposalServiceOption[] = OFFICIAL_DECOR_SERVICES.map((service) => ({
+    id: service.id,
+    name: service.name,
+    category: service.category === 'decor_packages' ? 'Decor Packages' : 'Decor Add-ons',
+    detail: `${service.description} Official Luxor charge.`,
+    officialDecorCategory: service.category,
+    inclusions: service.inclusions,
+    minimumQuantity: service.minimumQuantity,
+    unit: service.unit,
+    includedQuantity: getOfficialDecorService(selectedDecorPackageId)?.includedAddOnQuantities?.[service.id] || 0,
+  }))
+  const catalogServices = [...availableServices.filter((service) => service.required || service.locked), ...decorServices, ...availableServices.filter((service) => !service.required && !service.locked)]
+  const allSelectedServiceIds = [...selectedServiceIds, ...(selectedDecorPackageId ? [selectedDecorPackageId] : []), ...Object.keys(decorAddOnQuantities).filter((id) => decorAddOnQuantities[id] > 0)]
   const selectedPromotionId = promotionId
     || asString(pricingSelection?.promotionId)
     || asString(pricingSelection?.promotion_id)
@@ -936,6 +964,22 @@ export function ProposalBuilderModal({
   }
 
   const updateServiceSelection = (serviceId: string) => {
+    const decor = getOfficialDecorService(serviceId)
+    if (decor) {
+      const nextQuantities = { ...decorAddOnQuantities }
+      if (decor.category === 'decor_add_ons') {
+        if (nextQuantities[serviceId]) delete nextQuantities[serviceId]
+        else nextQuantities[serviceId] = decor.minimumQuantity
+      }
+      updateProposalContext({ pricing_selection: {
+        ...(effectiveContext.pricing_selection || {}),
+        decor_package_id: decor.category === 'decor_packages' ? (selectedDecorPackageId === serviceId ? null : serviceId) : selectedDecorPackageId || null,
+        decorPackageId: decor.category === 'decor_packages' ? (selectedDecorPackageId === serviceId ? null : serviceId) : selectedDecorPackageId || null,
+        decor_add_on_quantities: nextQuantities,
+        decorAddOnQuantities: nextQuantities,
+      } })
+      return
+    }
     const service = availableServices.find((candidate) => candidate.id === serviceId)
     if (!service || !selectedPackageOption || lockedServiceIds.includes(serviceId)) return
 
@@ -1035,6 +1079,8 @@ export function ProposalBuilderModal({
       eventEndTime: eventEndTime || null,
       event_end_time: eventEndTime || null,
       addOns: selectedServiceIds,
+      decorPackageId: selectedDecorPackageId || null,
+      decorAddOnQuantities,
       removedServiceIds,
       customItems: customItemSelection(customItems),
       promotionId: selectedPromotionId,
@@ -1051,6 +1097,10 @@ export function ProposalBuilderModal({
     pricing_selection: {
       ...(effectiveContext.pricing_selection || {}),
       service_ids: selectedServiceIds,
+      decor_package_id: selectedDecorPackageId || null,
+      decor_add_on_quantities: decorAddOnQuantities,
+      decorPackageId: selectedDecorPackageId || null,
+      decorAddOnQuantities,
       removedServiceIds,
       removed_service_ids: removedServiceIds,
       customItems: customItemSelection(customItems),
@@ -1064,7 +1114,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [invoiceId, customItems, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
+  }), [invoiceId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1275,7 +1325,7 @@ export function ProposalBuilderModal({
           ? 'Final price verified'
           : 'Pricing needs event details'
   const continueLabel = stepIndex === 0
-    ? 'Continue to preferred vendors'
+    ? 'Continue to services & decor'
     : stepIndex === 1
       ? 'Continue to investment'
     : stepIndex === 2
@@ -1648,7 +1698,7 @@ export function ProposalBuilderModal({
               <div className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/[0.055] p-4 text-sm leading-6 text-[color:var(--portal-muted)]">
                 <div className="flex items-start gap-3">
                   <ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
-                  <p>Required services stay locked. Basic and upgrade choices are mutually exclusive inside each category, and the server verifies every exact price before publishing.</p>
+                  <p>Choose one decor package and any additional decor items. Package inclusions are already covered by the package price. Required services stay locked, and every price is verified before publishing.</p>
                 </div>
               </div>
 
@@ -1660,12 +1710,20 @@ export function ProposalBuilderModal({
                 lineItems={finalLineItems}
                 customItems={customItems}
                 optionalServices={optionalServices}
-                catalogServices={availableServices}
-                addableServiceIds={optionalServices.filter((service) => !lockedServiceIds.includes(service.id)).map((service) => service.id)}
+                catalogServices={catalogServices}
+                addableServiceIds={catalogServices.filter((service) => !lockedServiceIds.includes(service.id)).map((service) => service.id)}
                 lockedServiceIds={lockedServiceIds}
                 includedServiceIds={[...packageIncludedServiceIds]}
                 unavailableServiceIds={[]}
-                selectedServiceIds={selectedServiceIds}
+                selectedServiceIds={allSelectedServiceIds}
+                serviceQuantities={decorAddOnQuantities}
+                onServiceQuantityChange={(serviceId, quantity) => updateProposalContext({ pricing_selection: {
+                  ...(effectiveContext.pricing_selection || {}),
+                  decor_package_id: selectedDecorPackageId || null,
+                  decor_add_on_quantities: { ...decorAddOnQuantities, [serviceId]: quantity },
+                  decorPackageId: selectedDecorPackageId || null,
+                  decorAddOnQuantities: { ...decorAddOnQuantities, [serviceId]: quantity },
+                } })}
                 servicePrices={servicePrices}
                 serviceQuotes={serviceQuotes}
                 pricingReady={pricingStatus === 'ready' && !pricingErrors.length}

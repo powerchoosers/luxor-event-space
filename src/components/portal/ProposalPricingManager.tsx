@@ -5,6 +5,7 @@ import { AlertTriangle, Check, ChevronDown, ExternalLink, RefreshCw, Save } from
 import { PortalButton, PortalSkeleton } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { catalogNumber, catalogValue, setCatalogValue, type PricingCatalog } from '@/lib/luxorPricingCatalog'
+import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
 
 type PricingRecord = {
   id: string
@@ -26,6 +27,7 @@ type FieldGroup = {
   title: string
   description: string
   fields: FieldDefinition[]
+  subgroups?: Array<{ title: string; description: string; fields: FieldDefinition[] }>
 }
 
 const DAY_GROUPS = [
@@ -51,6 +53,22 @@ const MONEY_GROUPS: FieldGroup[] = [
       { label: 'Security rate', path: ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], suffix: '/ guard / hour', step: '1' },
       { label: 'Security minimum', path: ['luxor_costs', 'required_fees', 'security', 'minimum_hours'], suffix: 'hours', step: '1', hideDollar: true },
       { label: 'Refundable security deposit', path: ['luxor_costs', 'security_deposit', 'amount'] },
+    ],
+    subgroups: [
+      {
+        title: 'Decor packages',
+        description: 'The price covers the entire package, including all listed items. Choose one package per event.',
+        fields: OFFICIAL_DECOR_SERVICES.filter((service) => service.category === 'decor_packages').map((service) => ({
+          label: service.name, path: ['luxor_costs', 'official_decor', service.id, 'amount'], suffix: '/ package', step: '0.01',
+        })),
+      },
+      {
+        title: 'Decor add-ons',
+        description: 'Additional quantities are charged separately. Items already included with a package do not create extra charges. Marquee Letters have a 2-letter minimum.',
+        fields: OFFICIAL_DECOR_SERVICES.filter((service) => service.category === 'decor_add_ons').map((service) => ({
+          label: service.name, path: ['luxor_costs', 'official_decor', service.id, 'amount'], suffix: service.unit === 'letter' ? '/ letter' : '/ each', step: '0.01',
+        })),
+      },
     ],
   },
   {
@@ -176,7 +194,7 @@ export function ProposalPricingManager() {
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 text-[#9a6d26] dark:text-[#e0bd67]"><Check size={15} /><span className="text-[10px] font-black uppercase tracking-[0.16em]">One approved catalog</span></div>
             <h3 className="mt-2 text-lg font-bold text-[color:var(--portal-text)]">Pricing that updates everywhere</h3>
-            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Saving here updates new proposal calculations, Elena’s pricing context, and venue brochure package figures. Proposals already published keep their original pricing snapshot.</p>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Saving here updates new proposal calculations, Elena&apos;s pricing context, and venue brochure package figures. Existing saved proposals keep their original pricing snapshot.</p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <PortalButton type="button" variant="ghost" onClick={() => { setDraft(structuredClone(record.config)); setError(null) }} disabled={!dirty || saving}>Discard</PortalButton>
@@ -225,6 +243,13 @@ export function ProposalPricingManager() {
         <details key={group.title} className="group overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
           <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-4 sm:px-6"><span><span className="block text-sm font-bold text-[color:var(--portal-text)]">{group.title}</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">{group.description}</span></span><ChevronDown size={17} className="mt-1 shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>
           <div className="grid gap-4 border-t border-[color:var(--portal-border)] p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-3">{group.fields.map((field) => <MoneyInput key={field.path.join('.')} draft={draft} field={field} onChange={update} />)}</div>
+          {group.subgroups?.map((subgroup) => (
+            <div key={subgroup.title} className="border-t border-[color:var(--portal-border)] p-4 sm:p-6">
+              <h4 className="text-xs font-black uppercase tracking-[0.12em] text-[color:var(--portal-text)]">{subgroup.title}</h4>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{subgroup.description}</p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{subgroup.fields.map((field) => <MoneyInput key={field.path.join('.')} draft={draft} field={field} onChange={update} />)}</div>
+            </div>
+          ))}
         </details>
       ))}
 

@@ -3,6 +3,7 @@ import { LUXOR_BOOKING_EMAIL, LUXOR_VENUE_ADDRESS, LUXOR_WEBSITE } from './luxor
 import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
 import { formatLuxorDate } from './luxorDateFormatting'
 import { formatCatalogTime } from './luxorPricingCatalog'
+import { getOfficialDecorService } from './luxorDecorCatalog'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT = 750
@@ -10,6 +11,8 @@ const LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT = 750
 type UnknownRecord = Record<string, unknown>
 
 export type LuxorProposalDisplayLine = {
+  id?: string
+  officialDecor?: boolean
   category: string
   service: string
   quantity: number
@@ -43,6 +46,7 @@ export type LuxorProposalPricingSummary = {
   guestArrivalTime?: string | null
   eventEndTime?: string | null
   lines: LuxorProposalDisplayLine[]
+  decorSubtotal: number | null
   subtotal: number
   approvedDiscount: number
   promotion: LuxorProposalPromotionSnapshot | null
@@ -181,6 +185,8 @@ export function getLuxorProposalPromotionDisclosure(invoice: LuxorInvoice): Luxo
 
 function normalizedLineItem(value: unknown) {
   if (!isRecord(value)) return null
+  const id = asText(value.id) || asText(value.catalogId) || undefined
+  const officialDecor = Boolean(id && getOfficialDecorService(id))
   const service = asText(value.description) ?? 'Service'
   const category = asText(value.category) ?? 'Other services'
   const quantity = asQuantity(value.quantity)
@@ -199,6 +205,8 @@ function normalizedLineItem(value: unknown) {
     || lineTotal < -0.004
 
   return {
+    id,
+    officialDecor,
     category,
     service,
     quantity,
@@ -284,7 +292,10 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
     eventAccess: asText(context.event_access),
     guestArrivalTime: asText(context.guest_arrival_time) ?? asText(context.guestArrivalTime),
     eventEndTime: asText(context.event_end_time) ?? asText(context.eventEndTime),
-    lines: serviceItems.map(({ category, service, quantity, unitPrice, lineTotal, included, detail }) => ({ category, service, quantity, unitPrice, lineTotal, included, detail })),
+    lines: serviceItems.map(({ id, officialDecor, category, service, quantity, unitPrice, lineTotal, included, detail }) => ({ id, officialDecor, category, service, quantity, unitPrice, lineTotal, included, detail })),
+    decorSubtotal: serviceItems.some((item) => item.officialDecor)
+      ? roundMoney(serviceItems.filter((item) => item.officialDecor).reduce((sum, item) => sum + item.lineTotal, 0))
+      : null,
     subtotal,
     approvedDiscount,
     promotion,
@@ -307,6 +318,13 @@ function displayQuantity(value: number) {
   return Number.isInteger(value) ? String(value) : value.toLocaleString('en-US', { maximumFractionDigits: 2 })
 }
 
+export function decorQuantityLabel(item: LuxorProposalDisplayLine) {
+  if (!item.officialDecor || item.category !== 'Decor Add-ons') return null
+  return item.id === 'decor-marquee-letters'
+    ? `${displayQuantity(item.quantity)} letters at ${money(item.unitPrice)} / letter`
+    : `${displayQuantity(item.quantity)} at ${money(item.unitPrice)} each`
+}
+
 function displayEventDate(value: string) {
   return formatLuxorDate(value) || value
 }
@@ -314,12 +332,13 @@ function displayEventDate(value: string) {
 function proposalBreakdownHtml(summary: LuxorProposalPricingSummary) {
   const rows = summary.lines.map((item) => `<tr>
     <td style="padding:12px 8px 12px 0;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#caa24c;font-size:15px;line-height:1.2">&#10003;</td>
-    <td style="padding:12px 8px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#f7efe3;font-size:12px;line-height:1.45"><span style="display:block;color:#a99878;font-size:9px;line-height:1.35;text-transform:uppercase;letter-spacing:.08em">${escapeHtml(item.category)}</span>${escapeHtml(item.service)}</td>
-    <td align="right" style="padding:12px 0 12px 6px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px;white-space:nowrap">${item.quantity > 1 ? `Qty ${displayQuantity(item.quantity)}` : ''}</td>
+    <td style="padding:12px 8px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#f7efe3;font-size:12px;line-height:1.45"><span style="display:block;color:#a99878;font-size:9px;line-height:1.35;text-transform:uppercase;letter-spacing:.08em">${escapeHtml(item.category)}</span>${escapeHtml(item.service)}${item.officialDecor && item.detail ? `<span style="display:block;color:#a99878;font-size:10px">${escapeHtml(item.detail)}</span>` : ''}${decorQuantityLabel(item) ? `<span style="display:block;color:#d7c29a;font-size:10px">${escapeHtml(decorQuantityLabel(item)!)}</span>` : ''}</td>
+    <td align="right" style="padding:12px 0 12px 6px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px;white-space:nowrap">${item.officialDecor ? money(item.lineTotal) : item.quantity > 1 ? `Qty ${displayQuantity(item.quantity)}` : ''}</td>
   </tr>`).join('') || `<tr><td colspan="3" style="padding:18px 0;color:#b8aa9a;font-size:12px;line-height:1.6">Your finalized package details are available in the secure proposal.</td></tr>`
 
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">
     <tr><td colspan="3" style="padding:0 0 9px;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Your package</td></tr>${rows}
+    ${summary.decorSubtotal !== null ? `<tr><td colspan="2" style="padding:14px 0;color:#d7c29a;font-size:11px;font-weight:700">Total Decor Investment (before tax)</td><td align="right" style="padding:14px 0;color:#f1d27a;font-size:12px;font-weight:700">${money(summary.decorSubtotal)}</td></tr>` : ''}
   </table>`
 }
 

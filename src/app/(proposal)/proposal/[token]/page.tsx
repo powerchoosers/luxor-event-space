@@ -11,7 +11,7 @@ import { AcceptProposalButton } from '@/components/proposal/AcceptEstimateButton
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { getLuxorProposalPricingSummary } from '@/lib/luxorProposalEmailServer'
+import { decorQuantityLabel, getLuxorProposalPricingSummary } from '@/lib/luxorProposalEmailServer'
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 
@@ -182,7 +182,8 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
 
           <section className="mt-8 rounded-2xl border border-white/10 bg-black/20 p-5 sm:p-6">
             <div className="flex items-center gap-3 border-b border-white/10 pb-4"><FileText size={17} className="text-[#caa24c]" /><h2 className="text-xs font-black uppercase tracking-[0.2em] text-white">Your package</h2></div>
-            {packageItems.length ? <ul className="mt-4 grid gap-3 sm:grid-cols-2">{packageItems.map((item, index) => <li key={`${item.service}-${index}`} className="flex gap-2.5 text-sm leading-5 text-zinc-300"><Check size={15} className="mt-0.5 shrink-0 text-[#f1d27a]" /><span><span className="block text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">{item.category}</span>{item.service}{item.quantity > 1 ? <span className="ml-1.5 text-xs text-zinc-500">× {item.quantity}</span> : null}{item.detail ? <span className="block text-[11px] text-zinc-400 mt-0.5">{item.detail}</span> : null}</span></li>)}</ul> : <p className="mt-4 text-sm leading-6 text-zinc-400">Your finalized package details are available in the attached proposal.</p>}
+            {packageItems.length ? <ul className="mt-4 grid gap-3 sm:grid-cols-2">{packageItems.map((item, index) => <li key={`${item.service}-${index}`} className={`flex gap-2.5 text-sm leading-5 text-zinc-300 ${item.officialDecor ? 'sm:col-span-2' : ''}`}><Check size={15} className="mt-0.5 shrink-0 text-[#f1d27a]" /><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">{item.category}</span>{item.service}{!item.officialDecor && item.quantity > 1 ? <span className="ml-1.5 text-xs text-zinc-500">× {item.quantity}</span> : null}{item.detail ? <span className="block text-[11px] text-zinc-400 mt-0.5">{item.detail}</span> : null}{decorQuantityLabel(item) ? <span className="mt-1 block text-xs text-zinc-300">{decorQuantityLabel(item)}</span> : null}</span>{item.officialDecor ? <span className="shrink-0 font-mono text-sm text-[#f1d27a]">{money(item.lineTotal)}</span> : null}</li>)}</ul> : <p className="mt-4 text-sm leading-6 text-zinc-400">Your finalized package details are available in the attached proposal.</p>}
+            {pricingSummary.decorSubtotal !== null ? <div className="mt-5 flex items-baseline justify-between gap-4 border-t border-white/[0.1] pt-4 text-sm"><span className="text-zinc-300">Total Decor Investment <span className="text-xs text-zinc-400">(before tax)</span></span><span className="shrink-0 font-mono font-bold text-[#f1d27a]">{money(pricingSummary.decorSubtotal)}</span></div> : null}
           </section>
 
           <section className="mt-5 overflow-hidden rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.05]">

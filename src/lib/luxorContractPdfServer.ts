@@ -9,6 +9,7 @@ import type { LuxorBooking, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
 import type { LuxorContractSignaturePlacement } from './luxorSignaturePlacement'
 import { formatLuxorDate } from './luxorDateFormatting'
+import { getOfficialDecorService } from './luxorDecorCatalog'
 
 const gold = rgb(0.67, 0.47, 0.20)
 const paleGold = rgb(0.92, 0.85, 0.72)
@@ -27,6 +28,7 @@ type ContractProposalLine = {
   category: string | null
   description: string
   quantity: number
+  decorTotal: number | null
 }
 
 type ContractPromotion = {
@@ -36,6 +38,7 @@ type ContractPromotion = {
 
 type ContractProposalSummary = {
   lines: ContractProposalLine[]
+  decorSubtotal: number | null
   subtotal: number | null
   discount: number
   tax: number | null
@@ -141,7 +144,15 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
       ? `${description} (${detail})`
       : description
     const rawQuantity = moneyValue(line.quantity)
-    return [{ category, description: itemDescription, quantity: rawQuantity === null || rawQuantity < 1 ? 1 : rawQuantity }]
+    const quantity = rawQuantity === null || rawQuantity < 1 ? 1 : rawQuantity
+    const decorId = textValue(line.id) || textValue(line.catalogId) || ''
+    const decor = getOfficialDecorService(decorId)
+    const unitPrice = moneyValue(line.unitPrice)
+    const decorTotal = decor ? moneyValue(line.total) ?? (unitPrice === null ? null : Math.round(unitPrice * quantity * 100) / 100) : null
+    const quantityDescription = decor?.category === 'decor_add_ons' && unitPrice !== null
+      ? `${itemDescription} | ${quantity} ${decorId === 'decor-marquee-letters' ? 'letters' : 'items'} at ${money(unitPrice)} ${decorId === 'decor-marquee-letters' ? '/ letter' : 'each'}`
+      : itemDescription
+    return [{ category, description: quantityDescription, quantity, decorTotal }]
   })
   const discount = moneyValue(pricingSnapshot.discount_amount ?? pricingSnapshot.discountAmount ?? context.discount_amount ?? context.discountAmount) ?? 0
   const subtotal = moneyValue(pricingSnapshot.subtotal ?? pricingSnapshot.original_subtotal ?? context.original_subtotal ?? context.subtotal)
@@ -149,6 +160,9 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
   const finalEventPrice = Math.max(0, Number(booking.contract_total || context.final_event_price || 0))
   return {
     lines,
+    decorSubtotal: lines.some((item) => item.decorTotal !== null)
+      ? Math.round(lines.reduce((sum, item) => sum + (item.decorTotal || 0), 0) * 100) / 100
+      : null,
     subtotal,
     discount,
     tax,
@@ -446,9 +460,11 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   if (proposalSummary.lines.length) {
     w.subheading('Accepted package')
     for (const item of proposalSummary.lines) {
-      const quantity = item.quantity > 1 ? ` (Qty ${Number.isInteger(item.quantity) ? item.quantity : item.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })})` : ''
-      w.checklistItem(`${item.category ? `${item.category}: ` : ''}${item.description}${quantity}`)
+      const quantity = item.decorTotal === null && item.quantity > 1 ? ` (Qty ${Number.isInteger(item.quantity) ? item.quantity : item.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })})` : ''
+      const amount = item.decorTotal === null ? '' : ` - ${money(item.decorTotal)}`
+      w.checklistItem(`${item.category ? `${item.category}: ` : ''}${item.description}${quantity}${amount}`)
     }
+    if (proposalSummary.decorSubtotal !== null) w.feeRow('Total Decor Investment (before tax)', money(proposalSummary.decorSubtotal))
   }
   w.paragraph(proposalSummary.paymentCollectionScope === 'luxor_services_only'
     ? `The event date is reserved after this Agreement is fully executed and the initial Luxor services payment is received. The separate refundable security deposit is due ${displayDate(new Date(`${booking.event_date}T12:00:00Z`).toISOString().slice(0, 10))}, 30 days before the Event. The remaining event balance is due by ${displayDate(finalPaymentDueDate)} as shown above.`
