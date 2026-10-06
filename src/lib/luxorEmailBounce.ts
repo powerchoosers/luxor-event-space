@@ -14,7 +14,8 @@ export function resolveLuxorBounceRecipients(input: {
       : input.mailboxRecipients?.length === 1
         ? input.mailboxRecipients
         : []
-  return [...new Set(sources.map(normalizeLuxorEmailAddress).filter(Boolean))]
+  const recipients = [...new Set(sources.map(normalizeLuxorEmailAddress).filter(Boolean))]
+  return recipients.length === 1 ? recipients : []
 }
 
 export function isLuxorBounceForCurrentAddress(currentAddress: unknown, bouncedAddress: unknown) {
@@ -27,7 +28,8 @@ export function luxorBounceNotificationId(eventId: unknown, bouncedAddress: unkn
   return `email_bounce_${String(eventId || '').trim()}_${normalizeLuxorEmailAddress(bouncedAddress)}`
 }
 
-export function isSameLuxorBounceTaskEvent(description: unknown, eventId: unknown) {
+export function isSameLuxorBounceTaskEvent(description: unknown, eventId: unknown, bouncedAddress: unknown) {
   const id = String(eventId || '').trim()
-  return Boolean(id && String(description || '').includes(`Provider event: ${id}`))
+  const address = normalizeLuxorEmailAddress(bouncedAddress)
+  return Boolean(id && address && String(description || '').includes(`Provider event: ${id}\nBounced recipient: ${address}`))
 }
