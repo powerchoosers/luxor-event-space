@@ -27,6 +27,14 @@ import { PromotionTermsFields, type PromotionTermsDraft } from './PromotionTerms
 import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 
+const PROPOSAL_TIME_OPTIONS = [
+  { value: '06:00', label: '6:00 AM' },
+  { value: '06:30', label: '6:30 AM' },
+  { value: '07:00', label: '7:00 AM' },
+  { value: '07:30', label: '7:30 AM' },
+  ...LUXOR_TIME_DROPDOWN_OPTIONS,
+]
+
 type ProposalSubmitAction = 'save' | 'email' | 'in_person'
 type ProposalPresentationMode = 'email' | 'in_person'
 
@@ -1394,7 +1402,7 @@ export function ProposalBuilderModal({
                           onChange={(value) => handleTimeChange('guest_arrival_time', value)}
                           options={[
                             { value: '', label: 'Select arrival time' },
-                            ...LUXOR_TIME_DROPDOWN_OPTIONS,
+                            ...PROPOSAL_TIME_OPTIONS,
                           ]}
                           className="w-full"
                           buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
@@ -1408,7 +1416,7 @@ export function ProposalBuilderModal({
                           onChange={(value) => handleTimeChange('event_end_time', value)}
                           options={[
                             { value: '', label: 'Select end time' },
-                            ...LUXOR_TIME_DROPDOWN_OPTIONS,
+                            ...PROPOSAL_TIME_OPTIONS,
                           ]}
                           className="w-full"
                           buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
