@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
+import { isLuxorBounceForCurrentAddress, luxorBounceNotificationId } from '@/lib/luxorEmailBounce'
 
 export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'calendar_response' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback' | 'email_delivery_issue'
 
@@ -159,7 +160,8 @@ export function usePortalNotifications() {
         fetch('/api/portal/calendar-responses/notifications?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
       ])
 
-      const aggregated: PortalNotificationItem[] = []
+  const aggregated: PortalNotificationItem[] = []
+  const bounceNotificationIds = new Set<string>()
       const inquiries = inquiriesRes.status === 'fulfilled' && inquiriesRes.value.ok
         ? await inquiriesRes.value.json() as RawRecord[]
         : []
@@ -264,17 +266,23 @@ export function usePortalNotifications() {
             const bounceEventId = String(emailBounce?.providerEventId || bounceAt)
             const bouncedAddress = normalizeEmail(emailBounce?.address)
             if (bounceAt && bounceEventId && bouncedAddress) {
-              const notificationId = `email_bounce_${inqId}_${bounceEventId}`
-              aggregated.push({
-                id: notificationId,
-                type: 'email_delivery_issue',
-                title: 'A lead email bounced',
-                subtitle: `${fullName}: review the email address before sending another message.`,
-                timestamp: bounceAt,
-                isRead: currentReadIds.has(notificationId),
-                targetUrl: leadUrl(inqId),
-                metadata: { inquiryId: inqId, email: bouncedAddress, currentAddress: emailBounce?.currentAddress === true },
-              })
+              const notificationId = luxorBounceNotificationId(bounceEventId, bouncedAddress)
+              if (!bounceNotificationIds.has(notificationId)) {
+                bounceNotificationIds.add(notificationId)
+                const addressIsCurrent = isLuxorBounceForCurrentAddress(inq.email, bouncedAddress)
+                aggregated.push({
+                  id: notificationId,
+                  type: 'email_delivery_issue',
+                  title: 'A lead email bounced',
+                  subtitle: addressIsCurrent
+                    ? `${fullName}: confirm this email address before sending another message.`
+                    : `${fullName}: a previous email address bounced. Check the current contact details before sending.`,
+                  timestamp: bounceAt,
+                  isRead: currentReadIds.has(notificationId),
+                  targetUrl: leadUrl(inqId),
+                  metadata: { inquiryId: inqId, email: bouncedAddress, currentAddress: addressIsCurrent },
+                })
+              }
             }
         })
       }

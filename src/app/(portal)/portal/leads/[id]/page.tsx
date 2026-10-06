@@ -61,6 +61,15 @@ import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay, formatUsDialInput } from '@/lib/luxorPhoneClient'
+import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
+
+function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
+  const bounce = lead.metadata?.emailBounce
+  const address = bounce && typeof bounce === 'object'
+    ? String((bounce as Record<string, unknown>).address || '')
+    : ''
+  return isLuxorBounceForCurrentAddress(lead.email, address)
+}
 import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
@@ -3704,7 +3713,7 @@ export default function LeadDetailPage({
                 ) : null}
                 {lead.metadata?.emailBounce && typeof lead.metadata.emailBounce === 'object' ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/8 px-2.5 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">
-                    Email bounced · check address
+                    {bouncedAddressMatchesCurrentEmail(lead) ? 'Email bounced · check address' : 'Earlier email address bounced'}
                   </span>
                 ) : null}
                 {requestedTourLanguage ? (

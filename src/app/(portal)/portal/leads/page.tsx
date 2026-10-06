@@ -35,6 +35,15 @@ import { useRouter } from 'next/navigation'
 import { isLuxorTestInquiry, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
+import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
+
+function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
+  const bounce = lead.metadata?.emailBounce
+  const address = bounce && typeof bounce === 'object'
+    ? String((bounce as Record<string, unknown>).address || '')
+    : ''
+  return isLuxorBounceForCurrentAddress(lead.email, address)
+}
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -774,9 +783,11 @@ export default function LeadsPage() {
                             {lead.metadata?.emailBounce ? (
                               <span
                                 className="inline-flex items-center rounded border border-rose-500/25 bg-rose-500/8 px-1.5 py-0.5 text-[9px] font-semibold text-rose-600 dark:text-rose-300"
-                                title="An email to this lead could not be delivered. Open the lead to review the address."
+                                title={bouncedAddressMatchesCurrentEmail(lead)
+                                  ? 'An email to this lead could not be delivered. Open the lead to review the address.'
+                                  : 'An earlier email address bounced. Review the current contact details.'}
                               >
-                                Email bounced · review address
+                                {bouncedAddressMatchesCurrentEmail(lead) ? 'Email bounced · review address' : 'Earlier email address bounced'}
                               </span>
                             ) : null}
                             {lead.phone ? (
