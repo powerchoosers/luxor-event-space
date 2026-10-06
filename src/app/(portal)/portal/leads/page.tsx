@@ -771,6 +771,14 @@ export default function LeadsPage() {
                                 {lead.email}
                               </p>
                             ) : null}
+                            {lead.metadata?.emailBounce ? (
+                              <span
+                                className="inline-flex items-center rounded border border-rose-500/25 bg-rose-500/8 px-1.5 py-0.5 text-[9px] font-semibold text-rose-600 dark:text-rose-300"
+                                title="An email to this lead could not be delivered. Open the lead to review the address."
+                              >
+                                Email bounced · review address
+                              </span>
+                            ) : null}
                             {lead.phone ? (
                               <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
                                 {lead.email ? '• ' : ''}{formatPhoneDisplay(lead.phone)}

@@ -138,7 +138,10 @@ export async function enrollLuxorBrochureLead(inquiry: LuxorInquiry, existingBro
         inquiry_id: inquiry.id,
         automation_key: 'brochure_lead',
         status: 'active',
-        started_at: new Date().toISOString(),
+        // Keep every touch anchored to the lead's original brochure signup.
+        // Historical enrollments therefore skip missed steps instead of
+        // restarting the sequence or creating a catch-up burst.
+        started_at: inquiry.created_at,
         marketing_consent_at_enrollment: true,
       }),
     },
@@ -166,6 +169,22 @@ export async function enrollLuxorBrochureLead(inquiry: LuxorInquiry, existingBro
       await supabaseRest('luxor_follow_up_actions?on_conflict=enrollment_id,step_key', {
         method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
         body: JSON.stringify({ enrollment_id: enrollment.id, template_id: template.id, step_key: template.step_key, channel: template.channel, scheduled_at: scheduledAt, status: 'existing_delivery', email_job_id: brochureJobId }),
+      })
+      continue
+    }
+
+    if (new Date(scheduledAt).getTime() <= Date.now()) {
+      await supabaseRest('luxor_follow_up_actions?on_conflict=enrollment_id,step_key', {
+        method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+        body: JSON.stringify({
+          enrollment_id: enrollment.id,
+          template_id: template.id,
+          step_key: template.step_key,
+          channel: template.channel,
+          scheduled_at: scheduledAt,
+          status: 'skipped',
+          outcome: 'Past step skipped during enrollment. No catch-up contact was sent or scheduled.',
+        }),
       })
       continue
     }

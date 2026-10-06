@@ -45,6 +45,7 @@ function notificationIcon(type: NotificationType) {
     case 'checkout_opened': return <Receipt size={16} className="text-violet-500 dark:text-violet-400" />
     case 'invoice_paid': return <CheckCircle2 size={16} className="text-emerald-500 dark:text-emerald-400" />
     case 'bill_due': return <AlertCircle size={16} className="text-rose-500 dark:text-rose-400" />
+    case 'email_delivery_issue': return <AlertCircle size={16} className="text-rose-500 dark:text-rose-400" />
     default: return <Bell size={16} className="text-[color:var(--portal-muted)]" />
   }
 }

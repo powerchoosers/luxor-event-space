@@ -441,6 +441,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         calendar_response: 'success',
         contract: 'success',
         email_open: 'info',
+        email_delivery_issue: 'warning',
         layout_feedback: 'info',
       }
       notify({

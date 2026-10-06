@@ -3702,6 +3702,11 @@ export default function LeadDetailPage({
                     <Mail size={11} className="text-[#caa24c]" /> {lead.email}
                   </span>
                 ) : null}
+                {lead.metadata?.emailBounce && typeof lead.metadata.emailBounce === 'object' ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/8 px-2.5 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">
+                    Email bounced · check address
+                  </span>
+                ) : null}
                 {requestedTourLanguage ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
                     <Languages size={12} /> {requestedTourLanguage}-speaking

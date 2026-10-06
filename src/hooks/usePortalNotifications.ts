@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 
-export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'calendar_response' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback'
+export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'calendar_response' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback' | 'email_delivery_issue'
 
 export interface PortalNotificationItem {
   id: string
@@ -253,6 +253,29 @@ export function usePortalNotifications() {
               targetUrl: leadUrl(inqId),
               metadata: { inquiryId: inqId, email: inq.email, phone: inq.phone, source },
             })
+
+            const inquiryMetadata = inq.metadata && typeof inq.metadata === 'object'
+              ? inq.metadata as RawRecord
+              : null
+            const emailBounce = inquiryMetadata?.emailBounce && typeof inquiryMetadata.emailBounce === 'object'
+              ? inquiryMetadata.emailBounce as RawRecord
+              : null
+            const bounceAt = String(emailBounce?.occurredAt || '')
+            const bounceEventId = String(emailBounce?.providerEventId || bounceAt)
+            const bouncedAddress = normalizeEmail(emailBounce?.address)
+            if (bounceAt && bounceEventId && bouncedAddress) {
+              const notificationId = `email_bounce_${inqId}_${bounceEventId}`
+              aggregated.push({
+                id: notificationId,
+                type: 'email_delivery_issue',
+                title: 'A lead email bounced',
+                subtitle: `${fullName}: review the email address before sending another message.`,
+                timestamp: bounceAt,
+                isRead: currentReadIds.has(notificationId),
+                targetUrl: leadUrl(inqId),
+                metadata: { inquiryId: inqId, email: bouncedAddress, currentAddress: emailBounce?.currentAddress === true },
+              })
+            }
         })
       }
 
@@ -730,6 +753,9 @@ export function usePortalNotifications() {
           .on('broadcast', { event: 'email-status' }, () => {
             void fetchNotifications(true, true)
           })
+          .on('broadcast', { event: 'lead-email-bounced' }, () => {
+            void fetchNotifications(true)
+          })
           .on('broadcast', { event: 'contract-status' }, () => {
             void fetchNotifications(true)
           })
@@ -879,6 +905,7 @@ export function usePortalNotifications() {
       bill_due: 0,
       contract: 0,
       email_open: 0,
+      email_delivery_issue: 0,
       layout_feedback: 0,
     }
     items.forEach((item) => {

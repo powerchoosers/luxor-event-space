@@ -7,12 +7,15 @@ import { luxorMailAddress, luxorMailSenders } from './luxorMailConfig'
 import { downloadLuxorMailAttachment, listLuxorMailAttachments, luxorMailMessage, saveLuxorMailAttachment, updateLuxorMailRow, type LuxorMailRow } from './luxorMailboxServer'
 import { recordLuxorCalendarReplies } from './luxorCalendarReplyServer'
 import { broadcastLuxorEmailArrival, broadcastLuxorPortalNotification } from './luxorZohoWebhookServer'
-import { sendLuxorWebPush } from './luxorWebPushServer'
 import { enqueueLuxorInvoiceAttachments } from './luxorBillIntakeServer'
+import { sendLuxorWebPush } from './luxorWebPushServer'
 
 export type ResendEvent = {
   type: string; created_at: string
-  data: { email_id?: string; message_id?: string; from?: string; to?: string[]; subject?: string; tags?: Record<string, string> }
+  data: {
+    email_id?: string; message_id?: string; from?: string; to?: string[]; subject?: string
+    tags?: Record<string, string>; bounce?: { type?: string; subType?: string; message?: string }
+  }
 }
 type EventRow = {
   event_id: string; payload: ResendEvent; processed_at: string | null; attempts: number; lease_until: string | null
@@ -201,9 +204,86 @@ async function processDelivery(event: ResendEvent, eventId: string) {
   await supabaseRest('rpc/luxor_resend_marketing_delivery', { method: 'POST',
     body: JSON.stringify({ p_message_id: row.id, p_event_id: eventId }) })
   await recordResendMarketingEngagement(row, event, eventId)
+  if (next === 'bounced') await flagBouncedLeadEmail(row, event, eventId)
   // Send only an opaque signal. The authenticated browser refetches protected
   // records and shows its normal deduplicated toast for opens/clicks instantly.
   await broadcastLuxorPortalNotification('email-status', { eventId, eventType: event.type })
+}
+
+function normalizeDeliveryAddress(value: string | null | undefined) {
+  return address(String(value || '')).trim().toLowerCase()
+}
+
+async function flagBouncedLeadEmail(row: LuxorMailRow, event: ResendEvent, eventId: string) {
+  const emailJobId = row.metadata?.emailJobId
+  if (typeof emailJobId !== 'string' || !/^[0-9a-f-]{36}$/i.test(emailJobId)) return
+
+  const jobs = await supabaseRest<Array<{ inquiry_id: string | null; recipient_email: string }>>(
+    `luxor_email_jobs?select=inquiry_id,recipient_email&id=eq.${encodeURIComponent(emailJobId)}&limit=1`,
+  )
+  const job = jobs[0]
+  if (!job?.inquiry_id) return
+
+  const bouncedAddress = normalizeDeliveryAddress(event.data.to?.[0] || row.to_addresses?.[0] || job.recipient_email)
+  if (!bouncedAddress) return
+  const inquiries = await supabaseRest<Array<{ id: string; full_name: string; email: string | null; metadata: Record<string, unknown> | null }>>(
+    `luxor_inquiries?select=id,full_name,email,metadata&id=eq.${encodeURIComponent(job.inquiry_id)}&limit=1`,
+  )
+  const inquiry = inquiries[0]
+  if (!inquiry) return
+
+  const bounce = event.data.bounce
+  const bounceKind = String(bounce?.type || '').trim().toLowerCase()
+  const bounceReason = String(bounce?.message || bounce?.subType || '').trim().slice(0, 500)
+  const occurredAt = new Date(event.created_at).toISOString()
+  const currentAddress = normalizeDeliveryAddress(inquiry.email)
+  const issue = {
+    address: bouncedAddress,
+    occurredAt,
+    providerEventId: eventId,
+    providerEmailId: providerIdForEvent(event),
+    type: bounceKind || 'bounce',
+    reason: bounceReason || 'The email provider could not deliver this message.',
+    currentAddress: currentAddress === bouncedAddress,
+  }
+  await supabaseRest(`luxor_inquiries?id=eq.${encodeURIComponent(inquiry.id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ metadata: { ...(inquiry.metadata || {}), emailBounce: issue } }),
+  })
+
+  const taskTitle = 'Review bounced email address'
+  const taskDescription = [
+    `Email could not be delivered to ${bouncedAddress}.`,
+    issue.currentAddress
+      ? 'Please confirm the correct email address with the lead before sending another email.'
+      : 'This was an earlier address. Check it against the current contact details before taking action.',
+    `Provider event: ${eventId}`,
+    `Reported: ${occurredAt}`,
+    `Reason: ${issue.reason}`,
+  ].join('\n')
+  const existingTasks = await supabaseRest<Array<{ id: string }>>(
+    `luxor_tasks?select=id&inquiry_id=eq.${encodeURIComponent(inquiry.id)}&title=eq.${encodeURIComponent(taskTitle)}&description=eq.${encodeURIComponent(taskDescription)}&limit=1`,
+  )
+  if (!existingTasks.length) {
+    await supabaseRest('luxor_tasks', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        inquiry_id: inquiry.id,
+        title: taskTitle,
+        description: taskDescription,
+        due_at: occurredAt,
+        due_date: occurredAt.slice(0, 10),
+        priority: 'high',
+        status: 'pending',
+      }),
+    })
+  }
+  await broadcastLuxorPortalNotification('lead-email-bounced', { eventId, inquiryId: inquiry.id })
+}
+
+function providerIdForEvent(event: ResendEvent) {
+  return event.data.email_id || null
 }
 
 async function recordResendMarketingEngagement(row: LuxorMailRow, event: ResendEvent, eventId: string) {
