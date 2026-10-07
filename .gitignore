@@ -53,5 +53,6 @@ next-env.d.ts
 
 # Local Twilio setup notes
 /TWILIO_SETUP.md
+/TWILIO_PRIVATE_CONTEXT.md
 
 .vercel
