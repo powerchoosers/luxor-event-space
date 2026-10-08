@@ -164,7 +164,7 @@ test('the final Day 30 email cannot be skipped and leaves the queued email intac
   assert.equal(state.job.status, 'queued')
 })
 
-test('database recovery function validates eligibility, locks linked rows, and updates the action/job pair atomically without changing role grants', () => {
+test('database recovery function validates eligibility, locks linked rows, and updates the action/job pair atomically with service-role-only access', () => {
   const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261008020000_atomic_follow_up_overdue_recovery.sql'), 'utf8')
   assert.match(migration, /target_inquiry\.marketing_opt_in/i)
   assert.match(migration, /target_enrollment\.status <> 'paused'/i)
@@ -176,7 +176,8 @@ test('database recovery function validates eligibility, locks linked rows, and u
   assert.match(migration, /set scheduled_for = p_scheduled_at/i)
   assert.match(migration, /set scheduled_at = p_scheduled_at/i)
   assert.match(migration, /security invoker/i)
-  assert.doesNotMatch(migration, /^\s*(grant|revoke)\b/im)
+  assert.match(migration, /revoke all on function public\.luxor_recover_brochure_follow_up_overdue\([^;]+\)\s+from public, anon, authenticated/i)
+  assert.match(migration, /grant execute on function public\.luxor_recover_brochure_follow_up_overdue\([^;]+\)\s+to service_role/i)
 })
 
 test('unsubscribe cancels queued action history alongside its queued email job', () => {

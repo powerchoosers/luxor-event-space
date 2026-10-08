@@ -68,6 +68,9 @@ create policy luxor_email_jobs_service_role on public.luxor_email_jobs for all t
 create policy luxor_notes_service_role on public.luxor_notes for all to service_role using (true) with check (true);
 
 grant usage on schema public to anon, authenticated, service_role;
-grant select on public.luxor_inquiries, public.luxor_tasks, public.luxor_email_jobs, public.luxor_notes to anon, authenticated;
+-- Production's inquiry table has broader direct role grants than the other
+-- core tables; row visibility is still restricted by its service-role-only RLS policy.
+grant all privileges on public.luxor_inquiries to anon, authenticated;
+grant select on public.luxor_tasks, public.luxor_email_jobs, public.luxor_notes to anon, authenticated;
 grant all privileges on public.luxor_inquiries, public.luxor_tasks, public.luxor_email_jobs, public.luxor_notes to service_role;
 grant usage, select on all sequences in schema public to service_role;

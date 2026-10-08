@@ -43,7 +43,7 @@ for role in anon authenticated; do
     echo "$role unexpectedly executed the recovery RPC." >&2
     exit 1
   fi
-  if [[ "$rpc_output" != *'permission denied for table luxor_inquiries'* ]]; then
+  if [[ "$rpc_output" != *'permission denied for function luxor_recover_brochure_follow_up_overdue'* ]]; then
     echo "$role recovery RPC failed for an unexpected reason: $rpc_output" >&2
     exit 1
   fi
@@ -54,5 +54,5 @@ if [[ "$state" != "paused:skipped:cancelled" ]]; then
   echo "Untrusted RPC attempt changed synthetic state: $state" >&2
   exit 1
 fi
-echo 'anon/auth follow-up table read denied; RPC had no visible lead and made no change: PASS (2 roles)'
+echo 'anon/auth follow-up table read and recovery RPC denied; state unchanged: PASS (2 roles)'
 echo 'All PostgreSQL follow-up integration checks passed.'

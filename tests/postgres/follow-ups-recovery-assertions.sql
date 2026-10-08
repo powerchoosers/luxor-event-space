@@ -6,11 +6,19 @@ begin
   if (select count(*) from public.luxor_follow_up_templates) <> 9 then raise exception 'template seed rows were lost'; end if;
   if (select enabled or send_approved from public.luxor_follow_up_automations where automation_key='brochure_lead') then raise exception 'existing disabled sending gate changed'; end if;
   if not (select relrowsecurity from pg_class where oid='public.luxor_follow_up_actions'::regclass) then raise exception 'RLS is not enabled on actions'; end if;
-  if not has_table_privilege('anon','public.luxor_inquiries','SELECT') or has_table_privilege('anon','public.luxor_inquiries','UPDATE') then raise exception 'synthetic core grants do not match production read-only privileges'; end if;
+  if not has_table_privilege('anon','public.luxor_inquiries','SELECT')
+    or not has_table_privilege('anon','public.luxor_inquiries','UPDATE')
+    or not has_table_privilege('authenticated','public.luxor_inquiries','INSERT')
+    or has_table_privilege('anon','public.luxor_tasks','UPDATE')
+  then raise exception 'synthetic core grants do not match the read-only production catalog snapshot'; end if;
   if has_function_privilege('anon','public.luxor_stop_brochure_follow_up()','EXECUTE') or not has_function_privilege('service_role','public.luxor_stop_brochure_follow_up()','EXECUTE') then raise exception 'stop trigger function ACL does not match production catalog'; end if;
   if has_table_privilege('anon','public.luxor_follow_up_actions','SELECT') or has_table_privilege('authenticated','public.luxor_follow_up_actions','UPDATE') then raise exception 'untrusted role unexpectedly has follow-up table grants'; end if;
   if not has_table_privilege('service_role','public.luxor_follow_up_actions','UPDATE') then raise exception 'existing service role grant missing'; end if;
   if not (select prorettype='jsonb'::regtype and not prosecdef from pg_proc where oid='public.luxor_recover_brochure_follow_up_overdue(uuid,uuid,uuid,text,timestamp with time zone)'::regprocedure) then raise exception 'recovery RPC is not SECURITY INVOKER returning jsonb'; end if;
+  if has_function_privilege('anon','public.luxor_recover_brochure_follow_up_overdue(uuid,uuid,uuid,text,timestamp with time zone)','EXECUTE')
+    or has_function_privilege('authenticated','public.luxor_recover_brochure_follow_up_overdue(uuid,uuid,uuid,text,timestamp with time zone)','EXECUTE')
+    or not has_function_privilege('service_role','public.luxor_recover_brochure_follow_up_overdue(uuid,uuid,uuid,text,timestamp with time zone)','EXECUTE')
+  then raise exception 'recovery RPC ACL must be service-role only'; end if;
   r := public.luxor_recover_brochure_follow_up_overdue('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','dddddddd-dddd-4ddd-8ddd-dddddddddddd','22222222-2222-4222-8222-222222222222','skip',null);
   if r->>'status' <> 'missing_enrollment' then raise exception 'wrong inquiry/enrollment validation failed: %', r; end if;
   r := public.luxor_recover_brochure_follow_up_overdue('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','cccccccc-cccc-4ccc-8ccc-cccccccccccc','99999999-9999-4999-8999-999999999999','skip',null);

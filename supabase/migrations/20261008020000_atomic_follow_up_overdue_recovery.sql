@@ -126,6 +126,14 @@ begin
 end;
 $$;
 
+-- New public-schema functions inherit this project's postgres defaults, which
+-- grant EXECUTE to anon and authenticated. Keep recovery available only to the
+-- server-side service role, as it operates on consent-gated lead records.
+revoke all on function public.luxor_recover_brochure_follow_up_overdue(uuid, uuid, uuid, text, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.luxor_recover_brochure_follow_up_overdue(uuid, uuid, uuid, text, timestamptz)
+  to service_role;
+
 -- Keep the linked action and queued job history consistent when a sequence is
 -- stopped by opt-out, booking, or a recorded disposition. The existing trigger
 -- already cancels the job and enrollment; include queued actions in that same

@@ -10,10 +10,11 @@ The script starts `postgres:17-alpine` with trust auth inside a short-lived
 container that is not published on a host port, executes the ordered SQL in
 `follow-ups.integration.sql`, and removes the container on exit. The core
 schema/grants are a minimal synthetic baseline. In a read-only production
-catalog query, `anon` and `authenticated` had `SELECT` on core inquiry/task/
-email/note tables, `service_role` had full core-table privileges, follow-up
-tables were service-role only, and the core RLS policies were service-role
-only. The local baseline mirrors those grants, RLS policies, and the
+catalog query, `anon` and `authenticated` had broad direct grants on
+`luxor_inquiries` and `SELECT` on core task/email/note tables;
+`service_role` had full core-table privileges, follow-up tables were
+service-role only, and the core RLS policies were service-role only. The local
+baseline mirrors those grants, RLS policies, and the
 `service_role` BYPASSRLS attribute; the follow-up table and function grants are
 then applied by the real ordered migrations.
 
@@ -34,6 +35,6 @@ reschedule and rollback/retry; the disabled send gate; note survival after task
 deletion; the stop trigger for unsubscribe, decline, and booking across the
 four live action states (`scheduled`, `email_queued`, `task_created`,
 `processing`) while preserving completed/failed and other terminal history;
-and anon/auth denial on protected reads and the invoker RPC. All inserted
+and anon/auth denial on protected reads and the service-role-only invoker RPC. All inserted
 records use synthetic UUIDs and `example.invalid` recipients. The harness does
 not connect to Supabase or send mail.
