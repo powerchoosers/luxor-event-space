@@ -12,41 +12,37 @@ export async function GET(request: NextRequest) {
     const inquiryId = request.nextUrl.searchParams.get('inquiryId')
     if (request.nextUrl.searchParams.get('dashboard') === '1') {
       const sendingEnabled = await isLuxorBrochureFollowUpSendingEnabled()
-      const enrollments = await supabaseRest<Array<{ id: string; inquiry_id: string; status: string }>>(
-        'luxor_follow_up_enrollments?select=id,inquiry_id,status&automation_key=eq.brochure_lead&status=in.(active,paused)&limit=500',
+      const enrollments = await supabaseRest<Array<{ id: string; inquiry_id: string }>>(
+        'luxor_follow_up_enrollments?select=id,inquiry_id&automation_key=eq.brochure_lead&status=in.(active,paused)&limit=500',
       )
-      const activeEnrollments = enrollments.filter((item) => item.status === 'active')
-      const enrollmentById = new Map(activeEnrollments.map((item) => [item.id, item.inquiry_id]))
-      const pausedEnrollmentIds = enrollments.filter((item) => item.status === 'paused').map((item) => item.id)
+      const enrollmentById = new Map(enrollments.map((item) => [item.id, item.inquiry_id]))
       const ids = [...enrollmentById.keys()]
-      if (!ids.length) return NextResponse.json({ emailActions: [], pausedEnrollmentIds, sendingEnabled })
+      if (!ids.length) return NextResponse.json({ emailActions: [], sendingEnabled })
       const actions = await supabaseRest<Array<{ id: string; enrollment_id: string; step_key: string; scheduled_at: string; status: string }>>(
         `luxor_follow_up_actions?select=id,enrollment_id,step_key,scheduled_at,status&channel=eq.email&status=in.(email_queued,scheduled)&enrollment_id=in.(${ids.map(encodeURIComponent).join(',')})&order=scheduled_at.asc&limit=1000`,
       )
       return NextResponse.json({ emailActions: actions.flatMap((item) => {
         const inquiry_id = enrollmentById.get(item.enrollment_id)
         return inquiry_id ? [{ ...item, inquiry_id }] : []
-      }), pausedEnrollmentIds, sendingEnabled })
+      }), sendingEnabled })
     }
     if (inquiryId) {
-      const historyPage = Math.max(0, Math.min(100, Number(request.nextUrl.searchParams.get('historyPage') || '0') || 0))
-      const historyOffset = historyPage * 20
       const [enrollment] = await supabaseRest<LuxorFollowUpEnrollment[]>(
         `luxor_follow_up_enrollments?select=id,inquiry_id,automation_key,status,started_at,response_received_at,ended_reason,nurture_eligible_at,marketing_consent_at_enrollment&inquiry_id=eq.${encodeURIComponent(inquiryId)}&automation_key=eq.brochure_lead&limit=1`,
       )
       const [actions, notes, calls, emails] = await Promise.all([
         enrollment ? supabaseRest<LuxorFollowUpAction[]>(`luxor_follow_up_actions?select=*&enrollment_id=eq.${encodeURIComponent(enrollment.id)}&order=scheduled_at.asc`) : Promise.resolve([]),
-        supabaseRest<Array<{ id: string; created_at: string; author: string | null; content: string; note_type: string | null }>>(`luxor_notes?select=id,created_at,author,content,note_type&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=20&offset=${historyOffset}`),
-        supabaseRest<Array<{ id: string; created_at: string; direction: string; status: string; outcome: string | null; notes: string | null; started_at: string | null; ended_at: string | null }>>(`luxor_calls?select=id,created_at,direction,status,outcome,notes,started_at,ended_at&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=20&offset=${historyOffset}`),
-        supabaseRest<Array<{ id: string; created_at: string; scheduled_for: string | null; sent_at: string | null; status: string; job_type: string; subject: string }>>(`luxor_email_jobs?select=id,created_at,scheduled_for,sent_at,status,job_type,subject&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=20&offset=${historyOffset}`),
+        supabaseRest<Array<{ id: string; created_at: string; author: string | null; content: string; note_type: string | null }>>(`luxor_notes?select=id,created_at,author,content,note_type&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=20`),
+        supabaseRest<Array<{ id: string; created_at: string; direction: string; status: string; outcome: string | null; notes: string | null; started_at: string | null; ended_at: string | null }>>(`luxor_calls?select=id,created_at,direction,status,outcome,notes,started_at,ended_at&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=20`),
+        supabaseRest<Array<{ id: string; created_at: string; sent_at: string | null; status: string; job_type: string; subject: string }>>(`luxor_email_jobs?select=id,created_at,sent_at,status,job_type,subject&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=20`),
       ])
       const history = [
         ...notes.map((item) => ({ id: `note-${item.id}`, at: item.created_at, kind: item.content.startsWith('Manual call outcome:') ? 'call' : 'note', label: item.content.startsWith('Manual call outcome:') ? 'Manual call outcome' : item.author || 'Note', detail: item.content })),
         ...calls.map((item) => ({ id: `call-${item.id}`, at: item.ended_at || item.started_at || item.created_at, kind: 'call', label: `${item.direction} call · ${item.status}`, detail: [item.outcome, item.notes].filter(Boolean).join(' · ') })),
-        ...emails.map((item) => ({ id: `email-${item.id}`, at: item.sent_at || item.scheduled_for || item.created_at, kind: 'email', label: `${item.subject} · ${item.status}`, detail: item.status === 'sent' ? 'Recorded as sent' : `Queue status: ${item.status}` })),
-        ...actions.filter((item) => item.channel === 'email' && ['scheduled', 'email_queued'].includes(item.status) && !item.email_job_id).map((item) => ({ id: `action-${item.id}`, at: item.scheduled_at, kind: 'follow-up', label: `Automated email · ${item.step_key.replaceAll('_', ' ')}`, detail: `${enrollment?.status === 'paused' ? 'Paused · ' : ''}Scheduled · ${item.status}` })),
+        ...emails.map((item) => ({ id: `email-${item.id}`, at: item.sent_at || item.created_at, kind: 'email', label: `${item.subject} · ${item.status}`, detail: item.status === 'sent' ? 'Recorded as sent' : `Queue status: ${item.status}` })),
+        ...actions.filter((item) => item.channel === 'email' && ['scheduled', 'email_queued'].includes(item.status) && !item.email_job_id).map((item) => ({ id: `action-${item.id}`, at: item.scheduled_at, kind: 'follow-up', label: `Automated email · ${item.step_key.replaceAll('_', ' ')}`, detail: `Scheduled · ${item.status}` })),
       ].sort((a, b) => b.at.localeCompare(a.at))
-      return NextResponse.json({ enrollment: enrollment ?? null, actions, history, historyPage, hasMoreHistory: notes.length === 20 || calls.length === 20 || emails.length === 20 })
+      return NextResponse.json({ enrollment: enrollment ?? null, actions, history })
     }
 
     const setup = await getLuxorFollowUpSetup()
@@ -100,29 +96,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, disposition })
     }
     if (action === 'pause' || action === 'resume' || action === 'stop') {
-      const [priorEnrollment] = await supabaseRest<Array<{ id: string; status: string; ended_reason: string | null }>>(
-        `luxor_follow_up_enrollments?select=id,status,ended_reason&inquiry_id=eq.${encodeURIComponent(inquiryId)}&automation_key=eq.brochure_lead&order=started_at.desc&limit=1`,
-      )
-      if (!priorEnrollment) return NextResponse.json({ error: 'A brochure sequence was not found.' }, { status: 404 })
-      if (action === 'resume' && priorEnrollment.status === 'paused') {
-        const now = encodeURIComponent(new Date().toISOString())
-        const [dueEmails, dueJobs] = await Promise.all([
-          supabaseRest<Array<{ id: string; scheduled_at: string }>>(
-            `luxor_follow_up_actions?select=id,scheduled_at&enrollment_id=eq.${encodeURIComponent(priorEnrollment.id)}&channel=eq.email&status=in.(scheduled,email_queued)&scheduled_at=lte.${now}&limit=1`,
-          ),
-          supabaseRest<Array<{ id: string; scheduled_for: string }>>(
-            `luxor_email_jobs?select=id,scheduled_for&automation_enrollment_id=eq.${encodeURIComponent(priorEnrollment.id)}&status=eq.queued&scheduled_for=lte.${now}&limit=1`,
-          ),
-        ])
-        if (dueEmails.length || dueJobs.length) return NextResponse.json({ error: 'This paused sequence has an overdue email. Review its timing before resuming to avoid an overdue send.' }, { status: 409 })
-      }
       const result = await controlLuxorBrochureFollowUp(inquiryId, action)
       if (result.status === 'missing') return NextResponse.json({ error: 'A brochure sequence was not found.' }, { status: 404 })
-      if (action === 'stop' && ['active', 'paused'].includes(priorEnrollment.status) && result.status === 'stopped') {
+      if (action === 'stop' && result.status === 'stopped') {
         const allowedReasons = ['booked', 'lost_another_venue', 'not_interested', 'event_canceled', 'no_response', 'duplicate', 'other', 'manual_stop']
         const stopReason = allowedReasons.includes(String(body.stopReason || '')) ? String(body.stopReason) : 'manual_stop'
         await supabaseRest(
-          `luxor_follow_up_enrollments?id=eq.${encodeURIComponent(priorEnrollment.id)}&status=eq.stopped`,
+          `luxor_follow_up_enrollments?inquiry_id=eq.${encodeURIComponent(inquiryId)}&automation_key=eq.brochure_lead&status=eq.stopped`,
           { method: 'PATCH', body: JSON.stringify({ ended_reason: stopReason, updated_at: new Date().toISOString() }) },
         )
       }
