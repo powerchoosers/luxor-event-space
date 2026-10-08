@@ -498,6 +498,7 @@ export type LuxorNote = {
   author: string
   content: string
   note_type: LuxorNoteType
+  task_id?: string | null
 }
 
 // --- Task Types ---

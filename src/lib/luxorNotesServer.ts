@@ -58,7 +58,8 @@ export async function createNote(
   inquiryId: string,
   content: string,
   noteType: LuxorNoteType = 'note',
-  author = 'Portal User'
+  author = 'Portal User',
+  taskId?: string | null
 ) {
   if (!content.trim()) {
     throw new Error('Note content cannot be empty.')
@@ -72,6 +73,7 @@ export async function createNote(
       content: content.trim(),
       note_type: noteType,
       author: author.trim(),
+      task_id: taskId || null,
     }),
   })
 

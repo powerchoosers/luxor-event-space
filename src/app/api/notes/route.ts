@@ -32,13 +32,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { inquiryId, content, noteType, author } = body
+    const { inquiryId, content, noteType, author, taskId } = body
 
     if (!inquiryId || !content) {
       return NextResponse.json({ error: 'inquiryId and content are required.' }, { status: 400 })
     }
 
-    const note = await createNote(inquiryId, content, noteType, author)
+    const note = await createNote(inquiryId, content, noteType, author, taskId)
     return NextResponse.json(note, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create note.'
