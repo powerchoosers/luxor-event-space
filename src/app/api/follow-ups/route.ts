@@ -3,8 +3,6 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorFollowUpSetup, isLuxorBrochureFollowUpSendingEnabled, updateLuxorFollowUpTemplate, recordLuxorFollowUpResponse, controlLuxorBrochureFollowUp, setLuxorFollowUpDisposition } from '@/lib/luxorFollowUpsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorFollowUpAction, LuxorFollowUpEnrollment } from '@/lib/luxorFollowUpsServer'
-import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { createNote } from '@/lib/luxorNotesServer'
 
 export async function GET(request: NextRequest) {
   if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
@@ -37,10 +35,9 @@ export async function GET(request: NextRequest) {
         supabaseRest<Array<{ id: string; created_at: string; sent_at: string | null; status: string; job_type: string; subject: string }>>(`luxor_email_jobs?select=id,created_at,sent_at,status,job_type,subject&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=20`),
       ])
       const history = [
-        ...notes.map((item) => ({ id: `note-${item.id}`, at: item.created_at, kind: item.content.startsWith('Manual call outcome:') ? 'call' : 'note', label: item.content.startsWith('Manual call outcome:') ? 'Manual call outcome' : item.author || 'Note', detail: item.content })),
+        ...notes.map((item) => ({ id: `note-${item.id}`, at: item.created_at, kind: 'note', label: item.author || 'Note', detail: item.content })),
         ...calls.map((item) => ({ id: `call-${item.id}`, at: item.ended_at || item.started_at || item.created_at, kind: 'call', label: `${item.direction} call · ${item.status}`, detail: [item.outcome, item.notes].filter(Boolean).join(' · ') })),
         ...emails.map((item) => ({ id: `email-${item.id}`, at: item.sent_at || item.created_at, kind: 'email', label: `${item.subject} · ${item.status}`, detail: item.status === 'sent' ? 'Recorded as sent' : `Queue status: ${item.status}` })),
-        ...actions.filter((item) => item.channel === 'email' && ['scheduled', 'email_queued'].includes(item.status) && !item.email_job_id).map((item) => ({ id: `action-${item.id}`, at: item.scheduled_at, kind: 'follow-up', label: `Automated email · ${item.step_key.replaceAll('_', ' ')}`, detail: `Scheduled · ${item.status}` })),
       ].sort((a, b) => b.at.localeCompare(a.at))
       return NextResponse.json({ enrollment: enrollment ?? null, actions, history })
     }
@@ -77,17 +74,6 @@ export async function POST(request: NextRequest) {
       const result = await recordLuxorFollowUpResponse(inquiryId)
       return NextResponse.json({ success: true, ...result })
     }
-    if (action === 'nurture') {
-      const inquiry = await getLuxorInquiry(inquiryId)
-      if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
-      const sequence = await controlLuxorBrochureFollowUp(inquiryId, 'stop')
-      const updated = await updateLuxorInquiry(inquiryId, {
-        metadata: { ...inquiry.metadata, followUpStage: 'nurture' },
-      })
-      if (!updated) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
-      await createNote(inquiryId, 'Lead moved to the Nurture stage by a portal user. The active brochure sequence was stopped. No nurture message or enrollment was created.', 'status_change', session.email)
-      return NextResponse.json({ success: true, stage: 'nurture', sequenceStatus: sequence.status })
-    }
     if (action === 'disposition') {
       const allowed = ['no_response', 'not_interested', 'lost_another_venue', 'event_canceled', null] as const
       const disposition = allowed.find((value) => value === body.disposition)
@@ -98,14 +84,6 @@ export async function POST(request: NextRequest) {
     if (action === 'pause' || action === 'resume' || action === 'stop') {
       const result = await controlLuxorBrochureFollowUp(inquiryId, action)
       if (result.status === 'missing') return NextResponse.json({ error: 'A brochure sequence was not found.' }, { status: 404 })
-      if (action === 'stop' && result.status === 'stopped') {
-        const allowedReasons = ['booked', 'lost_another_venue', 'not_interested', 'event_canceled', 'no_response', 'duplicate', 'other', 'manual_stop']
-        const stopReason = allowedReasons.includes(String(body.stopReason || '')) ? String(body.stopReason) : 'manual_stop'
-        await supabaseRest(
-          `luxor_follow_up_enrollments?inquiry_id=eq.${encodeURIComponent(inquiryId)}&automation_key=eq.brochure_lead&status=eq.stopped`,
-          { method: 'PATCH', body: JSON.stringify({ ended_reason: stopReason, updated_at: new Date().toISOString() }) },
-        )
-      }
       return NextResponse.json({ success: true, status: result.status, finalized: result.finalized })
     }
     return NextResponse.json({ error: 'Unsupported follow-up action.' }, { status: 400 })
