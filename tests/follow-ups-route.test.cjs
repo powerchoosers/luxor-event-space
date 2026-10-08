@@ -181,7 +181,7 @@ test('database recovery function validates eligibility, locks linked rows, and u
 
 test('unsubscribe cancels queued action history alongside its queued email job', () => {
   const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261008020000_atomic_follow_up_overdue_recovery.sql'), 'utf8')
-  assert.match(migration, /action\.status in \('scheduled', 'email_queued'\)/i)
+  assert.match(migration, /action\.status in \('scheduled', 'email_queued', 'task_created', 'processing'\)/i)
   assert.match(migration, /set status = 'cancelled'/i)
 })
 

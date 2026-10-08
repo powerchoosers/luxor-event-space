@@ -55,8 +55,10 @@ async function waitForServer(child) {
     ]
     const seq = Object.fromEntries(ids.map((id, i) => [id, { id: `enroll-${i + 1}`, inquiry_id: id, automation_key: 'brochure_lead', status: i === 1 || i === 2 || i === 4 ? 'paused' : 'active', started_at: '2026-10-01T12:00:00Z', response_received_at: null, ended_reason: null, marketing_consent_at_enrollment: true }]))
     const overdueActions = [
+      { id: 'action-overdue-1', inquiry_id: ids[0], enrollment_id: 'enroll-1', step_key: 'email_2', channel: 'email', scheduled_at: '2026-10-06T15:00:00Z', status: 'email_queued', email_job_id: 'synthetic-job-1' },
       { id: 'action-overdue-2', inquiry_id: ids[1], enrollment_id: 'enroll-2', step_key: 'email_2', channel: 'email', scheduled_at: '2026-10-06T15:00:00Z', status: 'email_queued', email_job_id: 'synthetic-job-2' },
       { id: 'action-overdue-5', inquiry_id: ids[2], enrollment_id: 'enroll-3', step_key: 'email_5', channel: 'email', scheduled_at: '2026-10-06T15:00:00Z', status: 'email_queued', email_job_id: 'synthetic-job-5' },
+      { id: 'action-overdue-4', inquiry_id: ids[3], enrollment_id: 'enroll-4', step_key: 'email_2', channel: 'email', scheduled_at: '2026-10-06T15:00:00Z', status: 'email_queued', email_job_id: 'synthetic-job-4' },
     ]
     const history = []
     await page.route('**/*', async (route) => {
@@ -85,7 +87,7 @@ async function waitForServer(child) {
         tasks.push(task); return json({ task })
       }
       if (url.pathname === '/api/tasks' && method === 'PATCH') { const index = tasks.findIndex((item) => item.id === body.id); if (index >= 0) tasks[index] = { ...tasks[index], ...body }; return json({ success: true }) }
-      if (url.pathname === '/api/follow-ups' && method === 'GET' && url.searchParams.get('dashboard') === '1') return json({ emailActions: overdueActions.filter((action) => action.status === 'email_queued'), pausedEnrollmentIds: ['enroll-2', 'enroll-3', 'enroll-5'], pausedEnrollments: [{ id: 'enroll-5', inquiry_id: ids[4] }], sendingEnabled: true })
+      if (url.pathname === '/api/follow-ups' && method === 'GET' && url.searchParams.get('dashboard') === '1') return json({ emailActions: overdueActions.filter((action) => action.status === 'email_queued' && seq[action.inquiry_id]?.status === 'active'), pausedEnrollmentIds: ['enroll-2', 'enroll-3', 'enroll-5'], pausedEnrollments: [1, 2, 4].map((index) => ({ id: `enroll-${index + 1}`, inquiry_id: ids[index] })), sendingEnabled: true })
       if (url.pathname === '/api/follow-ups' && method === 'GET' && url.searchParams.has('inquiryId')) { const id = url.searchParams.get('inquiryId'); return json({ enrollment: seq[id] ?? null, actions: overdueActions.filter((action) => action.inquiry_id === id && action.status === 'email_queued'), history: history.filter((item) => item.inquiry_id === id), hasMoreHistory: false }) }
       if (url.pathname === '/api/follow-ups' && method === 'POST') {
         if (body.action === 'resume') return json({ error: 'This paused sequence has an overdue email.' }, 409)
@@ -102,7 +104,7 @@ async function waitForServer(child) {
     page.on('pageerror', (error) => errors.push(error.message))
     await page.goto(`${origin}/followups-qa`, { waitUntil: 'domcontentloaded' })
     const cards = page.locator('article[role="button"]')
-    await page.getByText('Synthetic second activity').waitFor()
+    await page.getByText('Email #2').first().waitFor()
     assert.equal(await cards.count(), 5, 'lead cards are grouped by distinct lead id, including paused-only lead')
     const statValue = async (label) => page.getByText(label, { exact: true }).locator('xpath=../div[1]').innerText()
     assert.equal(await statValue('Due Today'), '1', 'numeric due-today counter')
@@ -115,7 +117,7 @@ async function waitForServer(child) {
     await page.getByRole('button', { name: 'All', exact: true }).click()
     await page.getByLabel('Search leads or follow-ups').fill('Synthetic Demo')
     assert.equal(await cards.count(), 2, 'same-name leads stay distinct')
-    await cards.filter({ hasText: 'Synthetic second activity' }).getByRole('button', { name: 'View' }).first().click()
+    await cards.filter({ hasText: 'Synthetic Demo' }).first().getByRole('button', { name: 'View' }).first().click()
     await page.getByRole('tab', { name: 'Timeline' }).click()
     await page.getByText('Synthetic action 1 · pending').waitFor()
     await page.getByText('Synthetic second activity · pending').waitFor()
@@ -133,7 +135,7 @@ async function waitForServer(child) {
     assert(requests.some((item) => item.path === '/api/follow-ups' && item.query.includes('inquiryId=' + ids[0])), 'closing the modal refreshed the selected lead history')
     await page.getByRole('tab', { name: 'Overview' }).click()
     await page.getByLabel('Search leads or follow-ups').fill('Synthetic Demo')
-    await cards.filter({ hasText: 'Email #2' }).getByRole('button', { name: 'View' }).first().click()
+    await cards.filter({ hasText: 'Synthetic Demo' }).nth(1).getByRole('button', { name: 'View' }).first().click()
     await page.getByRole('tab', { name: 'Overview' }).click()
     await page.getByRole('button', { name: 'Skip', exact: true }).first().click()
     assert(requests.some((item) => item.path === '/api/follow-ups' && item.body.action === 'recover_overdue' && item.body.itemId === 'action-overdue-2' && item.body.decision === 'skip'), 'paused overdue recovery targets the selected synthetic action')
@@ -144,7 +146,7 @@ async function waitForServer(child) {
     await page.getByText(/final approved email cannot be skipped/i).waitFor()
     assert.equal(await page.getByRole('button', { name: 'Skip', exact: true }).isDisabled(), true, 'Day 30 skip control is disabled')
     await page.keyboard.press('Escape')
-    await page.getByLabel('Search leads or follow-ups').fill('Synthetic second activity')
+    await page.getByLabel('Search leads or follow-ups').fill('Synthetic Demo')
     await cards.getByRole('button', { name: 'View' }).first().click()
     await page.getByRole('tab', { name: 'Overview' }).click()
     await page.getByRole('button', { name: 'Log Call', exact: true }).click({ force: true })
@@ -153,7 +155,7 @@ async function waitForServer(child) {
     await page.getByRole('button', { name: 'Cancel', exact: true }).last().click()
     await page.setViewportSize({ width: 390, height: 844 })
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'mobile viewport has no page-level horizontal overflow')
-    assert.equal(await cards.count(), 1, 'filtered lead card remains visible at mobile width')
+    assert.equal(await cards.count(), 2, 'same-name lead cards remain visible at mobile width')
     assert.deepEqual(errors, [], 'browser runtime has no uncaught page errors')
     console.log(JSON.stringify({ pass: true, scenarios: 17, syntheticApiRequests: requests.length, pageErrors: errors.length, checks: ['one card per lead ID with multiple activities', 'numeric due-today/overdue/upcoming counters', 'new and post-tour filters', 'same-name search', 'iframe action refreshes lead/tasks/history after close', 'paused overdue recovery target', 'no-phone call control disabled', 'email_5 skip blocked', 'manual call logging has no dial side effect', 'mobile width has no horizontal overflow'] }))
     await browser.close()

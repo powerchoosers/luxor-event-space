@@ -157,7 +157,7 @@ begin
   where action.enrollment_id = enrollment.id
     and enrollment.inquiry_id = new.id
     and enrollment.automation_key = 'brochure_lead'
-    and action.status in ('scheduled', 'email_queued');
+    and action.status in ('scheduled', 'email_queued', 'task_created', 'processing');
 
   update public.luxor_email_jobs job
   set status = 'cancelled', last_error = 'Brochure follow-up stopped: ' || stop_reason, updated_at = now()
