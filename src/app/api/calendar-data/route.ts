@@ -13,7 +13,7 @@ export async function GET() {
     }
 
     const [tours, slots, bookings, tasks] = await Promise.all([
-      listLuxorConfirmedTours(150),
+      listLuxorConfirmedTours(),
       listUpcomingLuxorTourSlots(1000),
       listLuxorBookingsWithPayments(150).catch(() => []),
       listAllTasks().catch(() => []),

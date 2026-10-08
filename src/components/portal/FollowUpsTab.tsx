@@ -188,6 +188,11 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
   const selected = selectedId ? leadById.get(selectedId) : undefined
   const selectedTasks = selectedId ? followUpTasks.filter((task) => task.inquiry_id === selectedId).sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? '')) : []
   const pending = followUpTasks.filter((task) => task.status === 'pending')
+  const completedTourLeads = useMemo(() => {
+    const uniqueLeads = new Map<string, LuxorInquiry>()
+    leads.filter((lead) => lead.tour_attendance_status === 'attended').forEach((lead) => uniqueLeads.set(lead.id, lead))
+    return [...uniqueLeads.values()].sort((a, b) => (b.preferred_tour_date || '').localeCompare(a.preferred_tour_date || ''))
+  }, [leads])
   const stats = [
     { label: 'Leads in Follow Up', value: new Set(rows.filter((row) => row.status !== 'Completed' && row.status !== 'Skipped').map((row) => row.inquiryId)).size },
     { label: 'Due Today', value: rows.filter((row) => row.status === 'Due today').length },
@@ -253,6 +258,25 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         {stats.map((stat) => <div key={stat.label} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3"><div className="text-2xl font-semibold">{stat.value}</div><div className="text-xs text-[color:var(--portal-muted)]">{stat.label}</div></div>)}
       </div>
+
+      <section aria-labelledby="post-tour-heading" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[color:var(--portal-border)] pb-3">
+          <div><h2 id="post-tour-heading" className="text-sm font-semibold">Post-Tour Follow-Ups <span className="ml-1 text-[color:var(--portal-muted)]">({completedTourLeads.length})</span></h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Every explicitly completed tour appears here, whether or not a follow-up plan exists.</p></div>
+          <span className="text-[10px] text-[color:var(--portal-muted)]">No email, text, or call is sent from this list.</span>
+        </div>
+        {!completedTourLeads.length ? <p className="py-6 text-center text-sm text-[color:var(--portal-muted)]">No completed tours have been recorded yet.</p> : <div className="grid gap-3 pt-4 md:grid-cols-2 xl:grid-cols-3">{completedTourLeads.map((lead) => {
+          const leadTasks = followUpTasks.filter((task) => task.inquiry_id === lead.id)
+          const leadEmails = emailActions.filter((action) => action.inquiry_id === lead.id)
+          const hasPending = leadTasks.some((task) => task.status === 'pending') || leadEmails.some((action) => ['queued', 'scheduled', 'pending'].includes(action.status))
+          const hasCompleted = leadTasks.some((task) => task.status === 'completed') || leadEmails.some((action) => action.status === 'completed')
+          const followUpStatus = hasPending ? 'Follow-Up Scheduled' : hasCompleted ? 'Follow-Up Completed' : 'Needs Follow-Up'
+          return <article key={lead.id} className="rounded-lg border border-[color:var(--portal-border)] p-4">
+            <button type="button" onClick={() => setSelectedId(lead.id)} className="block w-full text-left"><span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{lead.full_name}</span><span className="mt-1 block truncate text-xs text-[color:var(--portal-muted)]">{lead.email || lead.phone || 'No contact detail'} · {lead.event_type || 'Event not specified'}</span></button>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs"><span className="text-[color:var(--portal-muted)]">Tour: {lead.preferred_tour_date || 'Date not recorded'}{lead.preferred_tour_time ? ` · ${lead.preferred_tour_time}` : ''}</span><span className={followUpStatus === 'Needs Follow-Up' ? 'font-semibold text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}>{followUpStatus}</span></div>
+            <button type="button" onClick={() => { setLeadId(lead.id); setAdding(true) }} className="mt-3 rounded-md border border-[color:var(--portal-border)] px-3 py-2 text-xs font-semibold text-[color:var(--portal-text)] hover:border-[#caa24c]/50">Add Follow-Up</button>
+          </article>
+        })}</div>}
+      </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-[15rem] flex-1 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-2"><Search size={15} className="text-[color:var(--portal-muted)]" /><input aria-label="Search follow-ups" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads or follow-ups" className="w-full bg-transparent text-sm outline-none" /></div>

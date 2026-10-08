@@ -21,7 +21,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { listLuxorBookingsWithPayments, listAllPayments, listAllExpenses } from "@/lib/luxorBookingsServer";
-import { listLuxorInquiries } from "@/lib/luxorInquiriesServer";
+import { listAllLuxorInquiries } from "@/lib/luxorInquiriesServer";
 import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { listAllTasks } from "@/lib/luxorTasksServer";
 import { listAllBills } from "@/lib/luxorInvoicesServer";
@@ -32,6 +32,13 @@ import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
 import { BillsDueCard } from "@/components/portal/BillsDueCard";
 import { PortalMarketingSalesSection } from "@/components/portal/PortalMarketingSalesSection";
 import { fetchMarketingAndSalesMetrics, getDateRangeFromPreset } from "@/lib/luxorAnalyticsServer";
+import { luxorTodayKey } from "@/lib/luxorTourMetrics";
+
+function addDateKeyDays(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day + days))
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
+}
 
 function formatActivityTime(date: Date, now: Date): string {
   if (isNaN(date.getTime())) return 'Recently';
@@ -86,7 +93,7 @@ export default async function PortalOverview() {
 
   try {
     const [fetchedLeads, fetchedNotes, fetchedBookings, fetchedPayments, fetchedExpenses, fetchedTasks, fetchedBills, fetchedAnalytics] = await Promise.all([
-      listLuxorInquiries(100),
+      listAllLuxorInquiries(),
       listRecentNotes(5),
       listLuxorBookingsWithPayments(25).catch(() => []),
       listAllPayments().catch(() => []),
@@ -116,8 +123,9 @@ export default async function PortalOverview() {
 
   // --- Calculations for Top 4 Cards ---
   const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth(); // 0-indexed
+  const todayDateStr = luxorTodayKey(now)
+  const [currentYear, currentMonthNumber, currentDayNumber] = todayDateStr.split('-').map(Number)
+  const currentMonth = currentMonthNumber - 1
 
   const startOfMonth = new Date(currentYear, currentMonth, 1);
   const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
@@ -154,7 +162,7 @@ export default async function PortalOverview() {
   const netCashFlowStr = (isNetPositive ? '+' : '-') + '$' + Math.abs(netCashFlow).toLocaleString();
 
   // Generate dynamic sparkline cumulative net cash flow trend for the current month so far (1 to current day)
-  const currentDay = now.getDate();
+  const currentDay = currentDayNumber;
   const sparklineData = [];
   
   let runningCumulative = 0;
@@ -248,7 +256,6 @@ export default async function PortalOverview() {
   // Card 4: Needs Attention
   const businessLeads = leads.filter((lead) => !isLuxorTestInquiry(lead));
   const newLeadsCount = businessLeads.filter(l => l.status === 'new' || l.status === 'tour_requested').length;
-  const todayDateStr = now.toISOString().split('T')[0];
   const overdueTasksCount = tasks.filter(t => t.status === 'pending' && t.due_date && t.due_date <= todayDateStr).length;
   const needsAttentionCount = newLeadsCount + overdueTasksCount;
 
@@ -256,7 +263,7 @@ export default async function PortalOverview() {
   const priorities: { title: string; meta: string; isOverdue?: boolean }[] = [];
 
   // 1. Tours today
-  const toursToday = businessLeads.filter(l => l.preferred_tour_date === todayDateStr && (l.status === 'tour_requested' || l.status === 'tour_confirmed'));
+  const toursToday = businessLeads.filter(l => l.preferred_tour_date === todayDateStr && !['attended', 'no_show', 'cancelled'].includes(l.tour_attendance_status || ''));
   if (toursToday.length > 0) {
     const times = toursToday.map(t => t.preferred_tour_time).filter(Boolean) as string[];
     const timeRange = times.length > 0 ? `${times.sort()[0]} - ${times.sort()[times.length - 1]}` : 'Scheduled';
@@ -280,7 +287,7 @@ export default async function PortalOverview() {
   });
 
   // 3. Unpaid bills due today or tomorrow
-  const tomorrowDateStr = new Date(currentYear, currentMonth, currentDay + 1).toISOString().split('T')[0];
+  const tomorrowDateStr = addDateKeyDays(todayDateStr, 1);
   const billsTodayOrTomorrow = bills.filter(b => {
     if (b.status === 'paid' || !b.due_date) return false;
     return b.due_date === todayDateStr || b.due_date === tomorrowDateStr;
@@ -298,15 +305,15 @@ export default async function PortalOverview() {
   // --- Rolling Calendar Outlook (Past 3 Days to Future 10 Days) ---
   const calendarDays = [];
   for (let i = -3; i <= 10; i++) {
-    const d = new Date(currentYear, currentMonth, currentDay + i);
-    const dayStr = d.toISOString().split('T')[0];
-    const weekday = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
-    const monthStr = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
-    const label = `${monthStr} ${d.getDate()}`;
-    const isToday = i === 0;
+    const dayStr = addDateKeyDays(todayDateStr, i);
+    const d = new Date(`${dayStr}T12:00:00Z`)
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short' }).format(d).toUpperCase();
+    const monthStr = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', month: 'short' }).format(d).toUpperCase();
+    const label = `${monthStr} ${Number(dayStr.slice(8, 10))}`;
+    const isToday = dayStr === todayDateStr;
 
     // Filter items for this day
-    const dayTours = businessLeads.filter(l => l.preferred_tour_date === dayStr && (l.status === 'tour_requested' || l.status === 'tour_confirmed'));
+    const dayTours = businessLeads.filter(l => l.preferred_tour_date === dayStr && l.tour_attendance_status !== 'cancelled');
     const dayEvents = businessBookings.filter(b => b.event_date === dayStr && b.status !== 'cancelled');
     const dayPayments = bills.filter(b => b.due_date === dayStr && b.status !== 'paid');
     const dayTasks = tasks.filter(t => t.due_date === dayStr && t.status === 'pending');
@@ -316,7 +323,7 @@ export default async function PortalOverview() {
       weekday,
       label,
       isToday,
-      dayNum: d.getDate(),
+      dayNum: Number(dayStr.slice(8, 10)),
       tours: dayTours,
       events: dayEvents,
       payments: dayPayments,

@@ -1,9 +1,10 @@
 import 'server-only'
 
 import { supabaseRest } from './supabaseRestServer'
-import { listLuxorInquiries } from './luxorInquiriesServer'
+import { listAllLuxorInquiries } from './luxorInquiriesServer'
 import { listLuxorBookingsWithPayments } from './luxorBookingsServer'
 import { isLuxorTestInquiry } from './luxorInquiryTypes'
+import { getLuxorTourAnalytics } from './luxorTourMetrics'
 
 export type AnalyticsDatePreset = '7d' | '30d' | '90d' | 'this_month' | 'previous_month' | 'custom'
 
@@ -24,6 +25,13 @@ export type MarketingSalesMetrics = {
   tourClicks: number | null
   toursBooked: number
   toursCompleted: number
+  tourAnalytics: {
+    totalScheduled: number
+    completed: number
+    noShows: number
+    completionRate: number
+    noShowRate: number
+  }
   proposalsSent: number
   bookings: number
   revenue: number
@@ -252,7 +260,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     supabaseRest<PublicEventRow[]>(
       `luxor_public_events?select=id,event_name,session_id,page_path,source,created_at,metadata&created_at=gte.${encodeURIComponent(prevStartIso)}&created_at=lte.${encodeURIComponent(prevEndIso)}&limit=10000`,
     ).catch(() => []),
-    listLuxorInquiries(2000).catch(() => []),
+    listAllLuxorInquiries().catch(() => []),
     listLuxorBookingsWithPayments(2000).catch(() => []),
   ])
 
@@ -312,19 +320,14 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     return t >= prevStartTimeMs && t <= prevEndTimeMs
   })
 
-  // Tours Booked (Inquiries requesting a tour or confirmed tour)
-  const isTourBooked = (inq: (typeof inquiries)[0]) =>
-    Boolean(inq.preferred_tour_date || inq.status === 'tour_requested' || inq.status === 'tour_confirmed' || inq.status === 'booked')
+  // Tour conversion metrics share the scheduled-tour-date cohort for each period.
+  const tourAnalytics = getLuxorTourAnalytics(businessInquiries, range.start, range.end)
+  const previousTourAnalytics = getLuxorTourAnalytics(businessInquiries, range.previousStart, range.previousEnd)
+  const toursBooked = tourAnalytics.totalScheduled
+  const prevToursBooked = previousTourAnalytics.totalScheduled
 
-  const toursBooked = currentInquiries.filter(isTourBooked).length
-  const prevToursBooked = prevInquiries.filter(isTourBooked).length
-
-  // Tours Completed (inquiries marked attended or completed)
-  const isTourCompleted = (inq: (typeof inquiries)[0]) =>
-    inq.tour_attendance_status === 'attended' || inq.metadata?.tour_attended === true
-
-  const toursCompleted = currentInquiries.filter(isTourCompleted).length
-  const prevToursCompleted = prevInquiries.filter(isTourCompleted).length
+  const toursCompleted = tourAnalytics.completed
+  const prevToursCompleted = previousTourAnalytics.completed
 
   // Proposals Sent
   const isProposalSent = (inq: (typeof inquiries)[0]) =>
@@ -523,8 +526,11 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
       : null
 
     // Filter CRM inquiries matching this category
-    const catInquiries = currentInquiries.filter((inq) => normalizeChannel(inq.source, inq.metadata) === category)
-    const catToursBooked = catInquiries.filter(isTourBooked).length
+    const catToursBooked = getLuxorTourAnalytics(
+      businessInquiries.filter((inq) => normalizeChannel(inq.source, inq.metadata) === category),
+      range.start,
+      range.end,
+    ).totalScheduled
 
     // Filter Bookings matching this category (via linked inquiry or booking source)
     const catBookings = currentBookings.filter((b) => {
@@ -674,6 +680,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     tourClicks,
     toursBooked,
     toursCompleted,
+    tourAnalytics,
     proposalsSent,
     bookings: bookingsCount,
     revenue: currentRevenue,

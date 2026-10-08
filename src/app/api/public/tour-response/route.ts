@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     // A cancelled tour (or a closed-lost opportunity) must not be revived by
     // an old confirmation/reschedule link in the client’s inbox.
-    if (inquiry.status === 'closed_lost' || inquiry.tour_attendance_status === 'cancelled') {
+    if (inquiry.status === 'closed_lost' || ['cancelled', 'attended', 'no_show'].includes(inquiry.tour_attendance_status || '')) {
       return NextResponse.json({ error: 'This tour is no longer available. Please contact Luxor Event Space if you need help.' }, { status: 410 })
     }
 

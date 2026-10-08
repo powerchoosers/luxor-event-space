@@ -2756,7 +2756,7 @@ export default function LeadDetailPage({
       await fetchAllData(false)
       notify({
         title: attendance === 'attended' ? 'Tour marked complete' : 'Tour marked no show',
-        description: attendance === 'no_show' ? 'A reschedule email is queued for three hours from now.' : 'Any pending no-show follow-up was cancelled.',
+        description: 'The outcome was saved without sending a message.',
         variant: 'success',
       })
     } catch (error) {
@@ -8406,8 +8406,14 @@ function LeadLifecycleRail({
       return { ...step, label: 'Inquiry', subtext: lead.pipeline_stage === 'newsletter' ? '' : formattedInquiryDate }
     }
     if (step.id === 'tour') {
-      const tourWasImplicitlyCompleted = step.isCompleted && lead.tour_attendance_status !== 'attended' && !formattedTourDate
-      return { ...step, label: 'Tour', subtext: formattedTourDate || (tourWasImplicitlyCompleted ? 'Skipped' : '') }
+      const outcomeLabel = lead.tour_attendance_status === 'attended'
+        ? 'Completed'
+        : lead.tour_attendance_status === 'no_show'
+          ? 'No Show'
+          : lead.tour_attendance_status === 'cancelled'
+            ? 'Cancelled'
+            : formattedTourDate ? 'Needs outcome' : ''
+      return { ...step, label: 'Tour', subtext: [formattedTourDate, outcomeLabel].filter(Boolean).join(' · ') }
     }
     if (step.id === 'proposal') {
       return {
@@ -9258,11 +9264,8 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
     currentProposal?.proposal_accepted_at ||
     latestBooking,
   )
-  const hasTourStepBeenReached = ['tour_requested', 'tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status) || hasProposalOrContractWorkflow
-  // A proposal or agreement can be created for a client who has already toured
-  // outside the portal. Keep the record untouched, but render the tour as
-  // complete so the operational screen does not send the owner backwards.
-  const hasTourBeenCompleted = lead.tour_attendance_status === 'attended' || hasProposalOrContractWorkflow || ['proposal', 'contract', 'deposit', 'planning', 'final_payment', 'event', 'closing'].includes(lead.pipeline_stage || '') || lead.status === 'proposal_sent' || lead.status === 'booked'
+  const hasTourBeenCompleted = lead.tour_attendance_status === 'attended'
+  const tourHasFinalOutcome = ['attended', 'no_show', 'cancelled'].includes(lead.tour_attendance_status || '')
   const hasProposalStepBeenReached = hasProposalOrContractWorkflow || lead.status === 'booked' || ['contract', 'deposit', 'planning', 'final_payment', 'event', 'closing'].includes(lead.pipeline_stage || '')
   const proposalIsActive = !hasProposalOrContractWorkflow && (lead.pipeline_stage === 'proposal' || lead.status === 'proposal_sent')
   const bookingMetadata = latestBooking?.metadata || {}
@@ -9292,8 +9295,8 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
     },
     {
       id: 'tour',
-      isCompleted: hasTourBeenCompleted || (hasTourStepBeenReached && lead.tour_attendance_status === 'attended'),
-      isActive: !hasTourBeenCompleted && (lead.status === 'contacted' || lead.status === 'tour_requested' || lead.status === 'tour_confirmed'),
+      isCompleted: hasTourBeenCompleted,
+      isActive: !tourHasFinalOutcome && Boolean(lead.preferred_tour_date || ['contacted', 'tour_requested', 'tour_confirmed'].includes(lead.status)),
     },
     {
       id: 'proposal',
