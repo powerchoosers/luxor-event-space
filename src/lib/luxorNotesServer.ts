@@ -65,6 +65,17 @@ export async function createNote(
     throw new Error('Note content cannot be empty.')
   }
 
+  if (taskId) {
+    const [task] = await supabaseRest<Array<{ id: string }>>(
+      `luxor_tasks?select=id&id=eq.${encodeURIComponent(taskId)}&inquiry_id=eq.${encodeURIComponent(inquiryId)}&limit=1`,
+    )
+    if (!task) {
+      const error = new Error('The linked follow-up task does not belong to this lead.')
+      error.name = 'LuxorNoteTaskLinkError'
+      throw error
+    }
+  }
+
   const [created] = await supabaseRest<LuxorNote[]>('luxor_notes?select=*', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },

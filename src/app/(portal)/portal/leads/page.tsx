@@ -652,7 +652,7 @@ export default function LeadsPage() {
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} loading={loading} />}
         {activeTab === 'clients' && <LeadsClientsTab leads={leads} sort={clientSort} onSort={updateClientSort} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'lost' && <LeadsLostTab leads={leads} />}
-        {activeTab === 'followups' && <FollowUpsTab leads={leads} />}
+        {activeTab === 'followups' && <FollowUpsTab leads={leads} onLeadsRefresh={fetchLeads} />}
         {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
 

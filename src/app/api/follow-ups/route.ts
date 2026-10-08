@@ -6,13 +6,6 @@ import type { LuxorFollowUpAction, LuxorFollowUpEnrollment } from '@/lib/luxorFo
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 
-async function patchOne(path: string, body: Record<string, unknown>) {
-  const [updated] = await supabaseRest<Array<{ id: string }>>(path, {
-    method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(body),
-  })
-  return updated ?? null
-}
-
 export async function GET(request: NextRequest) {
   if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
   try {
@@ -114,50 +107,22 @@ export async function POST(request: NextRequest) {
       if (!/^[0-9a-f-]{36}$/i.test(enrollmentId) || !/^[0-9a-f-]{36}$/i.test(itemId) || !['skip', 'reschedule'].includes(decision)) {
         return NextResponse.json({ error: 'Choose a valid overdue email and recovery action.' }, { status: 400 })
       }
-      const [enrollment] = await supabaseRest<Array<{ id: string; inquiry_id: string; automation_key: string; status: string; marketing_consent_at_enrollment: boolean }>>(
-        `luxor_follow_up_enrollments?select=id,inquiry_id,automation_key,status,marketing_consent_at_enrollment&id=eq.${encodeURIComponent(enrollmentId)}&limit=1`,
-      )
-      if (!enrollment || enrollment.inquiry_id !== inquiryId || enrollment.automation_key !== 'brochure_lead') return NextResponse.json({ error: 'The selected sequence does not belong to this lead.' }, { status: 404 })
-      if (enrollment.status !== 'paused') return NextResponse.json({ error: 'Pause the sequence before reviewing overdue email timing.' }, { status: 409 })
-      const inquiry = await getLuxorInquiry(inquiryId)
-      if (!inquiry || !enrollment.marketing_consent_at_enrollment || !inquiry.marketing_opt_in || ['tour_confirmed', 'booked', 'closed_lost'].includes(inquiry.status) || inquiry.follow_up_disposition && inquiry.follow_up_disposition !== 'no_response') {
-        return NextResponse.json({ error: 'This lead is no longer eligible for brochure follow-up.' }, { status: 409 })
-      }
-      const [item] = await supabaseRest<Array<{ id: string; channel: string; step_key: string; status: string; scheduled_at: string; email_job_id: string | null }>>(
-        `luxor_follow_up_actions?select=id,channel,step_key,status,scheduled_at,email_job_id&id=eq.${encodeURIComponent(itemId)}&enrollment_id=eq.${encodeURIComponent(enrollmentId)}&limit=1`,
-      )
-      if (!item || item.channel !== 'email' || !['scheduled', 'email_queued'].includes(item.status) || new Date(item.scheduled_at).getTime() > Date.now()) {
-        return NextResponse.json({ error: 'That item is no longer an overdue queued email.' }, { status: 409 })
-      }
-      const jobQuery = item.email_job_id
-        ? `id=eq.${encodeURIComponent(item.email_job_id)}&automation_enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=eq.queued`
-        : `automation_enrollment_id=eq.${encodeURIComponent(enrollmentId)}&automation_step_key=eq.${encodeURIComponent(item.step_key)}&status=eq.queued`
-      const queuedJobs = await supabaseRest<Array<{ id: string }>>(`luxor_email_jobs?select=id&${jobQuery}&limit=1`)
-      if (item.email_job_id && !queuedJobs.length) return NextResponse.json({ error: 'The queued email has changed state. Refresh this lead before reviewing it.' }, { status: 409 })
-      if (decision === 'skip') {
-        const skipped = await patchOne(
-          `luxor_follow_up_actions?id=eq.${encodeURIComponent(item.id)}&enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=in.(scheduled,email_queued)`,
-          { status: 'skipped', outcome: 'Skipped by staff during overdue resume review.', updated_at: new Date().toISOString() },
-        )
-        if (!skipped) return NextResponse.json({ error: 'The overdue email changed state. Refresh this lead before reviewing it.' }, { status: 409 })
-        if (queuedJobs.length) {
-          const cancelled = await patchOne(`luxor_email_jobs?${jobQuery}`, { status: 'cancelled', last_error: 'Skipped by staff during overdue resume review.', updated_at: new Date().toISOString() })
-          if (!cancelled) return NextResponse.json({ error: 'The action was skipped, but its queued job changed state. Refresh before resuming.' }, { status: 409 })
-        }
-        return NextResponse.json({ success: true, decision })
-      }
       const scheduledAt = typeof body.scheduledAt === 'string' ? new Date(body.scheduledAt) : null
-      if (!scheduledAt || !Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) return NextResponse.json({ error: 'Choose a future date and time to reschedule this email.' }, { status: 400 })
-      if (queuedJobs.length) {
-        const rescheduledJob = await patchOne(`luxor_email_jobs?${jobQuery}`, { scheduled_for: scheduledAt.toISOString(), updated_at: new Date().toISOString() })
-        if (!rescheduledJob) return NextResponse.json({ error: 'The queued email changed state. Refresh this lead before reviewing it.' }, { status: 409 })
-      }
-      const rescheduledAction = await patchOne(
-        `luxor_follow_up_actions?id=eq.${encodeURIComponent(item.id)}&enrollment_id=eq.${encodeURIComponent(enrollmentId)}&status=in.(scheduled,email_queued)`,
-        { scheduled_at: scheduledAt.toISOString(), updated_at: new Date().toISOString() },
-      )
-      if (!rescheduledAction) return NextResponse.json({ error: 'The email action changed state. Refresh before resuming the sequence.' }, { status: 409 })
-      return NextResponse.json({ success: true, decision, scheduledAt: scheduledAt.toISOString() })
+      if (decision === 'reschedule' && (!scheduledAt || !Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now())) return NextResponse.json({ error: 'Choose a future date and time to reschedule this email.' }, { status: 400 })
+      const result = await supabaseRest<{ status: string; decision?: string; scheduled_at?: string }>('rpc/luxor_recover_brochure_follow_up_overdue', {
+        method: 'POST', body: JSON.stringify({
+          p_inquiry_id: inquiryId,
+          p_enrollment_id: enrollmentId,
+          p_action_id: itemId,
+          p_decision: decision,
+          p_scheduled_at: decision === 'reschedule' ? scheduledAt!.toISOString() : null,
+        }),
+      })
+      if (result.status === 'success') return NextResponse.json({ success: true, decision, scheduledAt: result.scheduled_at ?? null })
+      if (result.status === 'terminal_skip_requires_reschedule_or_stop') return NextResponse.json({ error: 'The final approved email cannot be skipped. Reschedule it to a future time or stop the sequence with a reason.' }, { status: 409 })
+      if (result.status === 'future_time_required') return NextResponse.json({ error: 'Choose a future date and time to reschedule this email.' }, { status: 400 })
+      if (result.status === 'missing_lead' || result.status === 'missing_enrollment') return NextResponse.json({ error: 'The selected sequence no longer belongs to this lead.' }, { status: 404 })
+      return NextResponse.json({ error: 'The sequence or email changed state. Refresh this lead before trying again.' }, { status: 409 })
     }
     if (action === 'pause' || action === 'resume' || action === 'stop') {
       const [priorEnrollment] = await supabaseRest<Array<{ id: string; status: string; ended_reason: string | null }>>(

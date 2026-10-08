@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:follow-ups": "node --test tests/follow-ups-route.test.cjs"
+    "test:follow-ups": "node --test tests/follow-ups-*.test.cjs tests/notes-route.test.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
