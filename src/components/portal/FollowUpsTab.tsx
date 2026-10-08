@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { CalendarClock, Check, ChevronRight, CircleAlert, Eye, Mail, Phone, Plus, Search, Settings2, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
+import { getCompletedTourLeads } from '@/lib/luxorTourMetrics'
 import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask, phoneCompletionNeedsOutcome } from '@/lib/luxorFollowUpTaskPolicy'
 import { PortalButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -188,11 +189,7 @@ export default function FollowUpsTab({ leads }: { leads: LuxorInquiry[] }) {
   const selected = selectedId ? leadById.get(selectedId) : undefined
   const selectedTasks = selectedId ? followUpTasks.filter((task) => task.inquiry_id === selectedId).sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? '')) : []
   const pending = followUpTasks.filter((task) => task.status === 'pending')
-  const completedTourLeads = useMemo(() => {
-    const uniqueLeads = new Map<string, LuxorInquiry>()
-    leads.filter((lead) => lead.tour_attendance_status === 'attended').forEach((lead) => uniqueLeads.set(lead.id, lead))
-    return [...uniqueLeads.values()].sort((a, b) => (b.preferred_tour_date || '').localeCompare(a.preferred_tour_date || ''))
-  }, [leads])
+  const completedTourLeads = useMemo(() => getCompletedTourLeads(leads), [leads])
   const stats = [
     { label: 'Leads in Follow Up', value: new Set(rows.filter((row) => row.status !== 'Completed' && row.status !== 'Skipped').map((row) => row.inquiryId)).size },
     { label: 'Due Today', value: rows.filter((row) => row.status === 'Due today').length },

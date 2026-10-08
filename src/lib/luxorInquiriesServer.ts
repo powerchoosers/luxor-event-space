@@ -3,6 +3,7 @@ import 'server-only'
 import { compactText, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
+import { loadLuxorPages } from './luxorTourMetrics'
 import { recordLuxorSmsConsent } from './luxorTextAutomationsServer'
 import {
   applyTourSlotToInquiry,
@@ -289,30 +290,18 @@ function getMissingColumnFromSchemaCacheError(message: string) {
 export async function listLuxorInquiries(limit = 1000) {
   const requested = Math.max(0, Math.floor(limit))
   const pageSize = 1000
-  const inquiries: LuxorInquiry[] = []
-  while (inquiries.length < requested) {
-    const count = Math.min(pageSize, requested - inquiries.length)
-    const page = await supabaseRest<LuxorInquiry[]>(
+  return loadLuxorPages((offset, count) => supabaseRest<LuxorInquiry[]>(
       `luxor_inquiries?select=*&order=created_at.desc&limit=${count}`,
-      { headers: { Range: `${inquiries.length}-${inquiries.length + count - 1}` } },
-    )
-    inquiries.push(...page)
-    if (page.length < count) break
-  }
-  return inquiries
+      { headers: { Range: `${offset}-${offset + count - 1}` } },
+    ), pageSize, requested)
 }
 
 export async function listAllLuxorInquiries() {
   const pageSize = 1000
-  const inquiries: LuxorInquiry[] = []
-  while (true) {
-    const page = await supabaseRest<LuxorInquiry[]>(
+  return loadLuxorPages((offset, count) => supabaseRest<LuxorInquiry[]>(
       `luxor_inquiries?select=*&order=created_at.desc&limit=${pageSize}`,
-      { headers: { Range: `${inquiries.length}-${inquiries.length + pageSize - 1}` } },
-    )
-    inquiries.push(...page)
-    if (page.length < pageSize) return inquiries
-  }
+      { headers: { Range: `${offset}-${offset + count - 1}` } },
+    ), pageSize)
 }
 
 export async function getLuxorInquiry(id: string) {
