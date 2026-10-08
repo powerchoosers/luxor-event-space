@@ -1,6 +1,7 @@
 -- Keep overdue-action recovery atomic with its linked email job. A retry after
 -- a failed request can safely repeat the same operation without leaving an
--- action/job pair split across terminal states or schedule times.
+-- action/job pair split across terminal states or schedule times. This uses
+-- the caller's existing table grants; it does not alter database role grants.
 create or replace function public.luxor_recover_brochure_follow_up_overdue(
   p_inquiry_id uuid,
   p_enrollment_id uuid,
@@ -10,7 +11,7 @@ create or replace function public.luxor_recover_brochure_follow_up_overdue(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = ''
 as $$
 declare
@@ -124,8 +125,5 @@ begin
   return jsonb_build_object('status', 'success', 'decision', 'reschedule', 'action_id', target_action.id, 'scheduled_at', p_scheduled_at);
 end;
 $$;
-
-revoke all on function public.luxor_recover_brochure_follow_up_overdue(uuid, uuid, uuid, text, timestamptz) from public, anon, authenticated;
-grant execute on function public.luxor_recover_brochure_follow_up_overdue(uuid, uuid, uuid, text, timestamptz) to service_role;
 
 notify pgrst, 'reload schema';

@@ -164,7 +164,7 @@ test('the final Day 30 email cannot be skipped and leaves the queued email intac
   assert.equal(state.job.status, 'queued')
 })
 
-test('database recovery function validates eligibility, locks linked rows, and updates the action/job pair atomically', () => {
+test('database recovery function validates eligibility, locks linked rows, and updates the action/job pair atomically without changing role grants', () => {
   const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20261008020000_atomic_follow_up_overdue_recovery.sql'), 'utf8')
   assert.match(migration, /target_inquiry\.marketing_opt_in/i)
   assert.match(migration, /target_enrollment\.status <> 'paused'/i)
@@ -175,8 +175,8 @@ test('database recovery function validates eligibility, locks linked rows, and u
   assert.match(migration, /set status = 'skipped'/i)
   assert.match(migration, /set scheduled_for = p_scheduled_at/i)
   assert.match(migration, /set scheduled_at = p_scheduled_at/i)
-  assert.match(migration, /grant execute[\s\S]*to service_role/i)
-  assert.match(migration, /revoke all[\s\S]*from public, anon, authenticated/i)
+  assert.match(migration, /security invoker/i)
+  assert.doesNotMatch(migration, /^\s*(grant|revoke)\b/im)
 })
 
 test('reschedule requires an explicit future time and updates only the selected queued items', async () => {
