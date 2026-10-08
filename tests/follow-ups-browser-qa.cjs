@@ -37,7 +37,15 @@ async function waitForServer(child) {
     const errors = []
     const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333', '44444444-4444-4444-8444-444444444444', '55555555-5555-4555-8555-555555555555']
     const dates = { overdue: '2026-10-06', today: '2026-10-08', future: '2026-10-12' }
-    const tasks = ids.slice(0, 4).map((id, i) => ({ id: `task-${i + 1}`, created_at: '2026-10-01T12:00:00Z', inquiry_id: id, title: `Synthetic action ${i + 1}`, description: '[follow-up:phone] Fixture only', due_date: dates[['overdue', 'today', 'future', 'future'][i]], due_at: `${dates[['overdue', 'today', 'future', 'future'][i]]}T15:00:00Z`, completed_at: null, priority: 'medium', status: 'pending', assigned_to: null, automation_enrollment_id: null }))
+    const makeTask = (id, inquiryId, title, date) => ({ id, created_at: '2026-10-01T12:00:00Z', inquiry_id: inquiryId, title, description: '[follow-up:phone] Fixture only', due_date: date, due_at: `${date}T15:00:00Z`, completed_at: null, priority: 'medium', status: 'pending', assigned_to: null, automation_enrollment_id: null })
+    const tasks = [
+      makeTask('task-1', ids[0], 'Synthetic action 1', dates.future),
+      makeTask('task-6', ids[0], 'Synthetic second activity', dates.today),
+      makeTask('task-2', ids[1], 'Synthetic action 2', dates.today),
+      makeTask('task-3', ids[2], 'Synthetic action 3', dates.future),
+      makeTask('task-4', ids[3], 'Synthetic action 4', dates.future),
+      makeTask('task-5', ids[4], 'Synthetic paused-lead review', dates.future),
+    ]
     const leads = [
       { id: ids[0], full_name: 'Synthetic Demo', email: 'demo@example.test', phone: '+12105550101', status: 'new', source: 'homepage_brochure', flow: 'brochure_lead', event_type: 'Wedding', target_date: '2027-06-14', guest_count: 90, budget: '$10k', created_at: '2026-10-01T12:00:00Z', updated_at: '2026-10-01T12:00:00Z', metadata: {}, marketing_opt_in: true, message: 'Fixture only' },
       { id: ids[1], full_name: 'Synthetic Demo', email: 'demo@example.test', phone: '+12105550102', status: 'new', source: 'homepage_brochure', flow: 'brochure_lead', event_type: 'Wedding', target_date: '2027-06-14', guest_count: 90, budget: '$10k', created_at: '2026-10-02T12:00:00Z', updated_at: '2026-10-02T12:00:00Z', metadata: {}, marketing_opt_in: true, message: 'Fixture only' },
@@ -45,7 +53,11 @@ async function waitForServer(child) {
       { id: ids[3], full_name: 'Synthetic Post Tour', email: 'tour@example.test', phone: '+12105550104', status: 'tour_confirmed', source: 'homepage_brochure', flow: 'brochure_lead', event_type: 'Quinceañera', target_date: '2027-09-03', guest_count: 120, budget: '$20k', tour_attendance_status: 'attended', created_at: '2026-10-04T12:00:00Z', updated_at: '2026-10-04T12:00:00Z', metadata: {}, marketing_opt_in: true, message: 'Fixture only' },
       { id: ids[4], full_name: 'Synthetic Paused', email: 'paused@example.test', phone: '+12105550105', status: 'new', source: 'homepage_brochure', flow: 'brochure_lead', event_type: 'Wedding', target_date: '2027-10-03', guest_count: 50, budget: null, created_at: '2026-10-05T12:00:00Z', updated_at: '2026-10-05T12:00:00Z', metadata: {}, marketing_opt_in: true, message: 'Fixture only' },
     ]
-    const seq = Object.fromEntries(ids.map((id, i) => [id, { id: `enroll-${i + 1}`, inquiry_id: id, automation_key: 'brochure_lead', status: i === 1 || i === 4 ? 'paused' : 'active', started_at: '2026-10-01T12:00:00Z', response_received_at: null, ended_reason: null, marketing_consent_at_enrollment: true }]))
+    const seq = Object.fromEntries(ids.map((id, i) => [id, { id: `enroll-${i + 1}`, inquiry_id: id, automation_key: 'brochure_lead', status: i === 1 || i === 2 || i === 4 ? 'paused' : 'active', started_at: '2026-10-01T12:00:00Z', response_received_at: null, ended_reason: null, marketing_consent_at_enrollment: true }]))
+    const overdueActions = [
+      { id: 'action-overdue-2', inquiry_id: ids[1], enrollment_id: 'enroll-2', step_key: 'email_2', channel: 'email', scheduled_at: '2026-10-06T15:00:00Z', status: 'email_queued', email_job_id: 'synthetic-job-2' },
+      { id: 'action-overdue-5', inquiry_id: ids[2], enrollment_id: 'enroll-3', step_key: 'email_5', channel: 'email', scheduled_at: '2026-10-06T15:00:00Z', status: 'email_queued', email_job_id: 'synthetic-job-5' },
+    ]
     const history = []
     await page.route('**/*', async (route) => {
       const url = new URL(route.request().url())
@@ -73,13 +85,13 @@ async function waitForServer(child) {
         tasks.push(task); return json({ task })
       }
       if (url.pathname === '/api/tasks' && method === 'PATCH') { const index = tasks.findIndex((item) => item.id === body.id); if (index >= 0) tasks[index] = { ...tasks[index], ...body }; return json({ success: true }) }
-      if (url.pathname === '/api/follow-ups' && method === 'GET' && url.searchParams.get('dashboard') === '1') return json({ emailActions: [], pausedEnrollmentIds: ['enroll-2', 'enroll-5'], pausedEnrollments: [{ id: 'enroll-5', inquiry_id: ids[4] }], sendingEnabled: true })
-      if (url.pathname === '/api/follow-ups' && method === 'GET' && url.searchParams.has('inquiryId')) { const id = url.searchParams.get('inquiryId'); return json({ enrollment: seq[id] ?? null, actions: id === ids[1] ? [{ id: 'action-overdue', inquiry_id: id, enrollment_id: 'enroll-2', step_key: 'email_2', channel: 'email', scheduled_at: '2026-10-06T15:00:00Z', status: 'email_queued', email_job_id: 'synthetic-job' }] : [], history: history.filter((item) => item.inquiry_id === id), hasMoreHistory: false }) }
+      if (url.pathname === '/api/follow-ups' && method === 'GET' && url.searchParams.get('dashboard') === '1') return json({ emailActions: overdueActions.filter((action) => action.status === 'email_queued'), pausedEnrollmentIds: ['enroll-2', 'enroll-3', 'enroll-5'], pausedEnrollments: [{ id: 'enroll-5', inquiry_id: ids[4] }], sendingEnabled: true })
+      if (url.pathname === '/api/follow-ups' && method === 'GET' && url.searchParams.has('inquiryId')) { const id = url.searchParams.get('inquiryId'); return json({ enrollment: seq[id] ?? null, actions: overdueActions.filter((action) => action.inquiry_id === id && action.status === 'email_queued'), history: history.filter((item) => item.inquiry_id === id), hasMoreHistory: false }) }
       if (url.pathname === '/api/follow-ups' && method === 'POST') {
         if (body.action === 'resume') return json({ error: 'This paused sequence has an overdue email.' }, 409)
         if (body.action === 'pause') { seq[body.inquiryId].status = 'paused'; return json({ success: true, status: 'paused' }) }
         if (body.action === 'stop') { seq[body.inquiryId].status = 'stopped'; return json({ success: true, status: 'stopped' }) }
-        if (body.action === 'recover_overdue') return json({ success: true })
+        if (body.action === 'recover_overdue') { const action = overdueActions.find((item) => item.id === body.itemId); if (action && body.decision === 'skip') action.status = 'skipped'; return json({ success: Boolean(action) }) }
         if (body.action === 'disposition') return json({ success: true, disposition: body.disposition })
         if (body.action === 'response') return json({ recorded: true })
         return json({ success: true })
@@ -90,9 +102,12 @@ async function waitForServer(child) {
     page.on('pageerror', (error) => errors.push(error.message))
     await page.goto(`${origin}/followups-qa`, { waitUntil: 'domcontentloaded' })
     const cards = page.locator('article[role="button"]')
-    await page.getByText('Synthetic action 1').waitFor()
+    await page.getByText('Synthetic second activity').waitFor()
     assert.equal(await cards.count(), 5, 'lead cards are grouped by distinct lead id, including paused-only lead')
-    assert.equal(await page.getByText('Due Today', { exact: true }).count(), 1)
+    const statValue = async (label) => page.getByText(label, { exact: true }).locator('xpath=../div[1]').innerText()
+    assert.equal(await statValue('Due Today'), '1', 'numeric due-today counter')
+    assert.equal(await statValue('Overdue'), '2', 'numeric overdue counter counts leads, including automation actions')
+    assert.equal(await statValue('Upcoming'), '2', 'numeric upcoming counter counts leads')
     await page.getByRole('button', { name: 'New Leads' }).click()
     assert.equal(await cards.count(), 4)
     await page.getByRole('button', { name: 'Post-Tour' }).click()
@@ -100,7 +115,12 @@ async function waitForServer(child) {
     await page.getByRole('button', { name: 'All', exact: true }).click()
     await page.getByLabel('Search leads or follow-ups').fill('Synthetic Demo')
     assert.equal(await cards.count(), 2, 'same-name leads stay distinct')
-    await cards.filter({ hasText: 'Synthetic Demo' }).first().getByRole('button', { name: 'View' }).click()
+    await cards.filter({ hasText: 'Synthetic second activity' }).getByRole('button', { name: 'View' }).first().click()
+    await page.getByRole('tab', { name: 'Timeline' }).click()
+    await page.getByText('Synthetic action 1 · pending').waitFor()
+    await page.getByText('Synthetic second activity · pending').waitFor()
+    assert.equal(await cards.count(), 2, 'multiple activities still render one card per lead')
+    await page.getByRole('tab', { name: 'Overview' }).click()
     await page.getByRole('button', { name: 'Schedule Tour' }).click()
     const frame = page.frameLocator('iframe[title="Synthetic Demo workspace"]')
     await frame.locator('#mark-attended').click()
@@ -112,12 +132,30 @@ async function waitForServer(child) {
     assert(requests.some((item) => item.path === '/api/tasks' && item.method === 'GET'), 'closing the modal refreshed Follow-Up tasks')
     assert(requests.some((item) => item.path === '/api/follow-ups' && item.query.includes('inquiryId=' + ids[0])), 'closing the modal refreshed the selected lead history')
     await page.getByRole('tab', { name: 'Overview' }).click()
+    await page.getByLabel('Search leads or follow-ups').fill('Synthetic Demo')
+    await cards.filter({ hasText: 'Email #2' }).getByRole('button', { name: 'View' }).first().click()
+    await page.getByRole('tab', { name: 'Overview' }).click()
+    await page.getByRole('button', { name: 'Skip', exact: true }).first().click()
+    assert(requests.some((item) => item.path === '/api/follow-ups' && item.body.action === 'recover_overdue' && item.body.itemId === 'action-overdue-2' && item.body.decision === 'skip'), 'paused overdue recovery targets the selected synthetic action')
+    await page.getByLabel('Search leads or follow-ups').fill('Synthetic No Phone')
+    await cards.getByRole('button', { name: 'View' }).first().click()
+    await page.getByRole('tab', { name: 'Overview' }).click()
+    assert.equal(await page.getByRole('button', { name: 'Log Call', exact: true }).isDisabled(), true, 'missing phone disables call logging')
+    await page.getByText(/final approved email cannot be skipped/i).waitFor()
+    assert.equal(await page.getByRole('button', { name: 'Skip', exact: true }).isDisabled(), true, 'Day 30 skip control is disabled')
+    await page.keyboard.press('Escape')
+    await page.getByLabel('Search leads or follow-ups').fill('Synthetic second activity')
+    await cards.getByRole('button', { name: 'View' }).first().click()
+    await page.getByRole('tab', { name: 'Overview' }).click()
     await page.getByRole('button', { name: 'Log Call', exact: true }).click({ force: true })
     assert.equal(await page.getByText('This form does not place a call.').count(), 1)
     assert(!requests.some((item) => item.path.includes('voice') || (item.path.includes('call') && item.method === 'POST')), 'log-only call flow did not place a call')
     await page.getByRole('button', { name: 'Cancel', exact: true }).last().click()
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'mobile viewport has no page-level horizontal overflow')
+    assert.equal(await cards.count(), 1, 'filtered lead card remains visible at mobile width')
     assert.deepEqual(errors, [], 'browser runtime has no uncaught page errors')
-    console.log(JSON.stringify({ pass: true, scenarios: 10, syntheticApiRequests: requests.length, pageErrors: errors.length, checks: ['one row per persistent lead ID', 'due-today count', 'new and post-tour filters', 'same-name search', 'iframe action refreshes lead/tasks/history after close', 'manual call logging has no dial side effect'] }))
+    console.log(JSON.stringify({ pass: true, scenarios: 17, syntheticApiRequests: requests.length, pageErrors: errors.length, checks: ['one card per lead ID with multiple activities', 'numeric due-today/overdue/upcoming counters', 'new and post-tour filters', 'same-name search', 'iframe action refreshes lead/tasks/history after close', 'paused overdue recovery target', 'no-phone call control disabled', 'email_5 skip blocked', 'manual call logging has no dial side effect', 'mobile width has no horizontal overflow'] }))
     await browser.close()
   } finally {
     if (browser) await browser.close().catch(() => {})
