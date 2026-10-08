@@ -128,30 +128,13 @@ export async function POST(request: NextRequest) {
           pipeline_stage: 'proposal',
         })
       }
-      if (attendance === 'attended' || attendance === 'rescheduled' || attendance === 'cancelled') {
+      if (attendance === 'attended' || attendance === 'no_show' || attendance === 'rescheduled' || attendance === 'cancelled') {
         await cancelQueuedTourEmailJobs(inquiryId)
       }
-      let noShowJob = null
-      if (attendance === 'no_show' && inquiry.email) {
-        const existingJobs = await listLuxorEmailJobsForInquiry(inquiryId)
-        const alreadyQueued = existingJobs.some((job) => job.job_type === 'tour_no_show_reschedule' && job.status === 'queued')
-        if (!alreadyQueued) {
-          const token = inquiry.tour_response_token || createPublicToken()
-          const email = buildTourEmail('tour_no_show_reschedule', inquiry, token)
-          noShowJob = await createLuxorEmailJob({
-            inquiryId,
-            jobType: 'tour_no_show_reschedule',
-            recipientEmail: inquiry.email,
-            subject: email.subject,
-            body: email.body,
-            scheduledFor: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
-            metadata: { attendance_occurrence: inquiry.tour_confirmed_at || inquiry.preferred_tour_date || new Date().toISOString(), requestedBy: session.email },
-          })
-          if (noShowJob && !inquiry.tour_response_token) await updateLuxorInquiry(inquiryId, { tour_response_token: token })
-        }
+      if (inquiry.tour_attendance_status !== attendance) {
+        await createNote(inquiryId, `Tour attendance marked as ${attendance.replaceAll('_', ' ')}.`, 'status_change', 'Portal Owner')
       }
-      await createNote(inquiryId, `Tour attendance marked as ${attendance.replaceAll('_', ' ')}.`, 'status_change', 'Portal Owner')
-      return NextResponse.json({ inquiry: updated, leadEvent: updatedLeadEvent, noShowJob })
+      return NextResponse.json({ inquiry: updated, leadEvent: updatedLeadEvent, noShowJob: null })
     }
 
     if (action === 'schedule-tour') {

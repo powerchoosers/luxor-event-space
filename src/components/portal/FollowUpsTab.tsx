@@ -16,7 +16,7 @@ type SequenceInfo = { status: 'active' | 'paused' | 'completed' | 'stopped'; end
 type SequenceAction = { id: string; enrollment_id: string; step_key: string; channel: string; scheduled_at: string; status: string; email_job_id: string | null }
 type EmailAction = { id: string; inquiry_id: string; step_key: string; scheduled_at: string | null; status: string; enrollment_id?: string; channel?: string; email_job_id?: string | null }
 type PausedEnrollment = { id: string; inquiry_id: string }
-type FollowUpRow = { inquiryId: string; next: { id: string; channel: Channel; title: string; dueAt: string | null; dueDate: string | null; status: string; assignee: string; task?: LuxorTask }; activities: Activity[] }
+type FollowUpRow = { inquiryId: string; next: { id: string; channel: Channel; title: string; dueAt: string | null; dueDate: string | null; status: string; assignee: string; task?: LuxorTask }; activities: Activity[]; postTourStatus?: string }
 type Filter = 'all' | 'new' | 'post_tour' | 'overdue'
 type DetailTab = 'overview' | 'event' | 'proposals' | 'notes' | 'timeline'
 type CallDraft = { lead: LuxorInquiry; task?: LuxorTask } | null
@@ -174,6 +174,11 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const eventTypes = useMemo(() => [...new Set(leads.map((lead) => lead.event_type).filter((value): value is string => Boolean(value)))].sort(), [leads])
   const pausedEnrollments = useMemo(() => new Set(pausedEnrollmentIds), [pausedEnrollmentIds])
   const followUpTasks = useMemo(() => tasks.filter(isLuxorFollowUpTask), [tasks])
+  const completedTourLeads = useMemo(() => {
+    const unique = new Map<string, LuxorInquiry>()
+    leads.filter((lead) => lead.tour_attendance_status === 'attended').forEach((lead) => unique.set(lead.id, lead))
+    return [...unique.values()].sort((a, b) => (b.preferred_tour_date || '').localeCompare(a.preferred_tour_date || ''))
+  }, [leads])
   const rows = useMemo<FollowUpRow[]>(() => {
     const entries: Array<{ inquiryId: string; id: string; channel: Channel; title: string; dueAt: string | null; dueDate: string | null; status: string; assignee: string; task?: LuxorTask }> = [
       ...followUpTasks.filter((task) => task.status === 'pending' && !(task.automation_enrollment_id && pausedEnrollments.has(task.automation_enrollment_id))).map((task) => ({ inquiryId: task.inquiry_id, id: task.id, channel: taskChannel(task), title: task.title, dueAt: task.due_at ?? null, dueDate: task.due_date ?? null, status: stateFor(task.due_at ?? null, task.due_date ?? null, today), assignee: task.assigned_to ?? 'Unassigned', task })),
@@ -182,7 +187,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     ]
     const grouped = new Map<string, typeof entries>()
     for (const entry of entries) grouped.set(entry.inquiryId, [...(grouped.get(entry.inquiryId) ?? []), entry])
-    return [...grouped.entries()].flatMap(([inquiryId, items]) => {
+    const activityRows = [...grouped.entries()].flatMap(([inquiryId, items]) => {
       const lead = leadById.get(inquiryId)
       if (!lead) return []
       const ordered = [...items].sort((a, b) => {
@@ -195,8 +200,25 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       const current = ordered[0]
       const allActivities: Activity[] = ordered.map((item) => ({ id: `next-${item.id}`, at: item.dueAt ?? item.dueDate ?? '', kind: 'follow-up', label: `${item.channel === 'phone' ? 'Phone call' : item.assignee === 'Automated' ? 'Automated email' : 'Email task'} · ${item.title}`, detail: `${item.status} · ${dateLabel(item.dueAt, item.dueDate)}${item.task && taskNotes(item.task) ? ` · ${taskNotes(item.task)}` : ''}` }))
       return [{ inquiryId, next: current, activities: allActivities }]
-    }).sort((a, b) => (a.next.dueAt ?? a.next.dueDate ?? '').localeCompare(b.next.dueAt ?? b.next.dueDate ?? ''))
-  }, [followUpTasks, emailActions, leadById, pausedEnrollmentIds, pausedSequenceRecords, today])
+    })
+    const postTourStatus = (inquiryId: string) => {
+      const hasPending = followUpTasks.some((task) => task.inquiry_id === inquiryId && task.status === 'pending')
+        || emailActions.some((action) => action.inquiry_id === inquiryId && ['queued', 'scheduled', 'pending', 'email_queued'].includes(action.status))
+      const hasCompleted = followUpTasks.some((task) => task.inquiry_id === inquiryId && task.status === 'completed')
+        || emailActions.some((action) => action.inquiry_id === inquiryId && ['completed', 'sent'].includes(action.status))
+      return hasPending ? 'Follow-Up Scheduled' : hasCompleted ? 'Follow-Up Completed' : 'Needs Follow-Up'
+    }
+    const completedByLead = new Map(completedTourLeads.map((lead) => [lead.id, lead]))
+    const rowsWithStatus = activityRows.map((row) => completedByLead.has(row.inquiryId) ? { ...row, postTourStatus: postTourStatus(row.inquiryId) } : row)
+    const rowsByLead = new Set(activityRows.map((row) => row.inquiryId))
+    const missingPostTourRows = completedTourLeads.filter((lead) => !rowsByLead.has(lead.id)).map((lead) => ({
+      inquiryId: lead.id,
+      next: { id: `post-tour-${lead.id}`, channel: 'email' as const, title: 'Post-Tour Follow-Up', dueAt: null, dueDate: null, status: 'Needs Follow-Up', assignee: 'Unassigned' },
+      activities: [{ id: `post-tour-${lead.id}-activity`, at: lead.preferred_tour_date || '', kind: 'follow-up' as const, label: 'Completed tour', detail: `Tour date: ${lead.preferred_tour_date || 'Not recorded'}${lead.preferred_tour_time ? ` · ${lead.preferred_tour_time}` : ''}` }],
+      postTourStatus: postTourStatus(lead.id),
+    }))
+    return [...rowsWithStatus, ...missingPostTourRows].sort((a, b) => (a.next.dueAt ?? a.next.dueDate ?? '').localeCompare(b.next.dueAt ?? b.next.dueDate ?? ''))
+  }, [followUpTasks, emailActions, leadById, pausedEnrollmentIds, pausedSequenceRecords, today, completedTourLeads])
   const visibleRows = useMemo(() => rows.filter((row) => {
     const lead = leadById.get(row.inquiryId)!
     const search = `${lead.full_name} ${lead.email ?? ''} ${lead.phone ?? ''} ${row.activities.map((item) => item.label).join(' ')}`.toLowerCase()
@@ -503,7 +525,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
           const lead = leadById.get(row.inquiryId)!
           const state = row.next.status
           return <article key={row.inquiryId} role="button" tabIndex={0} onClick={() => { selectLead(row.inquiryId); setDetailTab('overview') }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectLead(row.inquiryId); setDetailTab('overview') } }} className={`cursor-pointer rounded-xl border bg-[color:var(--portal-card)] p-4 shadow-sm transition hover:border-[#caa24c]/60 ${state === 'Overdue' ? 'border-red-300/80 dark:border-red-900/60' : 'border-[color:var(--portal-border)]'}`}>
-            <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="truncate font-semibold">{lead.full_name}</h3><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</p></div><span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${isPostTour(lead) ? 'bg-violet-100 text-violet-800 dark:bg-violet-950/50 dark:text-violet-200' : lead.status === 'closed_lost' ? 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300' : 'bg-[#caa24c]/15 text-[#8c6529] dark:text-[#f1d27a]'}`}>{getStageLabel(lead)}</span></div><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><div><div className={`flex items-center gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>{row.next.channel === 'phone' ? <Phone size={14} /> : <Mail size={14} />}{row.next.title}</div><p className={`mt-1 text-xs ${state === 'Overdue' ? 'font-semibold text-red-700 dark:text-red-300' : 'text-[color:var(--portal-muted)]'}`}>{state} · {dateLabel(row.next.dueAt, row.next.dueDate)}</p></div><div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="truncate font-semibold">{lead.full_name}</h3><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</p></div><span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${isPostTour(lead) ? 'bg-violet-100 text-violet-800 dark:bg-violet-950/50 dark:text-violet-200' : lead.status === 'closed_lost' ? 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300' : 'bg-[#caa24c]/15 text-[#8c6529] dark:text-[#f1d27a]'}`}>{getStageLabel(lead)}</span></div><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><div><div className={`flex items-center gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>{row.next.channel === 'phone' ? <Phone size={14} /> : <Mail size={14} />}{row.next.title}</div><p className={`mt-1 text-xs ${state === 'Overdue' ? 'font-semibold text-red-700 dark:text-red-300' : 'text-[color:var(--portal-muted)]'}`}>{state} · {dateLabel(row.next.dueAt, row.next.dueDate)}</p>{row.postTourStatus && <p className="mt-1 text-xs font-medium text-violet-700 dark:text-violet-300">{row.postTourStatus} � Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</p>}</div><div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
               {row.next.channel === 'phone' && <button type="button" onClick={() => dial(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>}
               {row.next.channel === 'email' && row.next.assignee !== 'Automated' && <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white disabled:opacity-50"><Mail size={14} /> Email</button>}
               {row.next.channel === 'email' && row.next.assignee === 'Automated' && <button type="button" onClick={() => { selectLead(lead.id); setDetailTab('timeline') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white"><Eye size={14} /> View</button>}
@@ -512,7 +534,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
             </div></div></div></div>
           </article>
         })}
-        {!visibleRows.length && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-12 text-center text-sm text-[color:var(--portal-muted)]">{loading ? 'Loading follow-ups…' : filter === 'post_tour' ? 'No leads with a completed tour and a pending follow-up.' : 'No matching follow-up leads. Add a task to keep the next step with its lead.'}</div>}
+        {!visibleRows.length && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-12 text-center text-sm text-[color:var(--portal-muted)]">{loading ? 'Loading follow-ups…' : filter === 'post_tour' ? 'No completed tours match these filters.' : 'No matching follow-up leads. Add a task to keep the next step with its lead.'}</div>}
       </div>
 
       <aside className="min-h-[28rem] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">

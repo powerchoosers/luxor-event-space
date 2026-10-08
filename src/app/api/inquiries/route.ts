@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listAllLuxorInquiries, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -146,8 +146,10 @@ export async function GET(request: NextRequest) {
     }
 
     const limitParam = searchParams.get('limit')
-    const limit = limitParam ? parseInt(limitParam, 10) : 1000
-    const inquiries = await listLuxorInquiries(limit)
+    const requestedLimit = limitParam ? parseInt(limitParam, 10) : null
+    const inquiries = requestedLimit === null || !Number.isFinite(requestedLimit)
+      ? await listAllLuxorInquiries()
+      : await listLuxorInquiries(Math.max(0, Math.min(requestedLimit, 10000)))
     return NextResponse.json(inquiries)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to fetch inquiries.'

@@ -287,9 +287,32 @@ function getMissingColumnFromSchemaCacheError(message: string) {
 }
 
 export async function listLuxorInquiries(limit = 1000) {
-  return supabaseRest<LuxorInquiry[]>(
-    `luxor_inquiries?select=*&order=created_at.desc&limit=${encodeURIComponent(limit)}`,
-  )
+  const requested = Math.max(0, Math.floor(limit))
+  const pageSize = 1000
+  const inquiries: LuxorInquiry[] = []
+  while (inquiries.length < requested) {
+    const count = Math.min(pageSize, requested - inquiries.length)
+    const page = await supabaseRest<LuxorInquiry[]>(
+      `luxor_inquiries?select=*&order=created_at.desc&limit=${count}`,
+      { headers: { Range: `${inquiries.length}-${inquiries.length + count - 1}` } },
+    )
+    inquiries.push(...page)
+    if (page.length < count) break
+  }
+  return inquiries
+}
+
+export async function listAllLuxorInquiries() {
+  const pageSize = 1000
+  const inquiries: LuxorInquiry[] = []
+  while (true) {
+    const page = await supabaseRest<LuxorInquiry[]>(
+      `luxor_inquiries?select=*&order=created_at.desc&limit=${pageSize}`,
+      { headers: { Range: `${inquiries.length}-${inquiries.length + pageSize - 1}` } },
+    )
+    inquiries.push(...page)
+    if (page.length < pageSize) return inquiries
+  }
 }
 
 export async function getLuxorInquiry(id: string) {
@@ -308,10 +331,11 @@ export async function getLuxorInquiryByTourToken(token: string) {
   return inquiry ?? null
 }
 
-export async function listLuxorConfirmedTours(limit = 1000) {
-  return supabaseRest<LuxorInquiry[]>(
-    `luxor_inquiries?select=*&status=eq.tour_confirmed&preferred_tour_date=not.is.null&order=preferred_tour_date.asc,preferred_tour_time.asc&limit=${encodeURIComponent(limit)}`,
-  )
+export async function listLuxorConfirmedTours() {
+  const inquiries = await listAllLuxorInquiries()
+  return inquiries
+    .filter((inquiry) => Boolean(inquiry.preferred_tour_date) && inquiry.tour_attendance_status !== 'cancelled')
+    .sort((a, b) => `${a.preferred_tour_date} ${a.preferred_tour_time || '99:99'}`.localeCompare(`${b.preferred_tour_date} ${b.preferred_tour_time || '99:99'}`))
 }
 
 export async function updateLuxorInquiry(id: string, updates: Partial<Record<string, unknown>>) {

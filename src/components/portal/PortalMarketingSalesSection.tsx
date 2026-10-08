@@ -395,6 +395,21 @@ export function PortalMarketingSalesSection({
         </div>
       </div>
 
+      <section aria-labelledby="tour-analytics-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div><h3 id="tour-analytics-title" className="text-sm font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#f1d27a]">Tour Analytics</h3><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Tours are grouped by scheduled date. Canceled tours are excluded from the rate denominator.</p></div>
+          <span className="text-xs text-[color:var(--portal-muted)]">Period: {rangeLabel}</span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { label: 'Total Tours Scheduled', value: metrics.tourAnalytics.totalScheduled },
+            { label: 'Completed Tours', value: metrics.tourAnalytics.completed },
+            { label: 'Completion Rate', value: `${metrics.tourAnalytics.completionRate}%` },
+            { label: 'No Shows', value: `${metrics.tourAnalytics.noShows} · ${metrics.tourAnalytics.noShowRate}%` },
+          ].map((metric) => <div key={metric.label} className="rounded-xl border border-[color:var(--portal-border)] px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{metric.label}</p><p className="mt-2 text-2xl font-semibold text-[color:var(--portal-text)]">{metric.value}</p></div>)}
+        </div>
+      </section>
+
       {/* 2. VISUAL SALES FUNNEL */}
       <div className="luxor-glass-card rounded-2xl p-5 sm:p-6 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
