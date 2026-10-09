@@ -556,6 +556,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
               subtitle={<>{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</>}
               onOpen={() => { selectLead(row.inquiryId); setDetailTab('overview') }}
               className={`cursor-pointer ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}
+              contentColumn
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">

@@ -30,6 +30,7 @@ declare
   source_job public.luxor_email_jobs%rowtype;
   source_revision public.luxor_calendar_revisions%rowtype;
   prepared_job public.luxor_email_jobs%rowtype;
+  reminder_guard record;
   correction public.luxor_email_correction_requests%rowtype;
   recipients text[];
   next_state jsonb;
@@ -92,10 +93,22 @@ begin
       where event_id=event.id and sequence=event.sequence for update;
     if not found then raise exception 'Current tour revision is missing'; end if;
 
-    perform 1 from public.luxor_email_jobs j
+    -- Lock every future reminder for the old address before changing the tour.
+    -- This prevents the worker from claiming a queued job in the gap between
+    -- validation and retargeting. Attempted payloads and idempotency keys stay
+    -- immutable, so an attempted retry requires an explicit later correction.
+    for reminder_guard in select j.status,j.attempts from public.luxor_email_jobs j
       where j.inquiry_id=p_inquiry_id and j.tour_revision_id=old_revision.id
-        and j.job_type='tour_reminder' and j.status='sending' and j.recipient_email=old_email for update;
-    if found then raise exception 'A tour reminder is already sending; retry the address edit after it finishes'; end if;
+        and j.job_type='tour_reminder' and j.recipient_email=old_email
+        and j.scheduled_for>stamp and j.status in ('queued','sending')
+      for update
+    loop
+      if reminder_guard.status='sending' then
+        raise exception 'A tour reminder is already sending; retry the address edit after it finishes';
+      elsif coalesce(reminder_guard.attempts,0)>0 then
+        raise exception 'A tour reminder has already been attempted; retry the address edit after it finishes';
+      end if;
+    end loop;
 
     -- A resend candidate is optional. Only use a sent confirmation whose
     -- saved tour content still matches the current tour; attendee-only changes
@@ -154,7 +167,7 @@ begin
       metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('calendar_sequence',event.sequence,'email_corrected_at',stamp),
       updated_at=stamp
       where inquiry_id=p_inquiry_id and tour_revision_id=old_revision.id and job_type='tour_reminder'
-        and status='queued' and scheduled_for>stamp;
+        and status='queued' and attempts=0 and scheduled_for>stamp;
   end if;
 
   -- Any previously prepared candidate belongs to the previous address and is
@@ -236,8 +249,13 @@ begin
     and job.metadata->>'source_job_id' ~* '^[0-9a-f-]{36}$'
     and job.metadata->>'source_revision_id' ~* '^[0-9a-f-]{36}$' then
     select * into source_job from public.luxor_email_jobs where id=(job.metadata->>'source_job_id')::uuid;
-    select * into source_revision from public.luxor_calendar_revisions where id=(job.metadata->>'source_revision_id')::uuid;
-    valid := found and source_job.inquiry_id=p_inquiry_id and source_job.status='sent'
+    if found then
+      select * into source_revision from public.luxor_calendar_revisions where id=(job.metadata->>'source_revision_id')::uuid;
+    else
+      source_revision := null;
+    end if;
+    valid := source_job.id is not null and source_revision.id is not null
+      and source_job.inquiry_id=p_inquiry_id and source_job.status='sent'
       and source_job.job_type='calendar_invitation' and source_job.calendar_method='REQUEST'
       and source_job.metadata->>'delivery'='branded_confirmation'
       and source_job.calendar_revision_id=source_revision.id and source_revision.event_id=event.id
@@ -245,7 +263,7 @@ begin
       and source_job.subject=job.subject and source_job.body=job.body;
   end if;
 
-  if not valid then
+  if valid is distinct from true then
     if p_action='worker' and job.status in ('queued','sending') then
       update public.luxor_email_jobs set status='cancelled',last_error='Tour, recipient, or source confirmation changed before delivery.',updated_at=now()
         where id=job.id returning * into job;

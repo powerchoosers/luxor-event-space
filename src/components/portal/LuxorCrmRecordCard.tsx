@@ -31,6 +31,7 @@ export function LuxorCrmRecordCard({
   contact,
   children,
   actions,
+  contentColumn = false,
   onOpen,
   className = '',
   selected = false,
@@ -40,6 +41,7 @@ export function LuxorCrmRecordCard({
   badges?: LuxorCrmCardBadge[]
   subtitle?: ReactNode
   contact?: ReactNode
+  contentColumn?: boolean
   children?: ReactNode
   actions?: ReactNode
   onOpen?: () => void
@@ -82,10 +84,12 @@ export function LuxorCrmRecordCard({
               ) : null}
             </div>
             {contact ? <div className="mt-1 break-all text-[10px] text-[color:var(--portal-muted)]">{contact}</div> : null}
+            {contentColumn && children ? <div className="mt-3 space-y-2 text-sm">{children}</div> : null}
+            {contentColumn && actions ? <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">{actions}</div> : null}
           </div>
         </div>
-        {children ? <div className="mt-3 space-y-2 text-sm">{children}</div> : null}
-        {actions ? <div className="relative mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">{actions}</div> : null}
+        {!contentColumn && children ? <div className="mt-3 space-y-2 text-sm">{children}</div> : null}
+        {!contentColumn && actions ? <div className="relative mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">{actions}</div> : null}
       </div>
     </article>
   )
