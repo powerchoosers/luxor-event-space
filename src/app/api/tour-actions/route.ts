@@ -7,13 +7,14 @@ import {
   getTourResponseLinks,
   listLuxorEmailJobsForInquiry,
   assertEmailHasNoUnresolvedPlaceholders,
+  processLuxorEmailJobs,
 } from '@/lib/luxorEmailJobsServer'
 import { getLuxorInquiry, updateLuxorInquiry, updateLuxorInquiryIfTourAttendanceStatus } from '@/lib/luxorInquiriesServer'
 import { resolveLuxorTourOutcomePrecondition } from '@/lib/luxorTourOutcome'
 import { getLuxorLeadEventForInquiry, listLuxorLeadEventsByInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { LuxorEmailJobKind, LuxorInquiryStatus, LuxorPipelineStage, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
+import { LuxorEmailJob, LuxorEmailJobKind, LuxorInquiryStatus, LuxorPipelineStage, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import { buildAiTourConfirmationEmail, buildTourReminderEmail, TourEmailContext } from '@/lib/luxorTourEmailServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { cancelLuxorTourForInquiry } from '@/lib/luxorTourCancellationServer'
@@ -62,6 +63,19 @@ export async function POST(request: NextRequest) {
     if (!inquiry) return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
     if (inquiry.status === 'closed_lost') {
       return NextResponse.json({ error: 'This opportunity is closed lost. Reopen it before scheduling or changing a tour.' }, { status: 409 })
+    }
+
+    if (action === 'confirm-email-resend') {
+      const jobId = String(body.jobId || '')
+      if (!/^[0-9a-f-]{36}$/i.test(jobId)) return NextResponse.json({ error: 'Resend request is invalid.' }, { status: 400 })
+      const [job] = await supabaseRest<LuxorEmailJob[]>('rpc/luxor_confirm_prepared_tour_email_resend', {
+        method: 'POST', body: JSON.stringify({ p_inquiry_id: inquiryId, p_job_id: jobId }),
+      })
+      if (!job) return NextResponse.json({ error: 'Resend request is unavailable.' }, { status: 409 })
+      if (job.status === 'queued') await processLuxorEmailJobs([job])
+      const refreshedJobs = await listLuxorEmailJobsForInquiry(inquiryId)
+      const refreshed = refreshedJobs.find((candidate) => candidate.id === job.id) || job
+      return NextResponse.json({ job: refreshed, deliveryQueued: refreshed.status === 'queued' || refreshed.status === 'sent' })
     }
 
     let selectedLeadEvent = null

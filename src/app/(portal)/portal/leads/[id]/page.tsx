@@ -72,6 +72,17 @@ function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
     : ''
   return isLuxorBounceForCurrentAddress(lead.email, address)
 }
+
+function resendMessagePreview(body: string) {
+  return decodeHtmlEntities(body
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim())
+}
 import type { LuxorCall } from '@/lib/luxorCallTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
@@ -382,6 +393,10 @@ export default function LeadDetailPage({
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [paymentInstallments, setPaymentInstallments] = useState<LuxorPaymentInstallment[]>([])
   const [tourEmailJobs, setTourEmailJobs] = useState<LuxorEmailJob[]>([])
+  const [emailResendCandidate, setEmailResendCandidate] = useState<LuxorEmailJob | null>(null)
+  const [emailResendModalOpen, setEmailResendModalOpen] = useState(false)
+  const [resendingEmailJobId, setResendingEmailJobId] = useState<string | null>(null)
+  const emailChangeRequestRef = useRef<{ previous: string; next: string; requestId: string } | null>(null)
   const [emailMessages, setEmailMessages] = useState<ZohoEmailMessage[]>([])
   const [loadingEmailMessages, setLoadingEmailMessages] = useState(false)
   const [emailThreadError, setEmailThreadError] = useState<string | null>(null)
@@ -1448,6 +1463,11 @@ export default function LeadDetailPage({
       setBookings(nextBookings)
       setPayments(paymentsData)
       setTourEmailJobs(tourJobsData)
+      const preparedResend = (tourJobsData as LuxorEmailJob[]).find((job) =>
+        job.recipient_email === leadData.email && ['cancelled', 'failed'].includes(job.status)
+        && (job.metadata as Record<string, unknown> | null)?.awaiting_owner_confirmation === true,
+      )
+      setEmailResendCandidate(preparedResend || null)
       setCallRecords(callsData)
       const nextLeadEvents = leadEventsData as LuxorLeadEvent[]
       setLeadEvents(nextLeadEvents)
@@ -1742,10 +1762,28 @@ export default function LeadDetailPage({
       setSavingLeadField(field)
       setLead((current) => current ? { ...current, [fieldKey]: normalizedValue, updated_at: new Date().toISOString() } : current)
 
+      const emailChange = fieldKey === 'email'
+      const normalizedEmail = String(normalizedValue ?? '').trim().toLowerCase()
+      if (emailChange && (!emailChangeRequestRef.current
+        || emailChangeRequestRef.current.previous !== String(previousLead.email || '').toLowerCase()
+        || emailChangeRequestRef.current.next !== normalizedEmail)) {
+        emailChangeRequestRef.current = {
+          previous: String(previousLead.email || '').toLowerCase(),
+          next: normalizedEmail,
+          requestId: crypto.randomUUID(),
+        }
+      }
       const res = await fetch('/api/inquiries', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, [fieldKey]: normalizedValue }),
+        body: JSON.stringify({
+          id,
+          [fieldKey]: emailChange ? normalizedEmail : normalizedValue,
+          ...(emailChange ? {
+            expectedEmail: emailChangeRequestRef.current?.previous ?? String(previousLead.email || '').toLowerCase(),
+            emailChangeRequestId: emailChangeRequestRef.current?.requestId ?? crypto.randomUUID(),
+          } : {}),
+        }),
       })
 
       const payload = await res.json().catch(() => ({}))
@@ -1753,9 +1791,15 @@ export default function LeadDetailPage({
         throw new Error(payload.error || 'Failed to update lead detail.')
       }
 
-      const updated = payload as LuxorInquiry
+      const updated = (emailChange ? payload.inquiry : payload) as LuxorInquiry
       setLead(updated)
       if (fieldKey === 'email') {
+        emailChangeRequestRef.current = null
+        const candidate = payload.resendCandidate as LuxorEmailJob | null
+        if (candidate) {
+          setEmailResendCandidate(candidate)
+          setEmailResendModalOpen(true)
+        }
         void fetchClientEmailThread(updated.email || '')
       }
       return true
@@ -1766,6 +1810,35 @@ export default function LeadDetailPage({
       return false
     } finally {
       setSavingLeadField(null)
+    }
+  }
+
+  const handleConfirmEmailResend = async () => {
+    if (!lead || !emailResendCandidate || resendingEmailJobId) return
+    try {
+      setResendingEmailJobId(emailResendCandidate.id)
+      const response = await fetch('/api/tour-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: lead.id, action: 'confirm-email-resend', jobId: emailResendCandidate.id }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || 'The confirmation could not be queued.')
+      const updatedJob = payload.job as LuxorEmailJob
+      setTourEmailJobs((current) => current.map((job) => job.id === updatedJob.id ? updatedJob : job))
+      setEmailResendCandidate(updatedJob.status === 'failed' ? updatedJob : null)
+      setEmailResendModalOpen(false)
+      notify({
+        title: updatedJob.status === 'sent' ? 'Confirmation sent' : updatedJob.status === 'failed' ? 'Confirmation needs retry' : 'Confirmation queued',
+        description: updatedJob.status === 'failed'
+          ? 'Delivery failed. Review the saved message and retry when ready.'
+          : `The saved tour confirmation was sent to ${updatedJob.recipient_email}.`,
+        variant: updatedJob.status === 'failed' ? 'error' : undefined,
+      })
+    } catch (err) {
+      notify({ title: 'Resend not sent', description: err instanceof Error ? err.message : 'Please refresh and try again.', variant: 'error' })
+    } finally {
+      setResendingEmailJobId(null)
     }
   }
 
@@ -6604,6 +6677,17 @@ export default function LeadDetailPage({
                       Schedule Tour
                     </button>
                   </div>
+                  {emailResendCandidate ? (
+                    <div className="mb-4 flex flex-col gap-3 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/[0.07] p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[color:var(--portal-text)]">A recent tour confirmation went to the previous address.</p>
+                        <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">The email address is saved. No email has been sent.</p>
+                      </div>
+                      <button type="button" onClick={() => setEmailResendModalOpen(true)} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/35 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">
+                        <Mail size={13} /> Review resend
+                      </button>
+                    </div>
+                  ) : null}
                   {tourEmailJobs.length === 0 ? (
                     <p className="rounded-xl border border-dashed border-zinc-850 px-4 py-6 text-center text-xs text-zinc-600">No tour emails have been saved for this client yet.</p>
                   ) : (
@@ -7373,6 +7457,31 @@ export default function LeadDetailPage({
           void fetchAllData(false)
         }}
       />
+
+      <PortalModal isOpen={emailResendModalOpen && Boolean(emailResendCandidate)} onClose={() => !resendingEmailJobId && setEmailResendModalOpen(false)} maxWidth="max-w-xl">
+        {emailResendCandidate ? (
+          <div className="p-5 sm:p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#a8792f] dark:text-[#f1d27a]">Owner confirmation required</p>
+                <h2 className="mt-2 text-lg font-semibold text-[color:var(--portal-text)]">Resend the saved tour confirmation?</h2>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Review the original message and recipient. Confirming sends it once; closing this window leaves it ready for later.</p>
+              </div>
+              <PortalCloseButton onClick={() => !resendingEmailJobId && setEmailResendModalOpen(false)} aria-label="Close resend review" />
+            </div>
+            <dl className="grid gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm sm:grid-cols-[6rem_1fr]">
+              <dt className="text-[color:var(--portal-muted)]">To</dt><dd className="break-all font-medium text-[color:var(--portal-text)]">{emailResendCandidate.recipient_email}</dd>
+              <dt className="text-[color:var(--portal-muted)]">Subject</dt><dd className="text-[color:var(--portal-text)]">{decodeHtmlEntities(emailResendCandidate.subject)}</dd>
+              <dt className="text-[color:var(--portal-muted)]">Message</dt>
+              <dd className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-xs leading-5 text-[color:var(--portal-text)]">{resendMessagePreview(emailResendCandidate.body)}</dd>
+            </dl>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setEmailResendModalOpen(false)} disabled={Boolean(resendingEmailJobId)} className="min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">Cancel</button>
+              <button type="button" onClick={handleConfirmEmailResend} disabled={Boolean(resendingEmailJobId)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white hover:bg-[#b68d3b] disabled:opacity-50"><Send size={13} />{resendingEmailJobId ? 'Sending…' : 'Confirm and send'}</button>
+            </div>
+          </div>
+        ) : null}
+      </PortalModal>
 
       <PortalModal isOpen={isTourScheduleModalOpen} onClose={() => setIsTourScheduleModalOpen(false)} maxWidth="max-w-2xl">
         <form onSubmit={handleScheduleTour} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[color:var(--portal-card)] text-[color:var(--portal-text)]">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listAllLuxorInquiries, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
-import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
+import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { addMarketingMember } from '@/lib/luxorMarketingServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
@@ -405,7 +405,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, status, author, ...updates } = body
+    const { id, status, author, expectedEmail: _expectedEmail, emailChangeRequestId: _emailChangeRequestId, ...updates } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID required.' }, { status: 400 })
@@ -414,6 +414,26 @@ export async function PATCH(request: NextRequest) {
     const existing = await getLuxorInquiry(id)
     if (!existing) {
       return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
+    }
+
+    if (typeof updates.email === 'string') {
+      const email = updates.email.trim().toLowerCase()
+      const expectedEmail = typeof body.expectedEmail === 'string' ? body.expectedEmail.trim().toLowerCase() : ''
+      const requestId = typeof body.emailChangeRequestId === 'string' ? body.emailChangeRequestId : ''
+      if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) || email.length > 254) {
+        return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 })
+      }
+      if (!requestId) return NextResponse.json({ error: 'Email change request is missing. Please try again.' }, { status: 400 })
+      const result = await supabaseRest<{ inquiry: LuxorInquiry; resendJob: LuxorEmailJob | null; replayed: boolean }>(
+        'rpc/luxor_update_inquiry_email_for_portal',
+        { method: 'POST', body: JSON.stringify({
+          p_inquiry_id: id,
+          p_expected_email: expectedEmail,
+          p_new_email: email,
+          p_request_id: requestId,
+        }) },
+      )
+      return NextResponse.json({ inquiry: result.inquiry, resendCandidate: result.resendJob, replayed: result.replayed })
     }
 
     if (updates.pipeline_stage === 'closed_lost') {
