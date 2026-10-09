@@ -8825,6 +8825,7 @@ function DetailItem({
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(editValue ?? value)
   const [copied, setCopied] = useState(false)
+  const commitInFlightRef = useRef(false)
   const canEdit = Boolean(onCommit)
   const canCopy = Boolean(copyValue?.trim())
   const containerRef = useRef<HTMLDivElement>(null)
@@ -8847,6 +8848,12 @@ function DetailItem({
   }, [isEditing, inputType])
 
   const startEditing = () => {
+    if (!canEdit || isSaving || commitInFlightRef.current) return
+    setDraft(editValue ?? value)
+    setIsEditing(true)
+  }
+
+  const activateRow = () => {
     if (onCompose) {
       onCompose()
       return
@@ -8855,17 +8862,20 @@ function DetailItem({
       onCall()
       return
     }
-    if (!canEdit || isSaving) return
-    setDraft(editValue ?? value)
-    setIsEditing(true)
+    startEditing()
   }
 
   const commitDraft = async () => {
-    if (!onCommit || isSaving) return
+    if (!onCommit || isSaving || commitInFlightRef.current) return
 
-    const saved = await onCommit(draft)
-    if (saved) {
-      setIsEditing(false)
+    commitInFlightRef.current = true
+    try {
+      const saved = await onCommit(draft)
+      if (saved) {
+        setIsEditing(false)
+      }
+    } finally {
+      commitInFlightRef.current = false
     }
   }
 
@@ -8887,13 +8897,13 @@ function DetailItem({
       ref={containerRef}
       role={canEdit ? 'button' : undefined}
       tabIndex={canEdit ? 0 : undefined}
-      aria-label={canEdit ? `Edit ${label}` : undefined}
-      onClick={startEditing}
+      aria-label={canEdit ? onCompose ? 'Compose email' : onCall ? 'Call client' : `Edit ${label}` : undefined}
+      onClick={activateRow}
       onKeyDown={(event) => {
-        if (!canEdit || isEditing) return
+        if (event.target !== event.currentTarget || !canEdit || isEditing) return
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
-          startEditing()
+          activateRow()
         }
       }}
       className={`group/card relative flex ${compact ? 'min-h-10 items-center gap-3 px-2 -mx-2 py-1' : 'min-h-[72px] items-start gap-3 px-3 -mx-3 py-3.5'} rounded-xl transition-all hover:bg-[#caa24c]/[0.025] ${
