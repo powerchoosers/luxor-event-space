@@ -547,15 +547,36 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
           const state = row.next.status
           const stage = getStageLabel(lead)
           const stageTone = followUpStageTone(stage)
-          return <LuxorCrmRecordCard key={row.inquiryId} lead={lead} hideHeader onOpen={() => { selectLead(row.inquiryId); setDetailTab('overview') }} className={`cursor-pointer ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}>
-            <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="truncate font-semibold">{lead.full_name}</h3><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</p></div><PortalStatusBadge status={stage} tone={stageTone} /></div><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><div><div className={`flex items-center gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>{row.next.channel === 'phone' ? <Phone size={14} /> : <Mail size={14} />}{row.next.title}</div><p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>{row.postTourStatus && <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}</div><div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
-              {row.next.channel === 'phone' && <button type="button" onClick={() => dial(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>}
-              {row.next.channel === 'email' && row.next.assignee !== 'Automated' && <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white disabled:opacity-50"><Mail size={14} /> Email</button>}
-              {row.next.channel === 'email' && row.next.assignee === 'Automated' && <button type="button" onClick={() => { selectLead(lead.id); setDetailTab('timeline') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white"><Eye size={14} /> View</button>}
-              <button type="button" onClick={() => { selectLead(lead.id); setDetailTab('overview') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold"><Eye size={14} /> View</button>
-              <button type="button" aria-label={`More actions for ${lead.full_name}`} onClick={() => { selectLead(lead.id); setMoreOpen((value) => !value) }} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)]"><MoreHorizontal size={16} /></button>
-            </div></div></div></div>
-          </LuxorCrmRecordCard>
+          return (
+            <LuxorCrmRecordCard
+              key={row.inquiryId}
+              lead={lead}
+              avatar={<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span>}
+              badges={[{ label: stage, tone: stageTone }]}
+              subtitle={<>{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</>}
+              onOpen={() => { selectLead(row.inquiryId); setDetailTab('overview') }}
+              className={`cursor-pointer ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}
+              actions={
+                <div className="flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                  {row.next.channel === 'phone' && <button type="button" onClick={() => dial(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>}
+                  {row.next.channel === 'email' && row.next.assignee !== 'Automated' && <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white disabled:opacity-50"><Mail size={14} /> Email</button>}
+                  {row.next.channel === 'email' && row.next.assignee === 'Automated' && <button type="button" onClick={() => { selectLead(lead.id); setDetailTab('timeline') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white"><Eye size={14} /> View</button>}
+                  <button type="button" onClick={() => { selectLead(lead.id); setDetailTab('overview') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold"><Eye size={14} /> View</button>
+                  <button type="button" aria-label={`More actions for ${lead.full_name}`} onClick={() => { selectLead(lead.id); setMoreOpen((value) => !value) }} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)]"><MoreHorizontal size={16} /></button>
+                </div>
+              }
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className={`flex items-center gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>
+                    {row.next.channel === 'phone' ? <Phone size={14} /> : <Mail size={14} />}{row.next.title}
+                  </div>
+                  <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>
+                  {row.postTourStatus && <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
+                </div>
+              </div>
+            </LuxorCrmRecordCard>
+          )
         })}
         {!visibleRows.length && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-12 text-center text-sm text-[color:var(--portal-muted)]">{loading ? 'Loading follow-ups…' : filter === 'post_tour' ? 'No completed tours match these filters.' : 'No matching follow-up leads. Add a task to keep the next step with its lead.'}</div>}
       </div>

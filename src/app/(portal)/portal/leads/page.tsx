@@ -958,7 +958,7 @@ export default function LeadsPage() {
                       <LuxorCrmRecordCard
                         key={lead.id}
                         lead={lead}
-                        badges={[{ label: PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(lead))?.label || col.label, tone: luxorCrmStatusTone(col.label) }]}
+                        badges={[{ label: PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(lead))?.label || col.label, tone: col.tone as PortalStatusTone }]}
                         subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date TBD'} · {isGrandOpeningRsvp(lead) ? `${lead.attendee_count || lead.guest_count || 1} RSVP` : lead.guest_count ? `${lead.guest_count} guests` : 'No count'}</>}
                         contact={lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}
                         onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
@@ -1762,7 +1762,7 @@ function LeadsClientsTab({
             <LuxorCrmRecordCard
               key={client.id}
               lead={client}
-              badges={[{ label: 'Booked', tone: luxorCrmStatusTone('booked') }]}
+              badges={[{ label: 'Booked', tone: 'green' }]}
               subtitle={<>{client.event_type || 'Quinceañera'} · {client.target_date || 'Date TBD'}{client.guest_count ? <> · {client.guest_count} guests</> : <> · Flexible guest count</>}</>}
               contact={client.email || (client.phone ? formatPhoneDisplay(client.phone) : 'No contact details')}
               actions={
@@ -1959,7 +1959,7 @@ function LeadsLostTab({ leads }: { leads: LuxorInquiry[] }) {
             return <LuxorCrmRecordCard
               key={lead.id}
               lead={lead}
-              badges={[{ label: 'Closed Lost', tone: 'red' }]}
+              badges={[{ label: 'Closed Lost', tone: 'neutral' }]}
               subtitle={<>{lead.event_type || 'Event'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
               contact={lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact detail')}
               actions={<Link href={`/portal/leads/${lead.id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View dossier <ExternalLink size={14} aria-hidden="true" /></Link>}

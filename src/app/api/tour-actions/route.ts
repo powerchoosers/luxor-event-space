@@ -68,9 +68,13 @@ export async function POST(request: NextRequest) {
     if (action === 'confirm-email-resend') {
       const jobId = String(body.jobId || '')
       if (!/^[0-9a-f-]{36}$/i.test(jobId)) return NextResponse.json({ error: 'Resend request is invalid.' }, { status: 400 })
-      const [job] = await supabaseRest<LuxorEmailJob[]>('rpc/luxor_confirm_prepared_tour_email_resend', {
+      const rpcResult = await supabaseRest<LuxorEmailJob | LuxorEmailJob[]>('rpc/luxor_confirm_prepared_tour_email_resend', {
         method: 'POST', body: JSON.stringify({ p_inquiry_id: inquiryId, p_job_id: jobId }),
       })
+      // PostgreSQL returns this RPC's jsonb object as an object. Keep array
+      // compatibility for deployments with a table-returning wrapper, but do
+      // not destructure the scalar JSONB response as if it were a list.
+      const job = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
       if (!job) return NextResponse.json({ error: 'Resend request is unavailable.' }, { status: 409 })
       if (job.status === 'queued') await processLuxorEmailJobs([job])
       const refreshedJobs = await listLuxorEmailJobsForInquiry(inquiryId)

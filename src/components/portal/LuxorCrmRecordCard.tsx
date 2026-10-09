@@ -12,10 +12,11 @@ export type LuxorCrmCardBadge = {
 
 export function luxorCrmStatusTone(value: string): PortalStatusTone {
   const status = value.trim().toLowerCase().replaceAll('_', ' ')
+  if (status === 'booked' || /(completed|attended|signed|paid|successful|closed won)/.test(status)) return 'green'
+  if (status === 'closed lost') return 'neutral'
   if (/(overdue|no show|issue|needs attention|failed|lost)/.test(status)) return 'red'
   if (/(today|active|in progress|scheduled)/.test(status)) return 'blue'
   if (/(upcoming|booked|milestone|pending|needs outcome)/.test(status)) return 'gold'
-  if (/(completed|attended|signed|paid|successful|closed won)/.test(status)) return 'green'
   if (/(post tour|post-tour|new lead|nurture|lifecycle)/.test(status)) return 'purple'
   return 'neutral'
 }
@@ -23,23 +24,23 @@ export function luxorCrmStatusTone(value: string): PortalStatusTone {
 /** Shared Luxor record-card frame for CRM tabs; tab-specific details/actions are slots. */
 export function LuxorCrmRecordCard({
   lead,
+  avatar,
   badges,
   subtitle,
   contact,
   children,
   actions,
-  hideHeader = false,
   onOpen,
   className = '',
   selected = false,
 }: {
   lead: LuxorInquiry
+  avatar?: ReactNode
   badges?: LuxorCrmCardBadge[]
   subtitle?: ReactNode
   contact?: ReactNode
   children?: ReactNode
   actions?: ReactNode
-  hideHeader?: boolean
   onOpen?: () => void
   className?: string
   selected?: boolean
@@ -63,13 +64,13 @@ export function LuxorCrmRecordCard({
       tabIndex={onOpen ? 0 : undefined}
       aria-label={onOpen ? `Open ${lead.full_name}` : undefined}
     >
-      {!hideHeader ? <div className="flex min-w-0 items-start gap-3">
-        <PortalContactAvatar
+      <div className="flex min-w-0 items-start gap-3">
+        {avatar ?? <PortalContactAvatar
           name={lead.full_name}
           avatarUrl={lead.metadata?.avatar_url as string | null}
           size="md"
           className="shrink-0"
-        />
+        />}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
             <div className="min-w-0 flex-1">
@@ -84,8 +85,8 @@ export function LuxorCrmRecordCard({
           </div>
           {contact ? <div className="mt-1 break-all text-[10px] text-[color:var(--portal-muted)]">{contact}</div> : null}
         </div>
-      </div> : null}
-      {children ? <div className={hideHeader ? '' : 'mt-3 space-y-2 text-sm'}>{children}</div> : null}
+      </div>
+      {children ? <div className="mt-3 space-y-2 text-sm">{children}</div> : null}
       {actions ? <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">{actions}</div> : null}
     </article>
   )
