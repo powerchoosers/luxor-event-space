@@ -87,6 +87,15 @@ export function TourAvailabilityManager({
   const [saving, setSaving] = useState<'weekly' | 'flexible' | 'settings' | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
 
+  useEffect(() => {
+    if (!previewOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreviewOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [previewOpen])
+
   // Core Data State
   const [slots, setSlots] = useState<LuxorTourSlot[]>([])
   const [schedule, setSchedule] = useState<LuxorTourAvailability[]>(FALLBACK_SCHEDULE)
@@ -1034,10 +1043,15 @@ export function TourAvailabilityManager({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          aria-label="Guest booking form preview"
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 px-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-sm sm:items-center sm:p-4"
+          onClick={() => setPreviewOpen(false)}
         >
-          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
+          <div
+            className="relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full flex-col overflow-hidden rounded-t-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl sm:max-h-[90vh] sm:max-w-2xl sm:rounded-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] px-4 py-3 sm:p-6 sm:pb-4">
               <div>
                 <div className="flex items-center gap-2">
                   <Eye size={18} className="text-[#caa24c]" />
@@ -1053,13 +1067,13 @@ export function TourAvailabilityManager({
                 type="button"
                 onClick={() => setPreviewOpen(false)}
                 aria-label="Close preview"
-                className="rounded-lg p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="mt-6 space-y-6">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-4 sm:p-6 sm:pt-2">
               {/* Date Selector */}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">
@@ -1141,7 +1155,7 @@ export function TourAvailabilityManager({
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end border-t border-[color:var(--portal-border)] pt-4">
+            <div className="flex shrink-0 justify-end border-t border-[color:var(--portal-border)] p-4 sm:px-6">
               <PortalButton type="button" onClick={() => setPreviewOpen(false)}>
                 Close Preview
               </PortalButton>

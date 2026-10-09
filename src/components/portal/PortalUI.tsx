@@ -494,14 +494,14 @@ export function PortalPagination({
 }) {
   if (totalPages <= 1) return null
 
-  const buttonClass = 'flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-35'
+  const buttonClass = 'flex h-11 w-11 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-35 sm:h-8 sm:w-8'
   const pageOptions = Array.from({ length: totalPages }, (_, index) => {
     const page = index + 1
     return { value: String(page), label: `Page ${page} of ${totalPages}` }
   })
 
   return (
-    <nav className="flex shrink-0 items-center gap-2" aria-label="Pagination">
+    <nav className="flex shrink-0 items-center gap-1 sm:gap-2" aria-label="Pagination">
       <button type="button" aria-label="Previous page" title="Previous page" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)} className={buttonClass}>
         <ChevronLeft size={15} strokeWidth={2.25} aria-hidden="true" />
       </button>
@@ -509,8 +509,8 @@ export function PortalPagination({
         value={String(currentPage)}
         onChange={(value) => onPageChange(Number(value))}
         options={pageOptions}
-        className="min-w-[124px]"
-        buttonClassName="h-8 rounded-md bg-[color:var(--portal-card)] px-2 font-mono text-[10px] font-semibold"
+        className="!min-w-0 w-[5.5rem] sm:w-[124px]"
+        buttonClassName="h-11 rounded-md bg-[color:var(--portal-card)] px-2 font-mono text-[10px] font-semibold sm:h-8"
       />
       <button type="button" aria-label="Next page" title="Next page" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} className={buttonClass}>
         <ChevronRight size={15} strokeWidth={2.25} aria-hidden="true" />
@@ -649,7 +649,7 @@ export function PortalCloseButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg p-1 text-zinc-500 opacity-60 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 cursor-pointer ${className}`}
+      className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-500 opacity-75 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 cursor-pointer sm:h-9 sm:w-9 ${className}`}
       aria-label={ariaLabel}
       {...props}
     >
@@ -846,6 +846,7 @@ export function PortalSelect({
   placeholder = 'Select option...',
   disabled = false,
   theme = 'portal',
+  'aria-label': ariaLabel,
 }: {
   value: string
   onChange: (val: string) => void
@@ -855,33 +856,35 @@ export function PortalSelect({
   placeholder?: string
   disabled?: boolean
   theme?: 'portal' | 'light'
+  'aria-label'?: string
 }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const selectedOption = options.find((opt) => opt.value === value)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
-  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 })
+  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number; maxHeight: number }>({ top: 0, left: 0, width: 0, maxHeight: 240 })
   const isLight = theme === 'light'
 
   const updateCoords = React.useCallback(() => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
-      const dropdownHeight = dropdownRef.current ? dropdownRef.current.offsetHeight : 180
-      const spaceBelow = window.innerHeight - rect.bottom
-      const spaceAbove = rect.top
-      
-      let top = rect.bottom + 6
-      if (spaceBelow < dropdownHeight + 6 && spaceAbove > dropdownHeight + 6) {
-        top = rect.top - dropdownHeight - 6
-      }
-
+      const viewportPadding = 8
+      const dropdownHeight = dropdownRef.current ? Math.max(dropdownRef.current.scrollHeight, 180) : 240
+      const width = Math.min(rect.width, Math.max(0, window.innerWidth - viewportPadding * 2))
+      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding)
+      const spaceAbove = Math.max(0, rect.top - viewportPadding)
+      const opensAbove = spaceBelow < Math.min(dropdownHeight, 240) + 6 && spaceAbove > spaceBelow
+      const maxHeight = Math.min(240, opensAbove ? spaceAbove : spaceBelow)
+      const height = Math.min(dropdownHeight, maxHeight)
+      const top = opensAbove ? rect.top - height - 6 : rect.bottom + 6
       const nextCoords = {
-        top,
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
-        width: rect.width,
+        top: Math.max(viewportPadding, Math.min(top, window.innerHeight - height - viewportPadding)),
+        left: Math.max(viewportPadding, Math.min(rect.left, window.innerWidth - width - viewportPadding)),
+        width,
+        maxHeight,
       }
       setCoords((current) => {
-        if (current.top === nextCoords.top && current.left === nextCoords.left && current.width === nextCoords.width) {
+        if (current.top === nextCoords.top && current.left === nextCoords.left && current.width === nextCoords.width && current.maxHeight === nextCoords.maxHeight) {
           return current
         }
         return nextCoords
@@ -927,6 +930,7 @@ export function PortalSelect({
         ref={buttonRef}
         type="button"
         disabled={disabled}
+        aria-label={ariaLabel}
         onClick={() => {
           if (disabled) return
           updateCoords()
@@ -934,7 +938,7 @@ export function PortalSelect({
         }}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className={`flex w-full cursor-pointer items-center justify-between gap-2.5 rounded-lg border px-3 py-1.5 text-xs transition-all duration-150 hover:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${buttonClassName}`}
+        className={`portal-select-trigger flex min-h-11 w-full cursor-pointer items-center justify-between gap-2.5 rounded-lg border px-3 py-1.5 text-xs transition-all duration-150 hover:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-8 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${buttonClassName}`}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         <span className={`text-[10px] text-[color:var(--portal-muted)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
@@ -966,6 +970,7 @@ export function PortalSelect({
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,
                   width: `${coords.width}px`,
+                  maxHeight: `${coords.maxHeight}px`,
                   backgroundColor: isLight ? '#fffdfa' : 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
                   backdropFilter: isLight ? 'none' : 'blur(24px)',
                   WebkitBackdropFilter: 'blur(24px)'

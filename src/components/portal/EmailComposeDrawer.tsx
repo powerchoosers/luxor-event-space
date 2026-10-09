@@ -436,7 +436,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
       ? 'h-12 w-[min(380px,calc(100vw-1rem))]'
       : isExpanded
         ? 'h-[calc(100dvh-6.75rem-env(safe-area-inset-bottom))] w-[calc(100vw-1rem)] sm:w-[min(960px,calc(100vw-2rem))] lg:h-[calc(100dvh-2rem)]'
-        : 'h-[min(600px,calc(100dvh-6.75rem-env(safe-area-inset-bottom))] w-[calc(100vw-1rem)] sm:w-[min(540px,calc(100vw-2rem))] lg:h-[min(600px,calc(100dvh-1rem))]'}
+        : 'h-[min(600px,calc(100dvh-6.75rem-env(safe-area-inset-bottom)))] w-[calc(100vw-1rem)] sm:w-[min(540px,calc(100vw-2rem))] lg:h-[min(600px,calc(100dvh-1rem))]'}
   `
 
   return (

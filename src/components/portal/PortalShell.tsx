@@ -844,7 +844,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         </div>
       </aside>
 
-      <main onWheelCapture={handOffWheelToPage} className={`flex h-[100dvh] flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+      <main onWheelCapture={handOffWheelToPage} className={`flex h-[100dvh] flex-col overflow-hidden pt-[env(safe-area-inset-top)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         <header className={`z-50 grid h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b px-4 backdrop-blur-md sm:gap-x-4 sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
@@ -1018,7 +1018,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         </header>
 
         {/* Phone and portrait-tablet content reserve space for the shared bottom bar. */}
-        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:p-8'} ${
+        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-[calc(10rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:p-8'} ${
           portalTheme === 'light'
             ? 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
             : 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'

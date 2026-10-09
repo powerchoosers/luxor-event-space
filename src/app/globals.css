@@ -1858,3 +1858,19 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
   .pricing-cta p { font-size: 0.78rem; }
   .pricing-disclaimer { font-size: 0.5rem; line-height: 1.6; }
 }
+
+@media (hover: none) and (pointer: coarse) {
+  body[data-portal-theme] button[aria-label],
+  body[data-portal-theme] button:has(svg):not(:has(span)) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  body[data-portal-theme] .portal-select-trigger {
+    min-height: 44px;
+  }
+
+  body[data-portal-theme] .portal-notification-action {
+    opacity: 1;
+  }
+}
