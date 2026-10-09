@@ -4,6 +4,17 @@ export const LUXOR_TOUR_TIMEZONE = 'America/Chicago'
 
 export type LuxorTourSection = 'today' | 'upcoming' | 'completed' | 'no_shows' | 'needs_outcome' | 'cancelled'
 
+export async function loadLuxorPages<T>(fetchPage: (offset: number, count: number) => Promise<T[]>, pageSize = 1000, limit = Number.POSITIVE_INFINITY) {
+  const items: T[] = []
+  while (items.length < limit) {
+    const count = Math.min(pageSize, limit - items.length)
+    const page = await fetchPage(items.length, count)
+    items.push(...page)
+    if (page.length < count) return items
+  }
+  return items
+}
+
 const FINAL_OUTCOMES = new Set(['attended', 'no_show', 'cancelled'])
 
 export function luxorDateKey(value: string | Date): string {
@@ -22,6 +33,12 @@ export function luxorDateKey(value: string | Date): string {
 
 export function luxorTodayKey(now = new Date()) {
   return luxorDateKey(now)
+}
+
+export function getCompletedTourLeads<T extends LuxorInquiry>(inquiries: T[]) {
+  const unique = new Map<string, T>()
+  inquiries.filter((inquiry) => inquiry.tour_attendance_status === 'attended').forEach((inquiry) => unique.set(inquiry.id, inquiry))
+  return [...unique.values()].sort((a, b) => (b.preferred_tour_date || '').localeCompare(a.preferred_tour_date || ''))
 }
 
 export function getLuxorTourSection(tour: LuxorInquiry, todayKey: string): LuxorTourSection | null {
