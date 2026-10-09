@@ -3661,7 +3661,7 @@ export default function LeadDetailPage({
   const requestedTourLanguage = getRequestedTourLanguage(lead)
 
   return (
-    <PortalPageFrame className="max-w-[1560px] !gap-0 pb-24 sm:pb-0">
+    <PortalPageFrame className="max-w-[1560px] !gap-0">
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
           <ArrowLeft size={13} /> Back to Leads & Clients
@@ -3673,10 +3673,10 @@ export default function LeadDetailPage({
         ) : <PortalStatusBadge status={lead.status} />}
       </div>
 
-      <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
-        <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
-          <div className="flex min-w-0 gap-4">
-            <div className="relative h-20 w-20 shrink-0 self-start">
+      <section className="overflow-visible rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
+        <div className="grid gap-4 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
+          <div className="flex min-w-0 gap-3 sm:gap-4">
+            <div className="relative h-16 w-16 shrink-0 self-start sm:h-20 sm:w-20">
               <PortalContactAvatar
                 name={lead.full_name}
                 avatarUrl={lead.metadata?.avatar_url as string | null}
@@ -3705,12 +3705,12 @@ export default function LeadDetailPage({
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <h1 className="break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
                 {lead.phone ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-mono font-medium text-[color:var(--portal-text)]">
+                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-mono font-medium text-[color:var(--portal-text)]">
                     <Phone size={11} className="text-[#caa24c]" /> {formatPhoneDisplay(lead.phone)}
                   </span>
                 ) : null}
                 {lead.email ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-mono font-medium text-[color:var(--portal-text)]">
+                  <span className="inline-flex min-w-0 max-w-full items-start gap-1.5 break-all rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-mono font-medium text-[color:var(--portal-text)]">
                     <Mail size={11} className="text-[#caa24c]" /> {lead.email}
                   </span>
                 ) : null}
@@ -3773,13 +3773,13 @@ export default function LeadDetailPage({
                 )}
               </div>
               {isNewsletter ? (
-                <div className="mt-2 flex flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                     Newsletter
                   </span>
                 </div>
               ) : (
-                <div className="mt-2 flex flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
                   {leadEvents.length ? (
                     <div className="relative">
                       <button
@@ -3801,7 +3801,7 @@ export default function LeadDetailPage({
                             exit={{ opacity: 0, y: -5, scale: 0.98 }}
                             transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
                             role="listbox"
-                            className="portal-dropdown absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(340px,calc(100vw-3rem))] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                            className="portal-dropdown absolute left-0 top-[calc(100%+0.5rem)] z-50 max-h-[min(24rem,calc(100dvh-8rem))] w-[min(340px,calc(100vw-3rem))] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
                           >
                             <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
                             {leadEvents.map((event) => (
@@ -3846,7 +3846,7 @@ export default function LeadDetailPage({
               <button 
                 type="button"
                 onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
                 aria-label="Email client"
                 title="Email client"
               >
@@ -3857,7 +3857,7 @@ export default function LeadDetailPage({
               <button
                 type="button"
                 onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
                 aria-label="Call client"
                 title="Call client"
               >
@@ -3868,7 +3868,7 @@ export default function LeadDetailPage({
               <button
                 type="button"
                 onClick={() => setTextPopupOpen(true)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
                 aria-label="Text client"
                 title="Text client"
               >
@@ -3883,7 +3883,7 @@ export default function LeadDetailPage({
                 aria-haspopup="menu"
                 aria-label="More lead options"
                 title="More options"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/10 hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/10 hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
               >
                 <MoreVertical size={16} />
               </button>
@@ -3898,7 +3898,7 @@ export default function LeadDetailPage({
                       transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
                       role="menu"
                       data-portal-dropdown="true"
-                      className="portal-dropdown absolute right-0 top-[calc(100%+0.5rem)] z-50 w-60 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                      className="portal-dropdown absolute right-0 top-[calc(100%+0.5rem)] z-50 max-h-[min(24rem,calc(100dvh-8rem))] w-[min(15rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
                     >
                       <button type="button" role="menuitem" onClick={openAddEventModal} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <Plus size={13} className="text-[#caa24c]" />
@@ -3950,9 +3950,9 @@ export default function LeadDetailPage({
             { label: 'Guests', value: displayGuestCount ? `${displayGuestCount} expected` : 'Not captured' },
             { label: 'Budget', value: lead.budget || 'Not captured' },
           ]).map((item) => (
-            <div key={item.label} className="min-w-0 border-b border-r border-[color:var(--portal-border)] px-4 py-3 last:border-r-0 sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(3n)]:border-r xl:last:border-r-0">
+            <div key={item.label} className="min-w-0 border-b border-r border-[color:var(--portal-border)] px-3 py-2.5 sm:px-4 sm:py-3 last:border-r-0 sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(3n)]:border-r xl:last:border-r-0">
               <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{item.label}</p>
-              <p className="mt-1 truncate text-[11px] font-bold capitalize text-[color:var(--portal-text)]" title={item.value}>{item.value}</p>
+              <p className="mt-1 break-words text-[11px] font-bold capitalize text-[color:var(--portal-text)]" title={item.value}>{item.value}</p>
             </div>
           ))}
         </section>
@@ -7281,7 +7281,7 @@ export default function LeadDetailPage({
       </div>
       )}
 
-      <div className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-3 gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
+      <div className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 grid grid-cols-3 gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
         <button type="button" onClick={() => lead.phone && startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40">
           <Phone size={14} /> Call
         </button>

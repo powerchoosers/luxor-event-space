@@ -1921,7 +1921,7 @@ function MobileLeadCard({
   const stageLabel = PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(lead))?.label || 'Pipeline'
 
   return (
-    <article className={`p-4 ${selected ? 'bg-[#caa24c]/8' : ''}`}>
+    <article className={`p-3 sm:p-4 ${selected ? 'bg-[#caa24c]/8' : ''}`}>
       <div className="flex items-start gap-3">
         {onToggle ? (
           <div className="pt-1">
@@ -1947,7 +1947,7 @@ function MobileLeadCard({
         <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3 border-t border-[color:var(--portal-border)] pt-3 text-xs">
+      <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[color:var(--portal-border)] pt-2.5 text-xs sm:mt-3 sm:gap-3 sm:pt-3">
         {getPipelineStage(lead) !== 'newsletter' ? (
           <>
             <div className="min-w-0">
@@ -1982,7 +1982,7 @@ function MobileLeadCard({
         </div>
       </div>
 
-      <Link href={`/portal/leads/${lead.id}`} className="mt-3 inline-flex min-h-9 items-center text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
+      <Link href={`/portal/leads/${lead.id}`} className="mt-2.5 inline-flex min-h-11 items-center text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a] sm:mt-3">
         Open contact dossier <span className="ml-1" aria-hidden="true">→</span>
       </Link>
     </article>
