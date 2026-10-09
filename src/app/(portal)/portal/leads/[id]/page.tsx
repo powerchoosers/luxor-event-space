@@ -1272,11 +1272,13 @@ export default function LeadDetailPage({
     setActiveEventId(eventId)
     setShowEventPicker(false)
     setShowActionsMenu(false)
+    window.requestAnimationFrame(() => eventPickerTriggerRef.current?.focus())
     void persistLeadEventPreference(eventId)
   }
 
   const openAddEventModal = () => {
     setShowActionsMenu(false)
+    window.requestAnimationFrame(() => actionsMenuTriggerRef.current?.focus())
     setNewEventType('')
     setNewEventDate('')
     setNewEventGuestCount('')
@@ -1347,14 +1349,23 @@ export default function LeadDetailPage({
       if (event.key === 'Escape') {
         setShowEventPicker(false)
         setShowActionsMenu(false)
+        if (showEventPicker) eventPickerTriggerRef.current?.focus()
+        if (showActionsMenu) actionsMenuTriggerRef.current?.focus()
       }
     }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (showEventPicker && !eventPickerTriggerRef.current?.contains(target) && !eventPickerMenuRef.current?.contains(target)) setShowEventPicker(false)
+      if (showActionsMenu && !actionsMenuTriggerRef.current?.contains(target) && !actionsMenuRef.current?.contains(target)) setShowActionsMenu(false)
+    }
     window.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('pointerdown', handlePointerDown)
     return () => {
       window.cancelAnimationFrame(frame)
       window.removeEventListener('resize', updatePopoverPositions)
       window.removeEventListener('scroll', updatePopoverPositions, true)
       window.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('pointerdown', handlePointerDown)
     }
   }, [showActionsMenu, showEventPicker])
 
@@ -3838,7 +3849,7 @@ export default function LeadDetailPage({
                             role="listbox"
                             ref={eventPickerMenuRef}
                             style={{ position: 'fixed', top: eventPickerPosition.top, left: eventPickerPosition.left, maxHeight: eventPickerPosition.maxHeight, width: 'min(340px, calc(100vw - 1rem))' }}
-                            className="portal-dropdown z-50 overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                            className="portal-dropdown z-[71] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
                           >
                             <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
                             {leadEvents.map((event) => (
@@ -3928,7 +3939,7 @@ export default function LeadDetailPage({
               <AnimatePresence>
                 {showActionsMenu ? (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowActionsMenu(false)} />
+                    <div className="fixed inset-0 z-[70]" onClick={() => setShowActionsMenu(false)} />
                     <motion.div
                       ref={actionsMenuRef}
                       initial={{ opacity: 0, y: -5, scale: 0.98 }}
@@ -3938,29 +3949,29 @@ export default function LeadDetailPage({
                       role="menu"
                       data-portal-dropdown="true"
                       style={{ position: 'fixed', top: actionsMenuPosition.top, left: actionsMenuPosition.left, maxHeight: actionsMenuPosition.maxHeight, width: 'min(15rem, calc(100vw - 1rem))' }}
-                      className="portal-dropdown z-50 overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                      className="portal-dropdown z-[71] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
                     >
                       <button type="button" role="menuitem" onClick={openAddEventModal} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <Plus size={13} className="text-[#caa24c]" />
                         <span>Add event</span>
                       </button>
-                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); openProposalBuilder() }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); openProposalBuilder() }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <ReceiptText size={13} className="text-[#caa24c]" />
                         <span>Create invoice for selected event</span>
                       </button>
-                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setActiveLeadTab('documents') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setActiveLeadTab('documents') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <FileText size={13} className="text-[#caa24c]" />
                         <span>View invoices & documents</span>
                       </button>
                       {hasCancellableTour(lead) ? (
-                        <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setLeadLifecycleAction('cancel-tour') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                        <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setLeadLifecycleAction('cancel-tour') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                           <Calendar size={13} className="text-[#caa24c]" />
                           <span>Cancel scheduled tour</span>
                         </button>
                       ) : null}
                       {lead.status !== 'closed_lost' && lead.pipeline_stage !== 'closed_lost' ? (
                         <div className="mt-1 border-t border-[color:var(--portal-border)] pt-1.5">
-                          <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); setLeadLifecycleAction('deal-lost') }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/25 bg-red-500/[0.06] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-red-600 transition-colors hover:border-red-500/45 hover:bg-red-500/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 dark:text-red-300">
+                          <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setLeadLifecycleAction('deal-lost') }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/25 bg-red-500/[0.06] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-red-600 transition-colors hover:border-red-500/45 hover:bg-red-500/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 dark:text-red-300">
                             <AlertCircle size={13} />
                             <span>Mark deal lost</span>
                           </button>

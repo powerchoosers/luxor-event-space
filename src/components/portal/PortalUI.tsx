@@ -925,6 +925,7 @@ export function PortalSelect({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false)
+        window.requestAnimationFrame(() => buttonRef.current?.focus())
       }
     }
 
@@ -1091,6 +1092,7 @@ export function PortalDatePicker({
       if (event.key === 'Escape') {
         event.stopImmediatePropagation()
         setIsOpen(false)
+        window.requestAnimationFrame(() => buttonRef.current?.focus())
       }
     }
 
@@ -1154,6 +1156,7 @@ export function PortalDatePicker({
     if (isDisabled(formatted)) return
     onChange(formatted)
     setIsOpen(false)
+    window.requestAnimationFrame(() => buttonRef.current?.focus())
   }
 
   const isDisabled = (date: string) => Boolean((minDate && date < minDate) || (availableDates && !availableDates.has(date)))
@@ -1205,7 +1208,7 @@ export function PortalDatePicker({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.985 }}
                 transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                className={`portal-scrollbar fixed z-[9999] overflow-y-auto overscroll-contain rounded-md border p-0 text-xs shadow-2xl ring-1 ring-black/5 sm:p-4 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
+                className={`portal-date-picker-popup portal-scrollbar fixed z-[9999] overflow-y-auto overscroll-contain rounded-md border p-0 text-xs shadow-2xl ring-1 ring-black/5 sm:p-4 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
                 style={{
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,

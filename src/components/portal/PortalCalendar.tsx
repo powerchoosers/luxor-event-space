@@ -68,6 +68,18 @@ function formatRange(anchor: Date, view: PortalCalendarView) {
   return `${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(days[0])} - ${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(days[6])}`
 }
 
+const COARSE_POINTER_QUERY = '(hover: none) and (pointer: coarse)'
+
+function subscribeToCoarsePointer(callback: () => void) {
+  const mediaQuery = window.matchMedia(COARSE_POINTER_QUERY)
+  mediaQuery.addEventListener('change', callback)
+  return () => mediaQuery.removeEventListener('change', callback)
+}
+
+function getCoarsePointerSnapshot() {
+  return window.matchMedia(COARSE_POINTER_QUERY).matches
+}
+
 export function PortalCalendar({
   title,
   items,
@@ -86,6 +98,7 @@ export function PortalCalendar({
   const [selectedItem, setSelectedItem] = React.useState<PortalCalendarItem | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const mobileMenuRef = React.useRef<HTMLDivElement>(null)
+  const isCoarsePointer = React.useSyncExternalStore(subscribeToCoarsePointer, getCoarsePointerSnapshot, () => false)
   const visibleDays = React.useMemo(() => getVisibleDays(anchor, view), [anchor, view])
   const itemsByDate = React.useMemo(() => {
     return items.reduce<Record<string, PortalCalendarItem[]>>((groups, item) => {
@@ -187,7 +200,7 @@ export function PortalCalendar({
             const iso = toIsoDate(day)
             const dayItems = itemsByDate[iso] || []
             const outsideMonth = view === 'month' && day.getMonth() !== anchor.getMonth()
-            const visibleItems = view === 'month' ? dayItems.slice(0, 2) : dayItems
+            const visibleItems = view === 'month' ? dayItems.slice(0, isCoarsePointer ? 3 : 2) : dayItems
             const hiddenItemCount = dayItems.length - visibleItems.length
             const isToday = iso === todayIso
 
@@ -196,7 +209,7 @@ export function PortalCalendar({
                 key={iso}
                 className={`relative flex min-w-0 flex-col p-2 transition-colors duration-150 sm:p-3 ${view === 'month' ? 'h-28 min-h-28 sm:h-40 sm:min-h-40' : 'h-64 min-h-64'} ${isToday ? 'bg-[#caa24c]/[0.09] shadow-[inset_0_0_0_1px_rgba(202,162,76,0.7)]' : 'bg-[color:var(--portal-card)] hover:bg-[color:var(--portal-soft)]'} ${outsideMonth ? 'opacity-40' : ''}`}
               >
-                <button type="button" aria-label={`View schedule for ${formatDayHeading(iso)}${isToday ? ', today' : ''}`} onClick={() => setSelectedDay(iso)} className="portal-calendar-day-hit absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]" />
+                <button type="button" aria-label={`View schedule for ${formatDayHeading(iso)}${isToday ? ', today' : ''}${isCoarsePointer && dayItems.length ? `, ${dayItems.length} scheduled items` : ''}`} onClick={() => setSelectedDay(iso)} className="portal-calendar-day-hit absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]" />
                 <div className="pointer-events-none relative z-10 flex items-center justify-between gap-2">
                   <div>
                     <p className="text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] sm:text-[10px]">
@@ -223,23 +236,27 @@ export function PortalCalendar({
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--portal-faint)]">No items</p>
                   ) : dayItems.length > 0 ? (
                     <>
-                      <div className="portal-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+                      <div className={`portal-scrollbar flex min-h-0 flex-1 flex-col gap-2 pr-1 ${isCoarsePointer ? 'overflow-visible' : 'overflow-y-auto'}`}>
                         {visibleItems.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => setSelectedItem(item)}
-                            aria-label={`Open ${item.title}`}
-                            className={`${view === 'month' ? 'h-1.5 w-1.5 shrink-0 rounded-full border-0 p-0 sm:h-auto sm:w-full sm:rounded-lg sm:border sm:p-2' : 'w-full rounded-md border px-1.5 py-1 sm:rounded-lg sm:p-2'} pointer-events-auto text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
-                          >
-                            <p className={`text-[9px] font-bold text-[color:var(--portal-text)] line-clamp-1 sm:text-xs ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.title}</p>
-                            {item.subtitle ? <p className={`mt-0.5 text-[9px] leading-3 text-[color:var(--portal-muted)] line-clamp-1 sm:mt-1 sm:text-[10px] sm:leading-4 ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.subtitle}</p> : null}
-                          </button>
+                          view === 'month' && isCoarsePointer ? (
+                            <span key={item.id} aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${toneClass(item.tone)}`} />
+                          ) : (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setSelectedItem(item)}
+                              aria-label={`Open ${item.title}`}
+                              className={`${view === 'month' ? 'h-1.5 w-1.5 shrink-0 rounded-full border-0 p-0 sm:h-auto sm:w-full sm:rounded-lg sm:border sm:p-2' : 'w-full rounded-md border px-1.5 py-1 sm:rounded-lg sm:p-2'} pointer-events-auto text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
+                            >
+                              <p className={`text-[9px] font-bold text-[color:var(--portal-text)] line-clamp-1 sm:text-xs ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.title}</p>
+                              {item.subtitle ? <p className={`mt-0.5 text-[9px] leading-3 text-[color:var(--portal-muted)] line-clamp-1 sm:mt-1 sm:text-[10px] sm:leading-4 ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.subtitle}</p> : null}
+                            </button>
+                          )
                         ))}
                       </div>
                     </>
                   ) : null}
-                  {hiddenItemCount > 0 ? <button type="button" onClick={() => setSelectedDay(iso)} className="pointer-events-auto hidden text-left text-[9px] font-bold text-[#a8792f] hover:text-[#caa24c] sm:block">+{hiddenItemCount} more</button> : null}
+                  {hiddenItemCount > 0 ? (isCoarsePointer ? <span aria-hidden="true" className="text-[8px] font-bold text-[#a8792f]">+{hiddenItemCount}</span> : <button type="button" onClick={() => setSelectedDay(iso)} className="pointer-events-auto hidden text-left text-[9px] font-bold text-[#a8792f] hover:text-[#caa24c] sm:block">+{hiddenItemCount} more</button>) : null}
                 </div>
               </div>
             )
@@ -343,7 +360,8 @@ function renderDayDetails(items: PortalCalendarItem[], onSelectItem: (item: Port
           key={item.id}
           type="button"
           onClick={() => onSelectItem(item)}
-          className={`w-full rounded-xl border p-4 text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
+          aria-label={`Open ${item.title}`}
+          className={`min-h-11 w-full rounded-xl border p-4 text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">

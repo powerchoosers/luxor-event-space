@@ -1883,6 +1883,15 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
   body[data-portal-theme] .portal-contact-value-actions {
     opacity: 1;
     pointer-events: auto;
+    position: relative !important;
+    inset: auto !important;
+    transform: none !important;
+    margin-top: 0.25rem !important;
+  }
+
+  body[data-portal-theme] .portal-date-picker-popup {
+    padding: 0 !important;
+    transform: none !important;
   }
 
   body[data-portal-theme] .portal-contact-remove-action {
