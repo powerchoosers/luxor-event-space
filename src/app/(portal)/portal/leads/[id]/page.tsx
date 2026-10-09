@@ -62,6 +62,7 @@ import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay, formatUsDialInput } from '@/lib/luxorPhoneClient'
 import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
+import { getLuxorTourSection, luxorTodayKey } from '@/lib/luxorTourMetrics'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -8406,13 +8407,18 @@ function LeadLifecycleRail({
       return { ...step, label: 'Inquiry', subtext: lead.pipeline_stage === 'newsletter' ? '' : formattedInquiryDate }
     }
     if (step.id === 'tour') {
+      const tourSection = getLuxorTourSection(lead, luxorTodayKey())
       const outcomeLabel = lead.tour_attendance_status === 'attended'
         ? 'Completed'
         : lead.tour_attendance_status === 'no_show'
           ? 'No Show'
           : lead.tour_attendance_status === 'cancelled'
             ? 'Cancelled'
-            : formattedTourDate ? 'Needs outcome' : ''
+            : tourSection === 'needs_outcome'
+              ? 'Needs outcome'
+              : tourSection === 'needs_schedule'
+                ? 'Needs schedule'
+                : ''
       return { ...step, label: 'Tour', subtext: [formattedTourDate, outcomeLabel].filter(Boolean).join(' · ') }
     }
     if (step.id === 'proposal') {

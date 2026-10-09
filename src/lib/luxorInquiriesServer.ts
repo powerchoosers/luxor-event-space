@@ -3,7 +3,7 @@ import 'server-only'
 import { compactText, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
-import { loadLuxorPages } from './luxorTourMetrics'
+import { compareLuxorScheduledTours, getLuxorInquiryPageRequest, loadLuxorPages } from './luxorTourMetrics'
 import { recordLuxorSmsConsent } from './luxorTextAutomationsServer'
 import {
   applyTourSlotToInquiry,
@@ -290,18 +290,18 @@ function getMissingColumnFromSchemaCacheError(message: string) {
 export async function listLuxorInquiries(limit = 1000) {
   const requested = Math.max(0, Math.floor(limit))
   const pageSize = 1000
-  return loadLuxorPages((offset, count) => supabaseRest<LuxorInquiry[]>(
-    `luxor_inquiries?select=*&order=created_at.desc&limit=${count}`,
-    { headers: { Range: `${offset}-${offset + count - 1}` } },
-  ), pageSize, requested)
+  return loadLuxorPages((offset, count) => {
+    const page = getLuxorInquiryPageRequest(offset, count)
+    return supabaseRest<LuxorInquiry[]>(page.path, { headers: page.headers })
+  }, pageSize, requested)
 }
 
 export async function listAllLuxorInquiries() {
   const pageSize = 1000
-  return loadLuxorPages((offset, count) => supabaseRest<LuxorInquiry[]>(
-    `luxor_inquiries?select=*&order=created_at.desc&limit=${count}`,
-    { headers: { Range: `${offset}-${offset + count - 1}` } },
-  ), pageSize)
+  return loadLuxorPages((offset, count) => {
+    const page = getLuxorInquiryPageRequest(offset, count)
+    return supabaseRest<LuxorInquiry[]>(page.path, { headers: page.headers })
+  }, pageSize)
 }
 
 export async function getLuxorInquiry(id: string) {
@@ -324,7 +324,7 @@ export async function listLuxorConfirmedTours() {
   const inquiries = await listAllLuxorInquiries()
   return inquiries
     .filter((inquiry) => Boolean(inquiry.preferred_tour_date) && inquiry.tour_attendance_status !== 'cancelled')
-    .sort((a, b) => `${a.preferred_tour_date} ${a.preferred_tour_time || '99:99'}`.localeCompare(`${b.preferred_tour_date} ${b.preferred_tour_time || '99:99'}`))
+    .sort((a, b) => compareLuxorScheduledTours(a, b, 'asc'))
 }
 
 export async function updateLuxorInquiry(id: string, updates: Partial<Record<string, unknown>>) {
@@ -338,6 +338,25 @@ export async function updateLuxorInquiry(id: string, updates: Partial<Record<str
         updated_at: new Date().toISOString(),
       }),
     }
+  )
+  return updated ?? null
+}
+
+export async function updateLuxorInquiryIfTourAttendanceStatus(
+  id: string,
+  expectedStatus: LuxorInquiry['tour_attendance_status'] | null | undefined,
+  updates: Partial<Record<string, unknown>>,
+) {
+  const statusFilter = expectedStatus == null
+    ? 'tour_attendance_status=is.null'
+    : `tour_attendance_status=eq.${encodeURIComponent(expectedStatus)}`
+  const [updated] = await supabaseRest<LuxorInquiry[]>(
+    `luxor_inquiries?select=*&id=eq.${encodeURIComponent(id)}&${statusFilter}`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() }),
+    },
   )
   return updated ?? null
 }

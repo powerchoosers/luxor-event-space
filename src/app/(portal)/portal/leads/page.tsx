@@ -36,7 +36,7 @@ import { isLuxorTestInquiry, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
-import { compareLuxorScheduledTours, getLuxorTourSection, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
+import { compareLuxorScheduledTours, formatLuxorTourDate, getLuxorTourSection, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -136,6 +136,8 @@ export default function LeadsPage() {
   const boardRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [busyTourOutcomeIds, setBusyTourOutcomeIds] = useState<string[]>([])
+  const tourOutcomeLocks = useRef(new Set<string>())
   
   // Tab control
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'>('dashboard')
@@ -175,7 +177,7 @@ export default function LeadsPage() {
   const [lifecycleLead, setLifecycleLead] = useState<LuxorInquiry | null>(null)
   const [lifecycleAction, setLifecycleAction] = useState<LeadLifecycleAction | null>(null)
 
-  const fetchLeads = useCallback(async () => {
+  const fetchLeads = useCallback(async (): Promise<boolean> => {
     try {
       setLoading(true)
       setError(null)
@@ -183,9 +185,11 @@ export default function LeadsPage() {
       if (!res.ok) throw new Error('Failed to load inquiries.')
       const data = await res.json()
       setLeads(data)
+      return true
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'Unable to load inquiries.')
+      return false
     } finally {
       setLoading(false)
     }
@@ -385,18 +389,26 @@ export default function LeadsPage() {
   }
 
   const handleTourOutcome = async (lead: LuxorInquiry, attendance: 'attended' | 'no_show') => {
+    if (tourOutcomeLocks.current.has(lead.id)) return
+    tourOutcomeLocks.current.add(lead.id)
+    setBusyTourOutcomeIds((current) => [...current, lead.id])
     try {
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inquiryId: lead.id, action: 'attendance', attendance }),
       })
-      const payload = await response.json().catch(() => ({})) as { error?: string }
+      const payload = await response.json().catch(() => ({})) as { error?: string; warnings?: string[] }
       if (!response.ok) throw new Error(payload.error || 'Tour outcome could not be saved.')
-      await fetchLeads()
-      notify({ title: attendance === 'attended' ? 'Tour marked completed' : 'Tour marked no show', description: 'The outcome was saved without sending a message.', variant: 'success' })
+      const refreshFailed = !await fetchLeads()
+      const warnings = [...(payload.warnings ?? [])]
+      if (refreshFailed) warnings.push('Reload the page to refresh the tour list.')
+      notify({ title: attendance === 'attended' ? 'Tour marked completed' : 'Tour marked no show', description: warnings.length ? warnings.join(' ') : 'The outcome was saved without sending a message.', variant: warnings.length ? 'warning' : 'success' })
     } catch (error) {
-      notify({ title: 'Tour outcome could not be saved', description: error instanceof Error ? error.message : 'Try again.', variant: 'error' })
+      notify({ title: 'Tour outcome could not be confirmed', description: `${error instanceof Error ? error.message : 'Try again.'} Refresh and retrying the same outcome is safe.`, variant: 'error' })
+    } finally {
+      tourOutcomeLocks.current.delete(lead.id)
+      setBusyTourOutcomeIds((current) => current.filter((id) => id !== lead.id))
     }
   }
 
@@ -669,8 +681,8 @@ export default function LeadsPage() {
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} loading={loading} />}
         {activeTab === 'clients' && <LeadsClientsTab leads={leads} sort={clientSort} onSort={updateClientSort} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'lost' && <LeadsLostTab leads={leads} />}
-        {activeTab === 'followups' && <FollowUpsTab leads={leads} onLeadsRefresh={fetchLeads} />}
-        {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} />}
+        {activeTab === 'followups' && <FollowUpsTab leads={leads} onLeadsRefresh={async () => { await fetchLeads() }} />}
+        {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} busyTourOutcomeIds={busyTourOutcomeIds} />}
         {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
 
         {activeTab === 'pipeline' && (
@@ -1497,13 +1509,7 @@ function formatDate(value: string) {
 }
 
 function formatTourDate(value: string) {
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date(value)
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Chicago',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date)
+  return formatLuxorTourDate(value)
 }
 
 // --- SUB-TAB COMPONENTS FOR LEADS & CLIENTS ---
@@ -2080,11 +2086,13 @@ function LeadsToursTab({
   onMovePipelineStage,
   onLifecycleAction,
   onTourOutcome,
+  busyTourOutcomeIds,
 }: {
   leads: LuxorInquiry[]
   onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
   onTourOutcome: (lead: LuxorInquiry, attendance: 'attended' | 'no_show') => void
+  busyTourOutcomeIds: string[]
 }) {
   type TourView = 'all' | TourCategory
   type TourViewMode = 'cards' | 'list'
@@ -2094,7 +2102,7 @@ function LeadsToursTab({
   const [view, setView] = useState<TourView>(() => {
     if (typeof window === 'undefined') return 'all'
     const saved = window.localStorage.getItem('luxor_leads_tours_view')
-    return saved === 'past' ? 'needs_outcome' : saved && ['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'cancelled'].includes(saved) ? saved as TourView : 'all'
+    return saved === 'past' ? 'needs_outcome' : saved && ['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'].includes(saved) ? saved as TourView : 'all'
   })
   const [viewMode, setViewMode] = useState<TourViewMode>(() => {
     if (typeof window === 'undefined') return 'cards'
@@ -2148,7 +2156,7 @@ function LeadsToursTab({
   }, [])
 
   const grouped = useMemo(() => {
-    const result: Record<TourCategory, LuxorInquiry[]> = { today: [], upcoming: [], completed: [], no_shows: [], needs_outcome: [], cancelled: [] }
+    const result: Record<TourCategory, LuxorInquiry[]> = { today: [], upcoming: [], completed: [], no_shows: [], needs_outcome: [], needs_schedule: [], cancelled: [] }
     tours.forEach((tour) => {
       const category = getLuxorTourSection(tour, todayKey)
       if (category) result[category].push(tour)
@@ -2164,14 +2172,14 @@ function LeadsToursTab({
       return sort.direction === 'asc' ? value : -value
     }
     Object.entries(result).forEach(([category, items]) => {
-      const defaultDirection = ['completed', 'no_shows', 'needs_outcome', 'cancelled'].includes(category) ? 'desc' : 'asc'
+      const defaultDirection = ['completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'].includes(category) ? 'desc' : 'asc'
       items.sort(sort.key === 'date' ? (a, b) => compareLuxorScheduledTours(a, b, defaultDirection) : compare)
     })
     return result
   }, [sort, todayKey, tours])
 
-  const categoryLabels: Record<TourCategory, string> = { today: 'Today', upcoming: 'Upcoming', completed: 'Completed', no_shows: 'No Shows', needs_outcome: 'Needs Outcome', cancelled: 'Cancelled' }
-  const categoryOrder: TourCategory[] = ['today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'cancelled']
+  const categoryLabels: Record<TourCategory, string> = { today: 'Today', upcoming: 'Upcoming', completed: 'Completed', no_shows: 'No Shows', needs_outcome: 'Needs Outcome', needs_schedule: 'Needs Schedule', cancelled: 'Cancelled' }
+  const categoryOrder: TourCategory[] = ['today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled']
   const visibleTours = view === 'all' ? categoryOrder.flatMap((category) => grouped[category]) : grouped[view]
   const pageSize = 25
   const totalPages = Math.max(1, Math.ceil(visibleTours.length / pageSize))
@@ -2196,8 +2204,8 @@ function LeadsToursTab({
         <LeadLifecycleActionsMenu lead={tour} onAction={(action) => onLifecycleAction(tour, action)} />
       </div>
       {!['attended', 'no_show', 'cancelled'].includes(tour.tour_attendance_status || '') ? <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={() => onTourOutcome(tour, 'attended')} className="rounded-md border border-emerald-600/25 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300">Mark Completed</button>
-        <button type="button" onClick={() => onTourOutcome(tour, 'no_show')} className="rounded-md border border-rose-600/25 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-500/10 dark:text-rose-300">Mark No Show</button>
+        <button type="button" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'attended')} className="rounded-md border border-emerald-600/25 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/10 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300">{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark Completed'}</button>
+        <button type="button" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'no_show')} className="rounded-md border border-rose-600/25 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-500/10 disabled:cursor-wait disabled:opacity-60 dark:text-rose-300">{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark No Show'}</button>
       </div> : null}
       <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
         <div><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Tour date</p><p className="mt-1 font-bold text-[#caa24c]">{tour.preferred_tour_date ? formatTourDate(tour.preferred_tour_date) : 'Date Pending'}</p><p className="text-xs text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Time TBD'} · Central</p></div>
@@ -2216,8 +2224,8 @@ function LeadsToursTab({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Scheduled Tours ({tours.length})</h3>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <div className="flex items-center rounded-lg border border-[color:var(--portal-border)] p-1" role="tablist" aria-label="Tour date filter">
-              {(['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'cancelled'] as TourView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => saveView(option)} className={`rounded-md px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${view === option ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{option === 'all' ? 'All' : `${categoryLabels[option]} (${grouped[option].length})`}</button>)}
+            <div className="flex max-w-full flex-wrap items-center justify-start gap-1 rounded-lg border border-[color:var(--portal-border)] p-1 sm:justify-end" role="tablist" aria-label="Tour date filter">
+              {(['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'] as TourView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => saveView(option)} className={`rounded-md px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${view === option ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{option === 'all' ? 'All' : `${categoryLabels[option]} (${grouped[option].length})`}</button>)}
             </div>
             <div className="flex items-center rounded-lg border border-[color:var(--portal-border)] p-1" aria-label="Tour view mode">
               <button type="button" aria-pressed={viewMode === 'cards'} aria-label="Card view" onClick={() => saveViewMode('cards')} className={`rounded-md p-1.5 ${viewMode === 'cards' ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}><LayoutGrid size={15} /></button>

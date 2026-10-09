@@ -8,7 +8,7 @@ import {
   listLuxorEmailJobsForInquiry,
   assertEmailHasNoUnresolvedPlaceholders,
 } from '@/lib/luxorEmailJobsServer'
-import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { getLuxorInquiry, updateLuxorInquiry, updateLuxorInquiryIfTourAttendanceStatus } from '@/lib/luxorInquiriesServer'
 import { getLuxorLeadEventForInquiry, listLuxorLeadEventsByInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -112,6 +112,10 @@ export async function POST(request: NextRequest) {
       if (!['pending', 'attended', 'no_show', 'rescheduled', 'cancelled'].includes(attendance)) {
         return NextResponse.json({ error: 'Unsupported attendance status.' }, { status: 400 })
       }
+      const finalOutcomes = ['attended', 'no_show', 'cancelled']
+      if (finalOutcomes.includes(inquiry.tour_attendance_status || '') && inquiry.tour_attendance_status !== attendance) {
+        return NextResponse.json({ error: 'This tour already has a final outcome. Refresh before changing it.' }, { status: 409 })
+      }
       const updates: Record<string, unknown> = { tour_attendance_status: attendance }
       if (attendance === 'attended' && canAdvanceAttendedTour(inquiry.status, inquiry.pipeline_stage)) {
         updates.status = 'tour_confirmed'
@@ -120,21 +124,51 @@ export async function POST(request: NextRequest) {
       if (attendance === 'no_show' && canAdvanceAttendedTour(inquiry.status, inquiry.pipeline_stage)) updates.pipeline_stage = 'tour'
       if (attendance === 'rescheduled' && PRE_PROPOSAL_STATUSES.has(inquiry.status)) updates.status = 'tour_requested'
 
-      const updated = await updateLuxorInquiry(inquiryId, updates)
+      let updated = inquiry
+      let outcomeChanged = false
+      if (inquiry.tour_attendance_status !== attendance) {
+        const saved = await updateLuxorInquiryIfTourAttendanceStatus(inquiryId, inquiry.tour_attendance_status, updates)
+        if (!saved) {
+          const current = await getLuxorInquiry(inquiryId)
+          if (!current || current.tour_attendance_status !== attendance) {
+            return NextResponse.json({ error: 'Another tour outcome was saved first. Refresh to review the current status.' }, { status: 409 })
+          }
+          updated = current
+        } else {
+          updated = saved
+          outcomeChanged = true
+        }
+      }
+      const warnings: string[] = []
       let updatedLeadEvent = null
       if (attendance === 'attended' && selectedLeadEvent && canAdvanceAttendedTour(selectedLeadEvent.status, selectedLeadEvent.pipeline_stage)) {
-        updatedLeadEvent = await updateLuxorLeadEvent(selectedLeadEvent.id, {
-          status: 'tour_confirmed',
-          pipeline_stage: 'proposal',
-        })
+        try {
+          updatedLeadEvent = await updateLuxorLeadEvent(selectedLeadEvent.id, {
+            status: 'tour_confirmed',
+            pipeline_stage: 'proposal',
+          })
+        } catch (error) {
+          console.error('Tour outcome saved; linked event stage needs refresh:', error)
+          warnings.push('The tour outcome was saved, but its linked event stage could not be updated.')
+        }
       }
       if (attendance === 'attended' || attendance === 'no_show' || attendance === 'rescheduled' || attendance === 'cancelled') {
-        await cancelQueuedTourEmailJobs(inquiryId)
+        try {
+          await cancelQueuedTourEmailJobs(inquiryId)
+        } catch (error) {
+          console.error('Tour outcome saved; queued tour messages need review:', error)
+          warnings.push('The tour outcome was saved, but queued tour reminders could not be cancelled.')
+        }
       }
-      if (inquiry.tour_attendance_status !== attendance) {
-        await createNote(inquiryId, `Tour attendance marked as ${attendance.replaceAll('_', ' ')}.`, 'status_change', 'Portal Owner')
+      if (outcomeChanged) {
+        try {
+          await createNote(inquiryId, `Tour attendance marked as ${attendance.replaceAll('_', ' ')}.`, 'status_change', 'Portal Owner')
+        } catch (error) {
+          console.error('Tour outcome saved; activity note was not recorded:', error)
+          warnings.push('The tour outcome was saved, but its activity note could not be recorded.')
+        }
       }
-      return NextResponse.json({ inquiry: updated, leadEvent: updatedLeadEvent, noShowJob: null })
+      return NextResponse.json({ inquiry: updated, leadEvent: updatedLeadEvent, noShowJob: null, warnings, idempotent: !outcomeChanged })
     }
 
     if (action === 'schedule-tour') {

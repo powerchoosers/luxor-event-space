@@ -4,7 +4,7 @@ import { supabaseRest } from './supabaseRestServer'
 import { listAllLuxorInquiries } from './luxorInquiriesServer'
 import { listLuxorBookingsWithPayments } from './luxorBookingsServer'
 import { isLuxorTestInquiry } from './luxorInquiryTypes'
-import { getLuxorTourAnalytics } from './luxorTourMetrics'
+import { getLuxorTourAnalytics, getLuxorTourDateRange } from './luxorTourMetrics'
 
 export type AnalyticsDatePreset = '7d' | '30d' | '90d' | 'this_month' | 'previous_month' | 'custom'
 
@@ -13,6 +13,7 @@ export type DateRange = {
   end: Date
   previousStart: Date
   previousEnd: Date
+  tourDateRange: ReturnType<typeof getLuxorTourDateRange>
   label: string
   comparisonLabel: string
 }
@@ -25,6 +26,7 @@ export type MarketingSalesMetrics = {
   tourClicks: number | null
   toursBooked: number
   toursCompleted: number
+  tourAnalyticsAvailable: boolean
   tourAnalytics: {
     totalScheduled: number
     completed: number
@@ -107,6 +109,7 @@ export type MarketingSalesMetrics = {
 
 export function getDateRangeFromPreset(preset: AnalyticsDatePreset, customStart?: string, customEnd?: string): DateRange {
   const now = new Date()
+  const tourDateRange = getLuxorTourDateRange(preset, customStart, customEnd, now)
   const currentYear = now.getFullYear()
   const currentMonth = now.getMonth()
 
@@ -129,6 +132,7 @@ export function getDateRangeFromPreset(preset: AnalyticsDatePreset, customStart?
       previousEnd: prevEnd,
       label: 'Last 7 Days',
       comparisonLabel: 'vs previous 7 days',
+      tourDateRange,
     }
   }
 
@@ -151,6 +155,7 @@ export function getDateRangeFromPreset(preset: AnalyticsDatePreset, customStart?
       previousEnd: prevEnd,
       label: 'Last 90 Days',
       comparisonLabel: 'vs previous 90 days',
+      tourDateRange,
     }
   }
 
@@ -169,6 +174,7 @@ export function getDateRangeFromPreset(preset: AnalyticsDatePreset, customStart?
       previousEnd: prevEnd,
       label: 'This Month',
       comparisonLabel: 'vs previous month',
+      tourDateRange,
     }
   }
 
@@ -186,6 +192,7 @@ export function getDateRangeFromPreset(preset: AnalyticsDatePreset, customStart?
       previousEnd: prevEnd,
       label: 'Previous Month',
       comparisonLabel: 'vs month before',
+      tourDateRange,
     }
   }
 
@@ -204,6 +211,7 @@ export function getDateRangeFromPreset(preset: AnalyticsDatePreset, customStart?
       previousEnd: prevEnd,
       label: 'Custom Range',
       comparisonLabel: 'vs previous equivalent period',
+      tourDateRange,
     }
   }
 
@@ -226,6 +234,7 @@ export function getDateRangeFromPreset(preset: AnalyticsDatePreset, customStart?
     previousEnd: prevEnd,
     label: 'Last 30 Days',
     comparisonLabel: 'vs previous 30 days',
+    tourDateRange,
   }
 }
 
@@ -253,6 +262,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   const prevEndIso = range.previousEnd.toISOString()
 
   // 1. Fetch First-Party Web Events
+  let tourAnalyticsAvailable = true
   const [currentEvents, prevEvents, inquiries, bookingsWithPayments] = await Promise.all([
     supabaseRest<PublicEventRow[]>(
       `luxor_public_events?select=id,event_name,session_id,page_path,source,created_at,metadata&created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}&limit=10000`,
@@ -260,7 +270,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     supabaseRest<PublicEventRow[]>(
       `luxor_public_events?select=id,event_name,session_id,page_path,source,created_at,metadata&created_at=gte.${encodeURIComponent(prevStartIso)}&created_at=lte.${encodeURIComponent(prevEndIso)}&limit=10000`,
     ).catch(() => []),
-    listAllLuxorInquiries().catch(() => []),
+    listAllLuxorInquiries().catch(() => { tourAnalyticsAvailable = false; return [] }),
     listLuxorBookingsWithPayments(2000).catch(() => []),
   ])
 
@@ -321,8 +331,8 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   })
 
   // Tour conversion metrics share the scheduled-tour-date cohort for each period.
-  const tourAnalytics = getLuxorTourAnalytics(businessInquiries, range.start, range.end)
-  const previousTourAnalytics = getLuxorTourAnalytics(businessInquiries, range.previousStart, range.previousEnd)
+  const tourAnalytics = getLuxorTourAnalytics(businessInquiries, range.tourDateRange.startDate, range.tourDateRange.endDate)
+  const previousTourAnalytics = getLuxorTourAnalytics(businessInquiries, range.tourDateRange.previousStartDate, range.tourDateRange.previousEndDate)
   const toursBooked = tourAnalytics.totalScheduled
   const prevToursBooked = previousTourAnalytics.totalScheduled
 
@@ -426,11 +436,11 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   }
 
   // 5. Deltas
-  const toursBookedDeltaPercent = calculateDeltaPercent(toursBooked, prevToursBooked)
+  const toursBookedDeltaPercent = tourAnalyticsAvailable ? calculateDeltaPercent(toursBooked, prevToursBooked) : null
   const websiteVisitorsDeltaPercent = hasConnectedAnalytics ? calculateDeltaPercent(websiteVisitors || 0, prevWebsiteVisitors) : null
   const tourPageVisitsDeltaPercent = hasConnectedAnalytics ? calculateDeltaPercent(tourPageVisits || 0, prevTourPageVisits) : null
   const tourClicksDeltaPercent = hasConnectedAnalytics ? calculateDeltaPercent(tourClicks || 0, prevTourClicks) : null
-  const toursCompletedDeltaPercent = calculateDeltaPercent(toursCompleted, prevToursCompleted)
+  const toursCompletedDeltaPercent = tourAnalyticsAvailable ? calculateDeltaPercent(toursCompleted, prevToursCompleted) : null
   const proposalsSentDeltaPercent = calculateDeltaPercent(proposalsSent, prevProposalsSent)
   const bookingsDeltaPercent = calculateDeltaPercent(bookingsCount, prevBookingsCount)
   const revenueDeltaPercent = calculateDeltaPercent(currentRevenue, prevRevenue)
@@ -528,8 +538,8 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     // Filter CRM inquiries matching this category
     const catToursBooked = getLuxorTourAnalytics(
       businessInquiries.filter((inq) => normalizeChannel(inq.source, inq.metadata) === category),
-      range.start,
-      range.end,
+      range.tourDateRange.startDate,
+      range.tourDateRange.endDate,
     ).totalScheduled
 
     // Filter Bookings matching this category (via linked inquiry or booking source)
@@ -680,6 +690,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     tourClicks,
     toursBooked,
     toursCompleted,
+    tourAnalyticsAvailable,
     tourAnalytics,
     proposalsSent,
     bookings: bookingsCount,

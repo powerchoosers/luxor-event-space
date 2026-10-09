@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { CalendarClock, Check, ChevronRight, CircleAlert, Clock3, Eye, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Phone, Plus, Search, Settings2, UserRound, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
-import { getCompletedTourLeads } from '@/lib/luxorTourMetrics'
+import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
 import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask } from '@/lib/luxorFollowUpTaskPolicy'
 import { PortalButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
@@ -24,7 +24,7 @@ type CallDraft = { lead: LuxorInquiry; task?: LuxorTask } | null
 type ProfileWorkspace = { leadId: string; stage: 'tour' | 'proposal' | 'profile' } | null
 
 function taskChannel(task: LuxorTask): Channel { return getLuxorFollowUpTaskChannel(task) }
-function taskNotes(task: LuxorTask) { return (task.description ?? '').replace(/^\[follow-up:(?:email|phone)\]\s*/, '') }
+function taskNotes(task: LuxorTask) { return (task.description ?? '').replace(/^\[follow-up:(?:email|phone)\]\s*/, '').replace(/^\[post-tour\]\s*/, '') }
 function luxorDate(iso: string) {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(iso))
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
@@ -199,18 +199,14 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       return [{ inquiryId, next: current, activities: allActivities }]
     })
     const postTourStatus = (inquiryId: string) => {
-      const hasPending = followUpTasks.some((task) => task.inquiry_id === inquiryId && task.status === 'pending')
-        || emailActions.some((action) => action.inquiry_id === inquiryId && ['queued', 'scheduled', 'pending', 'email_queued'].includes(action.status))
-      const hasCompleted = followUpTasks.some((task) => task.inquiry_id === inquiryId && task.status === 'completed')
-        || emailActions.some((action) => action.inquiry_id === inquiryId && ['completed', 'sent'].includes(action.status))
-      return hasPending ? 'Follow-Up Scheduled' : hasCompleted ? 'Follow-Up Completed' : 'Needs Follow-Up'
+      return getLuxorPostTourFollowUpStatus(followUpTasks.filter((task) => task.inquiry_id === inquiryId))
     }
     const completedByLead = new Map(completedTourLeads.map((lead) => [lead.id, lead]))
     const rowsWithStatus = activityRows.map((row) => completedByLead.has(row.inquiryId) ? { ...row, postTourStatus: postTourStatus(row.inquiryId) } : row)
     const rowsByLead = new Set(activityRows.map((row) => row.inquiryId))
     const missingPostTourRows = completedTourLeads.filter((lead) => !rowsByLead.has(lead.id)).map((lead) => ({
       inquiryId: lead.id,
-      next: { id: `post-tour-${lead.id}`, channel: 'email' as const, title: 'Post-Tour Follow-Up', dueAt: null, dueDate: null, status: 'Needs Follow-Up', assignee: 'Unassigned' },
+      next: { id: `post-tour-${lead.id}`, channel: 'email' as const, title: 'Post-Tour Follow-Up', dueAt: null, dueDate: null, status: postTourStatus(lead.id), assignee: 'Unassigned' },
       activities: [{ id: `post-tour-${lead.id}-activity`, at: lead.preferred_tour_date || '', kind: 'follow-up' as const, label: 'Completed tour', detail: `Tour date: ${lead.preferred_tour_date || 'Not recorded'}${lead.preferred_tour_time ? ` · ${lead.preferred_tour_time}` : ''}` }],
       postTourStatus: postTourStatus(lead.id),
     }))
@@ -252,7 +248,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   async function saveTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!leadId || !title.trim() || !dueDate || !dueTime) return
-    const response = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: leadId, title: title.trim(), description: `[follow-up:${newChannel}]${notes.trim() ? ` ${notes.trim()}` : ''}`, dueDate, dueAt: localLuxorIso(dueDate, dueTime), assignedTo: assignee || undefined, priority: 'medium' }) })
+    const isPostTour = leadById.get(leadId)?.tour_attendance_status === 'attended'
+    const response = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: leadId, title: title.trim(), description: `[follow-up:${newChannel}]${isPostTour ? ' [post-tour]' : ''}${notes.trim() ? ` ${notes.trim()}` : ''}`, dueDate, dueAt: localLuxorIso(dueDate, dueTime), assignedTo: assignee || undefined, priority: 'medium' }) })
     if (!response.ok) { notify({ title: 'The follow-up could not be saved', variant: 'error' }); return }
     setAdding(false); setTitle(''); setNotes(''); setDueDate(''); setLeadId('')
     notify({ title: `${newChannel === 'phone' ? 'Phone' : 'Email'} follow-up task added`, description: 'No call or email was sent.', variant: 'success' })

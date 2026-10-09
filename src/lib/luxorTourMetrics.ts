@@ -2,7 +2,22 @@ import type { LuxorInquiry } from './luxorInquiryTypes'
 
 export const LUXOR_TOUR_TIMEZONE = 'America/Chicago'
 
-export type LuxorTourSection = 'today' | 'upcoming' | 'completed' | 'no_shows' | 'needs_outcome' | 'cancelled'
+export type LuxorTourSection = 'today' | 'upcoming' | 'completed' | 'no_shows' | 'needs_outcome' | 'needs_schedule' | 'cancelled'
+export type LuxorTourDateRangePreset = '7d' | '30d' | '90d' | 'this_month' | 'previous_month' | 'custom'
+
+export type LuxorTourDateRange = {
+  startDate: string
+  endDate: string
+  previousStartDate: string
+  previousEndDate: string
+}
+
+export function getLuxorInquiryPageRequest(offset: number, count: number) {
+  return {
+    path: 'luxor_inquiries?select=*&order=created_at.desc,id.desc',
+    headers: { Range: `${offset}-${offset + count - 1}` },
+  }
+}
 
 export async function loadLuxorPages<T>(fetchPage: (offset: number, count: number) => Promise<T[]>, pageSize = 1000, limit = Number.POSITIVE_INFINITY) {
   const items: T[] = []
@@ -10,7 +25,7 @@ export async function loadLuxorPages<T>(fetchPage: (offset: number, count: numbe
     const count = Math.min(pageSize, limit - items.length)
     const page = await fetchPage(items.length, count)
     items.push(...page)
-    if (page.length < count) return items
+    if (page.length === 0) return items
   }
   return items
 }
@@ -35,10 +50,81 @@ export function luxorTodayKey(now = new Date()) {
   return luxorDateKey(now)
 }
 
+export function formatLuxorTourDate(value: string) {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const date = new Date(dateOnly ? `${value}T12:00:00.000Z` : value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: dateOnly ? 'UTC' : LUXOR_TOUR_TIMEZONE,
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date)
+}
+
+function addLuxorDateKeyDays(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+function isCalendarDateKey(value: string | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+export function getLuxorTourDateRange(
+  preset: LuxorTourDateRangePreset,
+  customStart?: string,
+  customEnd?: string,
+  now = new Date(),
+): LuxorTourDateRange {
+  const today = luxorDateKey(now)
+  let startDate: string
+  let endDate: string
+  let previousStartDate: string
+  let previousEndDate: string
+
+  if (preset === 'this_month') {
+    startDate = `${today.slice(0, 7)}-01`
+    endDate = today
+    previousEndDate = addLuxorDateKeyDays(startDate, -1)
+    previousStartDate = `${previousEndDate.slice(0, 7)}-01`
+  } else if (preset === 'previous_month') {
+    endDate = `${today.slice(0, 7)}-01`
+    endDate = addLuxorDateKeyDays(endDate, -1)
+    startDate = `${endDate.slice(0, 7)}-01`
+    previousEndDate = addLuxorDateKeyDays(startDate, -1)
+    previousStartDate = `${previousEndDate.slice(0, 7)}-01`
+  } else if (preset === 'custom' && isCalendarDateKey(customStart) && isCalendarDateKey(customEnd) && customStart <= customEnd) {
+    startDate = customStart
+    endDate = customEnd
+    const days = Math.round((Date.parse(`${endDate}T00:00:00.000Z`) - Date.parse(`${startDate}T00:00:00.000Z`)) / 86_400_000)
+    previousEndDate = addLuxorDateKeyDays(startDate, -1)
+    previousStartDate = addLuxorDateKeyDays(previousEndDate, -days)
+  } else {
+    const days = preset === '7d' ? 7 : preset === '90d' ? 90 : 30
+    endDate = today
+    startDate = addLuxorDateKeyDays(today, -days)
+    previousEndDate = addLuxorDateKeyDays(startDate, -1)
+    previousStartDate = addLuxorDateKeyDays(previousEndDate, -days)
+  }
+
+  // Calendar arithmetic does not depend on server timezone or DST day length.
+  return { startDate, endDate, previousStartDate, previousEndDate }
+}
+
 export function getCompletedTourLeads<T extends LuxorInquiry>(inquiries: T[]) {
   const unique = new Map<string, T>()
   inquiries.filter((inquiry) => inquiry.tour_attendance_status === 'attended').forEach((inquiry) => unique.set(inquiry.id, inquiry))
   return [...unique.values()].sort((a, b) => (b.preferred_tour_date || '').localeCompare(a.preferred_tour_date || ''))
+}
+
+export function getLuxorPostTourFollowUpStatus(tasks: Array<{ status: string; description?: string | null }>) {
+  const postTourTasks = tasks.filter((task) => /\[post-tour\]/i.test(task.description ?? ''))
+  if (postTourTasks.some((task) => task.status === 'pending')) return 'Follow-Up Scheduled'
+  if (postTourTasks.some((task) => task.status === 'completed')) return 'Follow-Up Completed'
+  return 'Needs Follow-Up'
 }
 
 export function getLuxorTourSection(tour: LuxorInquiry, todayKey: string): LuxorTourSection | null {
@@ -53,7 +139,7 @@ export function getLuxorTourSection(tour: LuxorInquiry, todayKey: string): Luxor
   if (status === 'cancelled') return 'cancelled'
 
   const dateKey = tour.preferred_tour_date ? luxorDateKey(tour.preferred_tour_date) : ''
-  if (!dateKey) return 'needs_outcome'
+  if (!dateKey) return 'needs_schedule'
   if (dateKey < todayKey) return 'needs_outcome'
   if (dateKey === todayKey) return 'today'
   return 'upcoming'
@@ -88,7 +174,7 @@ export function compareLuxorScheduledTours(a: LuxorInquiry, b: LuxorInquiry, dir
   return a.id.localeCompare(b.id)
 }
 
-export function getLuxorTourAnalytics(inquiries: LuxorInquiry[], start: Date, end: Date) {
+export function getLuxorTourAnalytics(inquiries: LuxorInquiry[], start: Date | string, end: Date | string) {
   const startKey = luxorDateKey(start)
   const endKey = luxorDateKey(end)
   const cohort = new Map<string, LuxorInquiry>()
