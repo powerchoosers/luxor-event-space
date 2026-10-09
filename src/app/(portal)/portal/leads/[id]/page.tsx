@@ -63,6 +63,7 @@ import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay, formatUsDialInput } from '@/lib/luxorPhoneClient'
 import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
 import { getLuxorTourSection, luxorTodayKey } from '@/lib/luxorTourMetrics'
+import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -2742,7 +2743,7 @@ export default function LeadDetailPage({
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, action: 'attendance', attendance, expectedAttendance: lead.tour_attendance_status || null }),
+        body: JSON.stringify(createLuxorTourAttendancePayload({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, attendance, expectedAttendance: lead.tour_attendance_status || null })),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: unknown; warnings?: string[] }
       if (!response.ok) throw new Error(payload.error || 'Tour attendance could not be updated.')

@@ -9,6 +9,7 @@ import {
   assertEmailHasNoUnresolvedPlaceholders,
 } from '@/lib/luxorEmailJobsServer'
 import { getLuxorInquiry, updateLuxorInquiry, updateLuxorInquiryIfTourAttendanceStatus } from '@/lib/luxorInquiriesServer'
+import { resolveLuxorTourOutcomePrecondition } from '@/lib/luxorTourOutcome'
 import { getLuxorLeadEventForInquiry, listLuxorLeadEventsByInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -112,8 +113,9 @@ export async function POST(request: NextRequest) {
       if (!['pending', 'attended', 'no_show', 'rescheduled', 'cancelled'].includes(attendance)) {
         return NextResponse.json({ error: 'Unsupported attendance status.' }, { status: 400 })
       }
-      const expectedAttendance = body.expectedAttendance === null ? null : String(body.expectedAttendance || '')
-      if (expectedAttendance !== (inquiry.tour_attendance_status || null)) {
+      const expectedAttendance = typeof body.expectedAttendance === 'string' ? body.expectedAttendance as LuxorTourAttendanceStatus : body.expectedAttendance === null ? null : undefined
+      const precondition = resolveLuxorTourOutcomePrecondition(inquiry.tour_attendance_status || null, attendance, expectedAttendance)
+      if (precondition === 'stale') {
         return NextResponse.json({ error: 'The tour outcome changed since this view loaded. Refresh and review the current outcome before correcting it.' }, { status: 409 })
       }
       if (inquiry.tour_attendance_status === 'cancelled' && attendance !== 'cancelled') {

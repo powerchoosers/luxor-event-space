@@ -6,9 +6,10 @@ import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, T
 import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
 import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
-import type { LuxorBooking, LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
+import type { LuxorBooking, LuxorInquiry, LuxorTask, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
+import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
 import { useToast } from '@/components/portal/ToastProvider'
 
 type CalendarPayload = {
@@ -27,7 +28,7 @@ export default function CalendarPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const { notify } = useToast()
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (): Promise<boolean> => {
     try {
       setLoading(true)
       setError(null)
@@ -35,8 +36,10 @@ export default function CalendarPage() {
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Failed to load calendar.')
       setData(payload)
+      return true
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load calendar.')
+      return false
     } finally {
       setLoading(false)
     }
@@ -76,17 +79,20 @@ export default function CalendarPage() {
     }
   }, [loadData, notify])
 
-  const updateAttendance = async (tour: LuxorInquiry, attendance: string) => {
+  const updateAttendance = async (tour: LuxorInquiry, attendance: LuxorTourAttendanceStatus) => {
     try {
       setBusyId(tour.id)
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: tour.id, action: 'attendance', attendance }),
+        body: JSON.stringify(createLuxorTourAttendancePayload({ inquiryId: tour.id, attendance, expectedAttendance: tour.tour_attendance_status || null })),
       })
-      const payload = await response.json()
+      const payload = await response.json() as { error?: string; warnings?: string[] }
       if (!response.ok) throw new Error(payload.error || 'Failed to update attendance.')
-      await loadData()
+      const refreshed = await loadData()
+      const warnings = [...(payload.warnings ?? [])]
+      if (!refreshed) warnings.push('The outcome was saved, but the calendar could not be refreshed.')
+      notify({ title: 'Tour outcome saved', description: warnings.length ? warnings.join(' ') : 'The tour outcome was saved without sending a message.', variant: warnings.length ? 'warning' : 'success' })
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update attendance.')
     } finally {
@@ -259,7 +265,7 @@ export default function CalendarPage() {
           description="Set the weekly days and hours first, then choose the specific future dates you want to publish. Visitors will see only the times that are open and still available."
           publishLabel="Open selected dates"
           defaultExpanded={false}
-          onUpdated={loadData}
+          onUpdated={async () => { await loadData() }}
         />
       ) : null}
 
@@ -298,15 +304,15 @@ function TourControls({
 }: {
   tour: LuxorInquiry
   busyId: string | null
-  onAttendance: (tour: LuxorInquiry, attendance: string) => void
+  onAttendance: (tour: LuxorInquiry, attendance: LuxorTourAttendanceStatus) => void
   onEmail: (tour: LuxorInquiry, jobType: string) => void
 }) {
   return (
     <div className="space-y-3">
       {tour.message ? <p className="line-clamp-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">{tour.message}</p> : null}
       <div className="flex flex-wrap gap-1.5">
-        <ActionButton disabled={busyId === tour.id} onClick={() => onAttendance(tour, 'attended')} icon={<UserCheck size={11} />} label="Attended" />
-        <ActionButton disabled={busyId === tour.id} onClick={() => onAttendance(tour, 'no_show')} icon={<UserX size={11} />} label="No-show" />
+        <ActionButton disabled={busyId === tour.id} onClick={() => onAttendance(tour, 'attended')} icon={<UserCheck size={11} />} label={tour.tour_attendance_status === 'no_show' ? 'Correct to attended' : 'Attended'} />
+        {tour.tour_attendance_status !== 'no_show' && <ActionButton disabled={busyId === tour.id} onClick={() => onAttendance(tour, 'no_show')} icon={<UserX size={11} />} label={tour.tour_attendance_status === 'attended' ? 'Correct to no-show' : 'No-show'} />}
         <ActionButton disabled={busyId === `${tour.id}-tour_confirmation`} onClick={() => onEmail(tour, 'tour_confirmation')} icon={<Send size={11} />} label="Confirm email" />
         <ActionButton disabled={busyId === `${tour.id}-tour_no_show_reschedule`} onClick={() => onEmail(tour, 'tour_no_show_reschedule')} icon={<Mail size={11} />} label="Reschedule" />
       </div>
