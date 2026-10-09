@@ -93,19 +93,24 @@ begin
       where event_id=event.id and sequence=event.sequence for update;
     if not found then raise exception 'Current tour revision is missing'; end if;
 
-    -- Lock every future reminder for the old address before changing the tour.
-    -- This prevents the worker from claiming a queued job in the gap between
-    -- validation and retargeting. Attempted payloads and idempotency keys stay
-    -- immutable, so an attempted retry requires an explicit later correction.
-    for reminder_guard in select j.status,j.attempts from public.luxor_email_jobs j
-      where j.inquiry_id=p_inquiry_id and j.tour_revision_id=old_revision.id
-        and j.job_type='tour_reminder' and j.recipient_email=old_email
-        and j.scheduled_for>stamp and j.status in ('queued','sending')
-      for update
+    -- Serialize the correction against every active delivery for this tour
+    -- revision and old recipient, including already-due reminders and ordinary
+    -- calendar REQUESTs. If the worker claimed a row first, reject the edit;
+    -- if this lock wins, the worker's post-claim revision check sees the new
+    -- sequence and skips the stale payload. Only future, unattempted reminders
+    -- are eligible for retargeting below; attempted payloads stay immutable.
+    for reminder_guard in select j.status,j.attempts,j.job_type,j.scheduled_for
+      from public.luxor_email_jobs j
+      where j.inquiry_id=p_inquiry_id and j.recipient_email=old_email
+        and j.status in ('queued','sending')
+        and ((j.job_type='calendar_invitation' and j.calendar_revision_id=old_revision.id)
+          or (j.job_type in ('tour_confirmation','tour_reminder') and j.tour_revision_id=old_revision.id))
+      for update of j
     loop
       if reminder_guard.status='sending' then
-        raise exception 'A tour reminder is already sending; retry the address edit after it finishes';
-      elsif coalesce(reminder_guard.attempts,0)>0 then
+        raise exception 'A tour email is already sending; retry the address edit after it finishes';
+      elsif reminder_guard.job_type='tour_reminder'
+        and reminder_guard.scheduled_for>stamp and coalesce(reminder_guard.attempts,0)>0 then
         raise exception 'A tour reminder has already been attempted; retry the address edit after it finishes';
       end if;
     end loop;
