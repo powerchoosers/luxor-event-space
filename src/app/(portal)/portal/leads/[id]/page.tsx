@@ -8349,7 +8349,7 @@ function EventContacts({ inquiryId }: { inquiryId: string }) {
         {contacts.map((contact) => <div key={contact.id} className="group flex items-center gap-2 rounded-xl bg-[color:var(--portal-soft)] px-2 py-2">
           <PortalContactAvatar name={contact.full_name} size="sm" />
           <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold text-[color:var(--portal-text)]">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="truncate text-[9px] text-[color:var(--portal-muted)]">{contact.email || 'No email'}{contact.phone ? ` · ${formatPhoneDisplay(contact.phone)}` : ''}</p></div>
-          <button type="button" onClick={() => setRemoving(contact)} className="p-1 text-[color:var(--portal-muted)] opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100 focus:opacity-100" aria-label={`Remove ${contact.full_name}`}><Trash2 size={12} /></button>
+          <button type="button" onClick={() => setRemoving(contact)} className="portal-contact-remove-action p-1 text-[color:var(--portal-muted)] opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100 focus:opacity-100" aria-label={`Remove ${contact.full_name}`}><Trash2 size={12} /></button>
         </div>)}
       </div>
       {adding ? <form onSubmit={addContact} className="mt-2 space-y-2 rounded-xl border border-[#caa24c]/25 bg-[color:var(--portal-soft)] p-3">
@@ -8827,7 +8827,7 @@ function DetailItem({
             {isSaving ? 'Saving...' : value}
           </p>
           {canCopy || (canEdit && !isEditing) ? (
-            <div className="pointer-events-none absolute right-0 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/value:pointer-events-auto group-hover/value:opacity-100">
+            <div className="portal-contact-value-actions pointer-events-none absolute right-0 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/value:pointer-events-auto group-hover/value:opacity-100">
               {canCopy ? (
                 <button
                   type="button"

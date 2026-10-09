@@ -1861,6 +1861,7 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 
 @media (hover: none) and (pointer: coarse) {
   body[data-portal-theme] button[aria-label],
+  body[data-portal-theme] button[title],
   body[data-portal-theme] button:has(svg):not(:has(span)) {
     min-width: 44px;
     min-height: 44px;
@@ -1871,6 +1872,15 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
   }
 
   body[data-portal-theme] .portal-notification-action {
+    opacity: 1;
+  }
+
+  body[data-portal-theme] .portal-contact-value-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  body[data-portal-theme] .portal-contact-remove-action {
     opacity: 1;
   }
 }
