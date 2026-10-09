@@ -166,13 +166,13 @@ export function PortalCalendar({
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => setAnchor((date) => moveAnchor(date, view, -1))} className="shrink-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
+          <button type="button" aria-label="Previous date range" onClick={() => setAnchor((date) => moveAnchor(date, view, -1))} className="shrink-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
             <ChevronLeft size={16} />
           </button>
           <button type="button" onClick={() => setAnchor(new Date())} className="shrink-0 rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
             Today
           </button>
-          <button type="button" onClick={() => setAnchor((date) => moveAnchor(date, view, 1))} className="shrink-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
+          <button type="button" aria-label="Next date range" onClick={() => setAnchor((date) => moveAnchor(date, view, 1))} className="shrink-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
             <ChevronRight size={16} />
           </button>
         </div>
