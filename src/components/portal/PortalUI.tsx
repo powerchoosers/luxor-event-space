@@ -679,6 +679,7 @@ export function PortalModal({
   description,
   ariaLabel,
   children,
+  footer,
   maxWidth = 'max-w-lg',
   zIndex,
 }: {
@@ -688,6 +689,7 @@ export function PortalModal({
   description?: string
   ariaLabel?: string
   children: React.ReactNode
+  footer?: React.ReactNode
   maxWidth?: string
   zIndex?: number
 }) {
@@ -807,19 +809,26 @@ export function PortalModal({
           >
             <ModalDepthContext.Provider value={depth + 1}>
               {title ? (
-                <>
-                  <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6 sm:py-4">
-                    <div className="min-w-0">
-                      <h3 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">{title}</h3>
-                      {description ? <p className="mt-1 max-w-xl text-[11px] leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
-                    </div>
-                    <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} />
+                <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6 sm:py-4">
+                  <div className="min-w-0">
+                    <h3 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">{title}</h3>
+                    {description ? <p className="mt-1 max-w-xl text-[11px] leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6">{children}</div>
+                  <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} />
+                </div>
+              ) : null}
+              {title || footer ? (
+                <>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6">
+                    {children}
+                  </div>
+                  {footer ? (
+                    <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-4 sm:px-6 sm:py-4">
+                      {footer}
+                    </div>
+                  ) : null}
                 </>
-              ) : (
-                children
-              )}
+              ) : children}
             </ModalDepthContext.Provider>
           </motion.div>
         </motion.div>

@@ -46,9 +46,19 @@ export function TourEmailResendDialog({
             : 'Tour confirmation is unavailable'
 
   return (
-    <PortalModal isOpen={isOpen && Boolean(candidate)} onClose={() => !isSending && onClose()} maxWidth="max-w-xl">
+    <PortalModal
+      isOpen={isOpen && Boolean(candidate)}
+      onClose={() => !isSending && onClose()}
+      maxWidth="max-w-xl"
+      footer={candidate ? (
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} disabled={isSending} className="min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">{canConfirm ? 'Cancel' : 'Close'}</button>
+          {canConfirm ? <button type="button" onClick={onConfirm} disabled={isSending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white hover:bg-[#b68d3b] disabled:opacity-50"><Send size={13} />{isSending ? 'Working…' : candidate.status === 'failed' ? 'Retry delivery' : 'Confirm and send'}</button> : null}
+        </div>
+      ) : null}
+    >
       {candidate ? (
-        <div className="p-5 sm:p-6">
+        <div>
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#a8792f] dark:text-[#f1d27a]">{statusLabel}</p>
@@ -66,13 +76,9 @@ export function TourEmailResendDialog({
             <dt className="text-[color:var(--portal-muted)]">Status</dt><dd className="capitalize text-[color:var(--portal-text)]">{candidate.status === 'cancelled' && candidate.awaitingOwnerConfirmation ? 'Needs your confirmation' : candidate.status}</dd>
             <dt className="text-[color:var(--portal-muted)]">To</dt><dd className="break-all font-medium text-[color:var(--portal-text)]">{candidate.recipient_email}</dd>
             <dt className="text-[color:var(--portal-muted)]">Subject</dt><dd className="break-words text-[color:var(--portal-text)]">{decodeHtmlEntities(candidate.subject)}</dd>
-            <dt className="text-[color:var(--portal-muted)]">Message</dt><dd className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-xs leading-5 text-[color:var(--portal-text)]">{resendMessagePreview(candidate.body)}</dd>
+            <dt className="text-[color:var(--portal-muted)]">Message</dt><dd className="whitespace-pre-wrap break-words rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-xs leading-5 text-[color:var(--portal-text)]">{resendMessagePreview(candidate.body)}</dd>
             {candidate.last_error ? <><dt className="text-[color:var(--portal-muted)]">Delivery note</dt><dd className="break-words text-xs text-red-700 dark:text-red-300">{candidate.last_error}</dd></> : null}
           </dl>
-          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onClose} disabled={isSending} className="min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">{canConfirm ? 'Cancel' : 'Close'}</button>
-            {canConfirm ? <button type="button" onClick={onConfirm} disabled={isSending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white hover:bg-[#b68d3b] disabled:opacity-50"><Send size={13} />{isSending ? 'Working…' : candidate.status === 'failed' ? 'Retry delivery' : 'Confirm and send'}</button> : null}
-          </div>
         </div>
       ) : null}
     </PortalModal>
