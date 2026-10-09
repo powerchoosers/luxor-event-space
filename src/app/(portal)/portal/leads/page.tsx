@@ -61,6 +61,8 @@ import {
   PortalPagination,
   PortalTableSkeleton,
   PortalFilterBar,
+  PortalStatusBadge,
+  type PortalStatusTone,
 } from '@/components/portal/PortalUI'
 import {
   LeadLifecycleActionSheet,
@@ -89,16 +91,16 @@ const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
 ]
 
 const PIPELINE_COLUMNS: { id: LuxorPipelineStage; label: string; short: string; tone: string; status?: LuxorInquiryStatus }[] = [
-  { id: 'newsletter', label: 'Newsletter', short: 'Newsletter', tone: 'emerald', status: 'new' },
+  { id: 'newsletter', label: 'Newsletter', short: 'Newsletter', tone: 'blue', status: 'new' },
   { id: 'inquiry', label: 'Inquiry', short: 'Inquiry', tone: 'blue', status: 'new' },
-  { id: 'tour', label: 'Tour', short: 'Tour', tone: 'purple', status: 'tour_requested' },
-  { id: 'proposal', label: 'Proposal', short: 'Proposal', tone: 'indigo', status: 'proposal_sent' },
-  { id: 'contract', label: 'Contract', short: 'Contract', tone: 'indigo', status: 'booked' },
-  { id: 'deposit', label: 'Deposit', short: 'Deposit', tone: 'green', status: 'booked' },
-  { id: 'planning', label: 'Planning', short: 'Planning', tone: 'cyan', status: 'booked' },
-  { id: 'final_payment', label: 'Final Payment', short: 'Final Payment', tone: 'amber', status: 'booked' },
-  { id: 'event', label: 'Event', short: 'Event', tone: 'rose', status: 'booked' },
-  { id: 'closing', label: 'Complete', short: 'Complete', tone: 'zinc', status: 'booked' },
+  { id: 'tour', label: 'Tour', short: 'Tour', tone: 'blue', status: 'tour_requested' },
+  { id: 'proposal', label: 'Proposal', short: 'Proposal', tone: 'blue', status: 'proposal_sent' },
+  { id: 'contract', label: 'Contract', short: 'Contract', tone: 'gold', status: 'booked' },
+  { id: 'deposit', label: 'Deposit', short: 'Deposit', tone: 'gold', status: 'booked' },
+  { id: 'planning', label: 'Planning', short: 'Planning', tone: 'blue', status: 'booked' },
+  { id: 'final_payment', label: 'Final Payment', short: 'Final Payment', tone: 'gold', status: 'booked' },
+  { id: 'event', label: 'Event', short: 'Event', tone: 'blue', status: 'booked' },
+  { id: 'closing', label: 'Complete', short: 'Complete', tone: 'green', status: 'booked' },
 ]
 
 const PIPELINE_STAGE_OPTIONS: { value: LuxorPipelineStage; label: string }[] = [
@@ -610,7 +612,7 @@ export default function LeadsPage() {
           <div className="flex flex-wrap items-center justify-end gap-3">
             {activeTab === 'pipeline' && (
               <>
-                <div className="hidden border border-zinc-800 rounded-md p-0.5 bg-zinc-950/60 font-semibold text-[10px] tracking-widest uppercase md:flex">
+                <div className="hidden rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-0.5 text-[10px] font-semibold uppercase tracking-widest md:flex">
                   <button
                     type="button"
                     onClick={() => {
@@ -620,7 +622,7 @@ export default function LeadsPage() {
                     className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
                       viewMode === 'list'
                         ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                        : 'text-zinc-500 hover:text-zinc-350 font-bold'
+                        : 'font-bold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                     }`}
                   >
                     List
@@ -640,7 +642,7 @@ export default function LeadsPage() {
                       className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
                         viewMode === 'board'
                           ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                          : 'text-zinc-500 hover:text-zinc-350 font-bold'
+                          : 'font-bold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                       }`}
                     >
                       Board
@@ -735,11 +737,11 @@ export default function LeadsPage() {
             </PortalFilterBar>
           }
           footer={
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full text-[10px] uppercase font-bold text-zinc-550 tracking-widest select-none">
+            <div className="flex w-full flex-col justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none sm:flex-row sm:items-center">
               <div>
-                Showing <span className="text-zinc-350 font-mono">{startIndex + 1}</span> -{' '}
-                <span className="text-zinc-350 font-mono">{Math.min(startIndex + 25, totalCount)}</span> of{' '}
-                <span className="text-zinc-350 font-mono">{totalCount}</span> leads
+                Showing <span className="font-mono text-[color:var(--portal-text)]">{startIndex + 1}</span> -{' '}
+                <span className="font-mono text-[color:var(--portal-text)]">{Math.min(startIndex + 25, totalCount)}</span> of{' '}
+                <span className="font-mono text-[color:var(--portal-text)]">{totalCount}</span> leads
               </div>
               {totalPages > 1 && (
                 <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
@@ -776,7 +778,7 @@ export default function LeadsPage() {
                 <tr>
                   <td colSpan={8} className="px-8 py-12 text-sm text-zinc-500">
                     <div className="max-w-xl">
-                      <p className="text-base font-semibold text-zinc-300">No records matching search parameters.</p>
+                      <p className="text-base font-semibold text-[color:var(--portal-text)]">No records matching search parameters.</p>
                       <p className="mt-2 leading-6">Try broadening your search term or selecting another lifecycle status filter.</p>
                     </div>
                   </td>
@@ -801,12 +803,12 @@ export default function LeadsPage() {
                           />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-white/90 leading-tight mb-0.5 group-hover:translate-x-0.5 transition-transform">
+                          <p className="mb-0.5 text-sm font-semibold leading-tight text-[color:var(--portal-text)] group-hover:translate-x-0.5 transition-transform">
                             <span className="inline-flex items-center gap-1.5">{lead.full_name}{isMarketingLead(lead) ? <Star className="h-3.5 w-3.5 fill-[#caa24c] text-[#caa24c]" aria-label="Marketing lead" /> : null}</span>
                           </p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                             {lead.email ? (
-                              <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
+                              <p className="text-[10px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">
                                 {lead.email}
                               </p>
                             ) : null}
@@ -821,12 +823,12 @@ export default function LeadsPage() {
                               </span>
                             ) : null}
                             {lead.phone ? (
-                              <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
+                              <p className="text-[10px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">
                                 {lead.email ? '• ' : ''}{formatPhoneDisplay(lead.phone)}
                               </p>
                             ) : null}
                             {!lead.email && !lead.phone ? (
-                              <p className="text-[10px] text-zinc-550 font-medium group-hover:text-zinc-400">
+                              <p className="text-[10px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">
                                 ID: {lead.id.slice(0, 8)}
                               </p>
                             ) : null}
@@ -843,11 +845,11 @@ export default function LeadsPage() {
                         className="min-w-[170px]"
                       />
                     </td>
-                    <td className="px-6 py-3 font-mono text-xs text-zinc-355">
+                    <td className="px-6 py-3 font-mono text-xs text-[color:var(--portal-muted)]">
                       {getPipelineStage(lead) === 'newsletter' ? null : (
                         <>
-                          <div className="font-semibold text-white">{lead.event_type || 'Quinceañera'}</div>
-                          <div className="text-zinc-550 text-[10px] mt-0.5">
+                          <div className="font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</div>
+                          <div className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">
                             {isGrandOpeningRsvp(lead)
                               ? `${lead.attendee_count || lead.guest_count || 1} attending`
                               : lead.guest_count
@@ -868,7 +870,7 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-start flex-col">
-                        <span className="text-xs text-zinc-400 font-medium">{formatDate(lead.created_at)}</span>
+                        <span className="text-xs font-medium text-[color:var(--portal-muted)]">{formatDate(lead.created_at)}</span>
                         {getPipelineStage(lead) !== 'newsletter' && lead.target_date ? (
                           <span className="text-[9px] text-[#caa24c] font-bold uppercase tracking-tighter mt-0.5">
                             {lead.target_date}
@@ -877,7 +879,7 @@ export default function LeadsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-3">
-                      <span className={`text-[10px] font-bold uppercase tracking-widest ${isGrandOpeningRsvp(lead) ? 'text-[#f1d27a]' : 'text-zinc-550'}`}>
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${isGrandOpeningRsvp(lead) ? 'text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}>
                         {formatSourceLabel(lead)}
                       </span>
                     </td>
@@ -931,21 +933,12 @@ export default function LeadsPage() {
           {PIPELINE_COLUMNS.map((col, colIndex, colArray) => {
             const colLeads = sortedLeads.filter(l => getPipelineStage(l) === col.id)
             return (
-              <div key={col.id} className="flex-1 min-w-[280px] max-w-[340px] bg-zinc-950/15 border border-zinc-900/60 rounded-2xl flex flex-col h-full overflow-hidden">
+              <div key={col.id} className="portal-card-surface flex-1 min-w-[280px] max-w-[340px] flex flex-col h-full overflow-hidden">
                 {/* Column Header */}
-                <div className="p-4 border-b border-zinc-900/80 bg-[#070707] flex items-center justify-between">
+                <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                   <div className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      col.tone === 'blue' ? 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.5)]' :
-                      col.tone === 'cyan' ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]' :
-                      col.tone === 'purple' ? 'bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.5)]' :
-                      col.tone === 'amber' ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]' :
-                      col.tone === 'indigo' ? 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.5)]' :
-                      col.tone === 'rose' ? 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.5)]' :
-                      col.tone === 'zinc' ? 'bg-zinc-500 shadow-[0_0_8px_rgba(113,113,122,0.5)]' :
-                      'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
-                    }`} />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{col.short}</span>
+                    <span className={`h-2 w-2 rounded-full ${col.tone === 'blue' ? 'bg-sky-600 dark:bg-sky-400' : col.tone === 'purple' ? 'bg-violet-600 dark:bg-violet-400' : col.tone === 'gold' ? 'bg-[#a8792f] dark:bg-[#f1d27a]' : 'bg-emerald-700 dark:bg-emerald-400'}`} aria-hidden="true" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{col.short}</span>
                   </div>
                   <span className="text-[9px] font-mono font-bold text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-0.5 rounded-md">
                     {colLeads.length}
@@ -955,12 +948,12 @@ export default function LeadsPage() {
                 {/* Cards Container */}
                 <div className="p-3 flex-1 overflow-y-auto portal-scrollbar space-y-3">
                   {colLeads.length === 0 ? (
-                    <div className="border border-dashed border-zinc-900/40 rounded-xl py-8 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-650">
+                    <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] py-8 text-center text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
                       No leads
                     </div>
                   ) : (
                     colLeads.map((lead) => (
-                      <div key={lead.id} className="luxor-glass-card border-[color:var(--portal-border)] hover:translate-y-[-2px] p-4 rounded-xl flex flex-col justify-between min-h-[140px] hover:border-[#caa24c]/20 transition-all group relative">
+                      <div key={lead.id} className="portal-card-surface group relative flex min-h-[140px] flex-col justify-between p-4 transition-colors hover:border-[#caa24c]/45">
                         <Link href={`/portal/leads/${lead.id}`} className="space-y-3 block">
                           <div className="flex items-center gap-3">
                             <PortalContactAvatar
@@ -972,16 +965,16 @@ export default function LeadsPage() {
                               <span className="text-xs font-bold text-[color:var(--portal-text)] group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors block truncate leading-none mb-1 group-hover:translate-x-0.5 transition-transform">
                                 {lead.full_name}
                               </span>
-                              <p className="text-[9px] text-zinc-500 truncate font-mono">
+                              <p className="truncate font-mono text-[9px] text-[color:var(--portal-muted)]">
                                 {lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}
                               </p>
                             </div>
                           </div>
 
                           <div className="space-y-1.5 border-t border-[color:var(--portal-border)] pt-2.5">
-                            <div className="flex items-center justify-between text-[10px] text-zinc-300 font-mono">
+                            <div className="flex items-center justify-between font-mono text-[10px] text-[color:var(--portal-muted)]">
                               <span className="font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</span>
-                              <span className="text-zinc-500">
+                              <span className="text-[color:var(--portal-muted)]">
                                 {isGrandOpeningRsvp(lead)
                                   ? `${lead.attendee_count || lead.guest_count || 1} RSVP`
                                   : lead.guest_count
@@ -991,7 +984,7 @@ export default function LeadsPage() {
                             </div>
                             
                             <div className="flex items-center gap-1.5 text-[9px] text-[#caa24c] font-medium uppercase tracking-tight">
-                              <Calendar size={11} className="text-zinc-600" />
+                              <Calendar size={11} className="text-[color:var(--portal-muted)]" />
                               <span>{lead.target_date || 'Date TBD'}</span>
                             </div>
                             {isGrandOpeningRsvp(lead) ? <GrandOpeningBadge /> : null}
@@ -1055,11 +1048,11 @@ export default function LeadsPage() {
           })}
 
           {/* Lost Leads Drawer / Collapsed Last Column */}
-          <div className="flex-1 min-w-[280px] max-w-[340px] bg-zinc-950/5 border border-zinc-900/40 rounded-2xl flex flex-col h-full overflow-hidden opacity-60 hover:opacity-100 transition-all duration-300">
-            <div className="p-4 border-b border-zinc-900/80 bg-[#070707] flex items-center justify-between">
+          <div className="portal-card-surface flex-1 min-w-[280px] max-w-[340px] flex flex-col h-full overflow-hidden opacity-75 transition-opacity duration-300 hover:opacity-100">
+            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
               <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 shadow-[0_0_8px_rgba(113,113,122,0.5)]" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Closed Lost</span>
+                <span className="h-2 w-2 rounded-full bg-[color:var(--portal-muted)]" aria-hidden="true" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Closed Lost</span>
               </div>
               <span className="text-[9px] font-mono font-bold text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-0.5 rounded-md">
                 {sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length}
@@ -1068,12 +1061,12 @@ export default function LeadsPage() {
 
             <div className="p-3 flex-1 overflow-y-auto portal-scrollbar space-y-3">
               {sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length === 0 ? (
-                <div className="border border-dashed border-zinc-900/40 rounded-xl py-8 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-700">
+                <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] py-8 text-center text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
                   No lost leads
                 </div>
               ) : (
                 sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').map((lead) => (
-                  <div key={lead.id} className="bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] p-4 rounded-xl flex flex-col justify-between min-h-[120px] hover:border-zinc-800/80 transition-all group">
+              <div key={lead.id} className="portal-card-surface group flex min-h-[120px] flex-col justify-between p-4 transition-colors hover:border-[color:var(--portal-muted)]">
                     <Link href={`/portal/leads/${lead.id}`} className="block">
                       <div className="flex items-center gap-3">
                         <PortalContactAvatar
@@ -1082,13 +1075,13 @@ export default function LeadsPage() {
                           className="w-7 h-7 text-[10px]"
                         />
                         <div className="min-w-0 flex-1">
-                          <span className="text-xs font-bold text-zinc-400 group-hover:text-blue-500 block truncate leading-none mb-1">
+                          <span className="mb-1 block truncate text-xs font-bold leading-none text-[color:var(--portal-text)] group-hover:text-sky-700 dark:group-hover:text-sky-300">
                             {lead.full_name}
                           </span>
-                          <p className="text-[9px] text-zinc-600 truncate font-mono">{lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}</p>
+                          <p className="truncate font-mono text-[9px] text-[color:var(--portal-muted)]">{lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}</p>
                         </div>
                       </div>
-                      <p className="text-[10px] text-zinc-650 mt-2 font-medium">
+                      <p className="mt-2 text-[10px] font-medium text-[color:var(--portal-muted)]">
                         {isGrandOpeningRsvp(lead)
                           ? `Grand Opening RSVP • ${lead.attendee_count || lead.guest_count || 1} attending`
                           : `${lead.event_type || 'Quinceañera'} • ${lead.guest_count || 0} guests`}
@@ -1432,14 +1425,14 @@ function LeadMetric({
   }
 
   return (
-    <div className="rounded-xl border border-[#caa24c]/10 bg-black/36 px-4 py-3 shadow-xl shadow-black/20">
+    <div className="portal-card-surface px-4 py-3">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">{label}</p>
+        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</p>
         <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${tones[tone]}`}>Live</span>
       </div>
       <div className="mt-2 flex items-end justify-between gap-3">
-        <p className="font-mono text-2xl font-bold text-white">{value}</p>
-        <p className="pb-1 text-right text-[11px] font-medium leading-4 text-[#d7c29a]/60">{detail}</p>
+        <p className="font-mono text-2xl font-bold text-[color:var(--portal-text)]">{value}</p>
+        <p className="pb-1 text-right text-[11px] font-medium leading-4 text-[color:var(--portal-muted)]">{detail}</p>
       </div>
     </div>
   )
@@ -1553,17 +1546,17 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
       {/* Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatsCard label="New Inquiries" value={newInquiries} subtitle="Awaiting response" tone="blue" />
-        <StatsCard label="Tours Scheduled" value={toursScheduled} subtitle="Active bookings" tone="purple" />
-        <StatsCard label="Tours Completed" value={toursCompleted} subtitle="Tours held" tone="cyan" />
-        <StatsCard label="Proposals Sent" value={proposalsSent} subtitle="Out for signature" tone="gold" />
+        <StatsCard label="Tours Scheduled" value={toursScheduled} subtitle="Active bookings" tone="blue" />
+        <StatsCard label="Tours Completed" value={toursCompleted} subtitle="Tours held" tone="green" />
+        <StatsCard label="Proposals Sent" value={proposalsSent} subtitle="Out for signature" tone="blue" />
         <StatsCard label="Deposits Received" value={depositsReceived} subtitle="Booked clients" tone="green" />
-        <StatsCard label="Conversion Rate" value={`${conversionRate}%`} subtitle="Lead-to-booking" tone="green" />
+        <StatsCard label="Conversion Rate" value={`${conversionRate}%`} subtitle="Lead-to-booking" tone="neutral" />
       </div>
 
       {/* Charts & Lists Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales Funnel */}
-        <div className="luxor-glass-card rounded-2xl p-6 lg:col-span-1 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+        <div className="portal-card-surface p-6 lg:col-span-1">
           <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] mb-6 flex items-center gap-2">
             <TrendingUp size={15} className="text-[#caa24c]" /> Sales Funnel Analysis
           </h3>
@@ -1573,7 +1566,7 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
                 <span className="text-[color:var(--portal-text)]">1. New Inquiries</span>
                 <span className="font-mono text-zinc-400">{total} leads (100%)</span>
               </div>
-              <div className="h-2 w-full rounded-full bg-zinc-950 border border-zinc-900 overflow-hidden">
+              <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
                 <div className="h-full rounded-full bg-blue-500 w-full" />
               </div>
             </div>
@@ -1581,20 +1574,20 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
             <div>
               <div className="flex justify-between text-xs font-bold mb-1.5">
                 <span className="text-[color:var(--portal-text)]">2. Tours Booked</span>
-                <span className="font-mono text-zinc-400">{tourStageCount} ({tourPct}%)</span>
+                <span className="font-mono text-[color:var(--portal-muted)]">{tourStageCount} ({tourPct}%)</span>
               </div>
-              <div className="h-2 w-full rounded-full bg-zinc-950 border border-zinc-900 overflow-hidden">
-                <div className="h-full rounded-full bg-purple-500" style={{ width: `${tourPct}%` }} />
+              <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                <div className="h-full rounded-full bg-sky-600 dark:bg-sky-400" style={{ width: `${tourPct}%` }} />
               </div>
             </div>
 
             <div>
               <div className="flex justify-between text-xs font-bold mb-1.5">
                 <span className="text-[color:var(--portal-text)]">3. Proposals Out</span>
-                <span className="font-mono text-zinc-400">{proposalStageCount} ({proposalPct}%)</span>
+                <span className="font-mono text-[color:var(--portal-muted)]">{proposalStageCount} ({proposalPct}%)</span>
               </div>
-              <div className="h-2 w-full rounded-full bg-zinc-950 border border-zinc-900 overflow-hidden">
-                <div className="h-full rounded-full bg-amber-500" style={{ width: `${proposalPct}%` }} />
+              <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                <div className="h-full rounded-full bg-sky-600 dark:bg-sky-400" style={{ width: `${proposalPct}%` }} />
               </div>
             </div>
 
@@ -1603,7 +1596,7 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
                 <span className="text-[color:var(--portal-text)]">4. Booked Event Days</span>
                 <span className="font-mono text-emerald-400">{bookedStageCount} ({bookedPct}%)</span>
               </div>
-              <div className="h-2 w-full rounded-full bg-zinc-950 border border-zinc-900 overflow-hidden">
+              <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
                 <div className="h-full rounded-full bg-emerald-500" style={{ width: `${bookedPct}%` }} />
               </div>
             </div>
@@ -1712,7 +1705,7 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
                 <td className="px-6 py-3 text-sm font-medium text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</td>
                 <td className="px-6 py-3 text-xs font-medium text-[color:var(--portal-muted)]">{formatDate(lead.created_at)}</td>
                 <td className="px-6 py-3 font-mono text-[9px] font-bold uppercase tracking-widest text-[#caa24c]/80">{formatSourceLabel(lead)}</td>
-                <td className="px-8 py-3 text-right"><span className="rounded-md border border-[#caa24c]/25 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#f1d27a]">{lead.status}</span></td>
+                <td className="px-8 py-3 text-right"><PortalStatusBadge status={lead.status} /></td>
               </tr>
             ))}
           </tbody>
@@ -1731,23 +1724,23 @@ function StatsCard({
   label: string
   value: string | number
   subtitle: string
-  tone?: 'blue' | 'purple' | 'cyan' | 'gold' | 'green'
+  tone?: 'blue' | 'purple' | 'gold' | 'green' | 'neutral'
 }) {
   const styles = {
-    blue: 'border-blue-500/10 bg-blue-500/5 text-blue-400',
-    purple: 'border-purple-500/10 bg-purple-500/5 text-purple-400',
-    cyan: 'border-cyan-500/10 bg-cyan-500/5 text-cyan-400',
-    gold: 'border-[#caa24c]/10 bg-[#caa24c]/5 text-[#f1d27a]',
-    green: 'border-emerald-500/10 bg-emerald-500/5 text-emerald-400',
+    blue: 'border-sky-300 bg-sky-50 dark:border-sky-400/30 dark:bg-sky-500/10',
+    purple: 'border-violet-300 bg-violet-50 dark:border-violet-400/30 dark:bg-violet-500/10',
+    gold: 'border-[#dfc98f] bg-[#fbf5e7] dark:border-[#caa24c]/35 dark:bg-[#caa24c]/10',
+    green: 'border-emerald-300 bg-emerald-50 dark:border-emerald-400/30 dark:bg-emerald-500/10',
+    neutral: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]',
   }
 
   return (
-    <div className="luxor-glass-card rounded-xl p-4 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between min-h-[110px]">
+    <div className={`portal-card-surface flex min-h-[110px] flex-col justify-between p-4 ${styles[tone ?? 'neutral']}`}>
       <div>
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</p>
-        <p className="font-mono text-xl font-bold text-white mt-1.5">{value}</p>
+        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</p>
+        <p className="mt-1.5 font-mono text-xl font-bold text-[color:var(--portal-text)]">{value}</p>
       </div>
-      <p className="text-[10px] text-zinc-500 font-medium leading-none mt-3">{subtitle}</p>
+      <p className="mt-3 text-[10px] font-medium leading-none text-[color:var(--portal-muted)]">{subtitle}</p>
     </div>
   )
 }
@@ -1814,7 +1807,7 @@ function LeadsClientsTab({
       <div className="hidden overflow-x-auto md:block">
         <PortalStickyTable minWidth="900px">
           <PortalStickyThead>
-            <tr className="whitespace-nowrap text-[10px] uppercase font-bold text-zinc-500 tracking-[0.15em] border-b border-zinc-900 bg-[#0c0c0c]/80">
+            <tr className="whitespace-nowrap border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
               <SortableHeader label="Client Name" sortKey="name" sort={sort} onSort={onSort} className="min-w-[260px] px-8 py-5" />
               <SortableHeader label="Event Type" sortKey="event" sort={sort} onSort={onSort} className="min-w-[180px] py-5" />
               <SortableHeader label="Guest Count" sortKey="guests" sort={sort} onSort={onSort} className="min-w-[150px] py-5" />
@@ -1825,17 +1818,20 @@ function LeadsClientsTab({
           <tbody className="divide-y divide-zinc-900/30">
             {clients.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-8 py-12 text-sm text-zinc-500 text-center font-medium">No booked clients in pipeline currently.</td>
+                <td colSpan={5} className="px-8 py-12 text-center text-sm font-medium text-[color:var(--portal-muted)]">No booked clients in pipeline currently.</td>
               </tr>
             ) : (
               clients.map((c) => (
-                <tr key={c.id} className="hover:bg-zinc-950/20 transition-colors">
+                <tr key={c.id} className="transition-colors hover:bg-[color:var(--portal-soft)]">
                   <td className="px-8 py-5">
-                    <Link href={`/portal/leads/${c.id}`} className="font-bold text-white hover:text-[#caa24c] transition-colors">{c.full_name}</Link>
-                    <p className="text-[10px] text-zinc-550 mt-0.5 font-mono">{c.email || 'No email registered'}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link href={`/portal/leads/${c.id}`} className="font-bold text-[color:var(--portal-text)] transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{c.full_name}</Link>
+                      <PortalStatusBadge status="Booked" />
+                    </div>
+                    <p className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)]">{c.email || 'No email registered'}</p>
                   </td>
-                  <td className="px-6 py-5 text-zinc-350 font-medium">{c.event_type || 'Quinceañera'}</td>
-                  <td className="px-6 py-5 text-zinc-500 font-mono text-xs">{c.guest_count || 'Flexible'} guests</td>
+                  <td className="px-6 py-5 font-medium text-[color:var(--portal-text)]">{c.event_type || 'Quinceañera'}</td>
+                  <td className="px-6 py-5 font-mono text-xs text-[color:var(--portal-muted)]">{c.guest_count || 'Flexible'} guests</td>
                   <td className="px-6 py-5 text-[#caa24c] font-bold font-mono">{c.target_date || 'TBD'}</td>
                   <td className="px-8 py-5 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -1859,6 +1855,7 @@ function LeadsClientsTab({
               lead={client}
               onLifecycleAction={onLifecycleAction}
               showPipelineStage={false}
+              showStatusBadge
             />
           ))
         )}
@@ -1910,6 +1907,7 @@ function MobileLeadCard({
   onToggle,
   onLifecycleAction,
   showPipelineStage,
+  showStatusBadge = false,
 }: {
   lead: LuxorInquiry
   index?: number
@@ -1917,8 +1915,11 @@ function MobileLeadCard({
   onToggle?: (id: string) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
   showPipelineStage: boolean
+  showStatusBadge?: boolean
 }) {
-  const stageLabel = PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(lead))?.label || 'Pipeline'
+  const pipelineStage = getPipelineStage(lead)
+  const stageLabel = PIPELINE_STAGE_OPTIONS.find((option) => option.value === pipelineStage)?.label || 'Pipeline'
+  const stageTone = (PIPELINE_COLUMNS.find((column) => column.id === pipelineStage)?.tone as PortalStatusTone | undefined) || 'neutral'
 
   return (
     <article className={`p-3 sm:p-4 ${selected ? 'bg-[#caa24c]/8' : ''}`}>
@@ -1942,6 +1943,7 @@ function MobileLeadCard({
               {lead.phone ? <span className="truncate">{lead.email ? '• ' : ''}{formatPhoneDisplay(lead.phone)}</span> : null}
               {!lead.email && !lead.phone ? <span>No contact details</span> : null}
             </div>
+            {showStatusBadge ? <div className="mt-1.5"><PortalStatusBadge status={lead.status} /></div> : null}
           </div>
         </Link>
         <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
@@ -1963,7 +1965,7 @@ function MobileLeadCard({
         {showPipelineStage ? (
           <div className="min-w-0">
             <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Pipeline</p>
-            <p className="mt-1 truncate font-semibold text-[#a8792f] dark:text-[#f1d27a]">{stageLabel}</p>
+            <div className="mt-1"><PortalStatusBadge status={stageLabel} tone={stageTone} /></div>
           </div>
         ) : null}
         {getPipelineStage(lead) !== 'newsletter' ? (
@@ -2195,13 +2197,21 @@ function LeadsToursTab({
     </div>
   ) : null
 
-  const renderTourCard = (tour: LuxorInquiry) => (
-    <article key={tour.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm">
+  const tourStatusTones: Record<TourCategory, PortalStatusTone> = {
+    today: 'blue', upcoming: 'gold', completed: 'green', no_shows: 'red',
+    needs_outcome: 'gold', needs_schedule: 'neutral', cancelled: 'neutral',
+  }
+  const renderTourCard = (tour: LuxorInquiry) => {
+    const category = getLuxorTourSection(tour, todayKey) ?? 'needs_schedule'
+    const statusLabel = category === 'no_shows' ? 'No Show' : categoryLabels[category]
+    return (
+    <article key={tour.id} className="portal-card-surface p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <Link href={`/portal/leads/${tour.id}`} className="font-bold text-[color:var(--portal-text)] hover:text-[#caa24c]">{tour.full_name}</Link>
           <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{tour.email || tour.phone || 'No contact details'}</p>
         </div>
+        <PortalStatusBadge status={statusLabel} tone={tourStatusTones[category]} warning={category === 'needs_outcome'} />
         <LeadLifecycleActionsMenu lead={tour} onAction={(action) => onLifecycleAction(tour, action)} />
       </div>
       {tour.tour_attendance_status !== 'cancelled' && tour.tour_attendance_status !== 'attended' ? <div className="mt-3 flex flex-wrap gap-2">
@@ -2217,7 +2227,8 @@ function LeadsToursTab({
         <Link href={`/portal/leads/${tour.id}`} className="ml-auto whitespace-nowrap text-xs font-bold text-[#caa24c] hover:underline">Manage Tour →</Link>
       </div>
     </article>
-  )
+    )
+  }
 
   return (
     <PortalTableCard
@@ -2319,7 +2330,7 @@ function LeadsProposalsTab({
       <div className="overflow-x-auto">
         <PortalStickyTable minWidth="900px">
           <PortalStickyThead>
-            <tr className="text-[10px] uppercase font-bold text-zinc-500 tracking-[0.15em] border-b border-zinc-900 bg-[#0c0c0c]/80">
+            <tr className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
               <th className="px-8 py-5">Client Name</th>
               <th className="px-6 py-5">Event Type</th>
               <th className="px-6 py-5">Guest Count</th>
@@ -2330,17 +2341,18 @@ function LeadsProposalsTab({
           <tbody className="divide-y divide-zinc-900/30">
             {proposals.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-8 py-12 text-sm text-zinc-500 text-center font-medium">No proposals awaiting signature.</td>
+                <td colSpan={5} className="px-8 py-12 text-center text-sm font-medium text-[color:var(--portal-muted)]">No proposals awaiting signature.</td>
               </tr>
             ) : (
               proposals.map((p) => (
-                <tr key={p.id} className="hover:bg-zinc-955/20 transition-colors">
+                <tr key={p.id} className="transition-colors hover:bg-[color:var(--portal-soft)]">
                   <td className="px-8 py-5">
-                    <Link href={`/portal/leads/${p.id}`} className="font-bold text-white hover:text-[#caa24c] transition-colors">{p.full_name}</Link>
-                    <p className="text-[10px] text-zinc-550 mt-0.5 font-mono">{p.email || 'No email'}</p>
+                    <Link href={`/portal/leads/${p.id}`} className="font-bold text-[color:var(--portal-text)] transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{p.full_name}</Link>
+                    <p className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)]">{p.email || 'No email'}</p>
+                    <div className="mt-1.5"><PortalStatusBadge status="Sent" /></div>
                   </td>
-                  <td className="px-6 py-5 text-zinc-350 font-medium">{p.event_type || 'Quinceañera'}</td>
-                  <td className="px-6 py-5 text-zinc-500 font-mono text-xs">{p.guest_count || 'Flexible'} guests</td>
+                  <td className="px-6 py-5 font-medium text-[color:var(--portal-text)]">{p.event_type || 'Quinceañera'}</td>
+                  <td className="px-6 py-5 font-mono text-xs text-[color:var(--portal-muted)]">{p.guest_count || 'Flexible'} guests</td>
                   <td className="px-6 py-5 font-mono font-bold uppercase tracking-widest text-[9px] text-[#caa24c]/85">{isGrandOpeningRsvp(p) ? 'RSVP' : p.source.replaceAll('_', ' ')}</td>
                   <td className="px-8 py-5 text-right">
                     <div className="flex items-center justify-end gap-2">

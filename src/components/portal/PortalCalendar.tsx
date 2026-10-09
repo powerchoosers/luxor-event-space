@@ -1,6 +1,6 @@
 'use client'
 
-import { CalendarDays, Check, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
 import React from 'react'
 import { PortalModal } from './PortalUI'
 
@@ -11,7 +11,8 @@ export type PortalCalendarItem = {
   date: string
   title: string
   subtitle?: string
-  tone?: 'gold' | 'blue' | 'green' | 'rose' | 'zinc'
+  tone?: 'gold' | 'blue' | 'green' | 'rose' | 'zinc' | 'warning'
+  warningLabel?: string
   href?: string
   openLabel?: string
   content?: React.ReactNode
@@ -129,7 +130,7 @@ export function PortalCalendar({
   }, [mobileMenuOpen])
 
   return (
-    <section className="portal-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
+    <section className="portal-card-surface portal-surface flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex flex-col gap-4 border-b border-[color:var(--portal-border)] p-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">{title}</p>
@@ -209,7 +210,7 @@ export function PortalCalendar({
                 key={iso}
                 className={`relative flex min-w-0 flex-col p-2 transition-colors duration-150 sm:p-3 ${view === 'month' ? 'h-28 min-h-28 sm:h-40 sm:min-h-40' : 'h-64 min-h-64'} ${isToday ? 'bg-[#caa24c]/[0.09] shadow-[inset_0_0_0_1px_rgba(202,162,76,0.7)]' : 'bg-[color:var(--portal-card)] hover:bg-[color:var(--portal-soft)]'} ${outsideMonth ? 'opacity-40' : ''}`}
               >
-                <button type="button" aria-label={`View schedule for ${formatDayHeading(iso)}${isToday ? ', today' : ''}${isCoarsePointer && dayItems.length ? `, ${dayItems.length} scheduled items` : ''}`} onClick={() => setSelectedDay(iso)} className="portal-calendar-day-hit absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]" />
+                <button type="button" aria-label={`View schedule for ${formatDayHeading(iso)}${isToday ? ', today' : ''}${isCoarsePointer && dayItems.length ? `, ${dayItems.length} scheduled items: ${dayItems.map((item) => `${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}${item.title}`).join(', ')}` : ''}`} onClick={() => setSelectedDay(iso)} className="portal-calendar-day-hit absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]" />
                 <div className="pointer-events-none relative z-10 flex items-center justify-between gap-2">
                   <div>
                     <p className="text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] sm:text-[10px]">
@@ -239,15 +240,16 @@ export function PortalCalendar({
                       <div className={`portal-scrollbar flex min-h-0 flex-1 flex-col gap-2 pr-1 ${view === 'month' && isCoarsePointer ? 'overflow-visible' : 'overflow-y-auto'}`}>
                         {visibleItems.map((item) => (
                           view === 'month' && isCoarsePointer ? (
-                            <span key={item.id} aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${toneClass(item.tone)}`} />
+                            <span key={item.id} aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.warningLabel ? 'bg-amber-700 ring-2 ring-amber-300 dark:bg-amber-300 dark:ring-amber-500/50' : toneClass(item.tone)}`} />
                           ) : (
                             <button
                               key={item.id}
                               type="button"
                               onClick={() => setSelectedItem(item)}
-                              aria-label={`Open ${item.title}`}
-                              className={`${view === 'month' ? 'h-1.5 w-1.5 shrink-0 rounded-full border-0 p-0 sm:h-auto sm:w-full sm:rounded-lg sm:border sm:p-2' : 'w-full rounded-md border px-1.5 py-1 sm:rounded-lg sm:p-2'} pointer-events-auto text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
+                              aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`}
+                              className={`${view === 'month' ? 'h-1.5 w-1.5 shrink-0 rounded-full border-0 p-0 sm:h-auto sm:min-h-11 sm:w-full sm:rounded-lg sm:border sm:p-2' : 'min-h-11 w-full rounded-md border px-1.5 py-1 sm:rounded-lg sm:p-2'} pointer-events-auto text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
                             >
+                              {item.warningLabel ? <span className={`mb-0.5 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200 ${view === 'month' ? 'hidden sm:inline-flex' : ''}`}><AlertTriangle size={10} aria-hidden="true" />{item.warningLabel}</span> : null}
                               <p className={`text-[9px] font-bold text-[color:var(--portal-text)] line-clamp-1 sm:text-xs ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.title}</p>
                               {item.subtitle ? <p className={`mt-0.5 text-[9px] leading-3 text-[color:var(--portal-muted)] line-clamp-1 sm:mt-1 sm:text-[10px] sm:leading-4 ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.subtitle}</p> : null}
                             </button>
@@ -286,6 +288,7 @@ export function PortalCalendar({
           <div className="space-y-3 max-h-[70vh] overflow-auto pr-1 portal-scrollbar">
             <div className={`rounded-xl border p-4 ${toneClass(selectedItem.tone)}`}>
               <p className="text-lg font-bold text-[color:var(--portal-text)]">{selectedItem.title}</p>
+              {selectedItem.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{selectedItem.warningLabel}</span> : null}
               {selectedItem.subtitle ? <p className="mt-1 text-sm text-[color:var(--portal-muted)]">{selectedItem.subtitle}</p> : null}
             </div>
             {selectedItem.href ? (
@@ -332,10 +335,11 @@ function ScheduleView({
           </div>
           <div className="space-y-2">
             {itemsByDate[date].map((item) => (
-              <button key={item.id} type="button" onClick={() => onSelectItem(item)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ${toneClass(item.tone)}`}>
+              <button key={item.id} type="button" aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`} onClick={() => onSelectItem(item)} className={`flex min-h-11 w-full items-center gap-3 rounded-xl border p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ${toneClass(item.tone)}`}>
                 <span className="h-9 w-1 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
+                  {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
                   {item.subtitle ? <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
                 </span>
                 <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{item.openLabel || 'Open'}</span>
@@ -360,12 +364,13 @@ function renderDayDetails(items: PortalCalendarItem[], onSelectItem: (item: Port
           key={item.id}
           type="button"
           onClick={() => onSelectItem(item)}
-          aria-label={`Open ${item.title}`}
+          aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`}
           className={`min-h-11 w-full rounded-xl border p-4 text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-base font-bold text-[color:var(--portal-text)]">{item.title}</p>
+              {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
               {item.subtitle ? <p className="mt-1 text-sm text-[color:var(--portal-muted)]">{item.subtitle}</p> : null}
             </div>
             <span className="rounded-full border border-[color:var(--portal-border)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">
@@ -390,11 +395,12 @@ function formatDayHeading(isoDate: string) {
 
 function toneClass(tone: PortalCalendarItem['tone'] = 'zinc') {
   const classes = {
-    gold: 'border-[#caa24c]/25 bg-[#caa24c]/8',
-    blue: 'border-blue-500/20 bg-blue-500/8',
-    green: 'border-emerald-500/20 bg-emerald-500/8',
-    rose: 'border-rose-500/20 bg-rose-500/8',
+    gold: 'border-[#dfc98f] bg-[#fbf5e7] dark:border-[#caa24c]/35 dark:bg-[#caa24c]/10',
+    blue: 'border-sky-300 bg-sky-50 dark:border-sky-400/30 dark:bg-sky-500/10',
+    green: 'border-emerald-300 bg-emerald-50 dark:border-emerald-400/30 dark:bg-emerald-500/10',
+    rose: 'border-rose-300 bg-rose-50 dark:border-rose-400/30 dark:bg-rose-500/10',
     zinc: 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]',
+    warning: 'border-amber-700 bg-amber-100 dark:border-amber-300 dark:bg-amber-500/20',
   }
 
   return classes[tone]

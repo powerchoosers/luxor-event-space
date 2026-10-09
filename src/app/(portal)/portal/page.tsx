@@ -516,7 +516,7 @@ export default async function PortalOverview() {
       </div>
 
       {loadError && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-xs font-medium text-red-400">
+        <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-medium text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300">
           Telemetry Warning: {loadError} (Data Loaded Successfully)
         </div>
       )}
@@ -548,7 +548,7 @@ export default async function PortalOverview() {
       {/* TOP ROW: 4 Metric Cards */}
       <PortalStaggerGroup className="grid auto-rows-fr grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-4">
         {/* Bookings Card */}
-        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
+        <PortalStaggerCard className="portal-card-surface flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
           <div>
             <span className="text-[#caa24c] mb-4 block">
               <Calendar size={22} strokeWidth={1.5} />
@@ -569,7 +569,7 @@ export default async function PortalOverview() {
         </PortalStaggerCard>
 
         {/* Cash Flow Card */}
-        <PortalStaggerCard className="luxor-glass-card relative flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between overflow-hidden rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
+        <PortalStaggerCard className="portal-card-surface relative flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between overflow-hidden p-4 sm:min-h-[180px] sm:p-6">
           <div className="flex justify-between items-start z-10 relative">
             <div>
               <span className="text-[#caa24c] mb-4 block">
@@ -592,14 +592,14 @@ export default async function PortalOverview() {
           </div>
 
           <div className="flex items-center gap-2 mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-bold z-10 relative">
-            <span className="text-[#188a42]">${totalInflow.toLocaleString()} in</span>
+            <span className="text-emerald-800 dark:text-emerald-300">${totalInflow.toLocaleString()} in</span>
             <span className="text-[color:var(--portal-muted)]/40">•</span>
-            <span className="text-[#b93c3c]">${totalOutflow.toLocaleString()} out</span>
+            <span className="text-[color:var(--portal-muted)]">${totalOutflow.toLocaleString()} out</span>
           </div>
         </PortalStaggerCard>
 
         {/* Next Event Card */}
-        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
+        <PortalStaggerCard className="portal-card-surface flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
           {nextBooking ? (
             <>
               <div>
@@ -636,7 +636,7 @@ export default async function PortalOverview() {
         </PortalStaggerCard>
 
         {/* Needs Attention Card */}
-        <PortalStaggerCard className="luxor-glass-card flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
+        <PortalStaggerCard className="portal-card-surface flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
           <div>
             <span className="text-[#caa24c] mb-4 block">
               <Bell size={22} strokeWidth={1.5} />
@@ -657,7 +657,7 @@ export default async function PortalOverview() {
       {/* MIDDLE ROW: 3 Columns (Today's Priorities, This Week, Bills Due) */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3">
         {/* Today's Priorities */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between shadow-2xl">
+        <div className="portal-card-surface flex flex-col justify-between p-6">
           <div>
             <div className="flex items-center gap-2.5 mb-6">
               <ListTodo className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -695,7 +695,7 @@ export default async function PortalOverview() {
         </div>
 
         {/* This Week / Calendar Outlook */}
-        <div className="luxor-glass-card rounded-2xl p-6 flex flex-col justify-between shadow-2xl overflow-hidden relative">
+        <div className="portal-card-surface relative flex flex-col justify-between overflow-hidden p-6">
           <ThisWeekCalendar days={calendarDays} />
         </div>
 
@@ -708,7 +708,7 @@ export default async function PortalOverview() {
       {/* BOTTOM ROW: 3 Columns (Recent Activity, Month at a Glance, Quick Actions) */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3 items-stretch">
         {/* Recent Activity */}
-        <div className="luxor-glass-card rounded-2xl p-5 flex flex-col justify-between shadow-2xl">
+        <div className="portal-card-surface flex flex-col justify-between p-5">
           <div>
             <div className="flex items-center gap-2.5 mb-3.5">
               <Activity className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -764,7 +764,7 @@ export default async function PortalOverview() {
         </div>
 
         {/* This Month At A Glance */}
-        <div className="luxor-glass-card rounded-2xl p-5 flex flex-col justify-between shadow-2xl">
+        <div className="portal-card-surface flex flex-col justify-between p-5">
           <div>
             <div className="flex items-center gap-2.5 mb-3.5">
               <Eye className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -821,7 +821,7 @@ export default async function PortalOverview() {
         </div>
 
         {/* Quick Actions */}
-        <div className="luxor-glass-card rounded-2xl p-5 flex flex-col justify-between shadow-2xl">
+        <div className="portal-card-surface flex flex-col justify-between p-5">
           <div>
             <div className="flex items-center gap-2.5 mb-3.5">
               <Zap className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />

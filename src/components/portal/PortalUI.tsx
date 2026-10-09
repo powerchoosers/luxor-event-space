@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check, Search, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check, Search, SlidersHorizontal } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/components/portal/ToastProvider'
 
@@ -572,22 +572,24 @@ export function PortalEmptyState({
   )
 }
 
-const STATUS_BADGE_STYLES: Record<string, string> = {
-  new: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
-  contacted: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20',
-  tour_requested: 'bg-purple-500/10 text-purple-400 border border-purple-500/20',
-  tour_confirmed: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
-  proposal_sent: 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20',
-  booked: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-  tentative: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
-  confirmed: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-  completed: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20',
-  closed_lost: 'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20',
-  draft: 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20',
-  sent: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
-  paid: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-  overdue: 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.1)]',
-  cancelled: 'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20',
+export type PortalStatusTone = 'red' | 'blue' | 'gold' | 'green' | 'purple' | 'neutral'
+
+const STATUS_TONES: Record<string, PortalStatusTone> = {
+  overdue: 'red', error: 'red', failed: 'red', no_show: 'red', urgent: 'red',
+  new: 'purple', new_lead: 'purple', post_tour: 'purple',
+  contacted: 'blue', sent: 'blue', viewed: 'blue', unread: 'blue', active: 'blue', pending: 'blue', scheduled: 'blue',
+  tentative: 'gold', tour_requested: 'neutral', tour_confirmed: 'blue', proposal_sent: 'blue', awaiting_signature: 'blue', upcoming: 'gold', needs_outcome: 'gold', needs_schedule: 'neutral', needs_follow_up: 'gold', high: 'gold', partial: 'gold',
+  booked: 'green', confirmed: 'green', completed: 'green', attended: 'green', paid: 'green', signed: 'green',
+  closed_lost: 'neutral', draft: 'neutral', cancelled: 'neutral', canceled: 'neutral', not_sent: 'neutral', void: 'neutral', refunded: 'neutral',
+}
+
+const STATUS_TONE_STYLES: Record<PortalStatusTone, string> = {
+  red: 'border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300',
+  blue: 'border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-500/10 dark:text-sky-300',
+  gold: 'border-[#dfc98f] bg-[#fbf5e7] text-[#76591f] dark:border-[#caa24c]/35 dark:bg-[#caa24c]/10 dark:text-[#f1d27a]',
+  green: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300',
+  purple: 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300',
+  neutral: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]',
 }
 
 function formatStatusText(s: string) {
@@ -597,12 +599,14 @@ function formatStatusText(s: string) {
     .join(' ')
 }
 
-export const PortalStatusBadge = React.memo(function PortalStatusBadge({ status }: { status: string }) {
+export const PortalStatusBadge = React.memo(function PortalStatusBadge({ status, tone, warning = false }: { status: string; tone?: PortalStatusTone; warning?: boolean }) {
   const normalized = status.toLowerCase().replace(/\s+/g, '_')
-  const badgeStyle = STATUS_BADGE_STYLES[normalized] ?? 'bg-zinc-500/10 text-zinc-300 border border-zinc-500/20'
+  const badgeStyle = STATUS_TONE_STYLES[tone ?? STATUS_TONES[normalized] ?? 'neutral']
+  const warningStyle = 'border-dashed border-amber-700 bg-amber-100 text-amber-950 ring-1 ring-amber-500/60 dark:border-amber-300 dark:bg-amber-500/20 dark:text-amber-200'
 
   return (
-    <span className={`inline-flex items-center rounded-sm px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${badgeStyle}`}>
+    <span aria-label={warning ? `Warning: ${formatStatusText(status)}` : undefined} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] ${warning ? warningStyle : badgeStyle}`}>
+      {warning ? <AlertTriangle size={11} aria-hidden="true" /> : null}
       {formatStatusText(status)}
     </span>
   )

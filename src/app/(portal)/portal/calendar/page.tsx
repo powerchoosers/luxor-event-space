@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
-import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
+import { getLuxorTourSection, luxorDateKey, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
 import { useToast } from '@/components/portal/ToastProvider'
 
 type CalendarPayload = {
@@ -17,6 +18,38 @@ type CalendarPayload = {
   slots: LuxorTourSlot[]
   bookings: (LuxorBooking & { paid_total?: number; balance_due?: number })[]
   tasks: LuxorTask[]
+}
+
+const TOUR_STATUS_PRESENTATION: Record<LuxorTourSection, { label: string; tone: PortalStatusTone }> = {
+  today: { label: 'Today', tone: 'blue' },
+  upcoming: { label: 'Upcoming', tone: 'gold' },
+  completed: { label: 'Completed', tone: 'green' },
+  no_shows: { label: 'No Show', tone: 'red' },
+  needs_outcome: { label: 'Needs Outcome', tone: 'gold' },
+  needs_schedule: { label: 'Needs Schedule', tone: 'neutral' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+}
+
+function getTourStatusPresentation(tour: LuxorInquiry) {
+  return TOUR_STATUS_PRESENTATION[getLuxorTourSection(tour, luxorTodayKey()) ?? 'needs_schedule']
+}
+
+function getCalendarTourTone(section: LuxorTourSection | null) {
+  if (!section) return 'zinc'
+  const toneBySection: Record<LuxorTourSection, PortalCalendarItem['tone']> = {
+    today: 'blue', upcoming: 'gold', completed: 'green', no_shows: 'rose',
+    needs_outcome: 'warning', needs_schedule: 'zinc', cancelled: 'zinc',
+  }
+  return toneBySection[section]
+}
+
+function getCalendarBookingTone(status: string, eventDate: string | null, todayKey: string): PortalCalendarItem['tone'] {
+  if (status === 'cancelled' || status === 'draft') return 'zinc'
+  if (status === 'completed') return 'green'
+  const dateKey = eventDate ? luxorDateKey(eventDate) : ''
+  if (dateKey === todayKey) return 'blue'
+  if (dateKey > todayKey) return 'gold'
+  return status === 'confirmed' ? 'green' : 'gold'
 }
 
 export default function CalendarPage() {
@@ -156,14 +189,18 @@ export default function CalendarPage() {
   }
 
   const tourItems = useMemo<PortalCalendarItem[]>(() => {
+    const todayKey = luxorTodayKey()
     const tourCards = data.tours
       .filter((tour) => tour.preferred_tour_date && tour.tour_attendance_status !== 'cancelled')
-      .map((tour) => ({
+      .map((tour) => {
+        const section = getLuxorTourSection(tour, todayKey)
+        return ({
         id: `tour-${tour.id}`,
         date: tour.preferred_tour_date!,
         title: tour.full_name,
         subtitle: `${tour.preferred_tour_time || 'Flexible time'} • ${tour.event_type || 'Event'}${tour.guest_count ? ` • ${tour.guest_count} guests` : ''}`,
-        tone: tour.tour_attendance_status === 'no_show' ? 'rose' : tour.tour_attendance_status === 'attended' ? 'green' : 'gold',
+        tone: getCalendarTourTone(section),
+        warningLabel: section === 'needs_outcome' ? 'Needs Outcome' : undefined,
         href: `/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}`,
         openLabel: 'Open tour',
         content: (
@@ -174,7 +211,8 @@ export default function CalendarPage() {
             onEmail={queueTourEmail}
           />
         ),
-      } satisfies PortalCalendarItem))
+      } satisfies PortalCalendarItem)
+      })
 
     // Published availability is represented by the day status, not as a placeholder
     // calendar item. Only booked tours with a saved date belong in the calendar.
@@ -207,6 +245,7 @@ export default function CalendarPage() {
   }, [data.tasks])
 
   const eventItems = useMemo<PortalCalendarItem[]>(() => {
+    const todayKey = luxorTodayKey()
     return data.bookings
       .filter((booking) => booking.event_date)
       .map((booking) => ({
@@ -214,7 +253,7 @@ export default function CalendarPage() {
         date: booking.event_date!,
         title: booking.client_name,
         subtitle: `${booking.event_type || 'Event'}${booking.guest_count ? ` • ${booking.guest_count} guests` : ''}`,
-        tone: booking.status === 'confirmed' ? 'green' : booking.status === 'cancelled' ? 'rose' : 'gold',
+        tone: getCalendarBookingTone(booking.status, booking.event_date, todayKey),
         href: booking.inquiry_id ? `/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking` : undefined,
         openLabel: 'Open booking',
         content: (
@@ -256,7 +295,7 @@ export default function CalendarPage() {
       />
 
       {error ? (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
+        <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300">{error}</div>
       ) : null}
 
       {activeCalendar === 'tours' ? (
@@ -270,7 +309,7 @@ export default function CalendarPage() {
       ) : null}
 
       {loading ? (
-        <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 shadow-xl space-y-6">
+        <div className="portal-card-surface space-y-6 p-8">
           <div className="flex items-center justify-between">
             <div className="h-6 w-48 rounded luxor-skeleton" />
             <div className="h-8 w-32 rounded-lg luxor-skeleton" />
@@ -307,6 +346,7 @@ function TourControls({
   onAttendance: (tour: LuxorInquiry, attendance: LuxorTourAttendanceStatus) => void
   onEmail: (tour: LuxorInquiry, jobType: string) => void
 }) {
+  const presentation = getTourStatusPresentation(tour)
   return (
     <div className="space-y-3">
       {tour.message ? <p className="line-clamp-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">{tour.message}</p> : null}
@@ -317,7 +357,7 @@ function TourControls({
         <ActionButton disabled={busyId === `${tour.id}-tour_no_show_reschedule`} onClick={() => onEmail(tour, 'tour_no_show_reschedule')} icon={<Mail size={11} />} label="Reschedule" />
       </div>
       <div className="flex items-center justify-between">
-        <PortalStatusBadge status={tour.tour_attendance_status || 'pending'} />
+        <PortalStatusBadge status={presentation.label} tone={presentation.tone} warning={presentation.label === 'Needs Outcome'} />
         <Link href={`/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
           Open <ExternalLink size={10} className="inline" />
         </Link>

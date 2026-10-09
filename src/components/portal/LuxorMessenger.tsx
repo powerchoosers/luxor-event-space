@@ -210,8 +210,8 @@ export function LuxorMessenger() {
   const sharedMedia = selectedConversation?.messages.flatMap((message) => message.media_urls.map((url) => ({ url, message }))) || []
 
   return (
-    <section className="portal-surface relative flex-1 min-h-0 h-full grid overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl lg:grid-cols-[22rem_minmax(0,1fr)]">
-      <aside className={`${showThreadOnMobile ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col border-r border-[color:var(--portal-border)]`}>
+    <section className="portal-card-surface portal-surface relative grid min-h-0 h-full min-w-0 flex-1 overflow-hidden lg:grid-cols-[22rem_minmax(0,1fr)]">
+      <aside className={`${showThreadOnMobile ? 'hidden lg:flex' : 'flex'} min-h-0 min-w-0 flex-col border-r border-[color:var(--portal-border)]`}>
         <div className="border-b border-[color:var(--portal-border)] p-4">
           <div className="flex items-center justify-between gap-3">
             <h1 className="font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Text Messages</h1>
@@ -255,7 +255,7 @@ export function LuxorMessenger() {
         </div>
       </aside>
 
-      <main className={`${showThreadOnMobile ? 'flex' : 'hidden lg:flex'} min-h-0 flex-col`}>
+      <main className={`${showThreadOnMobile ? 'flex' : 'hidden lg:flex'} min-h-0 min-w-0 flex-col`}>
         {loading ? <LoadingMessagePane /> : newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={setContactQuery} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
           <>
             <header className="flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-5">
@@ -263,8 +263,8 @@ export function LuxorMessenger() {
                 <button type="button" onClick={() => setShowThreadOnMobile(false)} className="rounded-lg p-2 text-[color:var(--portal-muted)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] lg:hidden" aria-label="Back to conversations"><ArrowLeft size={18}/></button>
                 <PortalContactAvatar name={selectedConversation.contactName} inquiryId={selectedConversation.inquiryId || undefined} size="md" />
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-black text-[color:var(--portal-text)]">{selectedConversation.contactName}</p>
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <p className="min-w-0 break-words text-sm font-black leading-tight text-[color:var(--portal-text)]">{selectedConversation.contactName}</p>
                     <PortalSmsConsentBadge phone={selectedConversation.phoneNumber} compact />
                   </div>
                   <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)] transition-colors hover:text-emerald-500">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
@@ -364,7 +364,7 @@ function NewMessagePane({ query, results, searching, onQueryChange, onSelect, on
 
 function MediaGallery({ items, onClose }: { items: Array<{ url: string; message: LuxorMessage }>; onClose: () => void }) {
   return <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-40 bg-black/80 p-5 backdrop-blur-sm">
-    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="mx-auto flex h-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="portal-card-surface mx-auto flex h-full max-w-4xl flex-col overflow-hidden">
       <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-4"><div><p className="text-sm font-black text-[color:var(--portal-text)]">Shared media</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Images and files received in this conversation.</p></div><PortalCloseButton onClick={onClose} aria-label="Close media gallery" /></div>
       <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-5">{items.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{items.map((item, index) => <a key={`${item.message.id}-${index}`} href={item.url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]"><div className="aspect-square bg-[color:var(--portal-card)]"><img src={item.url} alt={`Shared media from ${formatMessageTime(item.message.created_at)}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"/></div><p className="px-3 py-2 font-mono text-[8px] text-[color:var(--portal-muted)]">{new Date(item.message.created_at).toLocaleString()}</p></a>)}</div> : <div className="flex h-full items-center justify-center text-center"><div><Images size={25} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-bold text-[color:var(--portal-text)]">No shared media yet</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Photos received through MMS or RCS will appear here.</p></div></div>}</div>
     </motion.div>

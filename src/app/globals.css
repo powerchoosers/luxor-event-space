@@ -16,6 +16,23 @@
   --ink: #060606;
 }
 
+/* Keep shared surfaces in Tailwind's component layer so utilities can refine them. */
+@layer components {
+  .portal-card-surface {
+    border-style: solid;
+    border-width: 1px;
+    border-color: var(--portal-border);
+    background: var(--portal-card);
+    border-radius: 1rem;
+    box-shadow: 0 8px 24px -22px rgba(30, 24, 16, 0.42);
+    backdrop-filter: none;
+  }
+
+  body[data-portal-theme='dark'] .portal-card-surface {
+    box-shadow: 0 12px 28px -24px rgba(0, 0, 0, 0.8);
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
