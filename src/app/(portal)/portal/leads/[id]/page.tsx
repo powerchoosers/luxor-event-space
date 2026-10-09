@@ -2742,9 +2742,9 @@ export default function LeadDetailPage({
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, action: 'attendance', attendance }),
+        body: JSON.stringify({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, action: 'attendance', attendance, expectedAttendance: lead.tour_attendance_status || null }),
       })
-      const payload = await response.json().catch(() => ({}))
+      const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: unknown; warnings?: string[] }
       if (!response.ok) throw new Error(payload.error || 'Tour attendance could not be updated.')
       if (payload.inquiry) setLead(payload.inquiry as LuxorInquiry)
       if (attendance === 'attended') {
@@ -2755,10 +2755,11 @@ export default function LeadDetailPage({
         router.replace(`${pathname || `/portal/leads/${id}`}?${nextParams.toString()}`, { scroll: false })
       }
       await fetchAllData(false)
+      const warnings = payload.warnings ?? []
       notify({
-        title: attendance === 'attended' ? 'Tour marked complete' : 'Tour marked no show',
-        description: 'The outcome was saved without sending a message.',
-        variant: 'success',
+        title: attendance === 'attended' ? (lead.tour_attendance_status === 'no_show' ? 'Tour outcome corrected to complete' : 'Tour marked complete') : 'Tour marked no show',
+        description: warnings.length ? warnings.join(' ') : 'The outcome was saved without sending a message.',
+        variant: warnings.length ? 'warning' : 'success',
       })
     } catch (error) {
       notify({ title: 'Tour status not saved', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
@@ -4583,7 +4584,7 @@ export default function LeadDetailPage({
                             <span className="mb-3 block rounded-lg border border-emerald-500/20 bg-emerald-500/10 py-1.5 text-center text-[9px] font-black uppercase text-emerald-400">Tour Confirmed</span>
                           ) : null}
                           {!['Completed', 'Cancelled'].includes(tourDisplayStatus(lead)) ? (
-                            <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Mark Complete</button>
+                            <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">{lead.tour_attendance_status === 'no_show' ? 'Correct Outcome to Completed' : 'Mark Complete'}</button>
                           ) : null}
                           <div className="mt-2 grid gap-2 sm:grid-cols-2">
                             <button type="button" onClick={openTourScheduleModal} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Reschedule</button>

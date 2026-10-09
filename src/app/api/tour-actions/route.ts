@@ -112,9 +112,12 @@ export async function POST(request: NextRequest) {
       if (!['pending', 'attended', 'no_show', 'rescheduled', 'cancelled'].includes(attendance)) {
         return NextResponse.json({ error: 'Unsupported attendance status.' }, { status: 400 })
       }
-      const finalOutcomes = ['attended', 'no_show', 'cancelled']
-      if (finalOutcomes.includes(inquiry.tour_attendance_status || '') && inquiry.tour_attendance_status !== attendance) {
-        return NextResponse.json({ error: 'This tour already has a final outcome. Refresh before changing it.' }, { status: 409 })
+      const expectedAttendance = body.expectedAttendance === null ? null : String(body.expectedAttendance || '')
+      if (expectedAttendance !== (inquiry.tour_attendance_status || null)) {
+        return NextResponse.json({ error: 'The tour outcome changed since this view loaded. Refresh and review the current outcome before correcting it.' }, { status: 409 })
+      }
+      if (inquiry.tour_attendance_status === 'cancelled' && attendance !== 'cancelled') {
+        return NextResponse.json({ error: 'A cancelled tour cannot be changed through attendance controls.' }, { status: 409 })
       }
       const updates: Record<string, unknown> = { tour_attendance_status: attendance }
       if (attendance === 'attended' && canAdvanceAttendedTour(inquiry.status, inquiry.pipeline_stage)) {

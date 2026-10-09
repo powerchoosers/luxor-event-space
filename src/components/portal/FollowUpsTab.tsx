@@ -25,6 +25,9 @@ type ProfileWorkspace = { leadId: string; stage: 'tour' | 'proposal' | 'profile'
 
 function taskChannel(task: LuxorTask): Channel { return getLuxorFollowUpTaskChannel(task) }
 function taskNotes(task: LuxorTask) { return (task.description ?? '').replace(/^\[follow-up:(?:email|phone)\]\s*/, '').replace(/^\[post-tour\]\s*/, '') }
+function manualFollowUpDescription(channel: Channel, isPostTour: boolean, notes = '') {
+  return `[follow-up:${channel}]${isPostTour ? ' [post-tour]' : ''}${notes.trim() ? ` ${notes.trim()}` : ''}`
+}
 function luxorDate(iso: string) {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(iso))
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
@@ -249,7 +252,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     event.preventDefault()
     if (!leadId || !title.trim() || !dueDate || !dueTime) return
     const isPostTour = leadById.get(leadId)?.tour_attendance_status === 'attended'
-    const response = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: leadId, title: title.trim(), description: `[follow-up:${newChannel}]${isPostTour ? ' [post-tour]' : ''}${notes.trim() ? ` ${notes.trim()}` : ''}`, dueDate, dueAt: localLuxorIso(dueDate, dueTime), assignedTo: assignee || undefined, priority: 'medium' }) })
+    const response = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: leadId, title: title.trim(), description: manualFollowUpDescription(newChannel, isPostTour, notes), dueDate, dueAt: localLuxorIso(dueDate, dueTime), assignedTo: assignee || undefined, priority: 'medium' }) })
     if (!response.ok) { notify({ title: 'The follow-up could not be saved', variant: 'error' }); return }
     setAdding(false); setTitle(''); setNotes(''); setDueDate(''); setLeadId('')
     notify({ title: `${newChannel === 'phone' ? 'Phone' : 'Email'} follow-up task added`, description: 'No call or email was sent.', variant: 'success' })
@@ -335,7 +338,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     await addNote(task.inquiry_id, `Manual call outcome: ${outcome.replaceAll('_', ' ')}.${note.trim() ? ` ${note.trim()}` : ''}`, 'status_change', task.id)
     if (step === 'later' && nextAt) {
       const date = luxorDate(nextAt)
-      const followUp = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: task.inquiry_id, title: 'Follow up after call', description: `[follow-up:${nextChannel}]`, dueDate: date, dueAt: nextAt, assignedTo: assignee || undefined, priority: 'medium' }) })
+      const isPostTour = leadById.get(task.inquiry_id)?.tour_attendance_status === 'attended'
+      const followUp = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: task.inquiry_id, title: 'Follow up after call', description: manualFollowUpDescription(nextChannel, isPostTour), dueDate: date, dueAt: nextAt, assignedTo: assignee || undefined, priority: 'medium' }) })
       if (!followUp.ok) throw new Error('Call saved, but the next follow-up could not be scheduled.')
     }
     await refresh()
@@ -398,7 +402,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
         await addNote(callDraft.lead.id, 'Lead declined further contact after a manual call. The active brochure sequence was stopped.', 'status_change')
       }
       if (callOutcome !== 'not_interested' && nextStep === 'later' && !callDraft.task && nextDate) {
-        const followUp = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: callDraft.lead.id, title: 'Follow up after call', description: `[follow-up:${nextChannel}]`, dueDate: nextDate, dueAt: localLuxorIso(nextDate, nextTime), assignedTo: assignee || undefined, priority: 'medium' }) })
+        const isPostTour = callDraft.lead.tour_attendance_status === 'attended'
+        const followUp = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: callDraft.lead.id, title: 'Follow up after call', description: manualFollowUpDescription(nextChannel, isPostTour), dueDate: nextDate, dueAt: localLuxorIso(nextDate, nextTime), assignedTo: assignee || undefined, priority: 'medium' }) })
         if (!followUp.ok) throw new Error('Call note saved, but the next follow-up could not be scheduled.')
       }
       if (callOutcome !== 'not_interested' && nextStep === 'stop') {

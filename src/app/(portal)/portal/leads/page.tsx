@@ -396,7 +396,7 @@ export default function LeadsPage() {
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: lead.id, action: 'attendance', attendance }),
+        body: JSON.stringify({ inquiryId: lead.id, action: 'attendance', attendance, expectedAttendance: lead.tour_attendance_status || null }),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; warnings?: string[] }
       if (!response.ok) throw new Error(payload.error || 'Tour outcome could not be saved.')
@@ -2203,9 +2203,9 @@ function LeadsToursTab({
         </div>
         <LeadLifecycleActionsMenu lead={tour} onAction={(action) => onLifecycleAction(tour, action)} />
       </div>
-      {!['attended', 'no_show', 'cancelled'].includes(tour.tour_attendance_status || '') ? <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'attended')} className="rounded-md border border-emerald-600/25 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/10 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300">{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark Completed'}</button>
-        <button type="button" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'no_show')} className="rounded-md border border-rose-600/25 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-500/10 disabled:cursor-wait disabled:opacity-60 dark:text-rose-300">{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark No Show'}</button>
+      {tour.tour_attendance_status !== 'cancelled' && tour.tour_attendance_status !== 'attended' ? <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'attended')} className="rounded-md border border-emerald-600/25 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/10 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300">{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : tour.tour_attendance_status === 'no_show' ? 'Correct to Completed' : 'Mark Completed'}</button>
+        {!['attended', 'no_show'].includes(tour.tour_attendance_status || '') && <button type="button" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'no_show')} className="rounded-md border border-rose-600/25 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-500/10 disabled:cursor-wait disabled:opacity-60 dark:text-rose-300">{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark No Show'}</button>}
       </div> : null}
       <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
         <div><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Tour date</p><p className="mt-1 font-bold text-[#caa24c]">{tour.preferred_tour_date ? formatTourDate(tour.preferred_tour_date) : 'Date Pending'}</p><p className="text-xs text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Time TBD'} · Central</p></div>
