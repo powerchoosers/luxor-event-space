@@ -556,23 +556,21 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
               subtitle={<>{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</>}
               onOpen={() => { selectLead(row.inquiryId); setDetailTab('overview') }}
               className={`cursor-pointer ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}
-              actions={
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className={`flex items-center gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>
+                    {row.next.channel === 'phone' ? <Phone size={14} /> : <Mail size={14} />}{row.next.title}
+                  </div>
+                  <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>
+                  {row.postTourStatus && <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
+                </div>
                 <div className="flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
                   {row.next.channel === 'phone' && <button type="button" onClick={() => dial(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>}
                   {row.next.channel === 'email' && row.next.assignee !== 'Automated' && <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white disabled:opacity-50"><Mail size={14} /> Email</button>}
                   {row.next.channel === 'email' && row.next.assignee === 'Automated' && <button type="button" onClick={() => { selectLead(lead.id); setDetailTab('timeline') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white"><Eye size={14} /> View</button>}
                   <button type="button" onClick={() => { selectLead(lead.id); setDetailTab('overview') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold"><Eye size={14} /> View</button>
                   <button type="button" aria-label={`More actions for ${lead.full_name}`} onClick={() => { selectLead(lead.id); setMoreOpen((value) => !value) }} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)]"><MoreHorizontal size={16} /></button>
-                </div>
-              }
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className={`flex items-center gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>
-                    {row.next.channel === 'phone' ? <Phone size={14} /> : <Mail size={14} />}{row.next.title}
-                  </div>
-                  <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>
-                  {row.postTourStatus && <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
                 </div>
               </div>
             </LuxorCrmRecordCard>

@@ -1,6 +1,6 @@
 'use client'
 
-import type { ButtonHTMLAttributes, KeyboardEvent, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { PortalContactAvatar, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
@@ -12,6 +12,7 @@ export type LuxorCrmCardBadge = {
 
 export function luxorCrmStatusTone(value: string): PortalStatusTone {
   const status = value.trim().toLowerCase().replaceAll('_', ' ')
+  if (status === 'sent') return 'blue'
   if (status === 'booked' || /(completed|attended|signed|paid|successful|closed won)/.test(status)) return 'green'
   if (status === 'closed lost') return 'neutral'
   if (/(overdue|no show|issue|needs attention|failed|lost)/.test(status)) return 'red'
@@ -45,49 +46,47 @@ export function LuxorCrmRecordCard({
   className?: string
   selected?: boolean
 }) {
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (!onOpen || event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
-    event.preventDefault()
-    onOpen()
-  }
-
   return (
     <article
-      className={`portal-card-surface rounded-xl border p-4 shadow-sm transition-colors ${onOpen ? 'cursor-pointer hover:border-[#caa24c]/60' : ''} ${selected ? 'border-[#caa24c]/60 bg-[#caa24c]/[0.04]' : ''} ${className}`}
+      className={`portal-card-surface relative rounded-xl border p-4 shadow-sm transition-colors ${onOpen ? 'cursor-pointer hover:border-[#caa24c]/60' : ''} ${selected ? 'border-[#caa24c]/60 bg-[#caa24c]/[0.04]' : ''} ${className}`}
       onClick={(event) => {
         const target = event.target as HTMLElement
         if (target.closest('a,button,input,select,textarea,[role="menuitem"]')) return
         onOpen?.()
       }}
-      onKeyDown={onKeyDown}
-      role={onOpen ? 'button' : undefined}
-      tabIndex={onOpen ? 0 : undefined}
-      aria-label={onOpen ? `Open ${lead.full_name}` : undefined}
     >
-      <div className="flex min-w-0 items-start gap-3">
-        {avatar ?? <PortalContactAvatar
-          name={lead.full_name}
-          avatarUrl={lead.metadata?.avatar_url as string | null}
-          size="md"
-          className="shrink-0"
-        />}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
-            <div className="min-w-0 flex-1">
-              <h3 className="truncate text-sm font-semibold leading-tight text-[color:var(--portal-text)]">{lead.full_name}</h3>
-              {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)]">{subtitle}</div> : null}
-            </div>
-            {badges?.length ? (
-              <div className="flex max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-end">
-                {badges.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} />)}
+      {onOpen ? <button
+        type="button"
+        aria-label={`Open ${lead.full_name}`}
+        onClick={onOpen}
+        className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#a8792f]"
+      /> : null}
+      <div className="relative z-10">
+        <div className="flex min-w-0 items-start gap-3">
+          {avatar ?? <PortalContactAvatar
+            name={lead.full_name}
+            avatarUrl={lead.metadata?.avatar_url as string | null}
+            size="md"
+            className="shrink-0"
+          />}
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-sm font-semibold leading-tight text-[color:var(--portal-text)]">{lead.full_name}</h3>
+                {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)]">{subtitle}</div> : null}
               </div>
-            ) : null}
+              {badges?.length ? (
+                <div className="flex max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-end">
+                  {badges.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} />)}
+                </div>
+              ) : null}
+            </div>
+            {contact ? <div className="mt-1 break-all text-[10px] text-[color:var(--portal-muted)]">{contact}</div> : null}
           </div>
-          {contact ? <div className="mt-1 break-all text-[10px] text-[color:var(--portal-muted)]">{contact}</div> : null}
         </div>
+        {children ? <div className="mt-3 space-y-2 text-sm">{children}</div> : null}
+        {actions ? <div className="relative mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">{actions}</div> : null}
       </div>
-      {children ? <div className="mt-3 space-y-2 text-sm">{children}</div> : null}
-      {actions ? <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">{actions}</div> : null}
     </article>
   )
 }

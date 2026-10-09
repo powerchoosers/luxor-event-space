@@ -910,12 +910,31 @@ export async function processLuxorEmailJobs(
         }
       }
       const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
+      const isPreparedTourResend = metadata.prepared_tour_email_resend === true
+      if (isPreparedTourResend) {
+        const validation = await supabaseRest<{
+          job: LuxorEmailJob
+          claimed: boolean
+          eligible: boolean
+          completed?: boolean
+        }>(`rpc/${markSending
+          ? 'luxor_claim_prepared_tour_email_resend_delivery'
+          : 'luxor_check_prepared_tour_email_resend_delivery'}`, {
+          method: 'POST',
+          body: JSON.stringify({ p_inquiry_id: job.inquiry_id, p_job_id: job.id }),
+        })
+        if (!validation.eligible || !validation.job || (markSending && !validation.claimed)) {
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
+        job = validation.job
+      }
       if ((job.job_type === 'contract_signature' && metadata.flow_stage === 'contract_completed')
         || (job.job_type === 'deposit_payment_confirmation' && metadata.includes_paid_invoice === true)) {
         throw new Error('Legacy direct-send receipt needs delivery review; its original PDF cannot be reconstructed by the generic email worker.')
       }
       if (job.job_type === 'calendar_invitation' || job.job_type === 'inquiry_notification' || job.job_type === 'transactional_notice' || job.tour_revision_id) {
-        if (markSending) {
+        if (markSending && !isPreparedTourResend) {
           const [claimed] = await supabaseRest<LuxorEmailJob[]>(`luxor_email_jobs?select=*&id=eq.${job.id}&status=eq.queued`, {
             method: 'PATCH', headers: { Prefer: 'return=representation' },
             body: JSON.stringify({ status: 'sending', attempts: Number(job.attempts || 0) + 1, updated_at: new Date().toISOString() }),

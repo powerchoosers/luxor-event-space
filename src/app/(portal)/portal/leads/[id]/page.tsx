@@ -1454,10 +1454,15 @@ export default function LeadDetailPage({
       setBookings(nextBookings)
       setPayments(paymentsData)
       setTourEmailJobs(tourJobsData)
-      const preparedResend = (tourJobsData as LuxorEmailJob[]).find((job) =>
-        job.recipient_email === leadData.email && ['cancelled', 'failed'].includes(job.status)
-        && (job.metadata as Record<string, unknown> | null)?.awaiting_owner_confirmation === true,
-      )
+      const preparedResend = (tourJobsData as LuxorEmailJob[])
+        .filter((job) => {
+          const metadata = job.metadata as Record<string, unknown> | null
+          const prepared = metadata?.prepared_tour_email_resend === true || metadata?.awaiting_owner_confirmation === true
+          const current = !metadata?.superseded_at && !metadata?.superseded_by_request_id
+          const availableStatus = ['cancelled', 'failed', 'queued', 'sending', 'sent'].includes(job.status)
+          return prepared && current && availableStatus && job.recipient_email === leadData.email
+        })
+        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0] || null
       setEmailResendCandidate(preparedResend || null)
       setCallRecords(callsData)
       const nextLeadEvents = leadEventsData as LuxorLeadEvent[]
@@ -1787,10 +1792,11 @@ export default function LeadDetailPage({
       if (fieldKey === 'email') {
         emailChangeRequestRef.current = null
         const candidate = payload.resendCandidate as LuxorEmailJob | null
-        if (candidate) {
-          setEmailResendCandidate(candidate)
-          setEmailResendModalOpen(true)
-        }
+        // Every successful edit replaces the candidate, including edits for
+        // which no matching confirmation exists. Never leave an older
+        // address or tour revision available for owner confirmation.
+        setEmailResendCandidate(candidate)
+        setEmailResendModalOpen(Boolean(candidate && ['cancelled', 'failed'].includes(candidate.status)))
         void fetchClientEmailThread(updated.email || '')
       }
       return true
@@ -1817,15 +1823,18 @@ export default function LeadDetailPage({
       if (!response.ok) throw new Error(payload.error || 'The confirmation could not be queued.')
       const updatedJob = payload.job as LuxorEmailJob
       setTourEmailJobs((current) => current.map((job) => job.id === updatedJob.id ? updatedJob : job))
-      setEmailResendCandidate(updatedJob.status === 'failed' ? updatedJob : null)
+      setEmailResendCandidate(['failed', 'queued', 'sending', 'sent'].includes(updatedJob.status) ? updatedJob : null)
       setEmailResendModalOpen(false)
-      notify({
-        title: updatedJob.status === 'sent' ? 'Confirmation sent' : updatedJob.status === 'failed' ? 'Confirmation needs retry' : 'Confirmation queued',
-        description: updatedJob.status === 'failed'
-          ? 'Delivery failed. Review the saved message and retry when ready.'
-          : `The saved tour confirmation was sent to ${updatedJob.recipient_email}.`,
-        variant: updatedJob.status === 'failed' ? 'error' : undefined,
-      })
+      const statusMessage = updatedJob.status === 'sent'
+        ? { title: 'Confirmation sent', description: `The saved confirmation was sent to ${updatedJob.recipient_email}.`, variant: undefined }
+        : updatedJob.status === 'sending'
+          ? { title: 'Confirmation sending', description: 'The delivery worker is processing the saved confirmation.', variant: undefined }
+          : updatedJob.status === 'queued'
+            ? { title: 'Confirmation queued', description: `The saved confirmation is queued for ${updatedJob.recipient_email}.`, variant: undefined }
+            : updatedJob.status === 'failed'
+              ? { title: 'Confirmation needs retry', description: 'Delivery failed. Review the saved message and retry when ready.', variant: 'error' as const }
+              : { title: 'Confirmation unavailable', description: 'The tour or recipient changed; no message was sent.', variant: 'error' as const }
+      notify(statusMessage)
     } catch (err) {
       notify({ title: 'Resend not sent', description: err instanceof Error ? err.message : 'Please refresh and try again.', variant: 'error' })
     } finally {
@@ -6671,11 +6680,13 @@ export default function LeadDetailPage({
                   {emailResendCandidate ? (
                     <div className="mb-4 flex flex-col gap-3 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/[0.07] p-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-[color:var(--portal-text)]">A recent tour confirmation went to the previous address.</p>
-                        <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">The email address is saved. No email has been sent.</p>
+                        <p className="text-xs font-semibold text-[color:var(--portal-text)]">{emailResendCandidate.status === 'cancelled' && (emailResendCandidate.metadata as Record<string, unknown> | null)?.awaiting_owner_confirmation === true
+                          ? 'Review the saved tour confirmation before sending.'
+                          : `Saved confirmation status: ${emailResendCandidate.status}.`}</p>
+                        <p className="mt-1 break-all text-[11px] text-[color:var(--portal-muted)]">To {emailResendCandidate.recipient_email}{emailResendCandidate.last_error ? ` · ${emailResendCandidate.last_error}` : ''}</p>
                       </div>
                       <button type="button" onClick={() => setEmailResendModalOpen(true)} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/35 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">
-                        <Mail size={13} /> Review resend
+                        <Mail size={13} /> {emailResendCandidate.status === 'failed' ? 'Review retry' : emailResendCandidate.status === 'cancelled' ? 'Review confirmation' : 'View delivery'}
                       </button>
                     </div>
                   ) : null}
@@ -7450,7 +7461,15 @@ export default function LeadDetailPage({
       />
 
       <TourEmailResendDialog
-        candidate={emailResendCandidate}
+        candidate={emailResendCandidate ? {
+          id: emailResendCandidate.id,
+          recipient_email: emailResendCandidate.recipient_email,
+          subject: emailResendCandidate.subject,
+          body: emailResendCandidate.body,
+          status: emailResendCandidate.status as 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled',
+          awaitingOwnerConfirmation: (emailResendCandidate.metadata as Record<string, unknown> | null)?.awaiting_owner_confirmation === true,
+          last_error: emailResendCandidate.last_error,
+        } : null}
         isOpen={emailResendModalOpen}
         isSending={Boolean(resendingEmailJobId)}
         onClose={() => setEmailResendModalOpen(false)}

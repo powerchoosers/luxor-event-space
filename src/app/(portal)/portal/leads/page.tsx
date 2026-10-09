@@ -988,57 +988,26 @@ export default function LeadsPage() {
           })}
 
           {/* Lost Leads Drawer / Collapsed Last Column */}
-          <div className="portal-card-surface flex-1 min-w-[280px] max-w-[340px] flex flex-col h-full overflow-hidden opacity-75 transition-opacity duration-300 hover:opacity-100">
+          <div className="portal-card-surface flex min-w-[280px] max-w-[340px] flex-1 flex-col overflow-hidden opacity-75 transition-opacity duration-300 hover:opacity-100">
             <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[color:var(--portal-muted)]" aria-hidden="true" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Closed Lost</span>
-              </div>
-              <span className="text-[9px] font-mono font-bold text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-0.5 rounded-md">
-                {sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length}
-              </span>
+              <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[color:var(--portal-muted)]" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Closed Lost</span></div>
+              <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 font-mono text-[9px] font-bold text-[color:var(--portal-muted)]">{sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length}</span>
             </div>
-
-            <div className="p-3 flex-1 overflow-y-auto portal-scrollbar space-y-3">
+            <div className="portal-scrollbar flex-1 space-y-3 overflow-y-auto p-3">
               {sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] py-8 text-center text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
-                  No lost leads
-                </div>
-              ) : (
-                sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').map((lead) => (
-              <div key={lead.id} className="portal-card-surface group flex min-h-[120px] flex-col justify-between p-4 transition-colors hover:border-[color:var(--portal-muted)]">
-                    <Link href={`/portal/leads/${lead.id}`} className="block">
-                      <div className="flex items-center gap-3">
-                        <PortalContactAvatar
-                          name={lead.full_name}
-                          avatarUrl={lead.metadata?.avatar_url as string | null}
-                          className="w-7 h-7 text-[10px]"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <span className="mb-1 block truncate text-xs font-bold leading-none text-[color:var(--portal-text)] group-hover:text-sky-700 dark:group-hover:text-sky-300">
-                            {lead.full_name}
-                          </span>
-                          <p className="truncate font-mono text-[9px] text-[color:var(--portal-muted)]">{lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}</p>
-                        </div>
-                      </div>
-                      <p className="mt-2 text-[10px] font-medium text-[color:var(--portal-muted)]">
-                        {isGrandOpeningRsvp(lead)
-                          ? `Grand Opening RSVP • ${lead.attendee_count || lead.guest_count || 1} attending`
-                          : `${lead.event_type || 'Quinceañera'} • ${lead.guest_count || 0} guests`}
-                      </p>
-                    </Link>
-
-                    <div className="flex justify-end pt-3 mt-3 border-t border-zinc-900/20">
-                      <Link
-                        href={`/portal/leads/${lead.id}`}
-                        className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]"
-                      >
-                        View dossier
-                      </Link>
-                    </div>
-                  </div>
-                ))
-              )}
+                <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] py-8 text-center text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">No lost leads</div>
+              ) : sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').map((lead) => (
+                <LuxorCrmRecordCard
+                  key={lead.id}
+                  lead={lead}
+                  badges={[{ label: 'Closed Lost', tone: 'neutral' }]}
+                  subtitle={<>{isGrandOpeningRsvp(lead) ? `Grand Opening RSVP · ${lead.attendee_count || lead.guest_count || 1} attending` : `${lead.event_type || 'Quinceañera'} · ${lead.guest_count || 0} guests`}</>}
+                  contact={<span className="block">{lead.email || 'No email'}{lead.phone ? <span className="mt-0.5 block">{formatPhoneDisplay(lead.phone)}</span> : null}</span>}
+                  onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
+                  className="min-h-[120px]"
+                  actions={<Link href={`/portal/leads/${lead.id}`} className="inline-flex min-h-10 items-center text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">View dossier <ExternalLink size={13} className="ml-1" aria-hidden="true" /></Link>}
+                />
+              ))}
             </div>
           </div>
         </div>
@@ -1772,7 +1741,12 @@ function LeadsClientsTab({
                 </>
               }
             >
-              <div className="flex items-center justify-between gap-2 text-xs"><span className="text-[color:var(--portal-muted)]">Booking status</span><span className="font-semibold text-[color:var(--portal-text)]">Active booked client</span></div>
+              <div className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
+                <div className="flex min-w-0 items-center gap-2"><Phone size={13} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" /><span className="break-all text-[color:var(--portal-text)]">{client.phone ? formatPhoneDisplay(client.phone) : 'No phone captured'}</span></div>
+                <div className="flex min-w-0 items-center gap-2"><Languages size={13} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" /><span className="text-[color:var(--portal-text)]">Tour language: {getRequestedTourLanguage(client) || 'Not specified'}</span></div>
+                {isMarketingLead(client) ? <div className="flex items-center gap-2 text-[#8c6529] dark:text-[#f1d27a]"><Star size={13} className="fill-current" aria-hidden="true" />Marketing lead</div> : null}
+                <div className="flex items-center justify-between gap-2"><span className="text-[color:var(--portal-muted)]">Booking status</span><span className="font-semibold text-[color:var(--portal-text)]">Active booked client</span></div>
+              </div>
               <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]"><Eye size={14} /> View client record</Link>
             </LuxorCrmRecordCard>
           ))}
@@ -1837,77 +1811,37 @@ function MobileLeadCard({
   const pipelineStage = getPipelineStage(lead)
   const stageLabel = PIPELINE_STAGE_OPTIONS.find((option) => option.value === pipelineStage)?.label || 'Pipeline'
   const stageTone = (PIPELINE_COLUMNS.find((column) => column.id === pipelineStage)?.tone as PortalStatusTone | undefined) || 'neutral'
+  const badges = [
+    ...(showStatusBadge ? [{ label: lead.status.replaceAll('_', ' '), tone: luxorCrmStatusTone(lead.status) }] : []),
+    ...(showPipelineStage ? [{ label: stageLabel, tone: stageTone }] : []),
+  ]
 
   return (
-    <article className={`p-3 sm:p-4 ${selected ? 'bg-[#caa24c]/8' : ''}`}>
-      <div className="flex items-start gap-3">
-        {onToggle ? (
-          <div className="pt-1">
-            <PortalBulkRowSelector checked={selected} index={index || 1} onChange={() => onToggle(lead.id)} label={lead.full_name} />
-          </div>
-        ) : null}
-        <Link href={`/portal/leads/${lead.id}`} className="flex min-w-0 flex-1 items-start gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
-          <PortalContactAvatar
-            name={lead.full_name}
-            avatarUrl={lead.metadata?.avatar_url as string | null}
-            size="md"
-            className="shrink-0"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-bold text-[color:var(--portal-text)]"><span className="truncate">{lead.full_name}</span>{isMarketingLead(lead) ? <Star className="h-3.5 w-3.5 shrink-0 fill-[#caa24c] text-[#caa24c]" aria-label="Marketing lead" /> : null}</p>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[color:var(--portal-muted)]">
-              {lead.email ? <span className="truncate">{lead.email}</span> : null}
-              {lead.phone ? <span className="truncate">{lead.email ? '• ' : ''}{formatPhoneDisplay(lead.phone)}</span> : null}
-              {!lead.email && !lead.phone ? <span>No contact details</span> : null}
-            </div>
-            {showStatusBadge ? <div className="mt-1.5"><PortalStatusBadge status={lead.status} /></div> : null}
-          </div>
-        </Link>
+    <LuxorCrmRecordCard
+      lead={lead}
+      badges={badges}
+      subtitle={pipelineStage !== 'newsletter' ? <>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date not set'} · {lead.guest_count || 'Flexible'} guests</> : 'Newsletter contact'}
+      contact={<span className="block">{lead.email || 'No email captured'}{lead.phone ? <span className="mt-0.5 block">{formatPhoneDisplay(lead.phone)}</span> : null}</span>}
+      onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
+      selected={selected}
+      className="rounded-none border-x-0 border-t-0 p-3 shadow-none sm:p-4"
+      actions={<div className="flex w-full items-center justify-between gap-3">
+        {onToggle ? <PortalBulkRowSelector checked={selected} index={index || 1} onChange={() => onToggle(lead.id)} label={lead.full_name} /> : <span />}
         <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
+      </div>}
+    >
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:gap-3">
+        {pipelineStage !== 'newsletter' ? <>
+          <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Event</p><p className="mt-1 break-words font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</p></div>
+          <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Date</p><p className="mt-1 break-words font-mono text-[color:var(--portal-muted)]">{lead.target_date || 'Not set'}</p></div>
+          <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Guests</p><p className="mt-1 font-mono text-[color:var(--portal-muted)]">{lead.guest_count || 'Flexible'}</p></div>
+        </> : null}
+        <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Language</p><p className="mt-1 break-words font-medium text-[color:var(--portal-muted)]">{getRequestedTourLanguage(lead) || 'Not specified'}</p></div>
+        {isMarketingLead(lead) ? <div className="flex items-center gap-1.5 text-[#a8792f] dark:text-[#f1d27a]"><Star size={12} className="fill-current" aria-hidden="true" />Marketing lead</div> : null}
       </div>
-
-      <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[color:var(--portal-border)] pt-2.5 text-xs sm:mt-3 sm:gap-3 sm:pt-3">
-        {getPipelineStage(lead) !== 'newsletter' ? (
-          <>
-            <div className="min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Event</p>
-              <p className="mt-1 truncate font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</p>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Date</p>
-              <p className="mt-1 truncate font-mono text-[color:var(--portal-muted)]">{lead.target_date || 'Not set'}</p>
-            </div>
-          </>
-        ) : null}
-        {showPipelineStage ? (
-          <div className="min-w-0">
-            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Pipeline</p>
-            <div className="mt-1"><PortalStatusBadge status={stageLabel} tone={stageTone} /></div>
-          </div>
-        ) : null}
-        {getPipelineStage(lead) !== 'newsletter' ? (
-          <div className="min-w-0">
-            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Guests</p>
-            <p className="mt-1 truncate font-mono text-[color:var(--portal-muted)]">{lead.guest_count || 'Flexible'}</p>
-          </div>
-        ) : null}
-        <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Language</p>
-          {getRequestedTourLanguage(lead) === 'Spanish' ? (
-            <p className="mt-1 inline-flex items-center gap-1 font-semibold text-[#a8792f] dark:text-[#f1d27a]"><Languages size={12} /> Spanish</p>
-          ) : (
-            <p className="mt-1 truncate font-medium text-[color:var(--portal-muted)]">{getRequestedTourLanguage(lead) || 'Not specified'}</p>
-          )}
-        </div>
-      </div>
-
-      <Link href={`/portal/leads/${lead.id}`} className="mt-2.5 inline-flex min-h-11 items-center text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a] sm:mt-3">
-        Open contact dossier <span className="ml-1" aria-hidden="true">→</span>
-      </Link>
-    </article>
+    </LuxorCrmRecordCard>
   )
 }
-
 function LeadsLostTab({ leads }: { leads: LuxorInquiry[] }) {
   const lostLeads = useMemo(
     () => leads
