@@ -312,6 +312,7 @@ export function PortalTableCard({
   footer,
   className = '',
   mobilePageScroll = false,
+  mobilePageScrollUntil = 'md',
 }: {
   controls?: React.ReactNode
   children: React.ReactNode
@@ -322,11 +323,18 @@ export function PortalTableCard({
    * them in a very short nested table area.
    */
   mobilePageScroll?: boolean
+  mobilePageScrollUntil?: 'md' | 'lg'
 }) {
+  const mobilePageScrollContainerClass = mobilePageScroll
+    ? mobilePageScrollUntil === 'lg' ? 'max-lg:flex-none' : 'max-md:flex-none'
+    : ''
+  const mobilePageScrollContentClass = mobilePageScroll
+    ? mobilePageScrollUntil === 'lg' ? 'max-lg:flex-none max-lg:overflow-visible' : 'max-md:flex-none max-md:overflow-visible'
+    : ''
   return (
-    <section className={`nodal-void-card portal-render-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${mobilePageScroll ? 'max-md:flex-none' : ''} ${className}`}>
+    <section className={`nodal-void-card portal-render-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${mobilePageScrollContainerClass} ${className}`}>
       {controls ? <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 px-4 sm:px-6">{controls}</div> : null}
-      <div className={`portal-scrollbar flex-1 overflow-auto ${mobilePageScroll ? 'max-md:flex-none max-md:overflow-visible' : ''}`} data-portal-table-scroller>
+      <div className={`portal-scrollbar flex-1 overflow-auto ${mobilePageScrollContentClass}`} data-portal-table-scroller>
         {children}
       </div>
       {footer ? <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-4 px-4 sm:px-6 flex items-center">{footer}</div> : null}

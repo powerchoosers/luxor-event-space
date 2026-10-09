@@ -191,6 +191,18 @@ function getPortalMobileViewportSnapshot() {
   return window.matchMedia(PORTAL_MOBILE_MEDIA_QUERY).matches
 }
 
+const PORTAL_DESKTOP_MEDIA_QUERY = '(min-width: 1024px)'
+
+function subscribeToPortalDesktopViewport(callback: () => void) {
+  const mediaQuery = window.matchMedia(PORTAL_DESKTOP_MEDIA_QUERY)
+  mediaQuery.addEventListener('change', callback)
+  return () => mediaQuery.removeEventListener('change', callback)
+}
+
+function getPortalDesktopViewportSnapshot() {
+  return window.matchMedia(PORTAL_DESKTOP_MEDIA_QUERY).matches
+}
+
 export function PortalShell({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole }) {
   return (
     <ToastProvider>
@@ -212,9 +224,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     getPortalMobileViewportSnapshot,
     () => false,
   )
+  const isDesktopViewport = useSyncExternalStore(
+    subscribeToPortalDesktopViewport,
+    getPortalDesktopViewportSnapshot,
+    () => true,
+  )
   const usesInternalTableScroll =
     (!isMobileViewport && pathname === '/portal/leads') ||
-    pathname === '/portal/events' ||
+    (isDesktopViewport && pathname === '/portal/events') ||
     pathname === '/portal/emails' ||
     pathname === '/portal/messages' ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))

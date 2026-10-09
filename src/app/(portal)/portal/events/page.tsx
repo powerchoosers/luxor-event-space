@@ -194,7 +194,7 @@ export default function EventsPage() {
   const confirmedCount = useMemo(() => bookings.filter((b) => b.status === 'confirmed').length, [bookings])
 
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-clip flex flex-col gap-6">
+    <PortalPageFrame className="h-full min-h-0 overflow-clip flex flex-col gap-6 max-lg:h-auto max-lg:min-h-full max-lg:overflow-visible">
       <PortalPageHeader
         icon={<CalendarRange size={18} />}
         title="Event Operations"
@@ -212,10 +212,12 @@ export default function EventsPage() {
       )}
 
       {/* Main split dashboard view */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-visible lg:overflow-hidden">
+      <div className="flex-none min-h-0 grid grid-cols-1 lg:flex-1 lg:min-h-0 lg:grid-cols-12 gap-6 overflow-visible lg:overflow-hidden">
         {/* Left pane: Events List */}
-        <div className="lg:col-span-5 flex min-h-[300px] min-w-0 flex-col overflow-hidden lg:min-h-0">
+        <div className="lg:col-span-5 flex min-h-[300px] min-w-0 flex-col overflow-visible lg:min-h-0 lg:overflow-hidden">
           <PortalTableCard
+            mobilePageScroll
+            mobilePageScrollUntil="lg"
             controls={
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -299,9 +301,9 @@ export default function EventsPage() {
         </div>
 
         {/* Right pane: Inspection Panel */}
-        <div className="lg:col-span-7 flex min-h-[400px] min-w-0 flex-col overflow-hidden lg:min-h-0">
+        <div className="lg:col-span-7 flex min-h-[400px] min-w-0 flex-col overflow-visible lg:min-h-0 lg:overflow-hidden">
           {selectedEvent ? (
-            <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col h-full overflow-hidden shadow-2xl">
+            <div className="luxor-glass-card min-h-[400px] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col overflow-hidden shadow-2xl lg:h-full lg:min-h-0">
               {/* Event title header */}
               <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -334,7 +336,7 @@ export default function EventsPage() {
               </div>
 
               {/* Tab Contents */}
-              <PortalTabTransition activeKey={activeDetailTab} className="flex-1 overflow-y-auto portal-scrollbar p-6 space-y-6">
+              <PortalTabTransition activeKey={activeDetailTab} className="flex-1 overflow-y-auto portal-scrollbar p-4 space-y-6 sm:p-6 max-lg:flex-none max-lg:overflow-visible">
                 {/* Timeline */}
                 {activeDetailTab === 'timeline' && (
                   <div className="space-y-4">

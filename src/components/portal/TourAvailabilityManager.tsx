@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   CalendarDays,
   Check,
@@ -1039,7 +1040,7 @@ export function TourAvailabilityManager({
       )}
 
       {/* GUEST BOOKING FORM PREVIEW MODAL (Prompt Req 7) */}
-      {previewOpen && (
+      {previewOpen && typeof document !== 'undefined' ? createPortal((
         <div
           role="dialog"
           aria-modal="true"
@@ -1162,7 +1163,7 @@ export function TourAvailabilityManager({
             </div>
           </div>
         </div>
-      )}
+      ), document.body) : null}
     </div>
   )
 }
