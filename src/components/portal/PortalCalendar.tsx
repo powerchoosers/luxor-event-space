@@ -236,7 +236,7 @@ export function PortalCalendar({
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--portal-faint)]">No items</p>
                   ) : dayItems.length > 0 ? (
                     <>
-                      <div className={`portal-scrollbar flex min-h-0 flex-1 flex-col gap-2 pr-1 ${isCoarsePointer ? 'overflow-visible' : 'overflow-y-auto'}`}>
+                      <div className={`portal-scrollbar flex min-h-0 flex-1 flex-col gap-2 pr-1 ${view === 'month' && isCoarsePointer ? 'overflow-visible' : 'overflow-y-auto'}`}>
                         {visibleItems.map((item) => (
                           view === 'month' && isCoarsePointer ? (
                             <span key={item.id} aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${toneClass(item.tone)}`} />
