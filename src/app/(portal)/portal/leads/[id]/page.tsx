@@ -491,6 +491,12 @@ export default function LeadDetailPage({
   const [showLeadTabOverflow, setShowLeadTabOverflow] = useState(false)
   const [leadLifecycleAction, setLeadLifecycleAction] = useState<LeadLifecycleAction | null>(null)
   const [showEventPicker, setShowEventPicker] = useState(false)
+  const eventPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const eventPickerMenuRef = useRef<HTMLDivElement | null>(null)
+  const actionsMenuTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null)
+  const [eventPickerPosition, setEventPickerPosition] = useState({ top: 0, left: 8, maxHeight: 360 })
+  const [actionsMenuPosition, setActionsMenuPosition] = useState({ top: 0, left: 8, maxHeight: 360 })
   const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false)
   const [newEventType, setNewEventType] = useState('')
   const [newEventDate, setNewEventDate] = useState('')
@@ -1314,6 +1320,29 @@ export default function LeadDetailPage({
 
   useEffect(() => {
     if (!showEventPicker && !showActionsMenu) return
+    const updatePopoverPositions = () => {
+      const place = (anchor: HTMLButtonElement | null, menu: HTMLDivElement | null, width: number, set: (value: { top: number; left: number; maxHeight: number }) => void) => {
+        const rect = anchor?.getBoundingClientRect()
+        if (!rect) return
+        const margin = 8
+        const maxWidth = Math.min(width, window.innerWidth - margin * 2)
+        const height = Math.min(menu?.scrollHeight ?? 360, window.innerHeight - margin * 2)
+        const below = Math.max(0, window.innerHeight - rect.bottom - margin)
+        const above = Math.max(0, rect.top - margin)
+        const openAbove = below < Math.min(height, 180) && above > below
+        const maxHeight = Math.max(100, Math.min(height, openAbove ? above : below))
+        set({
+          top: openAbove ? Math.max(margin, rect.top - maxHeight - 8) : Math.min(window.innerHeight - maxHeight - margin, rect.bottom + 8),
+          left: Math.max(margin, Math.min(rect.left, window.innerWidth - maxWidth - margin)),
+          maxHeight,
+        })
+      }
+      if (showEventPicker) place(eventPickerTriggerRef.current, eventPickerMenuRef.current, 340, setEventPickerPosition)
+      if (showActionsMenu) place(actionsMenuTriggerRef.current, actionsMenuRef.current, 256, setActionsMenuPosition)
+    }
+    const frame = window.requestAnimationFrame(updatePopoverPositions)
+    window.addEventListener('resize', updatePopoverPositions)
+    window.addEventListener('scroll', updatePopoverPositions, true)
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setShowEventPicker(false)
@@ -1321,7 +1350,12 @@ export default function LeadDetailPage({
       }
     }
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('resize', updatePopoverPositions)
+      window.removeEventListener('scroll', updatePopoverPositions, true)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
   }, [showActionsMenu, showEventPicker])
 
   const fetchAllData = async (showPageLoader = true, refreshEmailHistory = showPageLoader) => {
@@ -3676,7 +3710,7 @@ export default function LeadDetailPage({
       <section className="overflow-visible rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
         <div className="grid gap-4 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
           <div className="flex min-w-0 gap-3 sm:gap-4">
-            <div className="relative h-16 w-16 shrink-0 self-start sm:h-20 sm:w-20">
+            <div className="relative h-20 w-20 shrink-0 self-start">
               <PortalContactAvatar
                 name={lead.full_name}
                 avatarUrl={lead.metadata?.avatar_url as string | null}
@@ -3783,6 +3817,7 @@ export default function LeadDetailPage({
                   {leadEvents.length ? (
                     <div className="relative">
                       <button
+                        ref={eventPickerTriggerRef}
                         type="button"
                         onClick={() => setShowEventPicker((current) => !current)}
                         aria-expanded={showEventPicker}
@@ -3801,7 +3836,9 @@ export default function LeadDetailPage({
                             exit={{ opacity: 0, y: -5, scale: 0.98 }}
                             transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
                             role="listbox"
-                            className="portal-dropdown absolute left-0 top-[calc(100%+0.5rem)] z-50 max-h-[min(24rem,calc(100dvh-8rem))] w-[min(340px,calc(100vw-3rem))] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                            ref={eventPickerMenuRef}
+                            style={{ position: 'fixed', top: eventPickerPosition.top, left: eventPickerPosition.left, maxHeight: eventPickerPosition.maxHeight, width: 'min(340px, calc(100vw - 1rem))' }}
+                            className="portal-dropdown z-50 overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
                           >
                             <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
                             {leadEvents.map((event) => (
@@ -3877,6 +3914,7 @@ export default function LeadDetailPage({
             )}
             <div className="relative">
               <button
+                ref={actionsMenuTriggerRef}
                 type="button"
                 onClick={() => setShowActionsMenu((current) => !current)}
                 aria-expanded={showActionsMenu}
@@ -3892,13 +3930,15 @@ export default function LeadDetailPage({
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowActionsMenu(false)} />
                     <motion.div
+                      ref={actionsMenuRef}
                       initial={{ opacity: 0, y: -5, scale: 0.98 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -5, scale: 0.98 }}
                       transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
                       role="menu"
                       data-portal-dropdown="true"
-                      className="portal-dropdown absolute right-0 top-[calc(100%+0.5rem)] z-50 max-h-[min(24rem,calc(100dvh-8rem))] w-[min(15rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                      style={{ position: 'fixed', top: actionsMenuPosition.top, left: actionsMenuPosition.left, maxHeight: actionsMenuPosition.maxHeight, width: 'min(15rem, calc(100vw - 1rem))' }}
+                      className="portal-dropdown z-50 overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
                     >
                       <button type="button" role="menuitem" onClick={openAddEventModal} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <Plus size={13} className="text-[#caa24c]" />
@@ -8818,16 +8858,16 @@ function DetailItem({
           />
         )
       ) : (
-        <div className={`group/value relative ${compact ? '' : 'mt-2'} flex w-full items-center ${canEdit || canCopy ? 'cursor-pointer' : ''}`}>
+      <div className={`group/value relative ${compact ? '' : 'mt-2'} flex w-full min-w-0 flex-col items-start ${canEdit || canCopy ? 'cursor-pointer' : ''}`}>
           <p
-            className={`min-w-0 flex-1 truncate ${compact ? 'text-xs font-medium' : 'text-sm font-bold'} leading-normal text-[color:var(--portal-text)] transition-all duration-150 group-hover/value:pr-[5.5rem] ${
+            className={`min-w-0 w-full flex-1 break-words ${compact ? 'text-xs font-medium' : 'text-sm font-bold'} leading-normal text-[color:var(--portal-text)] transition-all duration-150 sm:truncate sm:group-hover/value:pr-[5.5rem] ${
               isMono ? 'font-mono text-xs' : ''
             }`}
           >
             {isSaving ? 'Saving...' : value}
           </p>
           {canCopy || (canEdit && !isEditing) ? (
-            <div className="portal-contact-value-actions pointer-events-none absolute right-0 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/value:pointer-events-auto group-hover/value:opacity-100">
+            <div className="portal-contact-value-actions pointer-events-auto relative z-10 mt-1 inline-flex max-w-full flex-wrap items-center gap-1 opacity-100 transition-opacity duration-150 sm:pointer-events-none sm:absolute sm:right-0 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2 sm:opacity-0 sm:group-hover/value:pointer-events-auto sm:group-hover/value:opacity-100">
               {canCopy ? (
                 <button
                   type="button"

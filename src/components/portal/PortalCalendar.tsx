@@ -178,11 +178,11 @@ export function PortalCalendar({
         </div>
       </div>
 
-      <div className="portal-scrollbar min-h-[36rem] flex-1 overflow-auto p-3 sm:p-4">
+      <div className="portal-scrollbar min-h-[36rem] flex-1 overflow-auto p-1 sm:p-4">
         {view === 'schedule' ? (
           <ScheduleView items={items} onSelectItem={setSelectedItem} />
         ) : (
-        <div className={`grid overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-border)] gap-px ${view === 'day' ? 'grid-cols-1' : view === 'month' ? 'grid-cols-7' : 'grid-cols-1 sm:grid-cols-7'}`}>
+        <div className={`grid overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-border)] gap-px ${view === 'day' ? 'grid-cols-1' : view === 'month' ? 'grid-cols-7 min-w-[316px]' : 'grid-cols-1 sm:grid-cols-7'}`}>
           {visibleDays.map((day) => {
             const iso = toIsoDate(day)
             const dayItems = itemsByDate[iso] || []
@@ -196,7 +196,7 @@ export function PortalCalendar({
                 key={iso}
                 className={`relative flex min-w-0 flex-col p-2 transition-colors duration-150 sm:p-3 ${view === 'month' ? 'h-28 min-h-28 sm:h-40 sm:min-h-40' : 'h-64 min-h-64'} ${isToday ? 'bg-[#caa24c]/[0.09] shadow-[inset_0_0_0_1px_rgba(202,162,76,0.7)]' : 'bg-[color:var(--portal-card)] hover:bg-[color:var(--portal-soft)]'} ${outsideMonth ? 'opacity-40' : ''}`}
               >
-                <button type="button" aria-label={`View schedule for ${formatDayHeading(iso)}${isToday ? ', today' : ''}`} onClick={() => setSelectedDay(iso)} className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]" />
+                <button type="button" aria-label={`View schedule for ${formatDayHeading(iso)}${isToday ? ', today' : ''}`} onClick={() => setSelectedDay(iso)} className="portal-calendar-day-hit absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]" />
                 <div className="pointer-events-none relative z-10 flex items-center justify-between gap-2">
                   <div>
                     <p className="text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] sm:text-[10px]">
@@ -229,6 +229,7 @@ export function PortalCalendar({
                             key={item.id}
                             type="button"
                             onClick={() => setSelectedItem(item)}
+                            aria-label={`Open ${item.title}`}
                             className={`${view === 'month' ? 'h-1.5 w-1.5 shrink-0 rounded-full border-0 p-0 sm:h-auto sm:w-full sm:rounded-lg sm:border sm:p-2' : 'w-full rounded-md border px-1.5 py-1 sm:rounded-lg sm:p-2'} pointer-events-auto text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg ${toneClass(item.tone)}`}
                           >
                             <p className={`text-[9px] font-bold text-[color:var(--portal-text)] line-clamp-1 sm:text-xs ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.title}</p>

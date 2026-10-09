@@ -778,7 +778,7 @@ export function PortalModal({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
           style={{ zIndex: computedZIndex }}
-          className="fixed inset-0 flex items-center justify-center p-4"
+          className="fixed inset-0 flex items-end justify-center px-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:items-center sm:p-4"
         >
           <motion.div
             initial={{ opacity: 0 }}
@@ -799,19 +799,19 @@ export function PortalModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className={`relative z-10 flex max-h-[calc(100dvh-2rem)] w-full ${maxWidth} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh]`}
+            className={`relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1rem)] w-full ${maxWidth} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh]`}
           >
             <ModalDepthContext.Provider value={depth + 1}>
               {title ? (
                 <>
-                  <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
+                  <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6 sm:py-4">
                     <div className="min-w-0">
                       <h3 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">{title}</h3>
                       {description ? <p className="mt-1 max-w-xl text-[11px] leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
                     </div>
                     <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} />
                   </div>
-                  <div className="overflow-y-auto p-5 portal-scrollbar sm:p-6">{children}</div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6">{children}</div>
                 </>
               ) : (
                 children
@@ -1041,27 +1041,23 @@ export function PortalDatePicker({
   const [isOpen, setIsOpen] = React.useState(false)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
-  const [coords, setCoords] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number; maxHeight: number }>({ top: 0, left: 0, width: 256, maxHeight: 300 })
   const isLight = theme === 'light'
 
   const updateCoords = React.useCallback(() => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
-      const dropdownHeight = dropdownRef.current ? dropdownRef.current.offsetHeight : 290
-      const spaceBelow = window.innerHeight - rect.bottom
-      const spaceAbove = rect.top
-      
-      let top = rect.bottom + 6
-      if (spaceBelow < dropdownHeight + 6 && spaceAbove > dropdownHeight + 6) {
-        top = rect.top - dropdownHeight - 6
-      }
-
-      const nextCoords = {
-        top,
-        left: Math.max(8, Math.min(rect.right - 256, window.innerWidth - 264)),
-      }
+      const margin = 4
+      const width = Math.min(336, window.innerWidth - margin * 2)
+      const dropdownHeight = dropdownRef.current?.scrollHeight ?? 350
+      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - 8)
+      const spaceAbove = Math.max(0, rect.top - 8)
+      const openAbove = spaceBelow < Math.min(dropdownHeight, 240) && spaceAbove > spaceBelow
+      const maxHeight = Math.max(120, Math.min(dropdownHeight, openAbove ? spaceAbove : spaceBelow))
+      const top = openAbove ? Math.max(4, rect.top - maxHeight - 6) : Math.min(window.innerHeight - maxHeight - 4, rect.bottom + 6)
+      const nextCoords = { top, left: Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin)), width, maxHeight }
       setCoords((current) => {
-        if (current.top === nextCoords.top && current.left === nextCoords.left) {
+        if (current.top === nextCoords.top && current.left === nextCoords.left && current.width === nextCoords.width && current.maxHeight === nextCoords.maxHeight) {
           return current
         }
         return nextCoords
@@ -1209,22 +1205,24 @@ export function PortalDatePicker({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.985 }}
                 transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                className={`portal-scrollbar fixed z-[9999] w-64 rounded-md border p-4 text-xs shadow-2xl ring-1 ring-black/5 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
+                className={`portal-scrollbar fixed z-[9999] overflow-y-auto overscroll-contain rounded-md border p-0 text-xs shadow-2xl ring-1 ring-black/5 sm:p-4 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
                 style={{
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,
-                  width: '256px',
+                  width: `${coords.width}px`,
+                  maxHeight: `${coords.maxHeight}px`,
                   backgroundColor: isLight ? '#fffdfa' : 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
                   backdropFilter: isLight ? 'none' : 'blur(24px)',
                   WebkitBackdropFilter: 'blur(24px)'
                 }}
               >
                   {/* Header navigation */}
-                  <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-2">
+                  <div className="mb-2 flex items-center justify-between gap-0.5 border-b border-[color:var(--portal-border)] px-1 pb-2 sm:mb-4 sm:gap-2 sm:px-0">
                     <button
                       type="button"
+                      aria-label="Previous month"
                       onClick={handlePrevMonth}
-                      className={`cursor-pointer rounded p-1 transition-colors hover:bg-black/5 ${isLight ? 'text-[#8d672b] hover:text-[#3b2b1d]' : 'text-[color:var(--portal-muted,#d7c29a)] hover:text-[color:var(--portal-text,#f7efe3)]'}`}
+                      className={`inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded p-1 transition-colors hover:bg-black/5 sm:h-8 sm:w-8 ${isLight ? 'text-[#8d672b] hover:text-[#3b2b1d]' : 'text-[color:var(--portal-muted,#d7c29a)] hover:text-[color:var(--portal-text,#f7efe3)]'}`}
                     >
                       ◀
                     </button>
@@ -1235,22 +1233,23 @@ export function PortalDatePicker({
                     <button type="button" onClick={() => setViewDate(new Date(year + 1, month, 1))} aria-label="Next year" className={`rounded px-1 text-[9px] font-bold ${isLight ? 'text-[#8d672b]' : 'text-[color:var(--portal-muted)]'}`}>+1y</button>
                     <button
                       type="button"
+                      aria-label="Next month"
                       onClick={handleNextMonth}
-                      className={`cursor-pointer rounded p-1 transition-colors hover:bg-black/5 ${isLight ? 'text-[#8d672b] hover:text-[#3b2b1d]' : 'text-[color:var(--portal-muted,#d7c29a)] hover:text-[color:var(--portal-text,#f7efe3)]'}`}
+                      className={`inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded p-1 transition-colors hover:bg-black/5 sm:h-8 sm:w-8 ${isLight ? 'text-[#8d672b] hover:text-[#3b2b1d]' : 'text-[color:var(--portal-muted,#d7c29a)] hover:text-[color:var(--portal-text,#f7efe3)]'}`}
                     >
                       ▶
                     </button>
                   </div>
 
                   {/* Weekday Labels */}
-                  <div className={`mb-2 grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase tracking-wider ${isLight ? 'text-[#8b7b6b]' : 'text-[color:var(--portal-muted)]'}`}>
+                  <div className={`mb-1 grid grid-cols-7 gap-0 text-center text-[9px] font-bold uppercase tracking-wider sm:mb-2 sm:gap-1 ${isLight ? 'text-[#8b7b6b]' : 'text-[color:var(--portal-muted)]'}`}>
                     {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
                       <span key={day}>{day}</span>
                     ))}
                   </div>
 
                   {/* Day Grid */}
-                  <div className="grid grid-cols-7 gap-1">
+                  <div className="grid grid-cols-7 gap-0 sm:gap-1">
                     {dayCells.map((day, idx) => {
                       if (!day) return <span key={`empty-${idx}`} />
 
@@ -1264,7 +1263,8 @@ export function PortalDatePicker({
                           type="button"
                           onClick={() => handleSelectDay(day)}
                           disabled={disabled}
-                          className={`relative flex h-7 w-7 items-center justify-center rounded-md font-mono transition-all border ${disabled ? 'cursor-not-allowed border-transparent text-[#b9ad9f] opacity-55' : 'cursor-pointer'} ${
+                          aria-label={`Choose ${day.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`}
+                          className={`relative flex h-11 w-full min-w-0 items-center justify-center rounded-md border font-mono transition-all sm:h-7 sm:w-7 ${disabled ? 'cursor-not-allowed border-transparent text-[#b9ad9f] opacity-55' : 'cursor-pointer'} ${
                             isSelected
                               ? isLight ? 'border-[#b98a3d]/50 bg-[#f5ead8] font-bold text-[#6f4d1f] shadow' : 'border-[#caa24c]/40 hover:border-[#caa24c]/60 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
                               : isToday

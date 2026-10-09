@@ -70,7 +70,7 @@ export function LeadLifecycleActionsMenu({
   const menuRef = useRef<HTMLDivElement | null>(null)
   const menuId = useId()
   const [open, setOpen] = useState(false)
-  const [position, setPosition] = useState({ top: 0, left: 0 })
+  const [position, setPosition] = useState({ top: 0, left: 0, maxHeight: 400 })
   const cancellableTour = hasCancellableTour(lead)
   const canMarkLost = lead.status !== 'closed_lost' && lead.pipeline_stage !== 'closed_lost'
 
@@ -79,9 +79,16 @@ export function LeadLifecycleActionsMenu({
     const updatePosition = () => {
       const rect = buttonRef.current?.getBoundingClientRect()
       if (!rect) return
+      const width = Math.min(224, window.innerWidth - 16)
+      const menuHeight = menuRef.current?.scrollHeight ?? 240
+      const below = Math.max(0, window.innerHeight - rect.bottom - 12)
+      const above = Math.max(0, rect.top - 12)
+      const openAbove = below < Math.min(menuHeight, 180) && above > below
+      const maxHeight = Math.min(menuHeight, openAbove ? above : below)
       setPosition({
-        top: Math.min(window.innerHeight - 12, rect.bottom + 8),
-        left: Math.max(8, Math.min(window.innerWidth - 232, rect.right - 224)),
+        top: openAbove ? Math.max(8, rect.top - maxHeight - 8) : Math.min(window.innerHeight - maxHeight - 8, rect.bottom + 8),
+        left: Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width)),
+        maxHeight,
       })
     }
     const positionFrame = window.requestAnimationFrame(updatePosition)
@@ -137,8 +144,8 @@ export function LeadLifecycleActionsMenu({
           ref={menuRef}
           id={menuId}
           role="menu"
-          className="portal-dropdown fixed z-[130] w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1.5 shadow-2xl shadow-black/25 backdrop-blur-xl"
-          style={{ top: position.top, left: position.left }}
+          className="portal-dropdown fixed z-[130] w-56 max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1.5 shadow-2xl shadow-black/25 backdrop-blur-xl"
+          style={{ top: position.top, left: position.left, maxHeight: position.maxHeight }}
         >
           {cancellableTour ? (
             <button

@@ -1867,6 +1867,11 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
     min-height: 44px;
   }
 
+  body[data-portal-theme] [role='menuitem'],
+  body[data-portal-theme] [role='option'] {
+    min-height: 44px;
+  }
+
   body[data-portal-theme] .portal-select-trigger {
     min-height: 44px;
   }
