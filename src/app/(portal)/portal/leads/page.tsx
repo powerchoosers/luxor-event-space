@@ -1513,7 +1513,7 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
   const businessLeads = leads.filter((lead) => !isLuxorTestInquiry(lead))
   const newInquiries = businessLeads.filter(l => l.status === 'new').length
   const toursScheduled = businessLeads.filter((lead) => ['tour_requested', 'tour_confirmed'].includes(lead.status) && lead.tour_attendance_status !== 'cancelled').length
-  const toursCompleted = businessLeads.filter((lead) => (lead.status === 'tour_confirmed' || lead.tour_attendance_status === 'attended') && lead.tour_attendance_status !== 'cancelled').length
+  const toursCompleted = businessLeads.filter((lead) => lead.tour_attendance_status === 'attended').length
   const proposalsSent = businessLeads.filter(l => l.status === 'proposal_sent').length
   const depositsReceived = businessLeads.filter(l => l.status === 'booked').length
   const totalLeads = businessLeads.length
