@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Eye,
   Mail,
   MessageSquare,
   Phone,
@@ -80,6 +81,7 @@ import {
 } from '@/components/portal/PortalBulkSelection'
 import { useToast } from '@/components/portal/ToastProvider'
 import FollowUpsTab from '@/components/portal/FollowUpsTab'
+import { LuxorCrmRecordCard, LuxorCrmSecondaryAction, luxorCrmStatusTone } from '@/components/portal/LuxorCrmRecordCard'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -468,9 +470,9 @@ export default function LeadsPage() {
     localStorage.setItem('luxor_leads_current_page', '1')
   }, [])
 
-  const updateClientSort = useCallback((key: ClientSortKey) => {
+  const updateClientSort = useCallback((key: ClientSortKey, direction?: SortDirection) => {
     setClientSort((current) => {
-      const next = { key, direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc' } as TableSort<ClientSortKey>
+      const next = { key, direction: direction || (current.key === key && current.direction === 'asc' ? 'desc' : 'asc') } as TableSort<ClientSortKey>
       localStorage.setItem('luxor_clients_table_sort', JSON.stringify(next))
       return next
     })
@@ -953,93 +955,31 @@ export default function LeadsPage() {
                     </div>
                   ) : (
                     colLeads.map((lead) => (
-                      <div key={lead.id} className="portal-card-surface group relative flex min-h-[140px] flex-col justify-between p-4 transition-colors hover:border-[#caa24c]/45">
-                        <Link href={`/portal/leads/${lead.id}`} className="space-y-3 block">
-                          <div className="flex items-center gap-3">
-                            <PortalContactAvatar
-                              name={lead.full_name}
-                              avatarUrl={lead.metadata?.avatar_url as string | null}
-                              className="w-7 h-7 text-[10px] group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/25 transition-all duration-300"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <span className="text-xs font-bold text-[color:var(--portal-text)] group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors block truncate leading-none mb-1 group-hover:translate-x-0.5 transition-transform">
-                                {lead.full_name}
-                              </span>
-                              <p className="truncate font-mono text-[9px] text-[color:var(--portal-muted)]">
-                                {lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}
-                              </p>
+                      <LuxorCrmRecordCard
+                        key={lead.id}
+                        lead={lead}
+                        badges={[{ label: PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(lead))?.label || col.label, tone: luxorCrmStatusTone(col.label) }]}
+                        subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date TBD'} · {isGrandOpeningRsvp(lead) ? `${lead.attendee_count || lead.guest_count || 1} RSVP` : lead.guest_count ? `${lead.guest_count} guests` : 'No count'}</>}
+                        contact={lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}
+                        onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
+                        className="min-h-[140px]"
+                        actions={
+                          <>
+                            <div className="flex gap-1.5" onClick={(event) => event.stopPropagation()}>
+                              {lead.email ? <a href={`mailto:${lead.email}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]" title="Send Email" aria-label={`Email ${lead.full_name}`}><Mail size={14} /></a> : null}
+                              {lead.phone ? <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)]" title="Call from Luxor browser phone" aria-label={`Call ${lead.full_name}`}><Phone size={14} /></button> : null}
+                              {lead.phone ? <Link href={`/portal/leads/${lead.id}?tab=messages`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)]" title="Text client" aria-label={`Text ${lead.full_name}`}><MessageSquare size={14} /></Link> : null}
                             </div>
-                          </div>
-
-                          <div className="space-y-1.5 border-t border-[color:var(--portal-border)] pt-2.5">
-                            <div className="flex items-center justify-between font-mono text-[10px] text-[color:var(--portal-muted)]">
-                              <span className="font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</span>
-                              <span className="text-[color:var(--portal-muted)]">
-                                {isGrandOpeningRsvp(lead)
-                                  ? `${lead.attendee_count || lead.guest_count || 1} RSVP`
-                                  : lead.guest_count
-                                    ? `${lead.guest_count} guests`
-                                    : 'No count'}
-                              </span>
+                            <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                              {colIndex > 0 ? <button type="button" onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex - 1].id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)]" title={`Move to ${colArray[colIndex - 1].label}`}><ChevronLeft size={14} /></button> : null}
+                              {colIndex < colArray.length - 1 ? <button type="button" onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex + 1].id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)]" title={`Move to ${colArray[colIndex + 1].label}`}><ChevronRight size={14} /></button> : null}
+                              <LeadLifecycleActionsMenu lead={lead} onAction={(action) => openLeadLifecycleAction(lead, action)} className="!h-9 !w-9" />
                             </div>
-                            
-                            <div className="flex items-center gap-1.5 text-[9px] text-[#caa24c] font-medium uppercase tracking-tight">
-                              <Calendar size={11} className="text-[color:var(--portal-muted)]" />
-                              <span>{lead.target_date || 'Date TBD'}</span>
-                            </div>
-                            {isGrandOpeningRsvp(lead) ? <GrandOpeningBadge /> : null}
-                          </div>
-                        </Link>
-
-                        {/* Card Action Controls */}
-                        <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] pt-3 mt-3">
-                          <div className="flex gap-1.5">
-                            {lead.email && (
-                              <a href={`mailto:${lead.email}`} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[color:var(--portal-text)]" title="Send Email">
-                                <Mail size={11} />
-                              </a>
-                            )}
-                            {lead.phone && (
-                              <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[color:var(--portal-text)]" title="Call from Luxor browser phone">
-                                <Phone size={11} />
-                              </button>
-                            )}
-                            {lead.phone && (
-                              <Link href={`/portal/leads/${lead.id}?tab=messages`} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[#a8792f] dark:hover:text-[#f1d27a]" title="Text client">
-                                <MessageSquare size={11} />
-                              </Link>
-                            )}
-                          </div>
-
-                          <div className="flex gap-1">
-                            {colIndex > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex - 1].id)}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[color:var(--portal-text)]"
-                                title={`Move to ${colArray[colIndex - 1].label}`}
-                              >
-                                <ChevronLeft size={12} />
-                              </button>
-                            )}
-                            {colIndex < colArray.length - 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex + 1].id)}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/30 hover:text-[color:var(--portal-text)]"
-                                title={`Move to ${colArray[colIndex + 1].label}`}
-                              >
-                                <ChevronRight size={12} />
-                              </button>
-                            )}
-                            <LeadLifecycleActionsMenu
-                              lead={lead}
-                              onAction={(action) => openLeadLifecycleAction(lead, action)}
-                              className="!h-7 !w-7 bg-[color:var(--portal-soft)] [&>svg]:h-3.5 [&>svg]:w-3.5"
-                            />
-                          </div>
-                        </div>
-                      </div>
+                          </>
+                        }
+                      >
+                        {isGrandOpeningRsvp(lead) ? <GrandOpeningBadge /> : null}
+                      </LuxorCrmRecordCard>
                     ))
                   )}
                 </div>
@@ -1784,10 +1724,10 @@ function LeadsClientsTab({
 }: {
   leads: LuxorInquiry[]
   sort: TableSort<ClientSortKey>
-  onSort: (key: ClientSortKey) => void
+  onSort: (key: ClientSortKey, direction?: SortDirection) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
 }) {
-  const clients = useMemo(() => leads.filter(l => l.status === 'booked').sort((a, b) => {
+  const clients = useMemo(() => leads.filter((lead) => lead.status === 'booked').sort((a, b) => {
     let comparison = 0
     switch (sort.key) {
       case 'name': comparison = a.full_name.localeCompare(b.full_name); break
@@ -1801,69 +1741,46 @@ function LeadsClientsTab({
     <PortalTableCard
       mobilePageScroll
       controls={
-        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients ({clients.length})</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients ({clients.length})</h3>
+          <div className="w-full sm:w-60">
+            <PortalSelect aria-label="Sort booked clients" value={sort.key + ':' + sort.direction} onChange={(value) => { const [key, direction] = value.split(':'); onSort(key as ClientSortKey, direction as SortDirection) }} options={[
+              { value: 'name:asc', label: 'Client · A to Z' }, { value: 'name:desc', label: 'Client · Z to A' },
+              { value: 'event:asc', label: 'Event · A to Z' }, { value: 'event:desc', label: 'Event · Z to A' },
+              { value: 'guests:asc', label: 'Guest count · Low to high' }, { value: 'guests:desc', label: 'Guest count · High to low' },
+              { value: 'targetDate:asc', label: 'Event date · Earliest first' }, { value: 'targetDate:desc', label: 'Event date · Latest first' },
+            ]} />
+          </div>
+        </div>
       }
     >
-      <div className="hidden overflow-x-auto md:block">
-        <PortalStickyTable minWidth="900px">
-          <PortalStickyThead>
-            <tr className="whitespace-nowrap border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
-              <SortableHeader label="Client Name" sortKey="name" sort={sort} onSort={onSort} className="min-w-[260px] px-8 py-5" />
-              <SortableHeader label="Event Type" sortKey="event" sort={sort} onSort={onSort} className="min-w-[180px] py-5" />
-              <SortableHeader label="Guest Count" sortKey="guests" sort={sort} onSort={onSort} className="min-w-[150px] py-5" />
-              <SortableHeader label="Target Event Date" sortKey="targetDate" sort={sort} onSort={onSort} className="min-w-[190px] py-5" />
-              <th className="min-w-[220px] whitespace-nowrap px-8 py-5 text-right">Action</th>
-            </tr>
-          </PortalStickyThead>
-          <tbody className="divide-y divide-zinc-900/30">
-            {clients.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-8 py-12 text-center text-sm font-medium text-[color:var(--portal-muted)]">No booked clients in pipeline currently.</td>
-              </tr>
-            ) : (
-              clients.map((c) => (
-                <tr key={c.id} className="transition-colors hover:bg-[color:var(--portal-soft)]">
-                  <td className="px-8 py-5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link href={`/portal/leads/${c.id}`} className="font-bold text-[color:var(--portal-text)] transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{c.full_name}</Link>
-                      <PortalStatusBadge status="Booked" />
-                    </div>
-                    <p className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)]">{c.email || 'No email registered'}</p>
-                  </td>
-                  <td className="px-6 py-5 font-medium text-[color:var(--portal-text)]">{c.event_type || 'Quinceañera'}</td>
-                  <td className="px-6 py-5 font-mono text-xs text-[color:var(--portal-muted)]">{c.guest_count || 'Flexible'} guests</td>
-                  <td className="px-6 py-5 text-[#caa24c] font-bold font-mono">{c.target_date || 'TBD'}</td>
-                  <td className="px-8 py-5 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                    <Link href={`/portal/leads/${c.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Manage Dossier →</Link>
-                      <LeadLifecycleActionsMenu lead={c} onAction={(action) => onLifecycleAction(c, action)} />
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </PortalStickyTable>
-      </div>
-      <div className="divide-y divide-[color:var(--portal-border)] md:hidden">
-        {clients.length === 0 ? (
-          <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No booked clients in pipeline currently.</div>
-        ) : (
-          clients.map((client) => (
-            <MobileLeadCard
+      {clients.length === 0 ? (
+        <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No booked clients in pipeline currently.</div>
+      ) : (
+        <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+          {clients.map((client) => (
+            <LuxorCrmRecordCard
               key={client.id}
               lead={client}
-              onLifecycleAction={onLifecycleAction}
-              showPipelineStage={false}
-              showStatusBadge
-            />
-          ))
-        )}
-      </div>
+              badges={[{ label: 'Booked', tone: luxorCrmStatusTone('booked') }]}
+              subtitle={<>{client.event_type || 'Quinceañera'} · {client.target_date || 'Date TBD'}{client.guest_count ? <> · {client.guest_count} guests</> : <> · Flexible guest count</>}</>}
+              contact={client.email || (client.phone ? formatPhoneDisplay(client.phone) : 'No contact details')}
+              actions={
+                <>
+                  <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition-colors hover:bg-[#916825]"><UserCheck size={14} /> Manage Dossier</Link>
+                  <LeadLifecycleActionsMenu lead={client} onAction={(action) => onLifecycleAction(client, action)} />
+                </>
+              }
+            >
+              <div className="flex items-center justify-between gap-2 text-xs"><span className="text-[color:var(--portal-muted)]">Booking status</span><span className="font-semibold text-[color:var(--portal-text)]">Active booked client</span></div>
+              <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]"><Eye size={14} /> View client record</Link>
+            </LuxorCrmRecordCard>
+          ))}
+        </div>
+      )}
     </PortalTableCard>
   )
 }
-
 function MobileLeadList({
   leads,
   startIndex,
@@ -2013,26 +1930,15 @@ function LeadsLostTab({ leads }: { leads: LuxorInquiry[] }) {
         </div>
       }
     >
-      <PortalStickyTable minWidth="880px">
-        <PortalStickyThead>
-          <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
-            <th className="px-6 py-4">Client</th>
-            <th className="px-6 py-4">Event</th>
-            <th className="px-6 py-4">Closed</th>
-            <th className="px-6 py-4">Tour</th>
-            <th className="px-6 py-4 text-right">Record</th>
-          </tr>
-        </PortalStickyThead>
-        <tbody className="divide-y divide-[color:var(--portal-border)]">
-          {lostLeads.length === 0 ? (
-            <tr>
-              <td colSpan={5} className="px-8 py-16 text-center">
+      {lostLeads.length === 0 ? (
+        <div className="px-8 py-16 text-center">
                 <X size={22} className="mx-auto text-[color:var(--portal-muted)]" aria-hidden="true" />
                 <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">No closed-lost opportunities</p>
                 <p className="mt-1 text-xs text-[color:var(--portal-muted)]">When an opportunity is closed, its reason and any tour cancellation will appear here.</p>
-              </td>
-            </tr>
-          ) : lostLeads.map((lead) => {
+        </div>
+      ) : (
+        <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+          {lostLeads.map((lead) => {
             const dealLost = lead.metadata?.dealLost
             const dealLostRecord = dealLost && typeof dealLost === 'object' && !Array.isArray(dealLost)
               ? dealLost as Record<string, unknown>
@@ -2050,36 +1956,22 @@ function LeadsLostTab({ leads }: { leads: LuxorInquiry[] }) {
                 ? 'Kept on record'
                 : 'Not scheduled'
 
-            return (
-              <tr key={lead.id} className="group transition-colors hover:bg-[#caa24c]/[0.045]">
-                <td className="px-6 py-4">
-                  <Link href={`/portal/leads/${lead.id}`} className="flex items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
-                    <PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="sm" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-[color:var(--portal-text)] group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">{lead.full_name}</span>
-                      <span className="mt-0.5 block truncate text-[10px] font-medium text-[color:var(--portal-muted)]">{lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact detail')}</span>
-                    </span>
-                  </Link>
-                </td>
-                <td className="px-6 py-4">
-                  <p className="text-xs font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Event'}</p>
-                  <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</p>
-                </td>
-                <td className="px-6 py-4">
-                  <p className="text-xs font-medium text-[color:var(--portal-text)]">{formatDate(lead.updated_at || lead.created_at)}</p>
-                  <p className="mt-1 max-w-[240px] truncate text-[10px] text-[color:var(--portal-muted)]" title={lossReason || undefined}>{lossReason || 'Reason saved in activity'}</p>
-                </td>
-                <td className="px-6 py-4 text-xs font-medium text-[color:var(--portal-muted)]">{tourStatus}</td>
-                <td className="px-6 py-4 text-right">
-                  <Link href={`/portal/leads/${lead.id}`} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">
-                    View dossier <ExternalLink size={12} aria-hidden="true" />
-                  </Link>
-                </td>
-              </tr>
-            )
+            return <LuxorCrmRecordCard
+              key={lead.id}
+              lead={lead}
+              badges={[{ label: 'Closed Lost', tone: 'red' }]}
+              subtitle={<>{lead.event_type || 'Event'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
+              contact={lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact detail')}
+              actions={<Link href={`/portal/leads/${lead.id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View dossier <ExternalLink size={14} aria-hidden="true" /></Link>}
+            >
+              <div className="grid gap-3 text-xs sm:grid-cols-2">
+                <div><p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Closed</p><p className="mt-1 font-medium text-[color:var(--portal-text)]">{formatDate(lead.updated_at || lead.created_at)}</p><p className="mt-1 max-w-[240px] truncate text-[10px] text-[color:var(--portal-muted)]" title={lossReason || undefined}>{lossReason || 'Reason saved in activity'}</p></div>
+                <div><p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Tour</p><p className="mt-1 font-medium text-[color:var(--portal-muted)]">{tourStatus}</p></div>
+              </div>
+            </LuxorCrmRecordCard>
           })}
-        </tbody>
-      </PortalStickyTable>
+        </div>
+      )}
     </PortalTableCard>
   )
 }
@@ -2138,10 +2030,12 @@ function LeadsToursTab({
     window.localStorage.setItem('luxor_leads_tours_view_mode', nextMode)
   }
 
-  const handleSort = (key: TourSortKey) => {
-    const nextSort = sort.key === key
-      ? { key, direction: sort.direction === 'asc' ? 'desc' : 'asc' } as TableSort<TourSortKey>
-      : { key, direction: 'asc' } as TableSort<TourSortKey>
+  const handleSort = (key: TourSortKey, direction?: SortDirection) => {
+    const nextSort = direction
+      ? { key, direction }
+      : sort.key === key
+        ? { key, direction: sort.direction === 'asc' ? 'desc' : 'asc' } as TableSort<TourSortKey>
+        : { key, direction: 'asc' } as TableSort<TourSortKey>
     setSort(nextSort)
     setCurrentPage(1)
     window.localStorage.setItem('luxor_leads_tours_sort', JSON.stringify(nextSort))
@@ -2205,28 +2099,36 @@ function LeadsToursTab({
     const category = getLuxorTourSection(tour, todayKey) ?? 'needs_schedule'
     const statusLabel = category === 'no_shows' ? 'No Show' : categoryLabels[category]
     return (
-    <article key={tour.id} className="portal-card-surface p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link href={`/portal/leads/${tour.id}`} className="font-bold text-[color:var(--portal-text)] hover:text-[#caa24c]">{tour.full_name}</Link>
-          <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{tour.email || tour.phone || 'No contact details'}</p>
+      <LuxorCrmRecordCard
+        key={tour.id}
+        lead={tour}
+        badges={[{ label: statusLabel, tone: tourStatusTones[category], warning: category === 'needs_outcome' }]}
+        subtitle={<>{tour.event_type || 'Quinceañera'} · {tour.target_date || 'Event date not set'}{tour.guest_count ? <> · {tour.guest_count} guests</> : null}</>}
+        contact={tour.email || (tour.phone ? formatPhoneDisplay(tour.phone) : 'No contact details')}
+        className={category === 'no_shows' ? 'border-rose-300 dark:border-rose-400/40' : ''}
+        actions={
+          <>
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <PortalSelect className="w-full sm:w-auto" value={getPipelineStage(tour)} onChange={(value) => onMovePipelineStage(tour.id, value as LuxorPipelineStage)} options={PIPELINE_STAGE_OPTIONS} />
+            </div>
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+              <Link href={'/portal/leads/' + tour.id + '?stage=tour'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition-colors hover:bg-[#916825]"><Calendar size={14} /> Manage Tour</Link>
+              <Link href={'/portal/leads/' + tour.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"><Eye size={14} /> View</Link>
+              <LeadLifecycleActionsMenu lead={tour} onAction={(action) => onLifecycleAction(tour, action)} />
+            </div>
+          </>
+        }
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Tour time</p><p className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">{tour.preferred_tour_date ? formatTourDate(tour.preferred_tour_date) : 'Date Pending'}</p><p className="text-xs text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Time TBD'} · Central</p></div>
+          {tour.tour_attendance_status !== 'cancelled' && tour.tour_attendance_status !== 'attended' ? (
+            <div className="flex flex-wrap gap-2">
+              <LuxorCrmSecondaryAction disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'attended')}>{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : tour.tour_attendance_status === 'no_show' ? 'Correct to Completed' : 'Mark Completed'}</LuxorCrmSecondaryAction>
+              {!['attended', 'no_show'].includes(tour.tour_attendance_status || '') ? <LuxorCrmSecondaryAction disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'no_show')}>{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark No Show'}</LuxorCrmSecondaryAction> : null}
+            </div>
+          ) : null}
         </div>
-        <PortalStatusBadge status={statusLabel} tone={tourStatusTones[category]} warning={category === 'needs_outcome'} />
-        <LeadLifecycleActionsMenu lead={tour} onAction={(action) => onLifecycleAction(tour, action)} />
-      </div>
-      {tour.tour_attendance_status !== 'cancelled' && tour.tour_attendance_status !== 'attended' ? <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'attended')} className="rounded-md border border-emerald-600/25 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/10 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300">{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : tour.tour_attendance_status === 'no_show' ? 'Correct to Completed' : 'Mark Completed'}</button>
-        {!['attended', 'no_show'].includes(tour.tour_attendance_status || '') && <button type="button" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'no_show')} className="rounded-md border border-rose-600/25 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-500/10 disabled:cursor-wait disabled:opacity-60 dark:text-rose-300">{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark No Show'}</button>}
-      </div> : null}
-      <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
-        <div><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Tour date</p><p className="mt-1 font-bold text-[#caa24c]">{tour.preferred_tour_date ? formatTourDate(tour.preferred_tour_date) : 'Date Pending'}</p><p className="text-xs text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Time TBD'} · Central</p></div>
-        <div><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Event type</p><p className="mt-1 font-medium text-[color:var(--portal-text)]">{tour.event_type || 'Quinceañera'}</p></div>
-      </div>
-      <div className="mt-5 flex items-center gap-3 border-t border-[color:var(--portal-border)] pt-4">
-        <PortalSelect value={getPipelineStage(tour)} onChange={(value) => onMovePipelineStage(tour.id, value as LuxorPipelineStage)} options={PIPELINE_STAGE_OPTIONS} />
-        <Link href={`/portal/leads/${tour.id}`} className="ml-auto whitespace-nowrap text-xs font-bold text-[#caa24c] hover:underline">Manage Tour →</Link>
-      </div>
-    </article>
+      </LuxorCrmRecordCard>
     )
   }
 
@@ -2239,6 +2141,12 @@ function LeadsToursTab({
             <div className="flex max-w-full flex-wrap items-center justify-start gap-1 rounded-lg border border-[color:var(--portal-border)] p-1 sm:justify-end" role="tablist" aria-label="Tour date filter">
               {(['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'] as TourView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => saveView(option)} className={`rounded-md px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${view === option ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{option === 'all' ? 'All' : `${categoryLabels[option]} (${grouped[option].length})`}</button>)}
             </div>
+            {viewMode === 'list' ? <div className="w-full sm:w-56"><PortalSelect value={sort.key + ':' + sort.direction} onChange={(value) => { const [key, direction] = value.split(':'); handleSort(key as TourSortKey, direction as SortDirection) }} aria-label="Sort tours" options={[
+              { value: 'date:asc', label: 'Tour time · Earliest first' }, { value: 'date:desc', label: 'Tour time · Latest first' },
+              { value: 'client:asc', label: 'Client · A to Z' }, { value: 'client:desc', label: 'Client · Z to A' },
+              { value: 'event:asc', label: 'Event · A to Z' }, { value: 'event:desc', label: 'Event · Z to A' },
+              { value: 'stage:asc', label: 'Lifecycle · A to Z' }, { value: 'stage:desc', label: 'Lifecycle · Z to A' },
+            ]} /></div> : null}
             <div className="flex items-center rounded-lg border border-[color:var(--portal-border)] p-1" aria-label="Tour view mode">
               <button type="button" aria-pressed={viewMode === 'cards'} aria-label="Card view" onClick={() => saveViewMode('cards')} className={`rounded-md p-1.5 ${viewMode === 'cards' ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}><LayoutGrid size={15} /></button>
               <button type="button" aria-pressed={viewMode === 'list'} aria-label="List view" onClick={() => saveViewMode('list')} className={`rounded-md p-1.5 ${viewMode === 'list' ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}><List size={15} /></button>
@@ -2251,63 +2159,19 @@ function LeadsToursTab({
       {viewMode === 'cards' ? (
         <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
           {(view === 'all' ? categoryOrder : [view]).map((category) => (
-            <section key={category} aria-labelledby={`tour-${category}-heading`}>
-              <div className="mb-3 flex items-center gap-3"><h4 id={`tour-${category}-heading`} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
+            <section key={category} aria-labelledby={'tour-' + category + '-heading'}>
+              <div className="mb-3 flex items-center gap-3"><h4 id={'tour-' + category + '-heading'} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
               {grouped[category].length === 0 ? <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{grouped[category].map(renderTourCard)}</div>}
             </section>
           ))}
         </div>
       ) : (
-      <div className="min-h-0 flex-1 overflow-auto">
-        <PortalStickyTable minWidth="1060px">
-          <PortalStickyThead>
-            <tr className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
-              <SortableHeader label="Client Name" sortKey="client" sort={sort} onSort={handleSort} className="px-8 py-5" />
-              <SortableHeader label="Tour Time Preference" sortKey="date" sort={sort} onSort={handleSort} className="px-6 py-5" />
-              <SortableHeader label="Event Type" sortKey="event" sort={sort} onSort={handleSort} className="px-6 py-5" />
-              <SortableHeader label="Lifecycle Step" sortKey="stage" sort={sort} onSort={handleSort} className="px-6 py-5" />
-              <th className="px-8 py-5 text-right">Action</th>
-            </tr>
-          </PortalStickyThead>
-          <tbody className="divide-y divide-[color:var(--portal-border)]">
-            {pageTours.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-8 py-12 text-center text-sm font-medium text-[color:var(--portal-muted)]">No tours in this category.</td>
-              </tr>
-            ) : (
-              pageTours.map((t, index) => (
-                <React.Fragment key={t.id}>
-                  {(view === 'all' && (index === 0 || getLuxorTourSection(pageTours[index - 1], todayKey) !== getLuxorTourSection(t, todayKey))) ? <tr><th colSpan={5} className="bg-[#caa24c]/5 px-8 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-[#9a712e] dark:text-[#f1d27a]">{categoryLabels[getLuxorTourSection(t, todayKey) || 'needs_outcome']}</th></tr> : null}
-                <tr className="hover:bg-[#caa24c]/5 transition-colors">
-                  <td className="px-8 py-5">
-                    <Link href={`/portal/leads/${t.id}`} className="font-bold text-[color:var(--portal-text)] hover:text-[#caa24c]">{t.full_name}</Link>
-                    <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{t.email || t.phone || 'No contact details'}</p>
-                  </td>
-                  <td className="px-6 py-5">
-                    <p className="text-xs font-bold text-[#caa24c]">{t.preferred_tour_date ? formatTourDate(t.preferred_tour_date) : 'Date Pending'}</p>
-                    <p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{t.preferred_tour_time || 'Time TBD'} · Central</p>
-                  </td>
-                  <td className="px-6 py-5 font-medium text-[color:var(--portal-text)]">{t.event_type || 'Quinceañera'}</td>
-                  <td className="px-6 py-5 font-mono">
-                    <PortalSelect
-                      value={getPipelineStage(t)}
-                      onChange={(val) => onMovePipelineStage(t.id, val as LuxorPipelineStage)}
-                      options={PIPELINE_STAGE_OPTIONS}
-                    />
-                  </td>
-                  <td className="px-8 py-5 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link href={`/portal/leads/${t.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Manage Tour →</Link>
-                      <LeadLifecycleActionsMenu lead={t} onAction={(action) => onLifecycleAction(t, action)} />
-                    </div>
-                  </td>
-                </tr>
-                </React.Fragment>
-              ))
-            )}
-          </tbody>
-        </PortalStickyTable>
-      </div>
+        <div className="space-y-5 overflow-y-auto p-4 sm:p-6">
+          {view === 'all' ? categoryOrder.map((category) => {
+            const records = pageTours.filter((tour) => getLuxorTourSection(tour, todayKey) === category)
+            return records.length ? <section key={category} aria-label={categoryLabels[category]}><h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{categoryLabels[category]}</h4><div className="space-y-3">{records.map(renderTourCard)}</div></section> : null
+          }) : pageTours.length ? pageTours.map(renderTourCard) : <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-10 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p>}
+        </div>
       )}
     </PortalTableCard>
   )
@@ -2320,52 +2184,36 @@ function LeadsProposalsTab({
   leads: LuxorInquiry[]
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
 }) {
-  const proposals = leads.filter(l => l.status === 'proposal_sent')
+  const proposals = leads.filter((lead) => lead.status === 'proposal_sent')
   return (
-    <PortalTableCard
-      controls={
-        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Sent Proposals ({proposals.length})</h3>
-      }
-    >
-      <div className="overflow-x-auto">
-        <PortalStickyTable minWidth="900px">
-          <PortalStickyThead>
-            <tr className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
-              <th className="px-8 py-5">Client Name</th>
-              <th className="px-6 py-5">Event Type</th>
-              <th className="px-6 py-5">Guest Count</th>
-              <th className="px-6 py-5">Intake Source</th>
-              <th className="px-8 py-5 text-right">Action</th>
-            </tr>
-          </PortalStickyThead>
-          <tbody className="divide-y divide-zinc-900/30">
-            {proposals.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-8 py-12 text-center text-sm font-medium text-[color:var(--portal-muted)]">No proposals awaiting signature.</td>
-              </tr>
-            ) : (
-              proposals.map((p) => (
-                <tr key={p.id} className="transition-colors hover:bg-[color:var(--portal-soft)]">
-                  <td className="px-8 py-5">
-                    <Link href={`/portal/leads/${p.id}`} className="font-bold text-[color:var(--portal-text)] transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{p.full_name}</Link>
-                    <p className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)]">{p.email || 'No email'}</p>
-                    <div className="mt-1.5"><PortalStatusBadge status="Sent" /></div>
-                  </td>
-                  <td className="px-6 py-5 font-medium text-[color:var(--portal-text)]">{p.event_type || 'Quinceañera'}</td>
-                  <td className="px-6 py-5 font-mono text-xs text-[color:var(--portal-muted)]">{p.guest_count || 'Flexible'} guests</td>
-                  <td className="px-6 py-5 font-mono font-bold uppercase tracking-widest text-[9px] text-[#caa24c]/85">{isGrandOpeningRsvp(p) ? 'RSVP' : p.source.replaceAll('_', ' ')}</td>
-                  <td className="px-8 py-5 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                    <Link href={`/portal/leads/${p.id}`} className="text-xs font-bold text-[#caa24c] hover:underline">Review Proposal →</Link>
-                      <LeadLifecycleActionsMenu lead={p} onAction={(action) => onLifecycleAction(p, action)} />
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </PortalStickyTable>
-      </div>
+    <PortalTableCard controls={<h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Sent Proposals ({proposals.length})</h3>}>
+      {proposals.length === 0 ? (
+        <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No proposals awaiting signature.</div>
+      ) : (
+        <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+          {proposals.map((lead) => (
+            <LuxorCrmRecordCard
+              key={lead.id}
+              lead={lead}
+              badges={[{ label: 'Sent', tone: luxorCrmStatusTone('sent') }]}
+              subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
+              contact={lead.email || 'No email registered'}
+              actions={
+                <>
+                  <Link href={'/portal/leads/' + lead.id + '?stage=proposal'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition-colors hover:bg-[#916825]"><FileCheck size={14} /> Review Proposal</Link>
+                  <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
+                </>
+              }
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="text-[color:var(--portal-muted)]">Intake source</span>
+                <span className="font-semibold text-[color:var(--portal-text)]">{isGrandOpeningRsvp(lead) ? 'RSVP' : lead.source.replaceAll('_', ' ')}</span>
+              </div>
+              <Link href={'/portal/leads/' + lead.id} className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]"><Eye size={14} /> View lead record</Link>
+            </LuxorCrmRecordCard>
+          ))}
+        </div>
+      )}
     </PortalTableCard>
   )
 }
