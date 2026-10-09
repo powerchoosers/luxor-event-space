@@ -664,9 +664,9 @@ export default function LeadsPage() {
           { id: 'dashboard', label: 'Funnel Dashboard', icon: <TrendingUp size={15} /> },
           { id: 'pipeline', label: 'Pipeline Board', icon: <Users size={15} /> },
           { id: 'tours', label: 'Tours', icon: <Calendar size={15} /> },
+          { id: 'followups', label: 'Follow Ups', icon: <Phone size={15} /> },
           { id: 'proposals', label: 'Proposals & Contracts', icon: <FileCheck size={15} /> },
           { id: 'clients', label: 'Booked Clients', icon: <UserCheck size={15} /> },
-          { id: 'followups', label: 'Follow Ups', icon: <Phone size={15} /> },
           { id: 'lost', label: 'Closed Lost', icon: <X size={15} />, count: closedLostCount },
           ]}
           activeTab={activeTab}
