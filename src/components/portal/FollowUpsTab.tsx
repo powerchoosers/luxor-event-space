@@ -1,7 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import { CalendarClock, Check, ChevronRight, CircleAlert, Clock3, Eye, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Phone, Plus, Search, Settings2, UserRound, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
@@ -26,6 +25,7 @@ type CallDraft = { lead: LuxorInquiry; task?: LuxorTask } | null
 type ProfileWorkspace = { leadId: string; stage: 'tour' | 'proposal' | 'profile' } | null
 type EventContact = { id: string; full_name: string; email: string | null; phone: string | null; role_label: string | null }
 type ExpandedCardDetails = { history: Activity[]; contacts: EventContact[]; hasMoreHistory: boolean; historyPage: number; loading: boolean; error: string | null }
+type CardMenuPosition = { leadId: string; left: number; width: number; above: boolean }
 
 function taskChannel(task: LuxorTask): Channel { return getLuxorFollowUpTaskChannel(task) }
 function taskNotes(task: LuxorTask) { return (task.description ?? '').replace(/^\[follow-up:(?:email|phone)\]\s*/, '').replace(/^\[post-tour\]\s*/, '') }
@@ -126,8 +126,10 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const selectedIdRef = useRef<string | null>(null)
   selectedIdRef.current = selectedId
   const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(() => new Set())
+  const expandedRowIdsRef = useRef(new Set<string>())
   const [expandedCardDetails, setExpandedCardDetails] = useState<Record<string, ExpandedCardDetails>>({})
-  const expandedCardLoadRef = useRef(new Set<string>())
+  const expandedCardLoadRef = useRef(new Map<string, number>())
+  const expandedCardRequestSequenceRef = useRef(0)
   const [detailTab, setDetailTab] = useState<DetailTab>('overview')
   const [adding, setAdding] = useState(false)
   const [leadId, setLeadId] = useState('')
@@ -151,6 +153,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [profileWorkspace, setProfileWorkspace] = useState<ProfileWorkspace>(null)
   const [moreOpen, setMoreOpen] = useState(false)
   const [cardMenuLeadId, setCardMenuLeadId] = useState<string | null>(null)
+  const [cardMenuPosition, setCardMenuPosition] = useState<CardMenuPosition | null>(null)
   const [callDraft, setCallDraft] = useState<CallDraft>(null)
   const [callOutcome, setCallOutcome] = useState('')
   const [callNote, setCallNote] = useState('')
@@ -170,6 +173,51 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [stageOverrides, setStageOverrides] = useState<Record<string, string>>({})
   const today = luxorToday()
 
+  const loadExpandedCardDetails = useCallback(async (inquiryId: string, page = 0, append = false, force = false) => {
+    if (expandedCardLoadRef.current.has(inquiryId) && !force) return
+    const requestId = ++expandedCardRequestSequenceRef.current
+    expandedCardLoadRef.current.set(inquiryId, requestId)
+    setExpandedCardDetails((current) => ({
+      ...current,
+      [inquiryId]: { ...(current[inquiryId] ?? { history: [], contacts: [], hasMoreHistory: false, historyPage: 0 }), loading: true, error: null },
+    }))
+    try {
+      const [historyResponse, contactsResponse] = await Promise.all([
+        fetch(`/api/follow-ups?inquiryId=${encodeURIComponent(inquiryId)}&historyPage=${page}`, { cache: 'no-store' }),
+        append ? Promise.resolve(null) : fetch(`/api/portal/event-contacts?inquiryId=${encodeURIComponent(inquiryId)}`, { cache: 'no-store' }),
+      ])
+      if (!historyResponse.ok) throw new Error('Follow-up history could not be loaded.')
+      if (contactsResponse && !contactsResponse.ok) throw new Error('Event contacts could not be loaded.')
+      const historyResult = await historyResponse.json() as { history?: Activity[]; hasMoreHistory?: boolean }
+      const contactResult = contactsResponse ? await contactsResponse.json() as { contacts?: EventContact[] } : null
+      if (expandedCardLoadRef.current.get(inquiryId) !== requestId) return
+      setExpandedCardDetails((current) => {
+        const prior = current[inquiryId] ?? { history: [], contacts: [], hasMoreHistory: false, historyPage: 0, loading: false, error: null }
+        const history = historyResult.history ?? []
+        const combinedHistory = append ? [...prior.history, ...history.filter((item) => !prior.history.some((existing) => existing.id === item.id))] : history
+        return {
+          ...current,
+          [inquiryId]: {
+            history: combinedHistory,
+            contacts: contactResult?.contacts ?? prior.contacts,
+            hasMoreHistory: Boolean(historyResult.hasMoreHistory),
+            historyPage: page,
+            loading: false,
+            error: null,
+          },
+        }
+      })
+    } catch (error) {
+      if (expandedCardLoadRef.current.get(inquiryId) !== requestId) return
+      setExpandedCardDetails((current) => ({
+        ...current,
+        [inquiryId]: { ...(current[inquiryId] ?? { history: [], contacts: [], hasMoreHistory: false, historyPage: 0, loading: false }), loading: false, error: error instanceof Error ? error.message : 'Details could not be loaded.' },
+      }))
+    } finally {
+      if (expandedCardLoadRef.current.get(inquiryId) === requestId) expandedCardLoadRef.current.delete(inquiryId)
+    }
+  }, [])
+
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
@@ -187,10 +235,11 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       setPausedSequenceRecords(emailResult.pausedEnrollments ?? [])
       setSendingEnabled(emailResult.sendingEnabled)
       if (!assignee && result.assignees[0]) setAssignee(result.assignees[0])
+      await Promise.all(Array.from(expandedRowIdsRef.current, (inquiryId) => loadExpandedCardDetails(inquiryId, 0, false, true)))
     } catch (error) {
       notify({ title: 'Follow-up tasks could not be loaded', description: error instanceof Error ? error.message : 'Try again in a moment.', variant: 'error' })
     } finally { setLoading(false) }
-  }, [assignee, notify])
+  }, [assignee, loadExpandedCardDetails, notify])
 
   useEffect(() => { void refresh() }, [refresh])
   useEffect(() => {
@@ -208,12 +257,15 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
         window.requestAnimationFrame(() => document.getElementById(`follow-up-menu-toggle-${CSS.escape(cardMenuLeadId)}`)?.focus())
       }
     }
+    const dismissResize = () => setCardMenuLeadId(null)
     document.addEventListener('pointerdown', dismissOutside)
     document.addEventListener('keydown', dismissEscape)
+    window.addEventListener('resize', dismissResize)
     return () => {
       window.cancelAnimationFrame(focusFrame)
       document.removeEventListener('pointerdown', dismissOutside)
       document.removeEventListener('keydown', dismissEscape)
+      window.removeEventListener('resize', dismissResize)
     }
   }, [cardMenuLeadId])
   useEffect(() => {
@@ -331,7 +383,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   async function addNote(inquiryId: string, content: string, noteType = 'note', taskId?: string) {
     const response = await fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId, content, noteType, taskId }) })
     if (!response.ok) throw new Error('The note could not be saved.')
-    await loadHistory(inquiryId)
+    await Promise.all([loadHistory(inquiryId), loadExpandedCardDetails(inquiryId, 0, false, true)])
   }
 
   function resetCallDraft() {
@@ -362,64 +414,48 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     setProfileWorkspace(null)
     await onLeadsRefresh()
     await refresh()
-    if (inquiryId) await loadHistory(inquiryId).catch(() => {})
+    if (inquiryId) await Promise.all([
+      loadHistory(inquiryId).catch(() => {}),
+      expandedRowIdsRef.current.has(inquiryId) ? Promise.resolve() : loadExpandedCardDetails(inquiryId, 0, false, true),
+    ])
   }
 
   function selectLead(inquiryId: string) {
     if (callDraft && callDraft.lead.id !== inquiryId) resetCallDraft()
     setMoreOpen(false)
+    if (selectedIdRef.current !== inquiryId) setDetailTab('overview')
     setSelectedId(inquiryId)
   }
 
-  async function loadExpandedCardDetails(inquiryId: string, page = 0, append = false) {
-    if (expandedCardLoadRef.current.has(inquiryId)) return
-    expandedCardLoadRef.current.add(inquiryId)
-    setExpandedCardDetails((current) => ({
-      ...current,
-      [inquiryId]: { ...(current[inquiryId] ?? { history: [], contacts: [], hasMoreHistory: false, historyPage: 0 }), loading: true, error: null },
-    }))
-    try {
-      const [historyResponse, contactsResponse] = await Promise.all([
-        fetch(`/api/follow-ups?inquiryId=${encodeURIComponent(inquiryId)}&historyPage=${page}`, { cache: 'no-store' }),
-        append ? Promise.resolve(null) : fetch(`/api/portal/event-contacts?inquiryId=${encodeURIComponent(inquiryId)}`, { cache: 'no-store' }),
-      ])
-      if (!historyResponse.ok) throw new Error('Follow-up history could not be loaded.')
-      if (contactsResponse && !contactsResponse.ok) throw new Error('Event contacts could not be loaded.')
-      const historyResult = await historyResponse.json() as { history?: Activity[]; hasMoreHistory?: boolean }
-      const contactResult = contactsResponse ? await contactsResponse.json() as { contacts?: EventContact[] } : null
-      setExpandedCardDetails((current) => {
-        const prior = current[inquiryId] ?? { history: [], contacts: [], hasMoreHistory: false, historyPage: 0, loading: false, error: null }
-        const history = historyResult.history ?? []
-        const combinedHistory = append ? [...prior.history, ...history.filter((item) => !prior.history.some((existing) => existing.id === item.id))] : history
-        return {
-          ...current,
-          [inquiryId]: {
-            history: combinedHistory,
-            contacts: contactResult?.contacts ?? prior.contacts,
-            hasMoreHistory: Boolean(historyResult.hasMoreHistory),
-            historyPage: page,
-            loading: false,
-            error: null,
-          },
-        }
-      })
-    } catch (error) {
-      setExpandedCardDetails((current) => ({
-        ...current,
-        [inquiryId]: { ...(current[inquiryId] ?? { history: [], contacts: [], hasMoreHistory: false, historyPage: 0, loading: false }), loading: false, error: error instanceof Error ? error.message : 'Details could not be loaded.' },
-      }))
-    } finally {
-      expandedCardLoadRef.current.delete(inquiryId)
+  function openLeadWorkspaceFromCard(lead: LuxorInquiry) {
+    selectLead(lead.id)
+    openLeadWorkspace(lead, 'profile')
+  }
+
+  function toggleCardMenu(event: MouseEvent<HTMLButtonElement>, inquiryId: string) {
+    if (cardMenuLeadId === inquiryId) {
+      setCardMenuLeadId(null)
+      return
     }
+    const trigger = event.currentTarget.getBoundingClientRect()
+    const container = event.currentTarget.parentElement?.getBoundingClientRect()
+    if (!container) return
+    const width = Math.min(208, window.innerWidth - 16)
+    const minimumLeft = 8 - container.left
+    const maximumLeft = window.innerWidth - 8 - container.left - width
+    const preferredLeft = window.innerWidth >= 640 ? container.width - width : 0
+    const left = Math.max(minimumLeft, Math.min(preferredLeft, maximumLeft))
+    const above = window.innerHeight - trigger.bottom < 112 && trigger.top > 112
+    setCardMenuPosition({ leadId: inquiryId, left, width, above })
+    setCardMenuLeadId(inquiryId)
   }
 
   function toggleExpandedRow(inquiryId: string) {
-    setExpandedRowIds((current) => {
-      const next = new Set(current)
-      if (next.has(inquiryId)) next.delete(inquiryId)
-      else next.add(inquiryId)
-      return next
-    })
+    const next = new Set(expandedRowIdsRef.current)
+    if (next.has(inquiryId)) next.delete(inquiryId)
+    else next.add(inquiryId)
+    expandedRowIdsRef.current = next
+    setExpandedRowIds(next)
     const detail = expandedCardDetails[inquiryId]
     if (!detail || detail.error) void loadExpandedCardDetails(inquiryId)
   }
@@ -625,7 +661,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     <div className="grid grid-cols-3 gap-2">{stats.map((stat) => <div key={stat.label} className={`portal-card-surface rounded-xl px-4 py-3 shadow-none ${stat.tone === 'red' ? 'border-rose-300 bg-rose-50 dark:border-rose-400/30 dark:bg-rose-500/10' : stat.tone === 'blue' ? 'border-sky-300 bg-sky-50 dark:border-sky-400/30 dark:bg-sky-500/10' : stat.tone === 'gold' ? 'border-[#dfc98f] bg-[#fbf5e7] dark:border-[#caa24c]/35 dark:bg-[#caa24c]/10' : ''}`}><div className="text-2xl font-semibold">{stat.value}</div><div className="text-xs text-[color:var(--portal-muted)]">{stat.label}</div></div>)}</div>
     <div className="flex flex-col gap-3"><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-[14rem] flex-1 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2"><Search size={15} className="text-[color:var(--portal-muted)]" /><input aria-label="Search leads or follow-ups" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads or follow-ups" className="w-full bg-transparent text-sm outline-none" /></div><PortalSelect value={eventType} onChange={setEventType} options={[{ value: 'all', label: 'All event types' }, ...eventTypes.map((value) => ({ value, label: value }))]} /></div><div className="flex flex-wrap items-center gap-2"><div className="flex flex-wrap gap-2" role="group" aria-label="Filter leads">{([{ id: 'all', label: 'All' }, { id: 'new', label: 'New Leads' }, { id: 'post_tour', label: 'Post-Tour' }, { id: 'overdue', label: 'Overdue' }] as const).map((item) => <button key={item.id} type="button" aria-pressed={filter === item.id} onClick={() => setFilter(item.id)} className={`min-h-9 rounded-full border px-4 text-xs font-semibold transition ${filter === item.id ? 'border-[#a8792f] bg-[#a8792f] text-white' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] hover:border-[#caa24c]/60'}`}>{item.label}</button>)}</div><div className="ml-auto"><PortalButton onClick={() => { if (leads[0]) openAddTask(leads[0].id) }}><Plus size={15} /> Add Follow-Up</PortalButton></div></div></div>
 
-    <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]">
+    <div className={`grid min-h-0 flex-1 gap-4 ${selected ? 'xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]' : ''}`}>
       <div className="space-y-3">
         {visibleRows.map((row) => {
           const lead = leadById.get(row.inquiryId)!
@@ -667,7 +703,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                   {row.next.channel === 'email' && row.next.assignee !== 'Automated' && <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white disabled:opacity-50"><Mail size={14} /> Email</button>}
                   <button type="button" onClick={() => logCall(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Log</button>
                   <div className="relative" data-follow-up-menu-root="true">
-                    <button id={`follow-up-menu-toggle-${row.inquiryId}`} type="button" aria-label={`More actions for ${lead.full_name}`} aria-haspopup="menu" aria-controls={`follow-up-menu-${row.inquiryId}`} aria-expanded={cardMenuLeadId === lead.id} onClick={() => setCardMenuLeadId((current) => current === lead.id ? null : lead.id)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)]"><MoreHorizontal size={16} /></button>
+                    <button id={`follow-up-menu-toggle-${row.inquiryId}`} type="button" aria-label={`More actions for ${lead.full_name}`} aria-haspopup="menu" aria-controls={`follow-up-menu-${row.inquiryId}`} aria-expanded={cardMenuLeadId === lead.id} onClick={(event) => toggleCardMenu(event, lead.id)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)]"><MoreHorizontal size={16} /></button>
                     {cardMenuLeadId === lead.id && <div id={`follow-up-menu-${row.inquiryId}`} role="menu" aria-label={`Actions for ${lead.full_name}`} onKeyDown={(event) => {
                       const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
                       const currentIndex = items.indexOf(document.activeElement as HTMLElement)
@@ -680,8 +716,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                         event.preventDefault()
                         items[nextIndex]?.focus()
                       }
-                    }} className="absolute right-0 top-full z-30 mt-2 w-52 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl">
-                      <Link role="menuitem" tabIndex={0} href={`/portal/leads/${lead.id}`} onClick={() => setCardMenuLeadId(null)} className="flex min-h-10 items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View Full Workspace</Link>
+                    }} style={cardMenuPosition?.leadId === lead.id ? { left: cardMenuPosition.left, width: cardMenuPosition.width, ...(cardMenuPosition.above ? { bottom: 'calc(100% + 0.5rem)' } : { top: 'calc(100% + 0.5rem)' }) } : undefined} className="absolute z-30 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl">
+                      <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openLeadWorkspaceFromCard(lead) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View Full Workspace</button>
                       <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openAddTask(lead.id) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Add Follow-Up</button>
                     </div>}
                   </div>
@@ -714,8 +750,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
         {!visibleRows.length && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-12 text-center text-sm text-[color:var(--portal-muted)]">{loading ? 'Loading follow-ups…' : filter === 'post_tour' ? 'No completed tours match these filters.' : 'No matching follow-up leads. Add a task to keep the next step with its lead.'}</div>}
       </div>
 
-      <aside className="min-h-[28rem] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
-        {selected ? <>
+      {selected && <aside className="min-h-[28rem] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
+        <>
           <div className="flex items-start justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3"><div><h2 className="font-serif text-xl">{selected.full_name}</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">{selected.event_type ?? 'Event not specified'} · {selected.target_date ?? 'Date not set'}</p><span className="mt-2 inline-flex rounded-full bg-[#caa24c]/15 px-3 py-1 text-[11px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">{getStageLabel(selected)}</span></div><button type="button" aria-label="Close lead workspace" onClick={() => { setSelectedId(null); setMoreOpen(false); resetCallDraft() }} className="rounded-lg border border-[color:var(--portal-border)] p-2"><X size={15} /></button></div>
           <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => dial(selected)} disabled={!selected.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-3 text-xs font-semibold text-white disabled:opacity-50"><Phone size={14} /> Call</button><button type="button" onClick={() => composeEmail(selected)} disabled={!selected.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold disabled:opacity-50"><Mail size={14} /> Email</button><button type="button" disabled title="Texting is not available" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold opacity-45"><MessageSquare size={14} /> Text (Soon)</button><button type="button" onClick={() => setMoreOpen((value) => !value)} className="ml-auto inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs"><MoreHorizontal size={14} /> More</button></div>
           <nav className="mt-4 flex overflow-x-auto border-b border-[color:var(--portal-border)]" role="tablist" aria-label="Lead workspace sections">{([{id:'overview',label:'Overview'},{id:'event',label:'Event Details'},{id:'proposals',label:'Proposals'},{id:'notes',label:'Notes'},{id:'timeline',label:'Timeline'}] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={detailTab === tab.id} onClick={() => setDetailTab(tab.id)} className={`whitespace-nowrap border-b-2 px-3 py-2 text-xs font-semibold ${detailTab === tab.id ? 'border-[#caa24c] text-[#8c6529] dark:text-[#f1d27a]' : 'border-transparent text-[color:var(--portal-muted)]'}`}>{tab.label}</button>)}</nav>
@@ -747,8 +783,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
             {historyHasMore && <div className="flex justify-center"><PortalButton size="sm" variant="ghost" onClick={() => void loadHistory(selected.id, historyPage + 1, true).catch((error) => notify({ title: 'Earlier activity could not be loaded', description: error instanceof Error ? error.message : 'Try again.', variant: 'error' }))}>Load earlier activity</PortalButton></div>}
           </div>}
           {moreOpen && <div className="mt-4 rounded-lg border border-[color:var(--portal-border)] p-2"><div className="grid gap-1 text-left">{[['Schedule or reschedule tour', 'event'], ['Send or edit proposal', 'proposals'], ['Add note', 'notes'], ['Change lead status', 'profile'], ['Move to Nurture', 'nurture']].map(([label, action]) => <button key={label} type="button" onClick={() => { if (action === 'event') openLeadWorkspace(selected, 'tour'); else if (action === 'profile') openLeadWorkspace(selected, 'profile'); else if (action === 'proposals') { setDetailTab('proposals'); openLeadWorkspace(selected, 'proposal') } else if (action === 'notes') setDetailTab('notes'); else void moveToNurture(selected.id) }} className="flex min-h-9 items-center rounded-md px-2 text-left text-xs hover:bg-[color:var(--portal-soft)]">{label}</button>)}{sequence?.status === 'active' && <button type="button" onClick={() => setPauseOpen(true)} className="flex min-h-9 items-center rounded-md px-2 text-left text-xs hover:bg-[color:var(--portal-soft)]">Pause Follow-Ups</button>}{sequence?.status === 'paused' && <button type="button" onClick={() => void resumeSequence()} className="flex min-h-9 items-center rounded-md px-2 text-left text-xs hover:bg-[color:var(--portal-soft)]">Resume Follow-Ups</button>}{(sequence?.status === 'active' || sequence?.status === 'paused') && <button type="button" onClick={() => setStopOpen(true)} className="flex min-h-9 items-center rounded-md px-2 text-left text-xs text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/20">Stop Follow-Ups</button>}</div></div>}
-        </> : <div className="flex h-full min-h-56 flex-col items-center justify-center text-center text-sm text-[color:var(--portal-muted)]"><ChevronRight size={20} /><p className="mt-2">Choose a lead to open the full follow-up workspace.</p></div>}
-      </aside>
+        </>
+      </aside>}
     </div>
 
     <PortalModal isOpen={adding} onClose={() => setAdding(false)} title="Add Follow-Up" description="Create a manual reminder on the existing lead. This does not send an email or place a call." maxWidth="max-w-lg" zIndex={100}>
