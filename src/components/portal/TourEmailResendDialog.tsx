@@ -17,12 +17,14 @@ export type TourEmailResendCandidate = {
 export function TourEmailResendDialog({
   candidate,
   isOpen,
+  emailUpdatedPrompt = false,
   isSending = false,
   onClose,
   onConfirm,
 }: {
   candidate: TourEmailResendCandidate | null
   isOpen: boolean
+  emailUpdatedPrompt?: boolean
   isSending?: boolean
   onClose: () => void
   onConfirm: () => void
@@ -64,7 +66,9 @@ export function TourEmailResendDialog({
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#a8792f] dark:text-[#f1d27a]">{statusLabel}</p>
               <h2 className="mt-2 text-lg font-semibold text-[color:var(--portal-text)]">{title}</h2>
               <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">{canConfirm
-                ? 'Review the saved message and recipient. It will send only after you confirm.'
+                ? emailUpdatedPrompt
+                  ? 'Email updated. Review the saved message and recipient. It will send only after you confirm.'
+                  : 'Review the saved message and recipient. It will send only after you confirm.'
                 : candidate.status === 'sent' ? 'The saved tour confirmation was sent to this recipient.'
                   : candidate.status === 'sending' ? 'The delivery worker is processing this saved confirmation.'
                     : candidate.status === 'queued' ? 'The saved confirmation is waiting in the delivery queue.'
