@@ -47,6 +47,7 @@ type MailboxMessageItem = {
   summary: string
   hasAttachment: boolean
   direction: 'incoming' | 'outgoing' | 'campaign'
+  deliveryStatus?: string
   folder: string
   isRead?: boolean
   storedLocally?: boolean
@@ -102,6 +103,7 @@ async function listStoredMailboxMessages(limit: number, email?: string): Promise
       summary: plainTextSummary(job.body),
       hasAttachment: false,
       direction: 'outgoing' as const,
+      deliveryStatus: job.status,
       folder: 'sent' as const,
       isRead: true,
       storedLocally: true,

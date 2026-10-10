@@ -1328,6 +1328,9 @@ export async function listLuxorZohoMessagesForAddress(email: string, limit = 100
       receivedAt: normalizeZohoDate(message.receivedTime || message.receivedtime || message.sentDateInGMT),
       summary: decodeHtmlEntities(message.summary),
       hasAttachment: zohoBoolean(message.hasAttachment),
+      // A message returned from Zoho's Sent search is provider accepted, not
+      // proof of delivery. The lead dossier labels it "Successfully sent".
+      deliveryStatus: direction === 'outgoing' ? 'sent' : undefined,
       direction,
       isRead: direction === 'outgoing' || String(message.status || '') === '1',
     }

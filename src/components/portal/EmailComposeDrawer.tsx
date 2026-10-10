@@ -32,6 +32,7 @@ import { renderEmailToHtml } from '@/app/(portal)/portal/marketing/EmailBuilder/
 import { BrandAssetPicker } from './BrandAssetPicker'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 import { stripTrackingPixels } from '@/lib/luxorTextUtils'
+import { publishLuxorEmailSent } from '@/lib/luxorLeadEmailNotice'
 
 // These addresses are explicitly approved for Luxor's Resend domain.
 const ALLOWED_SENDERS = [
@@ -406,6 +407,11 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
         throw new Error(data.error || 'Failed to send email.')
       }
 
+      publishLuxorEmailSent({
+        leadId: lead?.id || null,
+        recipient: toAddress.trim(),
+        messageId: typeof data.messageId === 'string' ? data.messageId : null,
+      })
       setSuccessMsg('Email successfully sent!')
       
       // Auto-close after brief delay

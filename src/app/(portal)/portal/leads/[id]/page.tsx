@@ -50,6 +50,7 @@ import {
   Loader2,
   Upload,
   Languages,
+  X,
 } from 'lucide-react'
 import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
@@ -61,7 +62,18 @@ import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay, formatUsDialInput } from '@/lib/luxorPhoneClient'
-import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
+import { normalizeLuxorEmailAddress } from '@/lib/luxorEmailBounce'
+import {
+  dismissLeadEmailNoticeTracker,
+  ensureLeadEmailNoticeTracker,
+  getLeadEmailNoticeResolution,
+  isLeadEmailNoticeVisible,
+  LUXOR_EMAIL_NOTICE_TTL_MS,
+  LUXOR_EMAIL_SENT_EVENT,
+  type LeadEmailNoticeResolution,
+  type LeadEmailNoticeTracker,
+  type LeadEmailSentEventDetail,
+} from '@/lib/luxorLeadEmailNotice'
 import { getLuxorTourSection, luxorTodayKey } from '@/lib/luxorTourMetrics'
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
 import { TourEmailResendDialog } from '@/components/portal/TourEmailResendDialog'
@@ -71,7 +83,7 @@ function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const address = bounce && typeof bounce === 'object'
     ? String((bounce as Record<string, unknown>).address || '')
     : ''
-  return isLuxorBounceForCurrentAddress(lead.email, address)
+  return normalizeLuxorEmailAddress(lead.email) === normalizeLuxorEmailAddress(address)
 }
 
 import type { LuxorCall } from '@/lib/luxorCallTypes'
@@ -108,6 +120,7 @@ type ZohoEmailMessage = {
   summary: string
   hasAttachment: boolean
   direction?: 'incoming' | 'outgoing' | 'matched'
+  deliveryStatus?: string
   folderId?: string
   threadId?: string
   attachments?: Array<{
@@ -389,11 +402,35 @@ export default function LeadDetailPage({
   const [resendingEmailJobId, setResendingEmailJobId] = useState<string | null>(null)
   const emailChangeRequestRef = useRef<{ previous: string; next: string; requestId: string } | null>(null)
   const [emailMessages, setEmailMessages] = useState<ZohoEmailMessage[]>([])
+  const [emailHistoryRecipient, setEmailHistoryRecipient] = useState('')
+  const emailHistoryRequestedRecipientRef = useRef('')
+  const emailThreadRequestRef = useRef(0)
   const [loadingEmailMessages, setLoadingEmailMessages] = useState(false)
+  const [emailNoticeTracker, setEmailNoticeTracker] = useState<LeadEmailNoticeTracker | null>(null)
   const [emailThreadError, setEmailThreadError] = useState<string | null>(null)
   const [zohoReconnectRequired, setZohoReconnectRequired] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const emailNoticeResolution = useMemo<LeadEmailNoticeResolution | null>(() => {
+    if (!lead) return null
+    const currentEmail = normalizeLuxorEmailAddress(lead.email)
+    const historyMatchesLead = normalizeLuxorEmailAddress(emailHistoryRecipient) === currentEmail
+    return getLeadEmailNoticeResolution({
+      leadId: lead.id,
+      currentEmail: lead.email,
+      bounce: lead.metadata?.emailBounce as Record<string, unknown> | null | undefined,
+      messages: historyMatchesLead ? emailMessages : [],
+    })
+  }, [emailHistoryRecipient, emailMessages, lead?.email, lead?.id, lead?.metadata?.emailBounce])
+
+  const resolvedNoticeKey = emailNoticeResolution?.kind === 'resolved'
+    ? `${emailNoticeResolution.leadId}:${emailNoticeResolution.recipient}:${emailNoticeResolution.bounceEventKey}:${emailNoticeResolution.successEventId}`
+    : ''
+  const resolutionSuperseded = emailNoticeResolution?.kind === 'resolved'
+    ? emailNoticeResolution.supersededByLaterEmail
+    : false
+  const showResolvedEmailNotice = isLeadEmailNoticeVisible(emailNoticeResolution, emailNoticeTracker)
 
   // Note drafting state
   const [noteContent, setNoteContent] = useState('')
@@ -1394,7 +1431,11 @@ export default function LeadDetailPage({
         }
       }
 
-      if (refreshEmailHistory) void fetchClientEmailThread(leadData.email || '')
+      const targetEmail = normalizeLuxorEmailAddress(leadData.email)
+      if (
+        refreshEmailHistory
+        || (targetEmail && emailHistoryRequestedRecipientRef.current !== targetEmail)
+      ) void fetchClientEmailThread(leadData.email || '')
 
       const [notesData, tasksData, invoicesData, bookingsData, paymentsData, tourJobsData, callsData, leadEventsData, eventPreferenceData, documentsData, signaturesData] = await Promise.all([
         fetch(`/api/notes?inquiryId=${id}`)
@@ -1593,13 +1634,20 @@ export default function LeadDetailPage({
   }, [id])
 
   const fetchClientEmailThread = async (email: string) => {
+    const requestId = ++emailThreadRequestRef.current
     if (!email) {
+      emailHistoryRequestedRecipientRef.current = ''
+      setEmailHistoryRecipient('')
       setEmailMessages([])
       setEmailThreadError(null)
       setZohoReconnectRequired(false)
+      setLoadingEmailMessages(false)
       return
     }
 
+    const normalizedEmail = normalizeLuxorEmailAddress(email)
+    emailHistoryRequestedRecipientRef.current = normalizedEmail
+    setEmailHistoryRecipient('')
     try {
       setLoadingEmailMessages(true)
       setEmailThreadError(null)
@@ -1614,16 +1662,78 @@ export default function LeadDetailPage({
         setZohoReconnectRequired(Boolean(payload.reconnectRequired))
         throw new Error(payload.error || 'Unable to load email history.')
       }
+      if (requestId !== emailThreadRequestRef.current) return
       setEmailMessages(payload.messages || [])
+      setEmailHistoryRecipient(normalizedEmail)
     } catch (threadError) {
+      if (requestId !== emailThreadRequestRef.current) return
       setEmailMessages([])
+      setEmailHistoryRecipient(normalizedEmail)
       const message = threadError instanceof Error ? threadError.message : 'Unable to load email history.'
       setEmailThreadError(message.includes('reconnected with email search permission') ? 'The mailbox needs to be reconnected in Settings.' : 'Email history could not be refreshed. Please try again.')
       setZohoReconnectRequired((current) => current || message.includes('reconnected with email search permission'))
     } finally {
-      setLoadingEmailMessages(false)
+      if (requestId === emailThreadRequestRef.current) setLoadingEmailMessages(false)
     }
   }
+
+  useEffect(() => {
+    const resolution = emailNoticeResolution
+    if (!lead || resolution?.kind !== 'resolved') {
+      setEmailNoticeTracker(null)
+      return
+    }
+
+    let storage: Storage | null = null
+    try { storage = window.localStorage } catch { /* Keep the notice in memory if storage is unavailable. */ }
+    let tracker = ensureLeadEmailNoticeTracker(storage, resolution)
+    if (resolution.supersededByLaterEmail && tracker.dismissedAt === null) {
+      tracker = dismissLeadEmailNoticeTracker(storage, resolution, tracker)
+    }
+    setEmailNoticeTracker(tracker)
+  }, [lead?.id, resolvedNoticeKey, resolutionSuperseded])
+
+  useEffect(() => {
+    const resolution = emailNoticeResolution
+    if (resolution?.kind !== 'resolved' || !emailNoticeTracker || !showResolvedEmailNotice) return
+
+    const millisecondsRemaining = emailNoticeTracker.firstSeenAt + LUXOR_EMAIL_NOTICE_TTL_MS - Date.now()
+    if (millisecondsRemaining <= 0) return
+
+    const timer = window.setTimeout(() => {
+      let storage: Storage | null = null
+      try { storage = window.localStorage } catch { /* The timeout still hides this page's notice. */ }
+      setEmailNoticeTracker((current) => current
+        ? dismissLeadEmailNoticeTracker(storage, resolution, current)
+        : current)
+    }, millisecondsRemaining)
+
+    return () => window.clearTimeout(timer)
+  }, [resolvedNoticeKey, emailNoticeTracker, resolutionSuperseded, showResolvedEmailNotice])
+
+  useEffect(() => {
+    if (!lead?.id || !lead.email) return
+    const currentLeadEmail = lead.email
+
+    const handleEmailSent = (event: Event) => {
+      const detail = (event as CustomEvent<LeadEmailSentEventDetail>).detail
+      if (!detail || normalizeLuxorEmailAddress(detail.recipient) !== normalizeLuxorEmailAddress(currentLeadEmail)) return
+      if (detail.leadId && detail.leadId !== lead.id) return
+
+      const resolution = emailNoticeResolution
+      if (resolution?.kind === 'resolved' && !resolution.supersededByLaterEmail && detail.messageId !== resolution.successEventId) {
+        let storage: Storage | null = null
+        try { storage = window.localStorage } catch { /* The in-memory notice still dismisses. */ }
+        const current = emailNoticeTracker || ensureLeadEmailNoticeTracker(storage, resolution)
+        setEmailNoticeTracker(dismissLeadEmailNoticeTracker(storage, resolution, current))
+      }
+
+      void fetchClientEmailThread(currentLeadEmail)
+    }
+
+    window.addEventListener(LUXOR_EMAIL_SENT_EVENT, handleEmailSent)
+    return () => window.removeEventListener(LUXOR_EMAIL_SENT_EVENT, handleEmailSent)
+  }, [lead?.id, lead?.email, emailNoticeResolution?.kind === 'resolved' ? emailNoticeResolution.successEventId : '', emailNoticeTracker])
 
   const handleStatusChange = async (newStatus: LuxorInquiry['status']) => {
     if (!lead) return false
@@ -1825,6 +1935,7 @@ export default function LeadDetailPage({
       setTourEmailJobs((current) => current.map((job) => job.id === updatedJob.id ? updatedJob : job))
       setEmailResendCandidate(['failed', 'queued', 'sending', 'sent'].includes(updatedJob.status) ? updatedJob : null)
       setEmailResendModalOpen(false)
+      void fetchClientEmailThread(updatedJob.recipient_email)
       const statusMessage = updatedJob.status === 'sent'
         ? { title: 'Confirmation sent', description: `The saved confirmation was sent to ${updatedJob.recipient_email}.`, variant: undefined }
         : updatedJob.status === 'sending'
@@ -3832,10 +3943,34 @@ export default function LeadDetailPage({
                     <Mail size={11} className="text-[#caa24c]" /> {lead.email}
                   </span>
                 ) : null}
-                {lead.metadata?.emailBounce && typeof lead.metadata.emailBounce === 'object' ? (
+                {emailNoticeResolution?.kind === 'warning' && !loadingEmailMessages ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/8 px-2.5 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">
                     {bouncedAddressMatchesCurrentEmail(lead) ? 'Email bounced · check address' : 'Earlier email address bounced'}
                   </span>
+                ) : null}
+                {showResolvedEmailNotice && emailNoticeResolution?.kind === 'resolved' ? (
+                  <div role="status" aria-live="polite" className="flex min-w-0 basis-full items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2.5 text-emerald-800 dark:text-emerald-200 sm:px-3.5">
+                    <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
+                    <p className="min-w-0 flex-1 break-words text-xs font-semibold leading-5">
+                      {emailNoticeResolution.delivery === 'delivered' ? 'Delivered' : 'Successfully sent'} to {emailNoticeResolution.recipient}.
+                    </p>
+                    <button
+                      type="button"
+                      aria-label="Dismiss email delivery notice"
+                      title="Dismiss notice"
+                      onClick={() => {
+                        const resolution = emailNoticeResolution
+                        if (resolution?.kind !== 'resolved') return
+                        let storage: Storage | null = null
+                        try { storage = window.localStorage } catch { /* The in-memory notice still dismisses. */ }
+                        const tracker = emailNoticeTracker || ensureLeadEmailNoticeTracker(storage, resolution)
+                        setEmailNoticeTracker(dismissLeadEmailNoticeTracker(storage, resolution, tracker))
+                      }}
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-emerald-800 transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/40 dark:text-emerald-200 dark:hover:bg-emerald-400/10"
+                    >
+                      <X size={14} aria-hidden="true" />
+                    </button>
+                  </div>
                 ) : null}
                 {requestedTourLanguage ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">

@@ -5,6 +5,7 @@ import { Send, Eye, Check, Loader2, RefreshCw, AlertCircle } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 import { stripTrackingPixels } from '@/lib/luxorTextUtils'
+import { publishLuxorEmailSent } from '@/lib/luxorLeadEmailNotice'
 import { PortalCloseButton, PortalSelect } from '@/components/portal/PortalUI'
 
 const LUXOR_SENDER_OPTIONS = [
@@ -158,6 +159,11 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
         throw new Error(data.error || 'Failed to send email.')
       }
 
+      publishLuxorEmailSent({
+        leadId: draft.inquiryId || null,
+        recipient: recipientEmail.trim(),
+        messageId: typeof data.messageId === 'string' ? data.messageId : null,
+      })
       setIsSent(true)
       if (onSendSuccess) {
         onSendSuccess(recipientEmail.trim(), subject.trim())
