@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import Link from 'next/link'
 import { CalendarClock, Check, ChevronRight, CircleAlert, Clock3, Eye, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Phone, Plus, Search, Settings2, UserRound, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
@@ -23,6 +24,8 @@ type Filter = 'all' | 'new' | 'post_tour' | 'overdue'
 type DetailTab = 'overview' | 'event' | 'proposals' | 'notes' | 'timeline'
 type CallDraft = { lead: LuxorInquiry; task?: LuxorTask } | null
 type ProfileWorkspace = { leadId: string; stage: 'tour' | 'proposal' | 'profile' } | null
+type EventContact = { id: string; full_name: string; email: string | null; phone: string | null; role_label: string | null }
+type ExpandedCardDetails = { history: Activity[]; contacts: EventContact[]; hasMoreHistory: boolean; historyPage: number; loading: boolean; error: string | null }
 
 function taskChannel(task: LuxorTask): Channel { return getLuxorFollowUpTaskChannel(task) }
 function taskNotes(task: LuxorTask) { return (task.description ?? '').replace(/^\[follow-up:(?:email|phone)\]\s*/, '').replace(/^\[post-tour\]\s*/, '') }
@@ -122,6 +125,9 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedIdRef = useRef<string | null>(null)
   selectedIdRef.current = selectedId
+  const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(() => new Set())
+  const [expandedCardDetails, setExpandedCardDetails] = useState<Record<string, ExpandedCardDetails>>({})
+  const expandedCardLoadRef = useRef(new Set<string>())
   const [detailTab, setDetailTab] = useState<DetailTab>('overview')
   const [adding, setAdding] = useState(false)
   const [leadId, setLeadId] = useState('')
@@ -144,6 +150,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [recoveryTime, setRecoveryTime] = useState('10:00')
   const [profileWorkspace, setProfileWorkspace] = useState<ProfileWorkspace>(null)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [cardMenuLeadId, setCardMenuLeadId] = useState<string | null>(null)
   const [callDraft, setCallDraft] = useState<CallDraft>(null)
   const [callOutcome, setCallOutcome] = useState('')
   const [callNote, setCallNote] = useState('')
@@ -152,6 +159,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [nextTime, setNextTime] = useState('10:00')
   const [nextChannel, setNextChannel] = useState<Channel>('phone')
   const [callSaving, setCallSaving] = useState(false)
+  const callSavingRef = useRef(false)
   const [sequenceSaving, setSequenceSaving] = useState(false)
   const [pauseOpen, setPauseOpen] = useState(false)
   const [pauseDate, setPauseDate] = useState('')
@@ -185,6 +193,29 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   }, [assignee, notify])
 
   useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    if (!cardMenuLeadId) return
+    const focusFrame = window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`#follow-up-menu-${CSS.escape(cardMenuLeadId)} [role="menuitem"]`)?.focus())
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Element && target.closest('[data-follow-up-menu-root="true"]')) return
+      setCardMenuLeadId(null)
+    }
+    const dismissEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setCardMenuLeadId(null)
+        window.requestAnimationFrame(() => document.getElementById(`follow-up-menu-toggle-${CSS.escape(cardMenuLeadId)}`)?.focus())
+      }
+    }
+    document.addEventListener('pointerdown', dismissOutside)
+    document.addEventListener('keydown', dismissEscape)
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('pointerdown', dismissOutside)
+      document.removeEventListener('keydown', dismissEscape)
+    }
+  }, [cardMenuLeadId])
   useEffect(() => {
     if (!selectedId) { setActivity([]); setSequence(null); setSequenceActions([]); setHistoryPage(0); setHistoryHasMore(false); return }
     let active = true
@@ -318,7 +349,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   function logCall(lead: LuxorInquiry, task?: LuxorTask) {
     if (!lead.phone) { notify({ title: 'No phone number on this lead', variant: 'warning' }); return }
     resetCallDraft()
-    setCallDraft({ lead, task })
+    const activePhoneTask = task && task.status === 'pending' && taskChannel(task) === 'phone' ? task : undefined
+    setCallDraft({ lead, task: activePhoneTask })
   }
 
   function openLeadWorkspace(lead: LuxorInquiry, stage: 'tour' | 'proposal' | 'profile') {
@@ -339,6 +371,59 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     setSelectedId(inquiryId)
   }
 
+  async function loadExpandedCardDetails(inquiryId: string, page = 0, append = false) {
+    if (expandedCardLoadRef.current.has(inquiryId)) return
+    expandedCardLoadRef.current.add(inquiryId)
+    setExpandedCardDetails((current) => ({
+      ...current,
+      [inquiryId]: { ...(current[inquiryId] ?? { history: [], contacts: [], hasMoreHistory: false, historyPage: 0 }), loading: true, error: null },
+    }))
+    try {
+      const [historyResponse, contactsResponse] = await Promise.all([
+        fetch(`/api/follow-ups?inquiryId=${encodeURIComponent(inquiryId)}&historyPage=${page}`, { cache: 'no-store' }),
+        append ? Promise.resolve(null) : fetch(`/api/portal/event-contacts?inquiryId=${encodeURIComponent(inquiryId)}`, { cache: 'no-store' }),
+      ])
+      if (!historyResponse.ok) throw new Error('Follow-up history could not be loaded.')
+      if (contactsResponse && !contactsResponse.ok) throw new Error('Event contacts could not be loaded.')
+      const historyResult = await historyResponse.json() as { history?: Activity[]; hasMoreHistory?: boolean }
+      const contactResult = contactsResponse ? await contactsResponse.json() as { contacts?: EventContact[] } : null
+      setExpandedCardDetails((current) => {
+        const prior = current[inquiryId] ?? { history: [], contacts: [], hasMoreHistory: false, historyPage: 0, loading: false, error: null }
+        const history = historyResult.history ?? []
+        const combinedHistory = append ? [...prior.history, ...history.filter((item) => !prior.history.some((existing) => existing.id === item.id))] : history
+        return {
+          ...current,
+          [inquiryId]: {
+            history: combinedHistory,
+            contacts: contactResult?.contacts ?? prior.contacts,
+            hasMoreHistory: Boolean(historyResult.hasMoreHistory),
+            historyPage: page,
+            loading: false,
+            error: null,
+          },
+        }
+      })
+    } catch (error) {
+      setExpandedCardDetails((current) => ({
+        ...current,
+        [inquiryId]: { ...(current[inquiryId] ?? { history: [], contacts: [], hasMoreHistory: false, historyPage: 0, loading: false }), loading: false, error: error instanceof Error ? error.message : 'Details could not be loaded.' },
+      }))
+    } finally {
+      expandedCardLoadRef.current.delete(inquiryId)
+    }
+  }
+
+  function toggleExpandedRow(inquiryId: string) {
+    setExpandedRowIds((current) => {
+      const next = new Set(current)
+      if (next.has(inquiryId)) next.delete(inquiryId)
+      else next.add(inquiryId)
+      return next
+    })
+    const detail = expandedCardDetails[inquiryId]
+    if (!detail || detail.error) void loadExpandedCardDetails(inquiryId)
+  }
+
   function openAddTask(inquiryId: string) {
     setLeadId(inquiryId)
     setTitle(''); setNotes(''); setDueDate(''); setDueTime('09:00'); setNewChannel('phone')
@@ -349,22 +434,22 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     if (busyId === task.id) return
     setBusyId(task.id)
     try {
-    const mapped = outcome === 'no_answer' ? 'no_answer' : outcome === 'voicemail_left' ? 'voicemail_left' : 'reached'
-    const patch = buildFollowUpTaskPatch({ status: 'completed', outcome: mapped, channel: taskChannel(task), completedAt: new Date().toISOString() })
-    const response = await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: task.id, ...patch }) })
-    if (!response.ok) throw new Error('The call task could not be updated.')
-    if (mapped === 'reached' && !suppressResponse) {
-      const result = await fetch('/api/follow-ups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: task.inquiry_id, action: 'response' }) })
-      if (!result.ok) throw new Error('Call saved, but the response could not be recorded.')
-    }
-    await addNote(task.inquiry_id, `Manual call outcome: ${outcome.replaceAll('_', ' ')}.${note.trim() ? ` ${note.trim()}` : ''}`, 'status_change', task.id)
-    if (step === 'later' && nextAt) {
-      const date = luxorDate(nextAt)
-      const isPostTour = leadById.get(task.inquiry_id)?.tour_attendance_status === 'attended'
-      const followUp = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: task.inquiry_id, title: 'Follow up after call', description: manualFollowUpDescription(nextChannel, isPostTour), dueDate: date, dueAt: nextAt, assignedTo: assignee || undefined, priority: 'medium' }) })
-      if (!followUp.ok) throw new Error('Call saved, but the next follow-up could not be scheduled.')
-    }
-    await refresh()
+      const mapped = outcome === 'no_answer' ? 'no_answer' : outcome === 'voicemail_left' ? 'voicemail_left' : 'reached'
+      const patch = buildFollowUpTaskPatch({ status: 'completed', outcome: mapped, channel: taskChannel(task), completedAt: new Date().toISOString() })
+      const response = await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: task.id, ...patch }) })
+      if (!response.ok) throw new Error('The call task could not be updated.')
+      if (mapped === 'reached' && !suppressResponse) {
+        const result = await fetch('/api/follow-ups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: task.inquiry_id, action: 'response' }) })
+        if (!result.ok) throw new Error('Call saved, but the response could not be recorded.')
+      }
+      await addNote(task.inquiry_id, `Manual call outcome: ${outcome.replaceAll('_', ' ')}.${note.trim() ? ` ${note.trim()}` : ''}`, 'status_change', task.id)
+      if (step === 'later' && nextAt) {
+        const date = luxorDate(nextAt)
+        const isPostTour = leadById.get(task.inquiry_id)?.tour_attendance_status === 'attended'
+        const followUp = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: task.inquiry_id, title: 'Follow up after call', description: manualFollowUpDescription(nextChannel, isPostTour), dueDate: date, dueAt: nextAt, assignedTo: assignee || undefined, priority: 'medium' }) })
+        if (!followUp.ok) throw new Error('Call saved, but the next follow-up could not be scheduled.')
+      }
+      await refresh()
     } catch (error) { throw error }
     finally { setBusyId(null) }
   }
@@ -401,7 +486,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
 
   async function saveCall(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!callDraft || !callOutcome) return
+    if (!callDraft || !callOutcome || callSavingRef.current) return
+    callSavingRef.current = true
     setCallSaving(true)
     let callOutcomeSaved = false
     let declineSaved = false
@@ -449,13 +535,12 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       const message = error instanceof Error ? error.message : 'Try again in a moment.'
       notify({ title: callOutcomeSaved && nextStep === 'stop' ? 'Call outcome saved; sequence status unknown' : declineSaved ? 'Decline saved; call outcome needs retry' : 'Call outcome was not fully saved', description: message, variant: 'error' })
     }
-    finally { setCallSaving(false) }
+    finally { callSavingRef.current = false; setCallSaving(false) }
   }
 
-  function dial(lead: LuxorInquiry, task?: LuxorTask) {
+  function dial(lead: LuxorInquiry) {
     if (!lead.phone) { notify({ title: 'No phone number on this lead', variant: 'warning' }); return }
     startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })
-    logCall(lead, task ?? pendingPhoneTask(lead.id))
   }
   function composeEmail(lead: LuxorInquiry) {
     if (!lead.email) { notify({ title: 'No email address on this lead', variant: 'warning' }); return }
@@ -547,6 +632,13 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
           const state = row.next.status
           const stage = getStageLabel(lead)
           const stageTone = followUpStageTone(stage)
+          const isExpanded = expandedRowIds.has(row.inquiryId)
+          const cardDetails = expandedCardDetails[row.inquiryId]
+          const additionalTaskHistory: Activity[] = followUpTasks
+            .filter((task) => task.inquiry_id === row.inquiryId && task.id !== row.next.id)
+            .map((task) => ({ id: `task-${task.id}`, at: task.completed_at || task.due_at || task.due_date || task.created_at, kind: taskChannel(task) === 'phone' ? 'call' : 'follow-up', label: `${task.title} · ${task.status}${task.call_outcome ? ` · ${task.call_outcome.replaceAll('_', ' ')}` : ''}`, detail: taskNotes(task) }))
+          const cardHistory = [...(cardDetails?.history ?? []), ...additionalTaskHistory].sort((a, b) => b.at.localeCompare(a.at))
+          const cardDetailsId = `follow-up-details-${row.inquiryId}`
           return (
             <LuxorCrmRecordCard
               key={row.inquiryId}
@@ -554,25 +646,67 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
               avatar={<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span>}
               badges={[{ label: stage, tone: stageTone }]}
               subtitle={<>{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</>}
-              onOpen={() => { selectLead(row.inquiryId); setDetailTab('overview') }}
-              className={`cursor-pointer ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}
+              onOpen={() => toggleExpandedRow(row.inquiryId)}
+              expanded={isExpanded}
+              expandedContentId={cardDetailsId}
+              interactionLabel={`${isExpanded ? 'Collapse' : 'Expand'} follow-up details for ${lead.full_name}`}
+              className={`cursor-pointer ${cardMenuLeadId === lead.id ? 'z-20' : ''} ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}
               contentColumn
+              responsiveContentColumn
             >
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
-                  <div className={`flex items-center gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>
-                    {row.next.channel === 'phone' ? <Phone size={14} /> : <Mail size={14} />}{row.next.title}
+                  <div className={`flex min-w-0 items-start gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>
+                    {row.next.channel === 'phone' ? <Phone className="mt-0.5 shrink-0" size={14} /> : <Mail className="mt-0.5 shrink-0" size={14} />}<span className="min-w-0 break-words [overflow-wrap:anywhere]">{row.next.title}</span>
                   </div>
-                  <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>
-                  {row.postTourStatus && <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
+                  <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>
+                  {row.postTourStatus && <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
                 </div>
-                <div className="flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
-                  {row.next.channel === 'phone' && <button type="button" onClick={() => dial(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>}
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0" onClick={(event) => event.stopPropagation()}>
+                  {row.next.channel === 'phone' && <button type="button" onClick={() => dial(lead)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>}
                   {row.next.channel === 'email' && row.next.assignee !== 'Automated' && <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white disabled:opacity-50"><Mail size={14} /> Email</button>}
-                  {row.next.channel === 'email' && row.next.assignee === 'Automated' && <button type="button" onClick={() => { selectLead(lead.id); setDetailTab('timeline') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white"><Eye size={14} /> View</button>}
-                  <button type="button" onClick={() => { selectLead(lead.id); setDetailTab('overview') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold"><Eye size={14} /> View</button>
-                  <button type="button" aria-label={`More actions for ${lead.full_name}`} onClick={() => { selectLead(lead.id); setMoreOpen((value) => !value) }} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)]"><MoreHorizontal size={16} /></button>
+                  <button type="button" onClick={() => logCall(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Log</button>
+                  <div className="relative" data-follow-up-menu-root="true">
+                    <button id={`follow-up-menu-toggle-${row.inquiryId}`} type="button" aria-label={`More actions for ${lead.full_name}`} aria-haspopup="menu" aria-controls={`follow-up-menu-${row.inquiryId}`} aria-expanded={cardMenuLeadId === lead.id} onClick={() => setCardMenuLeadId((current) => current === lead.id ? null : lead.id)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)]"><MoreHorizontal size={16} /></button>
+                    {cardMenuLeadId === lead.id && <div id={`follow-up-menu-${row.inquiryId}`} role="menu" aria-label={`Actions for ${lead.full_name}`} onKeyDown={(event) => {
+                      const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                      const currentIndex = items.indexOf(document.activeElement as HTMLElement)
+                      const nextIndex = event.key === 'ArrowDown' ? (currentIndex + 1) % items.length : event.key === 'ArrowUp' ? (currentIndex - 1 + items.length) % items.length : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : -1
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        setCardMenuLeadId(null)
+                        document.getElementById(`follow-up-menu-toggle-${row.inquiryId}`)?.focus()
+                      } else if (nextIndex >= 0 && items.length) {
+                        event.preventDefault()
+                        items[nextIndex]?.focus()
+                      }
+                    }} className="absolute right-0 top-full z-30 mt-2 w-52 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl">
+                      <Link role="menuitem" tabIndex={0} href={`/portal/leads/${lead.id}`} onClick={() => setCardMenuLeadId(null)} className="flex min-h-10 items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View Full Workspace</Link>
+                      <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openAddTask(lead.id) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Add Follow-Up</button>
+                    </div>}
+                  </div>
                 </div>
+              </div>
+              <div id={cardDetailsId} hidden={!isExpanded} className={isExpanded ? 'mt-3 border-t border-[color:var(--portal-border)] pt-3' : 'hidden'}>
+                {isExpanded ? <div className="space-y-3">
+                  {cardDetails?.loading && <p className="text-xs text-[color:var(--portal-muted)]">Loading additional details…</p>}
+                  {cardDetails?.error && <p role="status" className="text-xs text-red-700 dark:text-red-300">{cardDetails.error}</p>}
+                  <div className="grid min-w-0 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
+                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Email</p><p className="mt-0.5 break-words">{lead.email || 'Not provided'}</p></div>
+                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Phone</p><p className="mt-0.5 break-words">{lead.phone ? formatPhoneDisplay(lead.phone) : 'Not provided'}</p></div>
+                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Location</p><p className="mt-0.5 break-words">{typeof lead.metadata?.location === 'string' ? lead.metadata.location : typeof lead.metadata?.address === 'string' ? lead.metadata.address : 'Not provided'}</p></div>
+                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Guests</p><p className="mt-0.5 break-words">{lead.guest_count ? `${lead.guest_count} guests` : 'Not provided'}</p></div>
+                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Budget</p><p className="mt-0.5 break-words">{lead.budget || 'Not provided'}</p></div>
+                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Lead source</p><p className="mt-0.5 break-words">{lead.source?.replaceAll('_', ' ') || 'Not provided'}</p></div>
+                  </div>
+                  {(cardDetails?.contacts.length ?? 0) > 0 && <section className="space-y-2"><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Other event contacts</h4><ul className="grid gap-2 sm:grid-cols-2">{cardDetails!.contacts.map((contact) => <li key={contact.id} className="min-w-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-xs"><p className="break-words font-semibold">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="mt-1 break-words text-[color:var(--portal-muted)]">{[contact.email, contact.phone ? formatPhoneDisplay(contact.phone) : null].filter(Boolean).join(' · ') || 'No contact details'}</p></li>)}</ul></section>}
+                  {lead.message && <section><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Inquiry notes</h4><p className="mt-1 whitespace-pre-wrap break-words text-xs">{lead.message}</p></section>}
+                  <section className="space-y-2">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">History &amp; activity</h4>
+                    {cardHistory.length ? <ol className="space-y-2">{cardHistory.map((item) => <li key={item.id} className="min-w-0 border-l-2 border-[#caa24c]/50 pl-3"><div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1"><strong className="break-words text-xs">{item.label}</strong>{item.at && <time className="shrink-0 text-[10px] text-[color:var(--portal-muted)]">{new Date(item.at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium' })}</time>}</div>{item.detail && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[color:var(--portal-muted)]">{item.detail}</p>}</li>)}</ol> : !cardDetails?.loading ? <p className="text-xs text-[color:var(--portal-muted)]">No earlier activity is recorded.</p> : null}
+                    {cardDetails?.hasMoreHistory && <button type="button" onClick={() => void loadExpandedCardDetails(row.inquiryId, cardDetails.historyPage + 1, true)} disabled={cardDetails.loading} className="min-h-9 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Load earlier activity</button>}
+                  </section>
+                </div> : null}
               </div>
             </LuxorCrmRecordCard>
           )
@@ -601,7 +735,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                   {taskNotes(task) && <p className="mt-2 whitespace-pre-wrap text-sm text-[color:var(--portal-muted)]">{taskNotes(task)}</p>}
                   {task.status === 'pending' && !isPausedAutomationTask && <div className="mt-3 flex flex-wrap items-center gap-2">
                     {taskChannel(task) === 'phone'
-                      ? <PortalButton size="sm" disabled={!selected.phone || busyId === task.id} onClick={() => dial(selected, task)}><Phone size={13} /> Call &amp; Log</PortalButton>
+                      ? <><PortalButton size="sm" disabled={!selected.phone || busyId === task.id} onClick={() => dial(selected)}><Phone size={13} /> Call</PortalButton><PortalButton size="sm" variant="ghost" disabled={!selected.phone || busyId === task.id} onClick={() => logCall(selected, task)}>Log</PortalButton></>
                       : <><PortalButton size="sm" disabled={!selected.email || busyId === task.id} onClick={() => composeEmail(selected)}><Mail size={13} /> Open Composer</PortalButton><PortalButton size="sm" variant="ghost" disabled={busyId === task.id} onClick={() => void changeManualTask(task, 'complete')}><Check size={13} /> Complete</PortalButton></>}
                     <div className="w-40"><PortalDatePicker value={task.due_at ? luxorDate(task.due_at) : task.due_date?.slice(0, 10) ?? ''} onChange={(date) => date && void changeManualTask(task, 'reschedule', date)} placeholder="Reschedule" minDate={today} /></div>
                     <PortalButton size="sm" variant="ghost" disabled={busyId === task.id} onClick={() => void changeManualTask(task, 'skip')}><X size={13} /> Skip</PortalButton>
@@ -621,8 +755,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       <form onSubmit={saveTask} className="space-y-4"><label className="block text-sm">Lead<PortalSelect value={leadId} onChange={setLeadId} options={leads.map((lead) => ({ value: lead.id, label: lead.full_name }))} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Type<PortalSelect value={newChannel} onChange={(value) => setNewChannel(value as Channel)} options={[{ value: 'phone', label: 'Phone call' }, { value: 'email', label: 'Email task' }]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Title<input required value={title} onChange={(event) => setTitle(event.target.value)} placeholder={newChannel === 'phone' ? 'Personal call' : 'Follow-up email'} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Due date<PortalDatePicker value={dueDate} onChange={setDueDate} placeholder="Choose date" minDate={today} className="mt-1 w-full [&>button]:h-10 [&>button]:rounded-lg [&>button]:px-3 [&>button]:py-2 [&>button]:normal-case [&>button]:tracking-normal" /></label><label className="block text-sm">Due time (Central)<input required type="time" value={dueTime} onChange={(event) => setDueTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Assigned to<PortalSelect value={assignee} onChange={setAssignee} options={[{ value: '', label: 'Assign to me' }, ...assignees.map((email) => ({ value: email, label: email }))]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm" /></label><div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={() => setAdding(false)}>Cancel</PortalButton><PortalButton type="submit" disabled={!leadId || !dueDate || !dueTime}>Save Follow-Up</PortalButton></div></form>
     </PortalModal>
 
-    <PortalModal isOpen={Boolean(callDraft)} onClose={resetCallDraft} title="Log Call Outcome" description="Record the result and choose a dated manual next step. This form does not place a call." maxWidth="max-w-xl" zIndex={110}>
-      {callDraft && <form onSubmit={saveCall} className="space-y-4"><p className="text-sm text-[color:var(--portal-muted)]">{callDraft.lead.full_name} · {formatPhoneDisplay(callDraft.lead.phone)}. A dial action does not verify call completion; choose the outcome only after you know it.</p><fieldset><legend className="mb-2 text-xs font-semibold">Call outcome</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{[['no_answer','No Answer'],['interested','Interested'],['wants_tour','Wants Tour'],['needs_time','Needs Time'],['not_interested','Not Interested']].map(([value,label]) => <button key={value} type="button" aria-pressed={callOutcome === value} onClick={() => { setCallOutcome(value); if (value === 'not_interested') setNextStep('none') }} className={`min-h-12 rounded-lg border px-2 text-xs font-semibold ${callOutcome === value ? 'border-[#a8792f] bg-[#a8792f]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)]'}`}>{label}</button>)}</div></fieldset><label className="block text-sm">Add a note<textarea value={callNote} onChange={(event) => setCallNote(event.target.value)} maxLength={500} rows={3} placeholder="Call summary or voicemail note" className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm" /></label><label className="block text-sm">Next step<PortalSelect value={nextStep} onChange={setNextStep} disabled={callOutcome === 'not_interested'} options={[{value:'none',label:'No change'}, {value:'tour',label:'Schedule Tour'}, {value:'proposal',label:'Send Proposal'}, {value:'later',label:'Follow Up Later'}, {value:'thank_you',label:'Send Thank You'}, {value:'nurture',label:'Move to Nurture'}, {value:'stop',label:'No Further Follow-Up'}]} className="mt-1 w-full" buttonClassName="h-10" /></label>{['tour','proposal'].includes(nextStep) && <button type="button" onClick={() => { const lead = callDraft.lead; resetCallDraft(); openLeadWorkspace(lead, nextStep as 'tour' | 'proposal') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#caa24c]/50 px-3 text-xs font-semibold text-[#8c6529] dark:text-[#f1d27a]">Open existing {nextStep === 'tour' ? 'tour' : 'proposal'} controls <ChevronRight size={14} /></button>}{nextStep === 'thank_you' && <button type="button" onClick={() => composeEmail(callDraft.lead)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#caa24c]/50 px-3 text-xs font-semibold text-[#8c6529] dark:text-[#f1d27a]"><Mail size={14} /> Open manual email composer</button>}{nextStep === 'nurture' && <p className="text-xs text-[color:var(--portal-muted)]">This changes the lead’s stage only. It sends no messages and adds no nurture enrollment.</p>}{nextStep === 'later' && <div className="grid gap-3 sm:grid-cols-3"><label className="text-sm sm:col-span-2">Follow-up date<PortalDatePicker value={nextDate} onChange={setNextDate} placeholder="Choose date" minDate={today} className="mt-1 w-full" /></label><label className="text-sm">Time<input type="time" value={nextTime} onChange={(event) => setNextTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="text-sm sm:col-span-3">Reminder type<PortalSelect value={nextChannel} onChange={(value) => setNextChannel(value as Channel)} options={[{value:'phone',label:'Phone call'}, {value:'email',label:'Email task (manual; no email sent)'}]} className="mt-1 w-full" buttonClassName="h-10" /></label></div>}<div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={resetCallDraft}>Cancel</PortalButton><PortalButton type="submit" disabled={!callOutcome || callSaving || (nextStep === 'later' && !nextDate)}><Check size={14} /> Save &amp; Schedule</PortalButton></div></form>}
+    <PortalModal isOpen={Boolean(callDraft)} onClose={resetCallDraft} title="Log Call Outcome" description="Record the result and choose a dated manual next step. This form does not place a call." maxWidth="max-w-xl" zIndex={110} footer={callDraft ? <div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={resetCallDraft}>Cancel</PortalButton><PortalButton type="submit" form="follow-up-call-outcome-form" disabled={!callOutcome || callSaving || (nextStep === 'later' && !nextDate)}><Check size={14} /> Save &amp; Schedule</PortalButton></div> : undefined}>
+      {callDraft && <form id="follow-up-call-outcome-form" onSubmit={saveCall} className="space-y-4"><p className="text-sm text-[color:var(--portal-muted)]">{callDraft.lead.full_name} · {formatPhoneDisplay(callDraft.lead.phone)}. A dial action does not verify call completion; choose the outcome only after you know it.</p><fieldset><legend className="mb-2 text-xs font-semibold">Call outcome</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{[['no_answer','No Answer'],['interested','Interested'],['wants_tour','Wants Tour'],['needs_time','Needs Time'],['not_interested','Not Interested']].map(([value,label]) => <button key={value} type="button" aria-pressed={callOutcome === value} onClick={() => { setCallOutcome(value); if (value === 'not_interested') setNextStep('none') }} className={`min-h-12 rounded-lg border px-2 text-xs font-semibold ${callOutcome === value ? 'border-[#a8792f] bg-[#a8792f]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)]'}`}>{label}</button>)}</div></fieldset><label className="block text-sm">Add a note<textarea value={callNote} onChange={(event) => setCallNote(event.target.value)} maxLength={500} rows={3} placeholder="Call summary or voicemail note" className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm" /></label><label className="block text-sm">Next step<PortalSelect value={nextStep} onChange={setNextStep} disabled={callOutcome === 'not_interested'} options={[{value:'none',label:'No change'}, {value:'tour',label:'Schedule Tour'}, {value:'proposal',label:'Send Proposal'}, {value:'later',label:'Follow Up Later'}, {value:'thank_you',label:'Send Thank You'}, {value:'nurture',label:'Move to Nurture'}, {value:'stop',label:'No Further Follow-Up'}]} className="mt-1 w-full" buttonClassName="h-10" /></label>{['tour','proposal'].includes(nextStep) && <button type="button" onClick={() => { const lead = callDraft.lead; resetCallDraft(); openLeadWorkspace(lead, nextStep as 'tour' | 'proposal') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#caa24c]/50 px-3 text-xs font-semibold text-[#8c6529] dark:text-[#f1d27a]">Open existing {nextStep === 'tour' ? 'tour' : 'proposal'} controls <ChevronRight size={14} /></button>}{nextStep === 'thank_you' && <button type="button" onClick={() => composeEmail(callDraft.lead)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#caa24c]/50 px-3 text-xs font-semibold text-[#8c6529] dark:text-[#f1d27a]"><Mail size={14} /> Open manual email composer</button>}{nextStep === 'nurture' && <p className="text-xs text-[color:var(--portal-muted)]">This changes the lead&apos;s stage only. It sends no messages and adds no nurture enrollment.</p>}{nextStep === 'later' && <div className="grid gap-3 sm:grid-cols-3"><label className="text-sm sm:col-span-2">Follow-up date<PortalDatePicker value={nextDate} onChange={setNextDate} placeholder="Choose date" minDate={today} className="mt-1 w-full" /></label><label className="text-sm">Time<input type="time" value={nextTime} onChange={(event) => setNextTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="text-sm sm:col-span-3">Reminder type<PortalSelect value={nextChannel} onChange={(value) => setNextChannel(value as Channel)} options={[{value:'phone',label:'Phone call'}, {value:'email',label:'Email task (manual; no email sent)'}]} className="mt-1 w-full" buttonClassName="h-10" /></label></div>}</form>}
     </PortalModal>
 
     <PortalModal isOpen={pauseOpen} onClose={() => setPauseOpen(false)} title="Pause Follow-Ups" description="Pause this lead’s approved brochure sequence. Any date below adds a manual review reminder; it will not automatically resume." maxWidth="max-w-md" zIndex={120}><form onSubmit={(event) => void savePause(event)} className="space-y-4"><label className="block text-sm">Review on (optional)<PortalDatePicker value={pauseDate} onChange={setPauseDate} placeholder="Choose a review date" minDate={today} className="mt-1 w-full" /></label><label className="block text-sm">Reason (optional)<PortalSelect value={pauseReason} onChange={setPauseReason} options={[{value:'',label:'Choose a reason'}, {value:'Client requested later',label:'Client requested later'}, {value:'Staff follow-up needed',label:'Staff follow-up needed'}, {value:'Other',label:'Other'}]} className="mt-1 w-full" buttonClassName="h-10" /></label><div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={() => setPauseOpen(false)}>Cancel</PortalButton><PortalButton type="submit" disabled={sequenceSaving}><Pause size={14} /> Pause Follow-Ups</PortalButton></div></form></PortalModal>

@@ -8597,7 +8597,7 @@ function ClientSummaryCard({
         </div>
         <span className="text-[9px] font-black uppercase tracking-[0.14em] text-zinc-600">Hover to edit</span>
       </div>
-      <div className="flex-1 space-y-0.5">
+      <div className="min-w-0 space-y-1">
         {summaryRows.map((row) => (
           <DetailItem
             key={row.label}
@@ -9077,7 +9077,7 @@ function DetailItem({
           activateRow()
         }
       }}
-      className={`group/card relative flex ${compact ? 'min-h-10 items-center gap-3 px-2 -mx-2 py-1' : 'min-h-[72px] items-start gap-3 px-3 -mx-3 py-3.5'} rounded-xl transition-all hover:bg-[#caa24c]/[0.025] ${
+      className={`group/card relative flex ${compact ? 'min-h-0 items-start gap-3 px-2 -mx-2 py-2' : 'min-h-[72px] items-start gap-3 px-3 -mx-3 py-3.5'} rounded-xl transition-all hover:bg-[#caa24c]/[0.025] ${
         canEdit ? 'cursor-text focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30' : ''
       }`}
     >
@@ -9153,15 +9153,16 @@ function DetailItem({
         )
       ) : (
       <div className={`group/value relative ${compact ? '' : 'mt-2'} flex w-full min-w-0 flex-col items-start ${canEdit || canCopy ? 'cursor-pointer' : ''}`}>
+          {compact ? <span className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{label}</span> : null}
           <p
-            className={`min-w-0 w-full flex-1 break-words ${compact ? 'text-xs font-medium' : 'text-sm font-bold'} leading-normal text-[color:var(--portal-text)] transition-all duration-150 sm:truncate sm:group-hover/value:pr-[5.5rem] ${
+            className={`min-w-0 w-full flex-1 break-words ${compact ? 'text-xs font-medium [overflow-wrap:anywhere]' : 'text-sm font-bold'} leading-normal text-[color:var(--portal-text)] transition-all duration-150 ${compact ? '' : 'sm:truncate sm:group-hover/value:pr-[5.5rem]'} ${
               isMono ? 'font-mono text-xs' : ''
             }`}
           >
             {isSaving ? 'Saving...' : value}
           </p>
           {canCopy || (canEdit && !isEditing) ? (
-            <div className="portal-contact-value-actions pointer-events-auto relative z-10 mt-1 inline-flex max-w-full flex-wrap items-center gap-1 opacity-100 transition-opacity duration-150 sm:pointer-events-none sm:absolute sm:right-0 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2 sm:opacity-0 sm:group-hover/value:pointer-events-auto sm:group-hover/value:opacity-100">
+            <div className={`portal-contact-value-actions pointer-events-auto relative z-10 mt-1 inline-flex max-w-full flex-wrap items-center gap-1 opacity-100 transition-opacity duration-150 ${compact ? '' : 'sm:pointer-events-none sm:absolute sm:right-0 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2 sm:opacity-0 sm:group-hover/value:pointer-events-auto sm:group-hover/value:opacity-100'}`}>
               {canCopy ? (
                 <button
                   type="button"
