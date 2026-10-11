@@ -7,8 +7,10 @@ import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { syncLuxorPaymentInstallments } from '@/lib/luxorPaymentInstallmentsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
-import type { LuxorDocument } from '@/lib/luxorInquiryTypes'
+import type { LuxorDocument, LuxorBooking } from '@/lib/luxorInquiryTypes'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
+import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
+import { sameDayTermsFingerprint, reconcileLuxorSameDayReceipts, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
 
 export const runtime = 'nodejs'
 
@@ -34,11 +36,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!invoice?.proposal_accepted_at || invoice.status !== 'sent') {
       return NextResponse.json({ error: 'Record acceptance of the locked final proposal before uploading a signed agreement.' }, { status: 409 })
     }
+    if (booking.contract_status === 'signed') {
+      if (booking.metadata?.manual_signed_agreement_document_id && sameDayBookingPromotion(invoice)?.coverage_amount) {
+        await reconcileLuxorSameDayReceipts(booking.id)
+        return NextResponse.json({ booking: await getLuxorBooking(booking.id), alreadySigned: true })
+      }
+      return NextResponse.json({ error: 'The signed agreement is immutable. Open its existing document; do not upload a replacement over it.' }, { status: 409 })
+    }
 
     const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '')
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     if (!url || !serviceRoleKey) throw new Error('Supabase configuration is missing on the server.')
     const uploadedAt = new Date().toISOString()
+    const benefit = sameDayBookingPromotion(invoice)
+    const actualSignedInput = String(form.get('actualSignedAt') || '')
+    const signatureEvidence = String(form.get('signatureEvidence') || '').trim().slice(0, 1000)
+    const actualSignedAt = benefit?.coverage_amount ? new Date(actualSignedInput) : new Date(uploadedAt)
+    if (benefit?.coverage_amount && (!/(?:Z|[+-]\d{2}:\d{2})$/.test(actualSignedInput) || !Number.isFinite(actualSignedAt.getTime()) || actualSignedAt.getTime() > Date.now() || !signatureEvidence || form.get('signatureTimingConfirmed') !== 'true')) return NextResponse.json({ error: 'Verify the actual signing time, timezone, and that this PDF contains the exact locked proposal terms. An upload time does not establish same-day signing.' }, { status: 400 })
+    const signatureProof = benefit?.coverage_amount ? { actual_signed_at: actualSignedAt.toISOString(), signature_timing_verified: true, signature_evidence: signatureEvidence, same_day_terms_fingerprint: sameDayTermsFingerprint(invoice, booking) } : {}
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const storagePath = `contracts/${booking.id}/manual/${Date.now()}-${safeName}`
     await ensureDocumentBucket()
@@ -52,24 +67,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
         inquiry_id: inquiry.id, invoice_id: invoice.id, document_type: 'executed_contract', title: `Manually signed agreement for ${booking.client_name}`,
         file_name: file.name, storage_path: storagePath, content_type: 'application/pdf', size_bytes: file.size, created_by: session.email,
-        metadata: { signature_method: 'manual_upload', uploaded_at: uploadedAt, uploaded_by: session.email, booking_id: booking.id }, updated_at: uploadedAt,
+        metadata: { signature_method: 'manual_upload', uploaded_at: uploadedAt, uploaded_by: session.email, booking_id: booking.id, ...signatureProof }, updated_at: uploadedAt,
       }),
     })
     if (!document) throw new Error('The agreement was stored but its document record could not be created.')
-    const signedBooking = await updateLuxorBooking(booking.id, {
-      status: 'confirmed', contract_status: 'signed', contract_signed_at: uploadedAt,
+    const signedUpdate = {
+      ...(!benefit?.coverage_amount ? { status: 'confirmed' as const } : {}), contract_status: 'signed', contract_signed_at: actualSignedAt.toISOString(),
       metadata: { ...booking.metadata, manual_signed_agreement_document_id: document.id, manual_signed_agreement_uploaded_at: uploadedAt, manual_signed_agreement_uploaded_by: session.email, reservation_state: 'awaiting_initial_payment' },
-    }) || booking
+    } as const
+    const claimed = benefit?.coverage_amount ? (await supabaseRest<LuxorBooking[]>(`luxor_bookings?select=*&id=eq.${encodeURIComponent(booking.id)}&status=not.in.(cancelled,completed)&contract_status=${booking.contract_status ? 'eq.' + encodeURIComponent(booking.contract_status) : 'is.null'}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(signedUpdate) }))[0] : null
+    if (benefit?.coverage_amount && !claimed) {
+      const winner = await getLuxorBooking(booking.id)
+      if (winner?.contract_status !== 'signed') return NextResponse.json({ error: 'The booking was closed or changed during upload. Review its current state.' }, { status: 409 })
+      await reconcileLuxorSameDayReceipts(booking.id)
+      return NextResponse.json({ booking: await getLuxorBooking(booking.id), alreadySigned: true })
+    }
+    const signedBooking = claimed || await updateLuxorBooking(booking.id, signedUpdate) || booking
+    if (benefit?.coverage_amount) await reconcileLuxorSameDayReceipts(booking.id)
+    const completedInvoice = benefit?.coverage_amount ? await getInvoice(invoice.id) : invoice
+    const completedBooking = benefit?.coverage_amount ? await getLuxorBooking(booking.id) || signedBooking : signedBooking
     if (booking.status !== 'confirmed' && signedBooking.status === 'confirmed') {
       await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: signedBooking.id, inquiryId: inquiry.id })
         .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
     }
     await syncLuxorPaymentInstallments({ booking: { ...signedBooking, created_at: uploadedAt }, invoice })
     await Promise.all([
-      updateLuxorInquiry(inquiry.id, { status: 'booked', pipeline_stage: 'deposit', metadata: { ...inquiry.metadata, contract_signed_at: uploadedAt, contract_signature_method: 'manual_upload' } }),
+      benefit?.coverage_amount ? finalizeLuxorSameDayBooking(completedBooking, {}, inquiry,
+        { pipeline_stage: completedInvoice?.same_day_booking_status === 'eligible' ? 'planning' : 'deposit', metadata: { contract_signed_at: actualSignedAt.toISOString(), contract_signature_method: 'manual_upload' } }, false)
+        : updateLuxorInquiry(inquiry.id, { status: 'booked', pipeline_stage: 'deposit', metadata: { ...inquiry.metadata, contract_signed_at: actualSignedAt.toISOString(), contract_signature_method: 'manual_upload' } }),
       createNote(inquiry.id, `Signed paper agreement uploaded by ${session.email}. The booking is now signed; collect the selected initial payment to reserve the date.`, 'status_change', 'Owner Portal'),
     ])
-    return NextResponse.json({ document, booking: signedBooking }, { status: 201 })
+    return NextResponse.json({ document, booking: completedBooking }, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to upload the signed agreement.' }, { status: 500 })
   }

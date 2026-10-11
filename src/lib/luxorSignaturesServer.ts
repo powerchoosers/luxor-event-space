@@ -1,4 +1,6 @@
 import 'server-only'
+import { sameDayBookingPromotion, sameDayBookingRequiresRevision } from './luxorSameDayBooking'
+import { SAME_DAY_REVISION_MESSAGE, sameDayTermsFingerprint, reconcileLuxorSameDayReceipts, finalizeLuxorSameDayBooking } from './luxorSameDayBookingServer'
 
 import { LuxorBooking, LuxorInvoice, LuxorSignatureRequest } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
@@ -95,6 +97,8 @@ export function getLuxorBookingContractFingerprint(booking: LuxorBooking) {
     proposalLineItems: booking.metadata?.proposalLineItems || [],
     proposalTaxRate: booking.metadata?.proposalTaxRate || 0,
     proposalOffer: booking.metadata?.proposalOffer || null,
+    ...(booking.metadata?.final_proposal_context && (booking.metadata.final_proposal_context as Record<string, unknown>).same_day_booking
+      ? { sameDayBooking: (booking.metadata.final_proposal_context as Record<string, unknown>).same_day_booking, proposalInvoiceId: booking.invoice_id } : {}),
   })).digest('hex')
 }
 
@@ -244,6 +248,7 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking, options
   const ownerName = resolveOwnerSignerName(process.env.LUXOR_OWNER_SIGNER_NAME)
   const ownerEmail = process.env.LUXOR_OWNER_SIGNER_EMAIL || 'booking@luxoratlaspalmas.com'
   const parsedName = parseClientName(booking.client_name)
+  const proposal = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
   let created: LuxorSignatureRequest | null = null
   try {
     const [inserted] = await supabaseRest<LuxorSignatureRequest[]>('luxor_signature_requests?select=*', {
@@ -273,6 +278,7 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking, options
           guestCount: booking.guest_count,
           contractTotal: booking.contract_total,
           bookingFingerprint: getLuxorBookingContractFingerprint(booking),
+          ...(sameDayBookingPromotion(proposal)?.coverage_amount && proposal ? { sameDayTermsFingerprint: sameDayTermsFingerprint(proposal, booking) } : {}),
           signingMode: options?.signingMode || 'email',
           documentPreparationState: 'preparing',
           requestedStatus,
@@ -757,6 +763,9 @@ export async function signLuxorSignatureRequest(input: {
   let immutableSignatureDataUrl = recordedClientSignatureDataUrl(signature)
   let signatureRecordedByThisAttempt = false
   if (signature.status !== 'signed') {
+    const master = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
+    if (master && sameDayBookingRequiresRevision(master)) throw new Error(SAME_DAY_REVISION_MESSAGE)
+    if (master && sameDayBookingPromotion(master)?.coverage_amount && signature.metadata?.bookingFingerprint !== getLuxorBookingContractFingerprint(booking)) throw new Error('This agreement belongs to an earlier proposal version. Request a fresh agreement.')
     updated = await claimLuxorClientSignature(signature, input, signedAt)
     if (!updated) {
       // Another tab/request may have won the first-write race. Re-fetch and
@@ -769,13 +778,15 @@ export async function signLuxorSignatureRequest(input: {
     } else {
       signatureRecordedByThisAttempt = true
     }
+    signedAt = updated.signed_at || signedAt
     immutableSignatureDataUrl = recordedClientSignatureDataUrl(updated)
 
     if (signatureRecordedByThisAttempt && updated) {
-      await updateLuxorBooking(signature.booking_id, {
+      if (!sameDayBookingPromotion(master)?.coverage_amount) await updateLuxorBooking(signature.booking_id, {
         contract_status: 'signed',
         contract_signed_at: signedAt,
       })
+      await reconcileLuxorSameDayReceipts(signature.booking_id)
 
       // Persist the owner-visible signing signal before rendering PDFs,
       // creating Checkout, or sending mail. This helper also backfills it
@@ -793,10 +804,11 @@ export async function signLuxorSignatureRequest(input: {
       }
       const depositInvoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
       const depositPayments = depositInvoice ? await listPaidPaymentsByInvoice(depositInvoice.id) : []
-      const depositPaid = Boolean(depositInvoice) && depositPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) + 0.005 >= Number(depositInvoice?.total || 0)
-      let reconciledBooking = booking
+      const signedMaster = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
+      const depositPaid = Boolean(depositInvoice) && (!sameDayBookingPromotion(signedMaster)?.coverage_amount || signedMaster?.same_day_booking_status === 'eligible') && depositPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) + 0.005 >= Number(depositInvoice?.total || 0)
+      let reconciledBooking: LuxorBooking | null = booking
       let finalPaymentScheduleMissing = false
-      if (booking && depositPaid && inquiry?.status !== 'closed_lost' && booking.status !== 'cancelled') {
+      if (booking && depositPaid && !sameDayBookingPromotion(signedMaster)?.coverage_amount && inquiry?.status !== 'closed_lost' && booking.status !== 'cancelled') {
         const masterInvoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
         const finalPaymentDueDate = configuredFinalPaymentDueDate(booking)
         // A historical booking may have a paid initial payment but no approved
@@ -826,8 +838,12 @@ export async function signLuxorSignatureRequest(input: {
         }) || booking
       }
       if (inquiry && inquiry.status !== 'closed_lost') {
-        await updateLuxorInquiry(inquiry.id, {
-          status: 'booked',
+        if (booking && sameDayBookingPromotion(signedMaster)?.coverage_amount) {
+          const finalized = await finalizeLuxorSameDayBooking(booking, {}, inquiry,
+            { pipeline_stage: depositPaid ? 'planning' : 'deposit', metadata: { contract_signed_at: signedAt } }, false)
+          reconciledBooking = finalized.applied ? finalized.booking : null
+        } else await updateLuxorInquiry(inquiry.id, {
+          status: sameDayBookingPromotion(signedMaster)?.coverage_amount && !depositPaid ? 'proposal_sent' : 'booked',
           pipeline_stage: depositPaid ? 'planning' : 'deposit',
           metadata: { ...inquiry.metadata, contract_signed_at: signedAt },
         })
@@ -860,13 +876,15 @@ export async function signLuxorSignatureRequest(input: {
   // idempotent execution/payment recovery below.
   if (!signatureRecordedByThisAttempt && executionSignature.status === 'signed') {
     const recoveredBooking = await getLuxorBooking(signature.booking_id)
-    if (recoveredBooking && recoveredBooking.contract_status !== 'signed') {
+    const recoveredMaster = recoveredBooking?.invoice_id ? await getInvoice(recoveredBooking.invoice_id) : null
+    if (recoveredBooking && recoveredBooking.contract_status !== 'signed' && !sameDayBookingPromotion(recoveredMaster)?.coverage_amount) {
       await updateLuxorBooking(signature.booking_id, {
         contract_status: 'signed',
         contract_signed_at: recoveredBooking.contract_signed_at || signedAt,
       })
     }
     await ensureLuxorSignedOwnerActivity(executionSignature, input.signedName)
+    await reconcileLuxorSameDayReceipts(signature.booking_id)
   }
 
   const ownerName = resolveOwnerSignerName(signature.owner_name || process.env.LUXOR_OWNER_SIGNER_NAME)

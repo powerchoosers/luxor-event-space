@@ -167,7 +167,7 @@ export type LuxorPromotion = {
   updated_at: string
   name: string
   code: string
-  discount_type: 'percent' | 'fixed' | 'complimentary'
+  discount_type: 'percent' | 'fixed' | 'complimentary' | 'tax_coverage'
   value: number
   expires_on?: string | null
   complimentary_item?: string | null
@@ -234,7 +234,7 @@ export type LuxorInvoiceLineItem = {
   category?: string
   included?: boolean
   /** How this line reached the proposal. Keeps the owner audit trail clear. */
-  pricingRole?: 'required' | 'included' | 'add_on' | 'discount' | 'tax' | 'custom'
+  pricingRole?: 'required' | 'included' | 'add_on' | 'discount' | 'tax' | 'tax_coverage' | 'custom'
   /** The pricing rule/version that produced this exact, locked line. */
   pricingRuleId?: string
   /** Used for the clear three-bucket payment summary. */
@@ -320,6 +320,8 @@ export type LuxorProposalContext = {
   payment_plan?: LuxorProposalPaymentPlan
   /** Immutable promotion terms, if a saved promotion was selected. */
   promotion?: LuxorProposalPromotionSnapshot
+  same_day_booking?: import('./luxorSameDayBooking').LuxorSameDayBookingSnapshot
+  original_proposal_created_at?: string
   pricing_selection?: Record<string, unknown>
   calculation_warnings?: string[]
   calculation_errors?: string[]
@@ -332,6 +334,10 @@ export type LuxorInvoice = {
   id: string
   created_at: string
   updated_at: string
+  original_proposal_created_at?: string | null
+  same_day_booking_status?: 'pending' | 'eligible' | 'review' | 'revision_required' | null
+  same_day_booking_completed_at?: string | null
+  same_day_booking_review_reason?: string | null
   inquiry_id: string | null
   client_name: string
   event_type: string | null

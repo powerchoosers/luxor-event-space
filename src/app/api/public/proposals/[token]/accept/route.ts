@@ -4,6 +4,8 @@ import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { claimLuxorProposalAcceptance, getInvoice, getInvoiceByPublicToken } from '@/lib/luxorInvoicesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 import { hasLuxorSignatureDeliveryDocuments } from '@/lib/luxorSignaturesServer'
+import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
+import { SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     if (invoice.invoice_kind !== 'event' || !invoice.price_locked_at || invoice.status !== 'sent') {
       return NextResponse.json({ error: 'Luxor must publish the final proposal before it can be accepted.' }, { status: 409 })
     }
+    if (sameDayBookingRequiresRevision(invoice)) return NextResponse.json({ error: SAME_DAY_REVISION_MESSAGE }, { status: 410 })
     // Once accepted, an expiry must not trap the prospect in a partial
     // acceptance. They may retry solely to recover the queued agreement.
     if (!invoice.proposal_accepted_at && isLuxorOfferExpired(invoice)) {

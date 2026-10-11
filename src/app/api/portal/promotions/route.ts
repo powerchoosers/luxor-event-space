@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorPromotion } from '@/lib/luxorInquiryTypes'
+import { SAME_DAY_BOOKING_CODE } from '@/lib/luxorSameDayBooking'
 
 type PromotionInput = Partial<Pick<LuxorPromotion, 'name' | 'code' | 'discount_type' | 'value' | 'active' | 'metadata' | 'expires_on' | 'complimentary_item' | 'complimentary_scope' | 'complimentary_item_id'>> & {
   id?: string
@@ -152,6 +153,12 @@ export async function PATCH(request: NextRequest) {
     const promotions = await listPromotions()
     const existing = promotions.find((promotion) => promotion.id === id)
     if (!existing) return NextResponse.json({ error: 'Promotion not found.' }, { status: 404 })
+    if (existing.discount_type === 'tax_coverage' && existing.code === SAME_DAY_BOOKING_CODE) {
+      if (body.active === true && process.env.LUXOR_SAME_DAY_BOOKING_ENABLED !== 'true') return NextResponse.json({ error: 'Same-day booking requires the reviewed migration and deployment before activation.' }, { status: 409 })
+      if (typeof body.active !== 'boolean' || Object.keys(body).some(key => key !== 'id' && key !== 'active')) return NextResponse.json({ error: 'The same-day tax terms are fixed; only its active state can change.' }, { status: 400 })
+      const [updated] = await supabaseRest<LuxorPromotion[]>(`luxor_promotions?select=*&id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ active: body.active, updated_at: new Date().toISOString() }) })
+      return NextResponse.json(updated)
+    }
 
     const updates: Partial<LuxorPromotion> = {}
     const name = body.name === undefined ? existing.name : cleanName(body.name)

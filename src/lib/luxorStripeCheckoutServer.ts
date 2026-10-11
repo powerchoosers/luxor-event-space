@@ -3,8 +3,13 @@ import 'server-only'
 import crypto from 'node:crypto'
 import Stripe from 'stripe'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
-import { listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
+import { getInvoice, listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
+import { getLuxorBooking } from './luxorBookingsServer'
+import { getLuxorInquiry } from './luxorInquiriesServer'
+import { supabaseRest } from './supabaseRestServer'
 import { isLuxorOfferExpired, luxorOfferSnapshot } from './luxorOffer'
+import { assertLuxorSameDayPaymentAllowed, sameDayTermsFingerprint } from './luxorSameDayBookingServer'
+import { sameDayBookingPromotion } from './luxorSameDayBooking'
 
 /**
  * A checkout URL remains usable even after its reference is removed from our
@@ -45,6 +50,9 @@ export async function createLuxorPostContractCheckout(input: {
   masterInvoiceId?: string
 }) {
   const { invoice, inquiry, booking } = input
+  const master = await assertLuxorSameDayPaymentAllowed(invoice, booking)
+  const sameDay = master?.same_day_booking_status !== 'eligible' ? sameDayBookingPromotion(master) : null
+  const fingerprint = sameDay?.coverage_amount && master ? sameDayTermsFingerprint(master, booking) : ''
   if (inquiry.status === 'closed_lost') {
     throw new Error('This deal is closed lost, so a new Stripe checkout link cannot be created.')
   }
@@ -111,6 +119,17 @@ export async function createLuxorPostContractCheckout(input: {
 
   const stripe = new Stripe(secretKey)
   const origin = input.origin.replace(/\/$/, '')
+  const verifyCurrentSameDayState = async (checkoutId: string) => {
+    if (!sameDayBookingPromotion(master)?.coverage_amount) return
+    const [currentInvoice, currentBooking, currentInquiry, paid, pendingReceipts] = await Promise.all([
+      getInvoice(invoice.id), getLuxorBooking(booking.id), getLuxorInquiry(inquiry.id), listPaidPaymentsByInvoice(invoice.id),
+      supabaseRest<Array<{ id: string }>>(`luxor_payments?select=id&invoice_id=eq.${encodeURIComponent(invoice.id)}&status=eq.pending&metadata->>receipt_received=eq.true&limit=1`),
+    ])
+    if (!currentInvoice || !currentBooking || !currentInquiry || currentInvoice.status === 'cancelled' || currentInquiry.status === 'closed_lost' || currentBooking.contract_status !== 'signed' || paid.length || pendingReceipts.length ||
+      currentInvoice.total !== invoice.total || (currentInvoice.stripe_checkout_session_id && currentInvoice.stripe_checkout_session_id !== invoice.stripe_checkout_session_id && currentInvoice.stripe_checkout_session_id !== checkoutId)) throw new Error('This payment request changed while the link was being prepared. Refresh; do not pay from a stale link.')
+    const currentMaster = await assertLuxorSameDayPaymentAllowed(currentInvoice, currentBooking)
+    if (fingerprint && (!currentMaster || currentMaster.same_day_booking_status === 'eligible' || sameDayTermsFingerprint(currentMaster, currentBooking) !== fingerprint)) throw new Error('The same-day booking payment was received or its agreement changed. No additional link is available.')
+  }
   const offer = luxorOfferSnapshot(invoice)
   // Proposal totals are already final and price-locked before the scheduled
   // child invoices are made. A promotion is part of that final price; it must
@@ -126,11 +145,9 @@ export async function createLuxorPostContractCheckout(input: {
   }
   const nowSeconds = Math.floor(Date.now() / 1000)
   const maximumSessionExpiry = nowSeconds + (23 * 60 * 60) + (55 * 60)
-  const offerExpirySeconds = offer.expiresAt ? Math.floor(new Date(offer.expiresAt).getTime() / 1000) : null
+  const expiresAt = sameDay?.coverage_amount ? sameDay.expires_at : offer.expiresAt
+  const offerExpirySeconds = expiresAt ? Math.floor(new Date(expiresAt).getTime() / 1000) : null
   const checkoutExpiry = offerExpirySeconds ? Math.min(offerExpirySeconds, maximumSessionExpiry) : undefined
-  if (checkoutExpiry && checkoutExpiry < nowSeconds + (30 * 60)) {
-    throw new Error('This offer expires in less than 30 minutes, so Stripe cannot safely create a checkout link. Extend the offer or send an updated proposal.')
-  }
   let previousSessionMarker = invoice.stripe_checkout_session_id || 'first'
   if (invoice.stripe_checkout_session_id) {
     try {
@@ -145,8 +162,11 @@ export async function createLuxorPostContractCheckout(input: {
         existing.metadata?.invoice_id === invoice.id &&
         existing.metadata?.booking_id === booking.id &&
         existing.metadata?.payment_label === paymentLabel &&
+        (!fingerprint || existing.metadata?.same_day_fingerprint === fingerprint) &&
+        Number(existing.expires_at || 0) > nowSeconds &&
         (!checkoutExpiry || Number(existing.expires_at || 0) <= checkoutExpiry)
       if (sameRequest && existing.url) {
+        try { await verifyCurrentSameDayState(existing.id) } catch (error) { await stripe.checkout.sessions.expire(existing.id); throw error }
         return { checkoutId: existing.id, checkoutUrl: existing.url, paymentAmount, paymentLabel, balanceDue, paidTotal, reused: true }
       }
       if (existing.status === 'open') await stripe.checkout.sessions.expire(existing.id)
@@ -162,6 +182,19 @@ export async function createLuxorPostContractCheckout(input: {
     }
   }
 
+  // Reuse a previously capped session even in the final 30 minutes. A fresh
+  // session must never extend the original promotion deadline.
+  if (checkoutExpiry && checkoutExpiry < Math.floor(Date.now() / 1000) + (30 * 60)) {
+    throw new Error(sameDay?.coverage_amount
+      ? 'A new discounted card link cannot be created within 30 minutes of midnight. An existing valid link may still be used before midnight. Contact Luxor for verified Cash/Zelle payment or revised pricing and a fresh agreement.'
+      : 'This offer expires in less than 30 minutes, so Stripe cannot safely create a checkout link. Extend the offer or send an updated proposal.')
+  }
+  if (fingerprint) await updateInvoice(invoice.id, { proposal_context: { ...invoice.proposal_context, version: invoice.proposal_context?.version || 1, same_day_payment_fingerprint: fingerprint } })
+  const disclosedBenefit = sameDayBookingPromotion(master)
+  const taxDisclosure = disclosedBenefit?.coverage_amount && master
+    ? `Original proposal sales tax: $${Number(master.proposal_context?.pricing_snapshot && (master.proposal_context.pricing_snapshot as Record<string, unknown>).tax_amount || disclosedBenefit.coverage_amount).toFixed(2)}. LUXOR pays $${disclosedBenefit.coverage_amount.toFixed(2)} of that sales tax${master.same_day_booking_status === 'eligible' ? '; the booking qualified on its original proposal day' : ` only if agreement and required initial payment complete before ${disclosedBenefit.expires_at} (midnight America/Chicago)`}. This invoice collects the locked scheduled payment only.`
+    : ''
+
   const checkout = await stripe.checkout.sessions.create({
     mode: 'payment',
     integration_identifier: `luxor-post-contract-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
@@ -172,7 +205,7 @@ export async function createLuxorPostContractCheckout(input: {
       price_data: {
         currency: 'usd',
         unit_amount: Math.round(paymentAmount * 100),
-      product_data: { name: paymentLabel },
+      product_data: { name: paymentLabel, ...(taxDisclosure ? { description: taxDisclosure } : {}) },
       },
     }],
     metadata: {
@@ -190,12 +223,15 @@ export async function createLuxorPostContractCheckout(input: {
       offer_savings: '0',
       offer_expires_at: offer.expiresAt || '',
       stripe_coupon_id: '',
+      ...(fingerprint ? { same_day_fingerprint: fingerprint, same_day_deadline: sameDay!.expires_at, proposal_version: String(master!.proposal_version || 1) } : {}),
     },
+    ...(fingerprint ? { payment_intent_data: { metadata: { workflow: 'luxor_same_day_booking', invoice_id: invoice.id,
+      master_invoice_id: master!.id, booking_id: booking.id, same_day_fingerprint: fingerprint, same_day_deadline: sameDay!.expires_at } } } : {}),
     ...(checkoutExpiry ? { expires_at: checkoutExpiry } : {}),
     invoice_creation: {
       enabled: true,
       invoice_data: {
-        description: `${paymentLabel}${booking.event_type ? ` for ${booking.event_type}` : ''}${booking.event_date ? ` on ${booking.event_date}` : ''}`,
+        description: `${paymentLabel}${booking.event_type ? ` for ${booking.event_type}` : ''}${booking.event_date ? ` on ${booking.event_date}` : ''}${taxDisclosure ? '. ' + taxDisclosure : ''}`,
         metadata: {
           luxor_invoice_id: invoice.id,
           luxor_booking_id: booking.id,
@@ -212,7 +248,7 @@ export async function createLuxorPostContractCheckout(input: {
     idempotencyKey: `luxor-${invoice.invoice_kind || 'event'}-${booking.id}-${invoice.id}-${Math.round(paymentAmount * 100)}-${Math.round(paidTotal * 100)}-${previousSessionMarker}`,
   })
   if (!checkout.url) throw new Error('Stripe did not return a checkout link.')
-
+  try { await verifyCurrentSameDayState(checkout.id) } catch (error) { await stripe.checkout.sessions.expire(checkout.id); throw error }
   await updateInvoice(invoice.id, {
     payment_requested_at: new Date().toISOString(),
     payment_requested_amount: Number(checkout.amount_total || Math.round(paymentAmount * 100)) / 100,
@@ -220,6 +256,7 @@ export async function createLuxorPostContractCheckout(input: {
     stripe_checkout_session_id: checkout.id,
     stripe_checkout_url: checkout.url,
   })
+  try { await verifyCurrentSameDayState(checkout.id) } catch (error) { await stripe.checkout.sessions.expire(checkout.id); throw error }
 
   const actualPaymentAmount = Number(checkout.amount_total || Math.round(paymentAmount * 100)) / 100
   if (Math.abs(actualPaymentAmount - paymentAmount) > 0.01) {

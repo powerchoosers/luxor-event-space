@@ -19,6 +19,8 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
 import type { LuxorInvoice, LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
+import { recordLuxorSameDayPayment, recordLuxorSameDayScheduledPayment, sameDayTermsFingerprint, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
+import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 
 type ManualPaymentKind = 'deposit' | 'final' | 'security_deposit'
 
@@ -90,6 +92,12 @@ async function ensureConfiguredFinalBalanceInvoice(booking: NonNullable<Awaited<
   })
 }
 
+async function closeSameDayReviewCheckout(invoiceId: string) {
+  // The session may have appeared after this request's first read.
+  const current = await getInvoice(invoiceId)
+  if (current?.stripe_checkout_session_id) await expireLuxorCheckoutForRepricing(current).catch(() => null)
+}
+
 async function resolveManualPaymentInvoice(bookingId: string, kind: ManualPaymentKind) {
   const booking = await getLuxorBooking(bookingId)
   if (!booking) throw new Error('Booking record not found.')
@@ -143,6 +151,9 @@ export async function POST(request: NextRequest) {
       bookingId?: string
       paymentKind?: ManualPaymentKind
       paymentMethod?: string
+      receivedAt?: string
+      receiptEvidence?: string
+      receiptTimingConfirmed?: boolean
     }
     const bookingId = typeof body.bookingId === 'string' ? body.bookingId : ''
     const kind: ManualPaymentKind | null = body.paymentKind === 'deposit' || body.paymentKind === 'final' || body.paymentKind === 'security_deposit'
@@ -159,6 +170,7 @@ export async function POST(request: NextRequest) {
     if (!requestedBooking) return NextResponse.json({ error: 'Booking record not found.' }, { status: 404 })
     const requestedInquiryId = requestedBooking.inquiry_id || null
     const requestedInquiry = requestedInquiryId ? await getLuxorInquiry(requestedInquiryId) : null
+    if (requestedBooking.status === 'completed' && requestedBooking.invoice_id && sameDayBookingPromotion(await getInvoice(requestedBooking.invoice_id))) return NextResponse.json({ error: 'Completed booking records are immutable. Review any additional received funds separately.' }, { status: 409 })
     if (requestedBooking.status === 'cancelled' || requestedInquiry?.status === 'closed_lost') {
       return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled. Do not record a new payment; review any historic payment in Stripe or the ledger instead.' }, { status: 409 })
     }
@@ -173,6 +185,54 @@ export async function POST(request: NextRequest) {
     const existingPayments = await listPaidPaymentsByInvoice(invoice.id)
     const amount = invoiceBalance(invoice, existingPayments)
     const now = new Date().toISOString()
+    const sameDay = sameDayBookingPromotion(masterInvoice)
+    let guardedManualPayment: LuxorPayment | null = null
+    let actualPaidAt = now
+    if (amount <= MONEY_EPSILON && existingPayments.length) actualPaidAt = existingPayments.find(payment => payment.paid_at)?.paid_at || now
+    if (sameDay?.coverage_amount && kind === 'deposit') {
+      const received = typeof body.receivedAt === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/.test(body.receivedAt) ? new Date(body.receivedAt) : null
+      const evidence = typeof body.receiptEvidence === 'string' ? body.receiptEvidence.trim().slice(0, 1000) : ''
+      if (received && (!Number.isFinite(received.getTime()) || received.getTime() > Date.now())) return NextResponse.json({ error: 'Enter the actual receipt time with its timezone; it cannot be in the future.' }, { status: 400 })
+      const fingerprint = sameDayTermsFingerprint(masterInvoice, booking)
+      let competingCheckout = false
+      if (amount > MONEY_EPSILON && invoice.stripe_checkout_session_id) {
+        try { await expireLuxorCheckoutForRepricing(invoice) } catch { competingCheckout = true }
+      }
+      await updateInvoice(invoice.id, { proposal_context: { ...invoice.proposal_context, version: invoice.proposal_context?.version || 1, same_day_payment_fingerprint: fingerprint } })
+      if (amount > MONEY_EPSILON) {
+        const guarded = await recordLuxorSameDayPayment({ invoice, master: masterInvoice, booking, amount,
+          paidAt: received?.toISOString() || null, processor: 'manual', reference: 'manual:' + invoice.id + ':full-balance',
+          paymentMethod: paymentMethod(body.paymentMethod), eventId: 'manual:' + invoice.id + ':full-balance',
+          timingVerified: Boolean(received && evidence && body.receiptTimingConfirmed === true), fingerprint,
+          metadata: { ...paymentMetadata(kind, invoice, body.paymentMethod), recorded_at: now,
+            receipt_evidence: evidence, receipt_timing_attested_by: session.email, same_day_fingerprint: fingerprint, competing_checkout: competingCheckout } })
+        if (guarded.eligibility !== 'eligible') {
+          await closeSameDayReviewCheckout(invoice.id)
+          return NextResponse.json({ payment: guarded.payment, reviewRequired: true,
+          message: 'Receipt recorded for owner review. The date is pending and no payment confirmation was sent. Do not collect another payment.' }, { status: 202 })
+        }
+        guardedManualPayment = guarded.payment
+        actualPaidAt = guarded.payment.paid_at || received!.toISOString()
+      } else if (masterInvoice.same_day_booking_status !== 'eligible') {
+        return NextResponse.json({ error: 'A received payment is awaiting review. Do not collect or record another payment.' }, { status: 409 })
+      }
+    } else if (sameDay?.coverage_amount && masterInvoice.same_day_booking_status !== 'eligible') {
+      return NextResponse.json({ error: 'Verify the original same-day booking payment before recording another payment.' }, { status: 409 })
+    }
+    if (sameDay?.coverage_amount && kind !== 'deposit' && amount > MONEY_EPSILON) {
+      let competingCheckout = false
+      if (invoice.stripe_checkout_session_id) { try { await expireLuxorCheckoutForRepricing(invoice) } catch { competingCheckout = true } }
+      const guarded = await recordLuxorSameDayScheduledPayment({ invoice, booking, amount, paidAt: actualPaidAt,
+        processor: 'manual', reference: 'manual:' + invoice.id + ':full-balance', paymentMethod: paymentMethod(body.paymentMethod),
+        eventId: 'manual:' + invoice.id + ':full-balance', timingVerified: true,
+        metadata: { ...paymentMetadata(kind, invoice, body.paymentMethod), recorded_at: now, recorded_by: session.email, competing_checkout: competingCheckout } })
+      if (guarded.reviewRequired) {
+        await closeSameDayReviewCheckout(invoice.id)
+        return NextResponse.json({ payment: guarded.payment, reviewRequired: true, message: 'Receipt recorded for owner review. The booking changed or another payment is processing; no confirmation was sent.' }, { status: 202 })
+      }
+      guardedManualPayment = guarded.payment
+      actualPaidAt = guarded.payment.paid_at || actualPaidAt
+    }
 
     if (amount <= MONEY_EPSILON) {
       const finalBalanceInvoice = kind === 'deposit'
@@ -197,7 +257,7 @@ export async function POST(request: NextRequest) {
           security_deposit_status: 'held',
           metadata: {
             ...booking.metadata,
-            deposit_paid_at: booking.metadata?.deposit_paid_at || now,
+            deposit_paid_at: booking.metadata?.deposit_paid_at || actualPaidAt,
             security_deposit_collected_at: booking.metadata?.security_deposit_collected_at || now,
             security_deposit_held_at: booking.metadata?.security_deposit_held_at || now,
             security_deposit_payment_invoice_id: invoice.id,
@@ -217,7 +277,10 @@ export async function POST(request: NextRequest) {
             final_payment_invoice_id: invoice.id,
           },
       }
-      const updatedBooking = await updateLuxorBooking(booking.id, bookingUpdate)
+      const guardedFinalization = sameDay?.coverage_amount ? await finalizeLuxorSameDayBooking(booking, bookingUpdate, inquiry,
+        { status: 'booked', pipeline_stage: kind === 'deposit' ? 'planning' : 'event' }) : null
+      if (guardedFinalization && !guardedFinalization.applied) return NextResponse.json({ alreadyPaid: true, reviewRequired: true, booking: guardedFinalization.booking, message: 'Receipt preserved. The booking was closed or changed; owner review is required.' }, { status: 202 })
+      const updatedBooking = guardedFinalization?.booking || await updateLuxorBooking(booking.id, bookingUpdate)
       if (kind === 'deposit' && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
         await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
           .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
@@ -228,11 +291,11 @@ export async function POST(request: NextRequest) {
     // A manual receipt replaces, rather than competes with, an outstanding
     // Stripe link. Expire that link first so the same invoice cannot be paid
     // twice after an owner records a cash, check, or Zelle payment.
-    if (invoice.stripe_checkout_session_id) {
+    if (invoice.stripe_checkout_session_id && !guardedManualPayment) {
       await expireLuxorCheckoutForRepricing(invoice)
     }
 
-    const [payment] = await supabaseRest<LuxorPayment[]>('luxor_payments?on_conflict=processor,processor_reference&select=*', {
+    const [payment] = guardedManualPayment ? [guardedManualPayment] : await supabaseRest<LuxorPayment[]>('luxor_payments?on_conflict=processor,processor_reference&select=*', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify({
@@ -242,7 +305,7 @@ export async function POST(request: NextRequest) {
         amount,
         status: 'paid',
         payment_method: paymentMethod(body.paymentMethod),
-        paid_at: now,
+        paid_at: actualPaidAt,
         processor: 'manual',
         processor_reference: 'manual:' + invoice.id + ':full-balance',
         notes: kind === 'security_deposit'
@@ -255,12 +318,12 @@ export async function POST(request: NextRequest) {
     })
     if (!payment) throw new Error('Payment record could not be created.')
 
-    const updatedInvoice = await updateInvoice(invoice.id, { status: 'paid', paid_at: now }) || invoice
+    const updatedInvoice = (sameDay?.coverage_amount ? await getInvoice(invoice.id) : await updateInvoice(invoice.id, { status: 'paid', paid_at: actualPaidAt })) || invoice
     const finalBalanceInvoice = kind === 'deposit'
       ? await ensureConfiguredFinalBalanceInvoice(booking, masterInvoice)
       : null
     const finalPaymentScheduleMissing = kind === 'deposit' && !finalBalanceInvoice && !configuredFinalPaymentDueDate(booking)
-    const updatedBooking = await updateLuxorBooking(booking.id, kind === 'security_deposit'
+    const bookingPatch = kind === 'security_deposit'
       ? {
         security_deposit_amount: LUXOR_DEFAULT_SECURITY_DEPOSIT,
         security_deposit_status: 'held',
@@ -273,12 +336,12 @@ export async function POST(request: NextRequest) {
       }
       : kind === 'deposit'
       ? {
-        status: 'confirmed',
+        status: 'confirmed' as const,
         security_deposit_amount: LUXOR_DEFAULT_SECURITY_DEPOSIT,
         security_deposit_status: 'held',
         metadata: {
           ...booking.metadata,
-          deposit_paid_at: now,
+          deposit_paid_at: actualPaidAt,
           security_deposit_collected_at: now,
           security_deposit_held_at: now,
           security_deposit_payment_invoice_id: invoice.id,
@@ -297,7 +360,11 @@ export async function POST(request: NextRequest) {
           final_payment_recorded_manually_at: now,
           final_payment_invoice_id: invoice.id,
         },
-      })
+      }
+    const guardedFinalization = sameDay?.coverage_amount ? await finalizeLuxorSameDayBooking(booking, bookingPatch, inquiry,
+      { status: 'booked', pipeline_stage: kind === 'deposit' ? 'planning' : luxorOnlyCollection ? 'final_payment' : 'event', metadata: { ...inquiry?.metadata, latest_payment_at: actualPaidAt, latest_paid_invoice_id: invoice.id } }) : null
+    if (guardedFinalization && !guardedFinalization.applied) return NextResponse.json({ payment, reviewRequired: true, booking: guardedFinalization.booking, message: 'Receipt preserved. The booking was closed or changed; owner review is required.' }, { status: 202 })
+    const updatedBooking = guardedFinalization?.booking || await updateLuxorBooking(booking.id, bookingPatch)
 
     if (kind === 'deposit' && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
       await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
@@ -305,13 +372,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (inquiryId) {
-      if (inquiry) {
+      if (inquiry && !sameDay?.coverage_amount) {
         await updateLuxorInquiry(inquiry.id, {
           status: 'booked',
           pipeline_stage: kind === 'deposit' ? 'planning' : luxorOnlyCollection ? 'final_payment' : 'event',
           metadata: {
             ...inquiry.metadata,
-            latest_payment_at: now,
+            latest_payment_at: actualPaidAt,
             latest_paid_invoice_id: invoice.id,
           },
         })

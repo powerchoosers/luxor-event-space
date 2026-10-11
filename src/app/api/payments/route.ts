@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
     const requestedInvoice = typeof invoice_id === 'string' && invoice_id.trim()
       ? await getInvoice(invoice_id)
       : null
+    if (requestedInvoice?.booking_id || (requestedInvoice?.invoice_kind && requestedInvoice.invoice_kind !== 'event') || requestedInvoice?.proposal_context?.same_day_booking) return NextResponse.json({ error: 'Use the secure manual-payment workflow for booking payments.' }, { status: 409 })
     if (requestedInvoice?.status === 'cancelled') {
       return NextResponse.json({ error: 'This invoice has been cancelled and cannot receive a new payment record.' }, { status: 409 })
     }

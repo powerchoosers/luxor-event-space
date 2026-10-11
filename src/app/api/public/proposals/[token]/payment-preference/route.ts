@@ -3,6 +3,8 @@ import { getInvoiceByPublicToken } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { createNote } from '@/lib/luxorNotesServer'
+import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
+import { SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
 
 const methods = ['card', 'cash', 'zelle', 'check'] as const
 const amounts = ['deposit', 'full'] as const
@@ -11,6 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const { token } = await params
   const invoice = await getInvoiceByPublicToken(token)
   if (!invoice) return NextResponse.json({ error: 'Payment request not found.' }, { status: 404 })
+  if (sameDayBookingRequiresRevision(invoice)) return NextResponse.json({ error: invoice.same_day_booking_status === 'review' ? 'Payment received — owner review required. Please do not pay again.' : SAME_DAY_REVISION_MESSAGE }, { status: 410 })
   const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
   if (invoice.status === 'cancelled' || inquiry?.status === 'closed_lost') {
     return NextResponse.json({ error: 'This proposal is no longer available.' }, { status: 410 })

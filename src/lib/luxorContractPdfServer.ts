@@ -10,6 +10,9 @@ import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
 import type { LuxorContractSignaturePlacement } from './luxorSignaturePlacement'
 import { formatLuxorDate } from './luxorDateFormatting'
 import { getOfficialDecorService } from './luxorDecorCatalog'
+import { formatLuxorOfferExpiry } from './luxorOffer'
+import { luxorCalendarDate } from './luxorProposalTerms'
+import { SAME_DAY_CARD_CUTOFF_TERMS } from './luxorSameDayBooking'
 
 const gold = rgb(0.67, 0.47, 0.20)
 const paleGold = rgb(0.92, 0.85, 0.72)
@@ -42,6 +45,8 @@ type ContractProposalSummary = {
   subtotal: number | null
   discount: number
   tax: number | null
+  taxCoverage: number
+  sameDayTerms: string | null
   finalEventPrice: number
   promotion: ContractPromotion | null
   paymentCollectionScope: 'luxor_services_only' | 'legacy_full_event' | null
@@ -136,7 +141,7 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
     const pricingRole = textValue(line.pricingRole)?.toLowerCase() || ''
     const paymentBucket = textValue(line.paymentBucket)?.toLowerCase() || ''
     const searchable = `${category || ''} ${description}`.toLowerCase()
-    const hiddenLine = pricingRole === 'discount' || pricingRole === 'tax' || paymentBucket === 'security_deposit'
+    const hiddenLine = pricingRole === 'discount' || pricingRole === 'tax' || pricingRole === 'tax_coverage' || paymentBucket === 'security_deposit'
       || /refundable\s+security\s+deposit|(^|\s)(sales\s+)?tax($|\s)|discount|credit|promotion/.test(searchable)
     if (hiddenLine) return []
     const detail = textValue(line.detail)
@@ -166,6 +171,13 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
     subtotal,
     discount,
     tax,
+    taxCoverage: moneyValue(recordFrom(context.same_day_booking)?.coverage_amount) || 0,
+    sameDayTerms: context.same_day_booking ? [
+      textValue(recordFrom(context.same_day_booking)?.terms),
+      `Original proposal date: ${luxorCalendarDate(new Date(String(recordFrom(context.same_day_booking)?.original_created_at)))}. Deadline: before ${formatLuxorOfferExpiry(String(recordFrom(context.same_day_booking)?.expires_at))}.`,
+      `Tax coverage status in this price record: ${recordFrom(context.same_day_booking)?.status === 'expired' ? 'expired; applicable sales tax is payable by the client' : 'conditional until both signature and required initial payment qualify'}.`,
+      SAME_DAY_CARD_CUTOFF_TERMS,
+    ].filter(Boolean).join(' ') : null,
     finalEventPrice,
     promotion: promotionFromContext(context, metadata, discount),
     paymentCollectionScope: context.payment_collection_scope === 'luxor_services_only' ? 'luxor_services_only' : context.payment_collection_scope === 'legacy_full_event' ? 'legacy_full_event' : null,
@@ -448,11 +460,13 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.title('Package, pricing & payment', 'Financial terms')
   w.heading('3. Contract price')
   w.subheading('Final event price')
-  const displaySubtotal = proposalSummary.subtotal ?? Math.max(0, proposalSummary.finalEventPrice - (proposalSummary.tax || 0) + proposalSummary.discount)
+  const displaySubtotal = proposalSummary.subtotal ?? Math.max(0, proposalSummary.finalEventPrice + proposalSummary.taxCoverage - (proposalSummary.tax || 0) + proposalSummary.discount)
   w.feeRow('Package subtotal', money(displaySubtotal))
   if (proposalSummary.discount > 0.004) w.feeRow(proposalSummary.promotion?.name || 'Promotion discount', `-${money(proposalSummary.discount)}`)
   if (proposalSummary.tax !== null) w.feeRow('Sales tax', money(proposalSummary.tax))
+  if (proposalSummary.taxCoverage > 0) w.feeRow('LUXOR pays your sales tax (conditional)', `-${money(proposalSummary.taxCoverage)}`)
   w.feeRow('Final Event Price', money(proposalSummary.finalEventPrice))
+  if (proposalSummary.sameDayTerms) w.paragraph(proposalSummary.sameDayTerms)
   w.fieldPair('Initial booking payment', money(booking.deposit_required), 'Remaining balance', money(balance))
   w.fieldPair('Final payment due', displayDate(finalPaymentDueDate), 'Payment timing', 'After agreement signature')
   w.fieldPair('Refundable security deposit', money(securityDeposit), 'Security deposit due', proposalSummary.paymentCollectionScope === 'luxor_services_only' ? `${displayDate(new Date(`${booking.event_date}T12:00:00Z`).toISOString().slice(0, 10))} (30 days before event)` : 'Separate payment after signed agreement')

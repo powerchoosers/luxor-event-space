@@ -18,6 +18,8 @@ import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
 import { calculateLuxorOfferPricing, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
 
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
+import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
+import { assertLuxorSameDayRevisionSafe, SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
 
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
 
@@ -44,6 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     invoiceId = id
     let invoice = await getInvoice(id)
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
+    if (sameDayBookingRequiresRevision(invoice)) return NextResponse.json({ error: SAME_DAY_REVISION_MESSAGE }, { status: 410 })
     const finalProposalContext = invoice.invoice_kind === 'event' && invoice.proposal_context && typeof invoice.proposal_context === 'object'
       ? invoice.proposal_context
       : null
@@ -317,7 +320,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (booking && Math.abs(Number(booking.contract_total || 0) - Number(invoice.total || 0)) >= 0.005) return NextResponse.json({ error: 'The linked booking total does not match the final proposal. Create a revised proposal instead of changing a sent price.' }, { status: 409 })
       if (invoice.supersedes_invoice_id) {
         const prior = await getInvoice(invoice.supersedes_invoice_id)
-        if (prior?.proposal_accepted_at || prior?.booking_id) {
+        if (prior && sameDayBookingRequiresRevision(prior)) {
+          await assertLuxorSameDayRevisionSafe(prior)
+        } else if (prior?.proposal_accepted_at || prior?.booking_id) {
           return NextResponse.json({ error: 'A proposal that has been accepted cannot be replaced. Contact Luxor to prepare an amendment.' }, { status: 409 })
         }
       }
@@ -363,7 +368,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       if (invoice.supersedes_invoice_id) {
         const prior = await getInvoice(invoice.supersedes_invoice_id)
-        if (prior?.proposal_accepted_at || prior?.booking_id) {
+        if (prior && sameDayBookingRequiresRevision(prior)) {
+          await assertLuxorSameDayRevisionSafe(prior)
+        } else if (prior?.proposal_accepted_at || prior?.booking_id) {
           return NextResponse.json({ error: 'A proposal that has been accepted cannot be replaced. Contact Luxor to prepare an amendment.' }, { status: 409 })
         }
         if (prior && prior.status !== 'cancelled') {
@@ -431,7 +438,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
         if (updated.supersedes_invoice_id) {
           const prior = await getInvoice(updated.supersedes_invoice_id)
-          if (prior && prior.status !== 'cancelled') {
+          if (prior && prior.status !== 'cancelled' && !sameDayBookingRequiresRevision(prior)) {
             await updateInvoice(prior.id, { status: 'cancelled', offer_status: 'withdrawn', stripe_checkout_session_id: null, stripe_checkout_url: null, stripe_checkout_opened_at: null, payment_requested_at: null, payment_requested_amount: null, payment_requested_label: null })
           }
         }
@@ -563,7 +570,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       if (updated?.supersedes_invoice_id) {
         const prior = await getInvoice(updated.supersedes_invoice_id)
-        if (prior && prior.status !== 'cancelled') {
+        if (prior && prior.status !== 'cancelled' && !sameDayBookingRequiresRevision(prior)) {
           await updateInvoice(prior.id, { status: 'cancelled', offer_status: 'withdrawn', stripe_checkout_session_id: null, stripe_checkout_url: null, stripe_checkout_opened_at: null, payment_requested_at: null, payment_requested_amount: null, payment_requested_label: null })
         }
       }

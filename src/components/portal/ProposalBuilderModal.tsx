@@ -27,6 +27,7 @@ import { PromotionTermsFields, type PromotionTermsDraft } from './PromotionTerms
 import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from '@/lib/luxorDecorCatalog'
+import { SAME_DAY_BOOKING_CODE, SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBookingSnapshot } from '@/lib/luxorSameDayBooking'
 
 const PROPOSAL_TIME_OPTIONS = [
   { value: '06:00', label: '6:00 AM' },
@@ -156,6 +157,7 @@ type ProposalBuilderModalProps = {
   onClose: () => void
   isEditing?: boolean
   invoiceId?: string | null
+  supersedesInvoiceId?: string | null
   clientName: string
   clientEmail?: string | null
   eventType?: string | null
@@ -465,7 +467,7 @@ function normalizeLineItem(value: unknown): LuxorInvoiceLineItem | null {
     catalogId: asString(record.catalogId) || asString(record.catalog_id),
     category: asString(record.category),
     included: Boolean(record.included),
-    pricingRole: ['required', 'included', 'add_on', 'discount', 'tax', 'custom'].includes(String(record.pricingRole || record.pricing_role))
+    pricingRole: ['required', 'included', 'add_on', 'discount', 'tax', 'tax_coverage', 'custom'].includes(String(record.pricingRole || record.pricing_role))
       ? String(record.pricingRole || record.pricing_role) as LuxorInvoiceLineItem['pricingRole']
       : undefined,
     paymentBucket: ['venue', 'event', 'security_deposit'].includes(String(record.paymentBucket || record.payment_bucket))
@@ -635,6 +637,7 @@ export function ProposalBuilderModal({
   onClose,
   isEditing = false,
   invoiceId,
+  supersedesInvoiceId,
   clientName,
   clientEmail,
   eventType,
@@ -677,6 +680,7 @@ export function ProposalBuilderModal({
   const [pricingStatus, setPricingStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [calculation, setCalculation] = useState<ProposalPricingCalculation | null>(null)
+  const [pricingClock, setPricingClock] = useState(0)
   const [validationMessage, setValidationMessage] = useState<string | null>(null)
   const [pendingPackageChange, setPendingPackageChange] = useState<{ packageId: string; absorbedServiceIds: string[]; clearedConflictServiceIds: string[] } | null>(null)
   const [promotions, setPromotions] = useState<LuxorPromotion[]>([])
@@ -802,6 +806,8 @@ export function ProposalBuilderModal({
     || asString(effectiveContext.promotion_id)
     || null
   const selectedPromotion = promotions.find((promotion) => promotion.id === selectedPromotionId) || null
+  const sameDayCatalog = promotions.find(promotion => promotion.discount_type === 'tax_coverage' && promotion.code === SAME_DAY_BOOKING_CODE)
+  const taxCoveragePromotionId = asString(pricingSelection?.taxCoveragePromotionId ?? pricingSelection?.tax_coverage_promotion_id) || null
   const hasUnmigratedLegacyDiscount = Boolean(!selectedPromotionId && legacyDiscount && legacyDiscount.value > 0)
 
   const updateProposalContext = (patch: Partial<ProposalBuilderContext>) => {
@@ -1068,6 +1074,7 @@ export function ProposalBuilderModal({
 
   const pricingRequest = useMemo(() => ({
     invoiceId,
+    supersedesInvoiceId,
     selection: {
       packageId: 'rental_only',
       eventDate: eventDateValue || null,
@@ -1084,6 +1091,7 @@ export function ProposalBuilderModal({
       removedServiceIds,
       customItems: customItemSelection(customItems),
       promotionId: selectedPromotionId,
+      taxCoveragePromotionId,
       taxRate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
       paymentPlan: effectiveContext.payment_plan || null,
     },
@@ -1114,7 +1122,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [invoiceId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
+  }), [invoiceId, supersedesInvoiceId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1161,7 +1169,7 @@ export function ProposalBuilderModal({
       controller.abort()
       window.clearTimeout(timer)
     }
-  }, [eventDateValue, guestCount, isOpen, pricingEndpoint, pricingRequestKey])
+  }, [eventDateValue, guestCount, isOpen, pricingEndpoint, pricingRequestKey, pricingClock])
 
   const calculatedPackages = useMemo(() => calculation?.packages || [], [calculation])
   const packageCards = useMemo(() => PACKAGE_OPTIONS.map((option) => {
@@ -1216,12 +1224,21 @@ export function ProposalBuilderModal({
   // Discounts and tax belong in the one concise financial summary, not in the
   // client-facing checklist of package selections.
   const proposalChecklistItems = finalLineItems.filter((item) => (
-    item.pricingRole !== 'discount' && item.pricingRole !== 'tax'
+    item.pricingRole !== 'discount' && item.pricingRole !== 'tax' && item.pricingRole !== 'tax_coverage'
   ))
   const proposalSubtotal = selectedCalculatedPackage?.subtotal ?? asNumber(selectedContext.subtotal)
   const proposalDiscountAmount = selectedCalculatedPackage?.discountAmount ?? asNumber(selectedContext.discount_amount, selectedContext.discountAmount)
   const proposalTaxAmount = selectedCalculatedPackage?.taxAmount ?? asNumber(selectedContext.tax_amount, selectedContext.taxAmount)
   const proposalTaxRate = selectedCalculatedPackage?.taxRate ?? asNumber(selectedContext.tax_rate, selectedContext.taxRate)
+  const sameDayBenefit = selectedContext.same_day_booking as LuxorSameDayBookingSnapshot | undefined
+  const taxCoverageAmount = sameDayBenefit?.coverage_amount || 0
+  useEffect(() => {
+    if (!isOpen || !sameDayBenefit || sameDayBenefit.status === 'expired') return
+    const check = () => { if (Date.now() >= new Date(sameDayBenefit.expires_at).getTime()) setPricingClock(value => value + 1) }
+    const timer = window.setTimeout(check, Math.max(0, Math.min(new Date(sameDayBenefit.expires_at).getTime() - Date.now(), 2_147_483_647)))
+    window.addEventListener('focus', check)
+    return () => { window.clearTimeout(timer); window.removeEventListener('focus', check) }
+  }, [isOpen, sameDayBenefit?.expires_at, sameDayBenefit?.status])
   const venueServicesTotal = asNumber(selectedContext.venue_services_total)
   const eventServicesTotal = asNumber(selectedContext.event_services_total)
   const eventAccess = asString(selectedContext.event_access)
@@ -1560,7 +1577,7 @@ export function ProposalBuilderModal({
                       onChange={(value) => setSelectedPromotion(value || null)}
                       options={[
                         { value: '', label: 'No promotion' },
-                        ...promotions.filter((promotion) => promotion.active && (!promotion.expires_on || promotion.expires_on >= luxorCalendarDate()) || promotion.id === selectedPromotionId).map((promotion) => ({
+                        ...promotions.filter((promotion) => promotion.discount_type !== 'tax_coverage' && (promotion.active && (!promotion.expires_on || promotion.expires_on >= luxorCalendarDate()) || promotion.id === selectedPromotionId)).map((promotion) => ({
                           value: promotion.id,
                           label: `${promotion.name} · ${promotion.discount_type === 'complimentary' ? 'Complimentary' : (promotion.discount_type === 'fixed' ? formatMoney(promotion.value) : `${promotion.value}%`) + ' off'}`,
                         })),
@@ -1570,6 +1587,12 @@ export function ProposalBuilderModal({
                     />
                     {promotionsStatus === 'loading' ? <p className="mt-2 text-[10px] text-[color:var(--portal-muted)]"><ProposalCalculationStatus label="Loading saved promotions" /></p> : null}
                     {selectedPromotion ? <p className="mt-2 text-[10px] leading-4 text-emerald-700 dark:text-emerald-300">{selectedPromotion.name} ({selectedPromotion.code}) will be verified and snapped into this final proposal.</p> : null}
+                    {sameDayCatalog ? <div className="mt-4 border-t border-[color:var(--portal-border)] pt-4">
+                      <label className="flex items-start gap-3 text-sm font-semibold"><input type="checkbox" className="mt-1 accent-[#b98a3e]" checked={Boolean(taxCoveragePromotionId)} disabled={!sameDayCatalog.active && !taxCoveragePromotionId} onChange={event => updateProposalContext({ pricing_selection: { ...effectiveContext.pricing_selection, taxCoveragePromotionId: event.target.checked ? sameDayCatalog.id : null, tax_coverage_promotion_id: event.target.checked ? sameDayCatalog.id : null } })} /><span>{sameDayCatalog.name}{!sameDayCatalog.active ? ' (not active)' : ''}</span></label>
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Can accompany the selected discount. {SAME_DAY_BOOKING_TERMS}</p>
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{SAME_DAY_CARD_CUTOFF_TERMS}</p>
+                      {sameDayBenefit ? <p className="mt-2 text-xs font-semibold">Original date: {luxorCalendarDate(new Date(sameDayBenefit.original_created_at))}. {sameDayBenefit.status === 'expired' ? 'Expired — tax coverage removed; other promotions retained.' : 'Ends at midnight America/Chicago on this date.'}</p> : null}
+                    </div> : null}
                     {hasUnmigratedLegacyDiscount ? <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/8 p-2.5 text-[10px] leading-4 text-amber-900 dark:text-amber-100"><p className="font-bold">This draft has a legacy adjustment.</p><p className="mt-0.5">Save it as a promotion before saving this revision so its exact terms stay protected.</p><button type="button" onClick={() => { setPromotionDraft({ name: 'Legacy proposal promotion', discount_type: legacyDiscount?.type || 'percent', value: String(legacyDiscount?.value || '') }); setPromotionCreatorOpen(true) }} className="mt-2 font-black uppercase tracking-[0.09em] text-[#8c6529] underline decoration-[#caa24c]/50 underline-offset-2 dark:text-[#f1d27a]">Save as promotion</button></div> : null}
                     {promotionError ? <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-[10px] leading-4 text-rose-700 dark:text-rose-300"><span>{promotionError}</span>{promotionsStatus === 'error' ? <button type="button" onClick={() => void loadPromotions()} className="font-black uppercase tracking-[0.09em] underline underline-offset-2">Retry</button> : null}</div> : null}
                   </div>
@@ -1654,6 +1677,7 @@ export function ProposalBuilderModal({
                       {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Package &amp; services</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
                       {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">{selectedPromotion?.name || 'Promotion'}</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
                       {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
+{taxCoverageAmount > 0 ? <div className="flex items-center justify-between gap-3 text-sm"><span className="text-[color:var(--portal-muted)]">LUXOR pays your sales tax (conditional)</span><span className="font-mono font-semibold">-{formatMoney(taxCoverageAmount)}</span></div> : null}
                       <div className="flex items-end justify-between gap-3 border-t border-[#caa24c]/20 pt-3"><span className="text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Final event price</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{hasFinalPrice ? formatMoney(finalEventPrice) : 'Pricing not ready'}</span></div>
                       <div className="flex items-center justify-between gap-3 text-xs"><span className="text-[color:var(--portal-muted)]">Refundable security deposit</span><span className="font-mono font-bold">{formatMoney(refundableSecurityDeposit ?? 750)}</span></div>
                     </div>}
@@ -1805,6 +1829,7 @@ export function ProposalBuilderModal({
                           {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Subtotal</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
                           {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">{selectedPromotion?.name || 'Promotion'}</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
                           {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
+{taxCoverageAmount > 0 ? <div className="flex items-center justify-between gap-3 text-sm"><span className="text-[color:var(--portal-muted)]">LUXOR pays your sales tax (conditional)</span><span className="font-mono font-semibold">-{formatMoney(taxCoverageAmount)}</span></div> : null}
                           <div className="border-t border-[#caa24c]/20 pt-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final total</p><p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p></div>
                         </div>
                         <div className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[#8c6529] dark:text-[#f1d27a]">Payment process</p><p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Proposal acceptance → Event Agreement → payment choice after signature. The client can use Card, Zelle, or Cash; the separate refundable security deposit is handled with the first payment.</p></div>
@@ -1968,6 +1993,7 @@ export function ProposalBuilderModal({
                           <span className="font-mono">{formatMoney(proposalTaxAmount)}</span>
                         </div>
                       ) : null}
+                      {taxCoverageAmount > 0 ? <div className="flex items-center justify-between gap-4 p-3.5 text-sm"><span>LUXOR pays your sales tax (conditional)</span><span className="font-mono">-{formatMoney(taxCoverageAmount)}</span></div> : null}
                       <div className="flex items-center justify-between gap-4 p-4 text-base font-black bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]">
                         <span>Final Event Price (Total)</span>
                         <span className="font-mono text-xl">{formatMoney(finalEventPrice)}</span>

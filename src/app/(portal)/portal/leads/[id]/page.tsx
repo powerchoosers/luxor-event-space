@@ -101,6 +101,8 @@ import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_SERVICE_CA
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPreview'
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
+import { SameDayReceiptDialog, type SameDayReceiptEvidence } from '@/components/portal/SameDayReceiptDialog'
+import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import {
   hasCancellableTour,
   LeadLifecycleActionSheet,
@@ -488,6 +490,10 @@ export default function LeadDetailPage({
   const [inPersonHandoffUrl, setInPersonHandoffUrl] = useState<string | null>(null)
   const [inPersonCloseBusy, setInPersonCloseBusy] = useState(false)
   const [manualSignedAgreementFile, setManualSignedAgreementFile] = useState<File | null>(null)
+  const [sameDayReceipt, setSameDayReceipt] = useState<{ booking: LuxorBooking; method?: 'cash' | 'zelle' | 'check' } | null>(null)
+  const [paperSignedAt, setPaperSignedAt] = useState('')
+  const [paperSignatureEvidence, setPaperSignatureEvidence] = useState('')
+  const [paperSignatureConfirmed, setPaperSignatureConfirmed] = useState(false)
 
   useEffect(() => {
     proposalEditorOpenRef.current = isInvoiceModalOpen
@@ -2320,6 +2326,7 @@ export default function LeadDetailPage({
       ...proposalDecorSelection(contextSelection),
       ...(hasProposalRemovedServiceIds(contextSelection) || removedServiceIds.length ? { removedServiceIds } : {}),
       ...(promotionId ? { promotionId } : {}),
+      taxCoveragePromotionId: contextSelection?.taxCoveragePromotionId ?? contextSelection?.tax_coverage_promotion_id ?? null,
       taxRate: invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0),
       ...(customItems ? { customItems } : {}),
       ...(paymentPlan ? { paymentPlan } : {}),
@@ -2900,6 +2907,9 @@ export default function LeadDetailPage({
       const form = new FormData()
       form.append('bookingId', acceptanceData.bookingId)
       form.append('file', manualSignedAgreementFile)
+      form.append('actualSignedAt', paperSignedAt)
+      form.append('signatureEvidence', paperSignatureEvidence)
+      form.append('signatureTimingConfirmed', String(paperSignatureConfirmed))
       const response = await fetch(`/api/leads/${encodeURIComponent(id)}/manual-signed-agreement`, { method: 'POST', body: form })
       const data = await response.json().catch(() => ({})) as { error?: string }
       if (!response.ok) throw new Error(data.error || 'The signed agreement could not be uploaded.')
@@ -3050,7 +3060,9 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final', receivedMethod?: 'cash' | 'zelle' | 'check') => {
+  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final', receivedMethod?: 'cash' | 'zelle' | 'check', timingEvidence?: SameDayReceiptEvidence) => {
+    const master = invoices.find(invoice => invoice.id === booking.invoice_id)
+    if (paymentKind === 'deposit' && sameDayBookingPromotion(master)?.coverage_amount && !timingEvidence) { setSameDayReceipt({ booking, method: receivedMethod }); return }
     const preferredMethod = receivedMethod || ((booking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'manual').toLowerCase()
     try {
       setUpdatingStatus(true)
@@ -3061,6 +3073,7 @@ export default function LeadDetailPage({
           bookingId: booking.id,
           paymentKind,
           paymentMethod: preferredMethod,
+          ...timingEvidence,
         }),
       })
       const paymentPayload = await paymentRes.json().catch(() => ({})) as {
@@ -3068,9 +3081,13 @@ export default function LeadDetailPage({
         alreadyPaid?: boolean
         payment?: { amount?: number }
         invoice?: LuxorInvoice
+        reviewRequired?: boolean
+        message?: string
       }
       if (!paymentRes.ok) throw new Error(paymentPayload.error || 'Failed to record payment.')
       await fetchAllData(false)
+      setSameDayReceipt(null)
+      if (paymentPayload.reviewRequired) { notify({ title: 'Payment received — review required', description: paymentPayload.message || 'Please do not collect another payment. The reservation is pending owner review.', variant: 'info' }); return }
       if (paymentPayload.alreadyPaid) {
         notify({
           title: paymentKind === 'deposit' ? 'Initial payment already recorded' : 'Final balance already recorded',
@@ -3906,6 +3923,8 @@ export default function LeadDetailPage({
 
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0">
+{invoices.some(invoice => invoice.same_day_booking_status === 'review') || payments.some(payment => payment.metadata?.receipt_received && payment.status !== 'paid') ? <div role="alert" className="mb-4 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-text)]"><p className="font-semibold">Payment received — owner review required</p><p className="text-[color:var(--portal-muted)]">Funds are recorded in the ledger but have not qualified the same-day booking. Do not collect again or revise a received-payment proposal. Verify receipt evidence or reconcile the exception with the client.</p></div> : null}
+
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
           <ArrowLeft size={13} /> Back to Leads & Clients
@@ -8040,6 +8059,7 @@ export default function LeadDetailPage({
                 </div>
                 <details className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                   <summary className="cursor-pointer text-xs font-bold text-[color:var(--portal-text)]">Use a paper-signed agreement instead</summary>
+{sameDayBookingPromotion(inPersonCloseInvoice)?.coverage_amount ? <div className="mt-3 space-y-3 text-xs"><label className="block space-y-1">Actual signing time, including UTC offset<input value={paperSignedAt} onChange={event => setPaperSignedAt(event.target.value)} placeholder="2026-10-11T22:15:00-05:00" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3" /></label><label className="block space-y-1">Signing evidence<textarea value={paperSignatureEvidence} onChange={event => setPaperSignatureEvidence(event.target.value)} className="min-h-20 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3" /></label><label className="flex gap-2"><input type="checkbox" checked={paperSignatureConfirmed} onChange={event => setPaperSignatureConfirmed(event.target.checked)} /><span>I verified when both parties signed and that this PDF contains the exact locked proposal terms.</span></label><p className="text-[color:var(--portal-muted)]">Upload time alone does not establish eligibility. The full initial payment is also required before the original-day midnight in Chicago.</p></div> : null}
                   <p className="mt-2 text-[11px] leading-5 text-[color:var(--portal-muted)]">Choose a PDF only after both parties have signed a printed agreement. It is saved privately and unlocks the payment step.</p>
                   <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50"><span className="truncate">{manualSignedAgreementFile ? manualSignedAgreementFile.name : 'Choose signed agreement PDF'}</span><Upload size={15} className="ml-3 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" /><input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(event) => setManualSignedAgreementFile(event.target.files?.[0] || null)} /></label>
                   <button type="button" disabled={!manualSignedAgreementFile || inPersonCloseBusy} onClick={() => void uploadManualSignedAgreement()} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 py-3 text-xs font-black uppercase tracking-wider text-[#8c6529] transition hover:bg-[#caa24c]/20 disabled:opacity-45 dark:text-[#f1d27a]">{inPersonCloseBusy ? <Loader2 className="animate-spin" size={15} /> : <Upload size={15} />} Save signed PDF</button>
@@ -8113,10 +8133,12 @@ export default function LeadDetailPage({
         </form>
       </PortalModal>
 
+      <SameDayReceiptDialog isOpen={Boolean(sameDayReceipt)} onClose={() => !updatingStatus && setSameDayReceipt(null)} busy={updatingStatus} onSubmit={evidence => { if (sameDayReceipt) void handleRecordManualPayment(sameDayReceipt.booking, 'deposit', sameDayReceipt.method, evidence) }} />
       <ProposalBuilderModal
         isOpen={isInvoiceModalOpen}
         isEditing={Boolean(editingInvoiceId)}
-        invoiceId={editingInvoiceId}
+        invoiceId={editingInvoiceId && !invoices.find(invoice => invoice.id === editingInvoiceId)?.price_locked_at ? editingInvoiceId : null}
+        supersedesInvoiceId={editingInvoiceId && invoices.find(invoice => invoice.id === editingInvoiceId)?.price_locked_at ? editingInvoiceId : null}
         onClose={() => {
           proposalEditorOpenRef.current = false
           setIsInvoiceModalOpen(false)
@@ -8385,6 +8407,7 @@ export default function LeadDetailPage({
 function ClientDossierLoading() {
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0">
+
       {/* 1. Header Back & Status */}
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-mono font-bold text-[#caa24c]">

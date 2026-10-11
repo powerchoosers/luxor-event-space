@@ -18,6 +18,7 @@ import {
 } from './luxorSignaturesServer'
 import { supabaseRest } from './supabaseRestServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
+import { sameDayBookingRequiresRevision } from './luxorSameDayBooking'
 
 export const LUXOR_AGREEMENT_ATTACHMENT_MANIFEST = [
   { key: 'final_proposal_pdf', label: 'Final proposal PDF', filename: 'Luxor-Final-Proposal.pdf' },
@@ -61,7 +62,8 @@ function hasAcceptedLockedProposal(invoice: LuxorInvoice | null | undefined): in
     invoice.status === 'sent' &&
     invoice.price_locked_at &&
     invoice.proposal_accepted_at &&
-    invoice.offer_status !== 'withdrawn',
+    invoice.offer_status !== 'withdrawn' &&
+    !sameDayBookingRequiresRevision(invoice),
   )
 }
 

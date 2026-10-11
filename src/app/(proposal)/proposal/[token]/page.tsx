@@ -14,6 +14,8 @@ import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { decorQuantityLabel, getLuxorProposalPricingSummary } from '@/lib/luxorProposalEmailServer'
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
+import { sameDayBookingPromotion, sameDayBookingRequiresRevision, withoutExpiredSameDayCoverage } from '@/lib/luxorSameDayBooking'
+import { SameDayBookingNotice } from '@/components/proposal/SameDayBookingNotice'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,9 +52,11 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
     : null
   const reviewTogether = inPersonHandoff?.handoff_state === 'ready'
   const offerExpired = isLuxorOfferExpired(invoice)
+  const sameDayBenefit = sameDayBookingPromotion(invoice)
+  const sameDayBlocked = sameDayBookingRequiresRevision(invoice)
   const isPublished = invoice.status === 'sent' && Boolean(invoice.price_locked_at)
   const isAccepted = Boolean(invoice.proposal_accepted_at) || Boolean(booking)
-  const pricingSummary = getLuxorProposalPricingSummary(invoice)
+  const pricingSummary = getLuxorProposalPricingSummary(withoutExpiredSameDayCoverage(invoice))
   const finalPrice = pricingSummary.finalEventPrice
   const refundableSecurityDeposit = Number(context.refundable_security_deposit ?? booking?.security_deposit_amount ?? LUXOR_DEFAULT_SECURITY_DEPOSIT)
   const eventDate = dateLabel(context.event_date)
@@ -78,7 +82,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   // cookie with that name.
   const isInternalOwner = Boolean(await getVerifiedLuxorPortalSession())
   let directAgreementUrl: string | null = null
-  if (invoice.proposal_accepted_at && booking && booking.contract_status !== 'signed' && !isInternalOwner && invoice.inquiry_id) {
+  if (!sameDayBlocked && invoice.proposal_accepted_at && booking && booking.contract_status !== 'signed' && !isInternalOwner && invoice.inquiry_id) {
     const inquiry = await getLuxorInquiry(invoice.inquiry_id)
     if (inquiry?.email && inquiry.status !== 'closed_lost') {
       try {
@@ -119,8 +123,12 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
     }
   }
 
-  const status = offerExpired
+  const status = sameDayBlocked
+    ? { eyebrow: invoice.same_day_booking_status === 'review' ? 'Payment under review' : 'Same-day benefit expired', title: 'Please contact Luxor', copy: invoice.same_day_booking_status === 'review' ? 'Payment received. Please do not pay again; the owner must review your booking.' : 'The original same-day deadline has passed. Your existing agreement remains unchanged; revised pricing and a fresh agreement are required before payment.', tone: 'amber' }
+    : offerExpired
     ? { eyebrow: 'Proposal expired', title: 'Please request a refreshed proposal', copy: 'This final proposal is no longer available at the prior price. Please contact Luxor for a revised proposal.', tone: 'amber' }
+    : invoice.same_day_booking_status === 'eligible'
+      ? { eyebrow: 'Booking complete', title: 'Your date is officially reserved', copy: 'Your signed agreement and required initial payment were completed on the original proposal day. LUXOR pays the separately stated sales tax shown below.', tone: 'emerald' }
     : contractSigned
       ? reviewTogether
         ? { eyebrow: 'Agreement complete', title: 'Choose your payment method', copy: 'Your Event Agreement is signed. Choose Card, Zelle, or Cash with Luxor to complete the next payment step.', tone: 'emerald' }
@@ -158,6 +166,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
           </div>
 
           {!isPublished ? <section className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-5"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Awaiting final review</p><p className="mt-2 text-sm leading-6 text-amber-100/85">Luxor has not published a final, price-locked proposal at this link yet. Please contact the team if you expected one.</p></section> : null}
+          {sameDayBenefit ? <section className="mt-6 border-y border-[#caa24c]/25 py-5 text-zinc-200"><SameDayBookingNotice benefit={sameDayBenefit} completed={invoice.same_day_booking_status === 'eligible'} review={invoice.same_day_booking_status === 'review'} />{sameDayBlocked && booking?.contract_status === 'signed' ? <p className="mt-3 text-sm text-amber-200">The totals below are your signed price record. They cannot be paid through this expired proposal.</p> : null}</section> : null}
 
           <section className="mt-8 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -192,6 +201,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">Package subtotal</dt><dd className="font-mono text-zinc-200">{money(pricingSummary.subtotal)}</dd></div>
               {pricingSummary.approvedDiscount > 0.004 ? <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">{promotion?.name || 'Promotion discount'}</dt><dd className="font-mono text-zinc-200">-{money(pricingSummary.approvedDiscount)}</dd></div> : null}
               {pricingSummary.tax > 0.004 ? <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-400">Sales tax</dt><dd className="font-mono text-zinc-200">{money(pricingSummary.tax)}</dd></div> : null}
+              {pricingSummary.taxCoverage > 0.004 ? <div className="flex items-center justify-between gap-5 py-3"><dt className="text-zinc-300">LUXOR pays your sales tax{invoice.same_day_booking_status === 'eligible' ? '' : ' (conditional)'}</dt><dd className="font-mono text-zinc-200">-{money(pricingSummary.taxCoverage)}</dd></div> : null}
               <div className="flex items-end justify-between gap-5 py-4"><dt className="text-xs font-black uppercase tracking-[0.16em] text-[#f1d27a]">Final Event Price</dt><dd className="font-mono text-2xl font-black text-[#f1d27a]">{money(finalPrice)}</dd></div>
             </dl>
           </section>
@@ -205,8 +215,8 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
 
           <section className="mt-5 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><div className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-[#f1d27a]" size={18} /><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f1d27a]">Refundable Security Deposit</p><p className="mt-2 text-sm leading-6 text-zinc-200">Separate refundable security deposit required for all bookings. Deposit is held throughout the event period and is returned following the post-event inspection, subject to the terms of the Event Agreement.</p></div></div></section>
 
-          {isPublished && !offerExpired && !isAccepted ? <section className="mt-8 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Ready to move forward?</p><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-200">{reviewTogether ? 'Selecting this final proposal does not charge you. Your Event Agreement opens next on this device; after signing, choose Card, Zelle, or Cash.' : 'Selecting this final proposal does not charge you. Luxor will email your Event Agreement next; your secure Stripe payment link comes only after the agreement is signed.'}</p></div><AcceptProposalButton token={token} continueToSigning={reviewTogether} /></div></section> : null}
-          {isAccepted ? <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6"><div className="flex gap-3"><FileCheck2 className="mt-0.5 shrink-0 text-[#f1d27a]" size={19} /><div><p className="text-sm font-bold text-white">{status.title}</p><p className="mt-2 text-sm leading-6 text-zinc-300">{status.copy}</p>{reviewTogether && !contractSigned ? <div className="mt-4"><AcceptProposalButton token={token} continueToSigning alreadyAccepted /></div> : null}</div></div></section> : null}
+          {isPublished && !sameDayBlocked && !offerExpired && !isAccepted ? <section className="mt-8 rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-5 sm:p-6"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.24em] text-[#caa24c]">Ready to move forward?</p><p className="mt-2 max-w-xl text-sm leading-6 text-zinc-200">{reviewTogether ? 'Selecting this final proposal does not charge you. Your Event Agreement opens next on this device; after signing, choose Card, Zelle, or Cash.' : 'Selecting this final proposal does not charge you. Luxor will email your Event Agreement next; your secure Stripe payment link comes only after the agreement is signed.'}</p></div><AcceptProposalButton token={token} continueToSigning={reviewTogether} /></div></section> : null}
+          {isAccepted ? <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6"><div className="flex gap-3"><FileCheck2 className="mt-0.5 shrink-0 text-[#f1d27a]" size={19} /><div><p className="text-sm font-bold text-white">{status.title}</p><p className="mt-2 text-sm leading-6 text-zinc-300">{status.copy}</p>{reviewTogether && !sameDayBlocked && !contractSigned ? <div className="mt-4"><AcceptProposalButton token={token} continueToSigning alreadyAccepted /></div> : null}</div></div></section> : null}
 
           <footer className="mt-8 text-center text-[11px] leading-5 text-zinc-500">{reviewTogether ? 'This handoff continues to your Event Agreement and payment choice. Questions? Email booking@luxoratlaspalmas.com.' : 'Final proposals are separate from the Event Agreement and payment. Questions? Email booking@luxoratlaspalmas.com.'}</footer>
         </div>

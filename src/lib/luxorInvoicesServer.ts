@@ -127,12 +127,16 @@ export async function createInvoice(data: {
   price_locked_at?: string | null
   supersedes_invoice_id?: string | null
   proposal_version?: number | null
+  original_proposal_created_at?: string | null
+  same_day_booking_status?: LuxorInvoice['same_day_booking_status']
 }) {
   const [created] = await supabaseRest<LuxorInvoice[]>(data.id ? 'luxor_invoices?on_conflict=id&select=*' : 'luxor_invoices?select=*', {
     method: 'POST',
     headers: { Prefer: data.id ? 'resolution=ignore-duplicates,return=representation' : 'return=representation' },
     body: JSON.stringify({
       ...(data.id ? { id: data.id } : {}),
+      ...(data.original_proposal_created_at ? { original_proposal_created_at: data.original_proposal_created_at, same_day_booking_status: data.same_day_booking_status || 'pending' } : {}),
+      ...(!data.supersedes_invoice_id && data.invoice_kind === 'event' && data.proposal_context?.original_proposal_created_at ? { created_at: data.proposal_context.original_proposal_created_at } : {}),
       client_name: data.client_name,
       event_type: data.event_type || null,
       description: data.description || null,
@@ -253,6 +257,10 @@ export async function updateInvoice(
     | 'price_locked_at'
     | 'supersedes_invoice_id'
     | 'proposal_version'
+    | 'original_proposal_created_at'
+    | 'same_day_booking_status'
+    | 'same_day_booking_completed_at'
+    | 'same_day_booking_review_reason'
   >>
 ) {
   const [updated] = await supabaseRest<LuxorInvoice[]>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}`, {
@@ -347,7 +355,7 @@ function securityDepositGross(invoice: LuxorInvoice) {
  * disclosure, but never a new discount amount: the scheduled payment is
  * already calculated from the discounted Final Event Price.
  */
-function inheritedProposalPromotion(masterInvoice: LuxorInvoice) {
+function inheritedProposalPromotion(masterInvoice: LuxorInvoice, existing?: LuxorInvoice | null) {
   const promotionId = typeof masterInvoice.promotion_id === 'string'
     ? masterInvoice.promotion_id.trim() || null
     : null
@@ -359,6 +367,9 @@ function inheritedProposalPromotion(masterInvoice: LuxorInvoice) {
   return {
     promotion_id: promotionId,
     promotion_snapshot: promotionSnapshot,
+    ...(masterInvoice.proposal_context?.same_day_booking ? { proposal_context: { ...existing?.proposal_context,
+      version: existing?.proposal_context?.version || 1, same_day_disclosure: masterInvoice.proposal_context.same_day_booking,
+      same_day_disclosure_qualified: masterInvoice.same_day_booking_status === 'eligible' } } : {}),
   }
 }
 
@@ -412,7 +423,7 @@ export async function ensureLuxorDepositInvoice(input: {
   const notes = collection.scoped
     ? `Internal collection note: Stripe collects the confirmed Luxor services, including selected official decor charges. Planner-managed event services are collected separately. Luxor-controlled total: ${luxorServicesTotal.toFixed(2)}; planner-managed total: ${collection.plannerServicesTotal.toFixed(2)}. The refundable security deposit is billed separately.`
     : 'Amount due after the signed Event Agreement: the initial booking payment only. The refundable security deposit is billed separately, held through post-event inspection, and is not part of the Event Price.'
-  const promotion = inheritedProposalPromotion(input.masterInvoice)
+  const promotion = inheritedProposalPromotion(input.masterInvoice, existing)
   if (existing) {
     if (existing.status === 'paid') return existing
     return await updateInvoice(existing.id, {
@@ -463,7 +474,7 @@ export async function ensureLuxorSecurityDepositInvoice(input: { masterInvoice: 
   const existing = await getInvoiceByBookingAndKind(input.bookingId, 'security_deposit')
   const total = LUXOR_DEFAULT_SECURITY_DEPOSIT
   const lineItems: LuxorInvoiceLineItem[] = [{ description: 'Refundable Security Deposit', quantity: 1, unitPrice: total, total, category: 'Security Deposit', paymentBucket: 'security_deposit', required: true, detail: 'Held through the post-event inspection and returned subject to the Event Agreement.' }]
-  const promotion = inheritedProposalPromotion(input.masterInvoice)
+  const promotion = inheritedProposalPromotion(input.masterInvoice, existing)
   const payload = { line_items: lineItems, subtotal: total, tax_rate: 0, total, original_subtotal: total, original_total: total, discount_percent: 0, discount_amount: 0, ...promotion, invoice_kind: 'security_deposit' as const, due_date: input.dueDate, notes: 'Separate refundable security deposit due 30 days before the event. It is not part of the Event Total.' }
   if (existing) return existing.status === 'paid' ? existing : (await updateInvoice(existing.id, payload) || existing)
   return createInvoice({ inquiry_id: input.masterInvoice.inquiry_id, booking_id: input.bookingId, parent_invoice_id: input.masterInvoice.id, client_name: input.masterInvoice.client_name, event_type: input.masterInvoice.event_type, description: 'Refundable Security Deposit', ...payload })
@@ -493,7 +504,7 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
   const remainingEventBalance = Math.max(0, roundMoney(eventTotal - depositAmount))
   const finalBalance = remainingEventBalance
   const lineItems: LuxorInvoiceLineItem[] = [{ description: collection.scoped ? 'Remaining Luxor-Controlled Services Balance' : 'Remaining Event Balance After Initial Booking Payment', quantity: 1, unitPrice: remainingEventBalance, total: remainingEventBalance, category: 'Final Balance', paymentBucket: 'event', required: true }]
-  const promotion = inheritedProposalPromotion(input.masterInvoice)
+  const promotion = inheritedProposalPromotion(input.masterInvoice, existing)
   if (existing) {
     if (existing.status === 'paid') return existing
     return await updateInvoice(existing.id, {

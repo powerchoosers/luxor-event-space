@@ -4,6 +4,7 @@ import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './lux
 import { formatLuxorDate } from './luxorDateFormatting'
 import { formatCatalogTime } from './luxorPricingCatalog'
 import { getOfficialDecorService } from './luxorDecorCatalog'
+import { SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBookingSnapshot } from './luxorSameDayBooking'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT = 750
@@ -51,6 +52,8 @@ export type LuxorProposalPricingSummary = {
   approvedDiscount: number
   promotion: LuxorProposalPromotionSnapshot | null
   tax: number
+  taxCoverage: number
+  sameDayBooking: LuxorSameDayBookingSnapshot | null
   finalEventPrice: number
   refundableSecurityDeposit: number
   amountDueToBook: number | null
@@ -199,10 +202,11 @@ function normalizedLineItem(value: unknown) {
   const paymentBucket = asText(value.paymentBucket)?.toLowerCase() ?? ''
   const searchable = `${category} ${service}`.toLowerCase()
   const isSecurityDeposit = paymentBucket === 'security_deposit' || /refundable\s+security\s+deposit|security\s+deposit/.test(searchable)
-  const isTax = pricingRole === 'tax' || /(^|\s)(sales\s+)?tax($|\s)|taxes/.test(searchable)
-  const isDiscount = pricingRole === 'discount'
+  const isTaxCoverage = pricingRole === 'tax_coverage'
+  const isTax = !isTaxCoverage && (pricingRole === 'tax' || /(^|\s)(sales\s+)?tax($|\s)|taxes/.test(searchable))
+  const isDiscount = !isTaxCoverage && (pricingRole === 'discount'
     || /discount|credit|promotion|package\s+savings/.test(searchable)
-    || lineTotal < -0.004
+    || lineTotal < -0.004)
 
   return {
     id,
@@ -217,6 +221,7 @@ function normalizedLineItem(value: unknown) {
     isSecurityDeposit,
     isTax,
     isDiscount,
+    isTaxCoverage,
   }
 }
 
@@ -230,7 +235,9 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
   const context = proposalContext(rawInvoice.proposal_context)
   const rawItems = Array.isArray(rawInvoice.line_items) ? rawInvoice.line_items : []
   const items = rawItems.map(normalizedLineItem).filter((item): item is NonNullable<typeof item> => item !== null)
-  const serviceItems = items.filter((item) => !item.isSecurityDeposit && !item.isTax && !item.isDiscount)
+  const serviceItems = items.filter((item) => !item.isSecurityDeposit && !item.isTax && !item.isDiscount && !item.isTaxCoverage)
+  const taxCoverage = roundMoney(items.filter(item => item.isTaxCoverage).reduce((sum, item) => sum + Math.abs(item.lineTotal), 0))
+  const sameDayBooking = (recordFrom(context.same_day_booking) || recordFrom(context.same_day_disclosure)) as LuxorSameDayBookingSnapshot | null
   const explicitDiscount = roundMoney(items.filter((item) => item.isDiscount).reduce((sum, item) => sum + Math.abs(item.lineTotal), 0))
   const storedDiscount = asNonNegativeMoney(rawInvoice.discount_amount) ?? 0
   const approvedDiscount = Math.max(explicitDiscount, storedDiscount)
@@ -241,12 +248,12 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
   const serviceLineSubtotal = roundMoney(serviceItems.reduce((sum, item) => sum + Math.max(0, item.lineTotal), 0))
   const fallbackFinalEventPrice = invoiceTotal > 0
     ? Math.max(0, roundMoney(invoiceTotal - securityLineTotal))
-    : Math.max(0, roundMoney(serviceLineSubtotal - approvedDiscount + explicitTax))
+    : Math.max(0, roundMoney(serviceLineSubtotal - approvedDiscount + explicitTax - taxCoverage))
   const finalEventPrice = contextualFinalEventPrice ?? fallbackFinalEventPrice
 
   const storedSubtotal = asNonNegativeMoney(rawInvoice.subtotal) ?? 0
   const originalSubtotal = asNonNegativeMoney(rawInvoice.original_subtotal) ?? 0
-  const maximumPretaxSubtotal = Math.max(0, roundMoney(finalEventPrice + approvedDiscount - explicitTax))
+  const maximumPretaxSubtotal = Math.max(0, roundMoney(finalEventPrice + approvedDiscount + taxCoverage - explicitTax))
   const subtotalCandidates = [
     serviceLineSubtotal,
     Math.max(0, roundMoney(storedSubtotal - securityLineTotal + approvedDiscount)),
@@ -257,7 +264,7 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
     : maximumPretaxSubtotal
   const tax = explicitTax > 0
     ? explicitTax
-    : Math.max(0, roundMoney(finalEventPrice - (subtotal - approvedDiscount)))
+    : Math.max(0, roundMoney(finalEventPrice + taxCoverage - (subtotal - approvedDiscount)))
   const promotion = approvedDiscount > 0.004
     ? promotionSnapshot(context, rawInvoice, approvedDiscount)
     : null
@@ -300,6 +307,8 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
     approvedDiscount,
     promotion,
     tax,
+    taxCoverage,
+    sameDayBooking,
     finalEventPrice,
     refundableSecurityDeposit,
     amountDueToBook: asNonNegativeMoney(context.amount_due_to_book),
@@ -357,6 +366,7 @@ function proposalFinancialSummaryHtml(summary: LuxorProposalPricingSummary, opti
     <tr><td style="padding:18px 20px 0;color:#b8aa9a;font-size:11px">Package subtotal</td><td align="right" style="padding:18px 20px 0;color:#f7efe3;font-size:12px;font-weight:700">${money(summary.subtotal)}</td></tr>
     ${promotionRow}
     <tr><td style="padding:10px 20px 18px;color:#b8aa9a;font-size:11px">Sales tax</td><td align="right" style="padding:10px 20px 18px;color:#f7efe3;font-size:12px;font-weight:700">${money(summary.tax)}</td></tr>
+    ${summary.taxCoverage > 0 ? `<tr><td style="padding:0 20px 18px;color:#d2efd9;font-size:11px">LUXOR pays your sales tax (conditional)</td><td align="right" style="padding:0 20px 18px;color:#d2efd9;font-size:12px;font-weight:700">-${money(summary.taxCoverage)}</td></tr>` : ''}
     <tr><td style="padding:17px 20px;border-top:1px solid rgba(202,162,76,.24);color:#caa24c;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Final event price</td><td align="right" style="padding:14px 20px;border-top:1px solid rgba(202,162,76,.24);color:#f1d27a;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700">${money(summary.finalEventPrice)}</td></tr>
     <tr><td colspan="2" style="padding:0 20px 18px;color:#a99878;font-size:10px;line-height:1.55">This is the final price for your event services. It does not include the refundable security deposit below.</td></tr>
   </table>
@@ -390,6 +400,7 @@ function offerDisclosureHtml(
   summary?: LuxorProposalPricingSummary,
   stage: 'proposal' | 'accepted' = 'proposal',
 ) {
+  if (summary?.sameDayBooking) return sameDayDisclosureHtml(summary.sameDayBooking, summary.tax, invoice.same_day_booking_status === 'eligible')
   const expiresAt = formatLuxorOfferExpiry(invoice.offer_expires_at)
   if (hasLuxorOffer(invoice)) {
     const offer = luxorOfferSnapshot(invoice)
@@ -406,13 +417,21 @@ function offerDisclosureHtml(
 }
 
 function paymentPromotionDisclosureHtml(invoice: LuxorInvoice) {
+  const benefit = invoice.proposal_context?.same_day_disclosure as LuxorSameDayBookingSnapshot | undefined
+  const coverageDisclosure = benefit?.coverage_amount ? sameDayDisclosureHtml(benefit, benefit.coverage_amount, invoice.proposal_context?.same_day_disclosure_qualified === true || invoice.status === 'paid') : ''
   const promotion = getLuxorProposalPromotionDisclosure(invoice)
-  if (!promotion) return ''
+  if (!promotion) return coverageDisclosure
   const promotionLabel = promotion.code
     ? `${promotion.name} (${promotion.code})`
     : promotion.name
 
-  return `<div style="margin:16px 0 0;padding:16px 18px;border:1px solid rgba(99,190,139,.42);background:rgba(35,105,67,.17)"><p style="margin:0 0 7px;color:#a7e6be;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Promotion already applied</p><p style="margin:0;color:#f7efe3;font-size:12px;line-height:1.65"><strong>${escapeHtml(promotionLabel)}</strong> saved ${money(promotion.amount)} on your locked Final Event Price.</p><p style="margin:7px 0 0;color:#d2efd9;font-size:11px;line-height:1.65">The payment due above was calculated from that locked price and will not receive a second discount at checkout.</p></div>`
+  return coverageDisclosure + `<div style="margin:16px 0 0;padding:16px 18px;border:1px solid rgba(99,190,139,.42);background:rgba(35,105,67,.17)"><p style="margin:0 0 7px;color:#a7e6be;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Promotion already applied</p><p style="margin:0;color:#f7efe3;font-size:12px;line-height:1.65"><strong>${escapeHtml(promotionLabel)}</strong> saved ${money(promotion.amount)} on your locked Final Event Price.</p><p style="margin:7px 0 0;color:#d2efd9;font-size:11px;line-height:1.65">The payment due above was calculated from that locked price and will not receive a second discount at checkout.</p></div>`
+}
+
+function sameDayDisclosureHtml(benefit: LuxorSameDayBookingSnapshot, tax: number, completed: boolean) {
+  const originalDate = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(benefit.original_created_at))
+  if (benefit.coverage_amount <= 0 && benefit.status === 'expired') return `<div style="margin:22px 0;padding:18px 20px;border:1px solid rgba(202,162,76,.25);color:#e7d4aa;font-size:12px;line-height:1.65"><strong>${escapeHtml(benefit.name)}</strong><p>Expired benefit removed from this revised price. Applicable sales tax: ${money(tax)}, payable by the client. Compatible discounts remain. Original proposal date: ${escapeHtml(originalDate)}.</p></div>`
+  return `<div style="margin:22px 0;padding:18px 20px;border:1px solid rgba(202,162,76,.25);color:#e7d4aa;font-size:12px;line-height:1.65"><strong>${escapeHtml(benefit.name)}</strong><p>Applicable sales tax: ${money(tax)}. LUXOR coverage: ${money(benefit.coverage_amount)}. ${completed ? 'Qualified on time.' : `Conditional until midnight America/Chicago on ${escapeHtml(originalDate)}.`}</p><p>${escapeHtml(SAME_DAY_BOOKING_TERMS)}</p>${completed ? '' : `<p>${escapeHtml(SAME_DAY_CARD_CUTOFF_TERMS)}</p>`}</div>`
 }
 
 /** A proposal is deliberately not a contract or payment request. */

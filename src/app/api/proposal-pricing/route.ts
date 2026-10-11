@@ -8,6 +8,8 @@ import {
   getLuxorProposalPricingForInvoice,
   LuxorPromotionSelectionError,
   resolveLuxorProposalPromotion,
+  resolveLuxorSameDayBooking,
+  resolveLuxorOriginalProposalCreatedAt,
   updateDefaultLuxorProposalPricing,
 } from '@/lib/luxorProposalPricingServer'
 import {
@@ -45,14 +47,18 @@ export async function POST(request: NextRequest) {
     const selection = object(body)?.selection
     if (!object(selection)) return NextResponse.json({ error: 'Proposal selection is required.' }, { status: 400 })
     const invoiceId = typeof body.invoiceId === 'string' ? body.invoiceId : ''
-    const existing = invoiceId ? await getInvoice(invoiceId) : null
-    if (invoiceId && !existing) return NextResponse.json({ error: 'Proposal not found.' }, {status: 404})
-    if (existing && (existing.invoice_kind !== 'event' || existing.status !== 'draft' || existing.price_locked_at || existing.proposal_accepted_at || existing.proposal_sent_at)) return NextResponse.json({error: 'This proposal is locked. Create a revision.'}, {status: 409})
+    const revisionId = typeof body.supersedesInvoiceId === 'string' ? body.supersedesInvoiceId : ''
+    const existing = invoiceId || revisionId ? await getInvoice(invoiceId || revisionId) : null
+    if ((invoiceId || revisionId) && !existing) return NextResponse.json({ error: 'Proposal not found.' }, {status: 404})
+    if (revisionId && existing?.invoice_kind !== 'event') return NextResponse.json({ error: 'Only an event proposal can be revised.' }, {status: 409})
+    if (invoiceId && existing && (existing.invoice_kind !== 'event' || existing.status !== 'draft' || existing.price_locked_at || existing.proposal_accepted_at || existing.proposal_sent_at)) return NextResponse.json({error: 'This proposal is locked. Create a revision.'}, {status: 409})
     const pricing = await getLuxorProposalPricingForInvoice(existing)
     const promotion = await resolveLuxorProposalPromotion(selection as LuxorProposalSelection, existing)
-    const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion })
-    const createdOn = existing ? luxorCalendarDate(new Date(existing.created_at)) : luxorCalendarDate()
-    Object.assign(calculation.context, { proposal_created_on: createdOn, valid_through: proposalValidThrough(createdOn, promotion) })
+    const originalCreatedAt = await resolveLuxorOriginalProposalCreatedAt(existing)
+    const sameDayBooking = await resolveLuxorSameDayBooking(selection as LuxorProposalSelection, existing, originalCreatedAt)
+    const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion, sameDayBooking })
+    const createdOn = luxorCalendarDate(new Date(originalCreatedAt))
+    Object.assign(calculation.context, { original_proposal_created_at: originalCreatedAt, proposal_created_on: createdOn, valid_through: proposalValidThrough(createdOn, promotion) })
     const luxorCosts = object(pricing.config.luxor_costs) || pricing.config
     return NextResponse.json({
       pricing_config_version: pricing.version,

@@ -14,6 +14,8 @@ import { saveLuxorInvoicePdf } from '@/lib/luxorDocumentsServer'
 import { queueLuxorTransactionalNotice } from '@/lib/luxorTransactionalNoticeServer'
 import { hasLuxorOffer, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
+import { recordLuxorSameDayPayment, recordLuxorSameDayScheduledPayment, stripeSuccessfulPaymentEvidence, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
+import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 
 function escapeNoticeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
@@ -54,10 +56,10 @@ function getInitialPaymentBreakdown(invoice: LuxorInvoice) {
   }
 }
 
-async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
+async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event: Stripe.Event, stripe: Stripe) {
   const invoiceId = session.metadata?.invoice_id || session.client_reference_id
   if (!invoiceId || session.payment_status !== 'paid') return
-  const paidAt = new Date().toISOString()
+  let paidAt = new Date(event.created * 1000).toISOString()
   const kind = paymentKind(session.metadata?.payment_label, session.metadata?.invoice_kind)
   const invoice = await getInvoice(invoiceId)
   if (!invoice) {
@@ -68,6 +70,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
     ? invoice
     : invoice.parent_invoice_id ? await getInvoice(invoice.parent_invoice_id) : null
   const luxorOnlyCollection = Boolean(collectionMasterInvoice && luxorCollectionAmounts(collectionMasterInvoice).scoped)
+  const sameDay = Boolean(sameDayBookingPromotion(collectionMasterInvoice)?.coverage_amount)
 
   const bookingId = session.metadata?.booking_id || invoice.booking_id || null
   const booking = bookingId ? await getLuxorBooking(bookingId) : null
@@ -78,6 +81,36 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
   // later Stripe payment to a deal that is already closed lost; leave the
   // payment untouched for an owner to review/refund manually.
   const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
+  // Preserve a real promoted receipt even when the proposal is now withdrawn
+  // or its success arrived late. The atomic guard prevents booking/notice
+  // side effects until immutable timing and agreement identity qualify it.
+  let promotedPayment: LuxorPayment | null = null
+  if (collectionMasterInvoice && sameDayBookingPromotion(collectionMasterInvoice)?.coverage_amount && invoice.invoice_kind === 'deposit') {
+    if (!booking) throw new Error('A promoted payment requires its booking for durable reconciliation.')
+    const evidence = await stripeSuccessfulPaymentEvidence(stripe, session, event)
+    const guarded = await recordLuxorSameDayPayment({ invoice, master: collectionMasterInvoice, booking,
+      amount: Number(session.amount_total || 0) / 100, paidAt: evidence?.paidAt || null,
+      processor: 'stripe', reference: session.id, paymentMethod: 'stripe_checkout',
+      eventId: evidence?.eventId || event.id, timingVerified: Boolean(evidence), fingerprint: session.metadata?.same_day_fingerprint || '',
+      metadata: { payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
+        payment_kind: kind, payment_label: session.metadata?.payment_label, currency: session.currency,
+        same_day_fingerprint: session.metadata?.same_day_fingerprint, successful_event_id: evidence?.eventId || null } })
+    if (guarded.eligibility !== 'eligible') return
+    promotedPayment = guarded.payment
+    paidAt = promotedPayment.paid_at || evidence!.paidAt
+  }
+  if (sameDay && invoice.invoice_kind !== 'deposit') {
+    if (!booking) throw new Error('A promoted scheduled payment requires its booking for durable reconciliation.')
+    const evidence = await stripeSuccessfulPaymentEvidence(stripe, session, event)
+    const guarded = await recordLuxorSameDayScheduledPayment({ invoice, booking, amount: Number(session.amount_total || 0) / 100,
+      paidAt: evidence?.paidAt || null, processor: 'stripe', reference: session.id, paymentMethod: 'stripe_checkout',
+      eventId: evidence?.eventId || event.id, timingVerified: Boolean(evidence),
+      metadata: { payment_kind: kind, payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id, currency: session.currency } })
+    if (guarded.reviewRequired) return
+    promotedPayment = guarded.payment
+    paidAt = promotedPayment.paid_at || evidence!.paidAt
+  }
+  if (sameDay && booking?.status === 'completed') return
   if (inquiry?.status === 'closed_lost') {
     const noteContent = `Stripe reported a payment for a deal already marked lost. It was not applied to the booking or invoice automatically; review the Stripe payment and decide whether a refund is needed.`
     const existingNotes = await listNotesByInquiry(inquiry.id).catch(() => [])
@@ -115,9 +148,9 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
     return
   }
 
-  const [payment] = await supabaseRest<LuxorPayment[]>('luxor_payments?on_conflict=processor,processor_reference&select=*', {
+  const [payment] = promotedPayment ? [promotedPayment] : await supabaseRest<LuxorPayment[]>('luxor_payments?on_conflict=processor,processor_reference&select=*', {
     method: 'POST',
-    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
     body: JSON.stringify({
         booking_id: bookingId,
         invoice_id: invoiceId,
@@ -144,7 +177,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
 
   const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const isFullyPaid = paidTotal + 0.005 >= Number(invoice.total || 0)
-  await updateInvoice(invoiceId, {
+  if (!sameDay) await updateInvoice(invoiceId, {
     status: isFullyPaid ? 'paid' : 'sent',
     paid_at: isFullyPaid ? paidAt : null,
     stripe_invoice_id: typeof session.invoice === 'string' ? session.invoice : session.invoice?.id || null,
@@ -155,7 +188,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
     const linkedInquiry = inquiry || await getLuxorInquiry(inquiryId)
     if (linkedInquiry) {
       paymentContact = { phone: linkedInquiry.phone, name: linkedInquiry.full_name, inquiryId: linkedInquiry.id }
-      await updateLuxorInquiry(linkedInquiry.id, {
+      if (!sameDay) await updateLuxorInquiry(linkedInquiry.id, {
         status: linkedInquiry.status === 'booked' ? linkedInquiry.status : 'proposal_sent',
         pipeline_stage: linkedInquiry.status === 'booked' ? linkedInquiry.pipeline_stage : 'proposal',
         metadata: {
@@ -200,11 +233,11 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
               : Number(booking.deposit_required || 0),
           })
         : null
-      const updatedBooking = await updateLuxorBooking(booking.id, {
+      const bookingPatch = {
         // The security deposit is already part of the completed deposit child
         // invoice. It is held after receipt; the final balance never includes it.
         security_deposit_status: securityDepositCovered || (kind === 'deposit' && depositCovered) ? 'held' : booking.security_deposit_status,
-        status: reservationConfirmed ? 'confirmed' : booking.status === 'draft' ? 'tentative' : booking.status,
+        status: reservationConfirmed ? 'confirmed' as const : booking.status === 'draft' ? 'tentative' as const : booking.status,
         booked_at: reservationConfirmed ? booking.booked_at || paidAt : booking.booked_at,
         metadata: {
           ...booking.metadata,
@@ -227,7 +260,12 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
           ...(finalCovered ? { final_payment_paid_at: paidAt } : {}),
           ...(kind === 'final' && luxorOnlyCollection ? { luxor_services_paid_at: paidAt, luxor_services_payment_invoice_id: invoice.id } : {}),
         },
-      })
+      }
+      const guardedFinalization = sameDay ? await finalizeLuxorSameDayBooking(booking, bookingPatch, inquiry,
+        { status: 'booked', pipeline_stage: finalCovered ? 'event' : reservationConfirmed ? 'planning' : 'deposit',
+          metadata: { ...inquiry?.metadata, latest_payment_at: paidAt, latest_paid_invoice_id: invoice.id } }) : null
+      if (guardedFinalization && !guardedFinalization.applied) return
+      const updatedBooking = guardedFinalization?.booking || await updateLuxorBooking(booking.id, bookingPatch)
       if (reservationConfirmed && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
         await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
           .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
@@ -248,7 +286,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
       if (offerSecured) {
         await updateInvoice(offerInvoice.id, { offer_status: 'redeemed', offer_redeemed_at: paidAt })
       }
-      if (inquiryId && updatedBooking) {
+      if (inquiryId && updatedBooking && !sameDay) {
         const inquiry = await getLuxorInquiry(inquiryId)
         if (inquiry && inquiry.status !== 'closed_lost') {
           const planningComplete = Boolean(updatedBooking.metadata?.planning_completed_at) || updatedBooking.status === 'confirmed'
@@ -281,6 +319,9 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
             const securedOfferMessage = reservationConfirmed && hasLuxorOffer(offerInvoice)
               ? `<p>Your ${paidOffer.percent}% limited-time offer, saving ${paidOffer.savings.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}, is secured with your completed agreement and payment.</p>`
               : ''
+            const securedTax = sameDayBookingPromotion(masterInvoice)
+            const taxCoverageReceipt = reservationConfirmed && securedTax?.coverage_amount
+              ? `<p>Applicable sales tax on your original proposal: ${formatMoney(securedTax.coverage_amount)}. LUXOR pays this separately stated tax (${formatMoney(securedTax.coverage_amount)} coverage). Both your signed agreement and required initial payment completed before the original-day midnight in America/Chicago. The coverage is included in your event price and is not applied again to this receipt.</p>` : ''
             const paymentBreakdown = getInitialPaymentBreakdown(paidInvoice)
             const paymentExplanation = paymentBreakdown.securityDeposit > 0
               ? `We received your initial booking payment of <strong>${formatMoney(paymentBreakdown.initialBookingPayment)}</strong> and your separate refundable security deposit of <strong>${formatMoney(paymentBreakdown.securityDeposit)}</strong> (total received: ${formatMoney(paymentBreakdown.total)}). The refundable security deposit is held through the event period and returned following the post-event inspection, subject to the Event Agreement.`
@@ -291,7 +332,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session) {
               kind: 'paid_invoice', sourceId: session.id,
               inquiryId: inquiry.id, bookingId: booking.id, recipient: inquiry.email,
               subject: reservationConfirmed ? 'Your Luxor date is officially reserved' : 'Your Luxor booking payment is confirmed',
-              html: `<div style="font-family:Arial,sans-serif;width:100%;box-sizing:border-box;overflow-wrap:anywhere;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.22em;text-transform:uppercase;color:#9b6d24;font-size:11px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:32px">${reservationConfirmed ? 'Your date is officially reserved' : 'Your booking payment is confirmed'}</h1><p>Hi ${escapeNoticeHtml(inquiry.full_name.split(/\s+/)[0] || inquiry.full_name)},</p><p>${paymentExplanation}</p><p>${reservationConfirmed ? 'Your signed agreement and payment are complete, so your event date is officially reserved. We will continue with planning next.' : 'Your date remains pending until the agreement is signed.'}</p>${securedOfferMessage}<p>Your paid booking-payment invoice is attached for your records.</p></div>`,
+              html: `<div style="font-family:Arial,sans-serif;width:100%;box-sizing:border-box;overflow-wrap:anywhere;max-width:620px;margin:auto;background:#f8f3e9;color:#221d18;padding:36px;border-top:4px solid #b98a3d"><p style="letter-spacing:.22em;text-transform:uppercase;color:#9b6d24;font-size:11px;font-weight:700">Luxor Event Space</p><h1 style="font-family:Georgia,serif;font-size:32px">${reservationConfirmed ? 'Your date is officially reserved' : 'Your booking payment is confirmed'}</h1><p>Hi ${escapeNoticeHtml(inquiry.full_name.split(/\s+/)[0] || inquiry.full_name)},</p><p>${paymentExplanation}</p><p>${reservationConfirmed ? 'Your signed agreement and payment are complete, so your event date is officially reserved. We will continue with planning next.' : 'Your date remains pending until the agreement is signed.'}</p>${securedOfferMessage}${taxCoverageReceipt}<p>Your paid booking-payment invoice is attached for your records.</p></div>`,
               scheduledFor: paidAt, pdf,
               filename: `Luxor-Paid-Booking-Payment-Invoice-${paidInvoice.id.slice(0, 8)}.pdf`,
               legacyAutomationKey: `deposit_payment_confirmation:${session.id}`,
@@ -328,8 +369,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid Stripe webhook signature.' }, { status: 400 })
   }
   try {
+    const stripe = new Stripe(secretKey)
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
-      await recordPaidCheckoutSession(event.data.object)
+      await recordPaidCheckoutSession(event.data.object, event, stripe)
+    } else if (event.type === 'payment_intent.succeeded' && event.data.object.metadata?.workflow === 'luxor_same_day_booking') {
+      const sessions = await stripe.checkout.sessions.list({ payment_intent: event.data.object.id, limit: 2 })
+      if (sessions.data.length !== 1) throw new Error('The successful payment could not be matched to its exact Checkout session.')
+      await recordPaidCheckoutSession(sessions.data[0], event, stripe)
     }
     return NextResponse.json({ received: true })
   } catch (error) {

@@ -8,6 +8,7 @@ import {
 import { supabaseRest } from './supabaseRestServer'
 import type { LuxorInvoice, LuxorPromotion } from './luxorInquiryTypes'
 import { luxorCalendarDate } from './luxorProposalTerms'
+import { originalProposalCreatedAt, sameDayBookingSnapshot, SAME_DAY_BOOKING_CODE } from './luxorSameDayBooking'
 
 export type LuxorProposalPricingRecord = {
   id: string
@@ -23,6 +24,21 @@ export class LuxorPromotionSelectionError extends Error {
     super(message)
     this.name = 'LuxorPromotionSelectionError'
   }
+}
+
+/** Resolve pre-feature revisions without rewriting any historic record. */
+export async function resolveLuxorOriginalProposalCreatedAt(existing?: LuxorInvoice | null) {
+  let invoice = existing
+  const seen = new Set<string>()
+  for (let depth = 0; depth < 100; depth++) {
+    if (!invoice || invoice.original_proposal_created_at || invoice.proposal_context?.original_proposal_created_at || !invoice.supersedes_invoice_id) return originalProposalCreatedAt(invoice)
+    if (seen.has(invoice.id)) break
+    seen.add(invoice.id)
+    const [prior]: LuxorInvoice[] = await supabaseRest<LuxorInvoice[]>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(invoice.supersedes_invoice_id)}&limit=1`)
+    if (!prior || prior.invoice_kind !== 'event' || (prior.inquiry_id || null) !== (existing?.inquiry_id || null)) break
+    invoice = prior
+  }
+  throw new LuxorPromotionSelectionError('The original proposal creation date could not be verified from its revision history. Resolve that history before applying same-day terms.')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -101,13 +117,31 @@ export async function resolveLuxorProposalPromotion(selection: LuxorProposalSele
     id: promotion.id,
     name: promotion.name,
     code: promotion.code,
-    discount_type: promotion.discount_type,
+    discount_type: promotion.discount_type as LuxorProposalResolvedPromotion['discount_type'],
     value: Math.round(value * 100) / 100,
     expires_on: promotion.expires_on ?? null,
     complimentary_item: promotion.complimentary_item,
     complimentary_scope: promotion.complimentary_scope,
     complimentary_item_id: promotion.complimentary_item_id,
   }
+}
+
+/** Uses the saved catalog entry; clients cannot set tax coverage, origin, or expiry. */
+export async function resolveLuxorSameDayBooking(selection: LuxorProposalSelection, existing?: LuxorInvoice | null, createdAt?: string) {
+  const value = selection.taxCoveragePromotionId ?? selection.tax_coverage_promotion_id
+  const id = typeof value === 'string' ? value.trim() : ''
+  if (!id) return null
+  if (process.env.LUXOR_SAME_DAY_BOOKING_ENABLED !== 'true') throw new LuxorPromotionSelectionError('Same-day booking is awaiting reviewed deployment and activation.')
+  const origin = createdAt || await resolveLuxorOriginalProposalCreatedAt(existing)
+  if (id === promotionIdFromSelection(selection)) throw new LuxorPromotionSelectionError('A promotion cannot be selected twice.')
+  const saved = existing?.proposal_context?.same_day_booking
+  if (saved?.id === id) return sameDayBookingSnapshot(id, origin)
+  const [promotion] = await supabaseRest<LuxorPromotion[]>(`luxor_promotions?select=*&id=eq.${encodeURIComponent(id)}&active=eq.true&limit=1`)
+  if (!promotion || promotion.discount_type !== 'tax_coverage' || promotion.code !== SAME_DAY_BOOKING_CODE ||
+    (promotion.expires_on && promotion.expires_on < luxorCalendarDate())) throw new LuxorPromotionSelectionError()
+  // An additive migration provides the authoritative payment guard. This
+  // catalog entry is shipped inactive until reviewed deployment is complete.
+  return sameDayBookingSnapshot(id, origin)
 }
 
 /** Never replace a saved draft's catalog with subsequently edited Settings. */

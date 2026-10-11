@@ -31,7 +31,7 @@ export function luxorCollectionAmounts(invoice: LuxorInvoice) {
   const scoped = context.payment_collection_scope === LUXOR_PAYMENT_COLLECTION_SCOPE
   const serviceItems = (Array.isArray(invoice.line_items) ? invoice.line_items : [])
     .filter((item) => item.paymentBucket !== 'security_deposit')
-    .filter((item) => item.pricingRole !== 'discount' && item.pricingRole !== 'tax' && !item.isChecklistItem)
+    .filter((item) => item.pricingRole !== 'discount' && item.pricingRole !== 'tax' && item.pricingRole !== 'tax_coverage' && !item.isChecklistItem)
   const completeEventTotal = money(Number(invoice.total || 0))
   const luxorBase = money(serviceItems.filter(isLuxorCollectedLineItem).reduce((sum, item) => sum + Number(item.total || 0), 0))
   if (!scoped) return { scoped: false, luxorServicesTotal: completeEventTotal, plannerServicesTotal: 0 }

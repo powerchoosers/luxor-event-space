@@ -23,6 +23,7 @@ const EMPTY_DRAFT: PromotionDraft = {
 }
 
 function formatPromotion(promotion: Pick<LuxorPromotion, 'discount_type' | 'value'>) {
+  if (promotion.discount_type === 'tax_coverage') return 'LUXOR pays applicable sales tax after discounts; signature and initial payment before original-day midnight (Chicago)'
   return promotion.discount_type === 'complimentary' ? 'Complimentary · Regular value ' + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(promotion.value) + ' · Promotional value $0' : promotion.discount_type === 'percent'
     ? `${promotion.value}% off`
     : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(promotion.value) + ' off'
@@ -173,7 +174,7 @@ export function PromotionManager() {
                   <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{formatPromotion(promotion)} · {promotion.expires_on ? 'Expires ' + promotion.expires_on : 'No expiration'} <span className="text-[color:var(--portal-faint)]">· {promotion.code}</span></p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  <PortalButton variant="secondary" size="sm" onClick={() => openEdit(promotion)}><Edit3 size={12} /> Edit</PortalButton>
+                  {promotion.discount_type !== 'tax_coverage' && <PortalButton variant="secondary" size="sm" onClick={() => openEdit(promotion)}><Edit3 size={12} /> Edit</PortalButton>}
                   <PortalButton variant={promotion.active ? 'ghost' : 'secondary'} size="sm" onClick={() => void togglePromotion(promotion)}>{promotion.active ? 'Pause' : 'Activate'}</PortalButton>
                 </div>
               </article>

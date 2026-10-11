@@ -218,7 +218,7 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   const hasPromotion = summary.approvedDiscount > 0.004
   const promotionLabel = summary.promotion?.name || 'Promotion discount'
   const summaryHeight = isFinalProposal
-    ? (hasPromotion ? 121 : 99)
+    ? (hasPromotion ? 121 : 99) + (summary.taxCoverage > 0 ? 22 : 0)
     : (hasPromotion ? 100 : 78)
   ensureSpace(isFinalProposal ? 245 : 145, true)
   const summaryTop = y
@@ -228,7 +228,18 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   drawSummaryRow('Package subtotal', money(summary.subtotal))
   if (hasPromotion) drawSummaryRow(promotionLabel, `-${money(summary.approvedDiscount)}`)
   drawSummaryRow('Sales tax', money(summary.tax))
+  if (summary.taxCoverage > 0) drawSummaryRow('LUXOR-paid sales tax coverage', `-${money(summary.taxCoverage)}`)
   drawSummaryRow(isFinalProposal ? 'FINAL EVENT PRICE' : 'INVOICE TOTAL', money(isFinalProposal ? summary.finalEventPrice : invoiceTotal), { accent: true, strong: true, topBorder: true })
+  if (summary.sameDayBooking) {
+    const qualified = invoice.same_day_booking_status === 'eligible' || invoice.proposal_context?.same_day_disclosure_qualified === true || invoice.status === 'paid'
+    const disclosure = summary.sameDayBooking.coverage_amount > 0
+      ? `${summary.sameDayBooking.name}. Original proposal applicable sales tax: ${money(summary.sameDayBooking.coverage_amount)}. LUXOR pays ${money(summary.sameDayBooking.coverage_amount)} ${qualified ? 'qualified on the original proposal day' : `only when both the signed agreement and required initial payment finish before ${formatLuxorOfferExpiry(summary.sameDayBooking.expires_at)}; a late payment requires revised pricing and a fresh agreement`}. Scheduled payments do not apply coverage a second time.`
+      : `${summary.sameDayBooking.name}: expired. Applicable sales tax is payable by the client; other valid promotions remain.`
+    const rows = wrap(disclosure, regular, 8.2, contentRight - margin)
+    ensureSpace(rows.length * 11 + 22, true)
+    drawLines(rows, margin, y - 9, 8.2, regular, muted, 11)
+    y -= rows.length * 11 + 22
+  }
 
   if (isFinalProposal && summary.vendorEstimateLines.length) {
     ensureSpace(96 + summary.vendorEstimateLines.length * 22, true)

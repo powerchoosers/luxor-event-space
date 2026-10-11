@@ -4,7 +4,7 @@ import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, updateI
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 import { calculateLuxorProposal, type LuxorProposalSelection } from '@/lib/luxorProposalPricing'
-import { getDefaultLuxorProposalPricing, getLuxorProposalPricingForInvoice, LuxorPromotionSelectionError, resolveLuxorProposalPromotion } from '@/lib/luxorProposalPricingServer'
+import { getDefaultLuxorProposalPricing, getLuxorProposalPricingForInvoice, LuxorPromotionSelectionError, resolveLuxorProposalPromotion, resolveLuxorSameDayBooking, resolveLuxorOriginalProposalCreatedAt } from '@/lib/luxorProposalPricingServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 import { calculateLuxorOfferPricing, clampLuxorDiscountPercent, luxorOfferSnapshot } from '@/lib/luxorOffer'
@@ -15,6 +15,8 @@ import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorLeadEventForInquiry } from '@/lib/luxorLeadEventsServer'
 import { luxorCalendarDate, proposalValidThrough, proposalExpirationInstant } from '@/lib/luxorProposalTerms'
 import type { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorProposalContext } from '@/lib/luxorInquiryTypes'
+import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
+import { assertLuxorSameDayRevisionSafe } from '@/lib/luxorSameDayBookingServer'
 
 const PRICING_CONFIGURATION_REQUIRED = 'Pricing configuration required — administrator review.'
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
@@ -107,7 +109,7 @@ function isRefundableSecurityDepositLine(item: LuxorInvoiceLineItem) {
 function normaliseCalculatedLineItems(value: unknown): LuxorInvoiceLineItem[] {
   if (!Array.isArray(value)) throw new ProposalPricingConfigurationError()
 
-  const pricingRoles = new Set<NonNullable<LuxorInvoiceLineItem['pricingRole']>>(['required', 'included', 'add_on', 'discount', 'tax', 'custom'])
+  const pricingRoles = new Set<NonNullable<LuxorInvoiceLineItem['pricingRole']>>(['required', 'included', 'add_on', 'discount', 'tax', 'tax_coverage', 'custom'])
   const paymentBuckets = new Set<NonNullable<LuxorInvoiceLineItem['paymentBucket']>>(['venue', 'event', 'security_deposit'])
   const lines = value.map((raw): LuxorInvoiceLineItem | null => {
     const line = recordFrom(raw)
@@ -226,13 +228,15 @@ type InvoiceRouteUpdates = Parameters<typeof updateInvoice>[1] & {
 const INVOICE_STATUSES = new Set<LuxorInvoiceStatus>(['draft', 'sent', 'paid', 'overdue', 'cancelled'])
 
 async function calculateServerProposal(selection: LuxorProposalSelection, existing?: LuxorInvoice): Promise<ServerCalculatedProposal> {
+  const originalCreatedAt = await resolveLuxorOriginalProposalCreatedAt(existing)
   let pricingRecord: Awaited<ReturnType<typeof getDefaultLuxorProposalPricing>>
   let calculation: unknown
   let promotion: Awaited<ReturnType<typeof resolveLuxorProposalPromotion>>
   try {
     pricingRecord = await getLuxorProposalPricingForInvoice(existing)
     promotion = await resolveLuxorProposalPromotion(selection, existing)
-    calculation = calculateLuxorProposal(selection, pricingRecord.config, { promotion })
+    const sameDayBooking = await resolveLuxorSameDayBooking(selection, existing, originalCreatedAt)
+    calculation = calculateLuxorProposal(selection, pricingRecord.config, { promotion, sameDayBooking })
   } catch (error) {
     if (error instanceof LuxorPromotionSelectionError) throw error
     throw new ProposalPricingConfigurationError()
@@ -249,7 +253,8 @@ async function calculateServerProposal(selection: LuxorProposalSelection, existi
   // A rate is not a currency amount: rounding 0.0825 to cents changes 8.25% to 8%.
   const configuredTaxRate = Number(record.taxRate ?? record.tax_rate ?? rawContext?.tax_rate ?? 0)
   const taxRate = !Number.isFinite(configuredTaxRate) ? 0 : Math.max(0, Math.min(1, configuredTaxRate > 1 ? configuredTaxRate / 100 : configuredTaxRate))
-  const subtotal = nonNegativeMoney(record.netSubtotal ?? record.net_subtotal) ?? (total === null ? null : Math.max(0, roundMoney(total - taxAmount)))
+  const coverageAmount = Number(recordFrom(rawContext?.same_day_booking)?.coverage_amount || 0)
+  const subtotal = nonNegativeMoney(record.netSubtotal ?? record.net_subtotal) ?? (total === null ? null : Math.max(0, roundMoney(total + coverageAmount - taxAmount)))
   const originalSubtotal = nonNegativeMoney(record.originalSubtotal ?? record.original_subtotal ?? record.subtotal) ?? (subtotal === null ? null : roundMoney(subtotal + discountAmount))
   const originalTotal = nonNegativeMoney(record.originalTotal ?? record.original_total) ?? (originalSubtotal === null ? null : roundMoney(originalSubtotal * (1 + taxRate)))
   if (total === null || subtotal === null || originalSubtotal === null || originalTotal === null || !rawContext) {
@@ -276,8 +281,9 @@ async function calculateServerProposal(selection: LuxorProposalSelection, existi
     pricing_config_version: Math.max(1, Math.floor(Number(pricingRecord.version || 1))),
     pricing_selection: { ...(rawContext.pricing_selection as Record<string, unknown> || selection), ...(rawContext.payment_plan ? { paymentPlan: rawContext.payment_plan } : {}) },
     ...(rawContext.payment_plan ? { payment_plan: rawContext.payment_plan as LuxorProposalContext['payment_plan'] } : {}),
-    proposal_created_on: existing ? luxorCalendarDate(new Date(existing.created_at)) : luxorCalendarDate(),
-    valid_through: proposalValidThrough(existing ? luxorCalendarDate(new Date(existing.created_at)) : luxorCalendarDate(), promotion),
+    original_proposal_created_at: originalCreatedAt,
+    proposal_created_on: luxorCalendarDate(new Date(originalCreatedAt)),
+    valid_through: proposalValidThrough(luxorCalendarDate(new Date(originalCreatedAt)), promotion),
     final_event_price: total,
     refundable_security_deposit: refundableSecurityDeposit,
     // Drafts can safely retain the exact calculated package before the owner
@@ -323,11 +329,16 @@ async function revisedProposalVersion(params: {
   supersedesInvoiceId: string | null
   inquiryId: string | null
 }) {
-  if (!params.supersedesInvoiceId) return { supersedesInvoiceId: null, proposalVersion: 1 }
+  if (!params.supersedesInvoiceId) return { supersedesInvoiceId: null, proposalVersion: 1, prior: undefined }
   if (!params.inquiryId) return null
 
   const prior = await getInvoice(params.supersedesInvoiceId)
-  if (!prior || prior.invoice_kind !== 'event' || prior.inquiry_id !== params.inquiryId || prior.proposal_accepted_at || prior.booking_id || prior.status === 'paid') return null
+  if (!prior || prior.invoice_kind !== 'event' || prior.inquiry_id !== params.inquiryId || prior.status === 'paid' || prior.same_day_booking_status === 'eligible') return null
+  if (sameDayBookingRequiresRevision(prior)) {
+    await assertLuxorSameDayRevisionSafe(prior)
+    return { supersedesInvoiceId: prior.id, proposalVersion: Math.max(1, Number(prior.proposal_version || 1) + 1), prior }
+  }
+  if (prior.proposal_accepted_at || prior.booking_id) return null
 
   const priorBooking = prior.booking_id
     ? await getLuxorBooking(prior.booking_id) || await getLuxorBookingByInvoice(prior.id)
@@ -341,6 +352,7 @@ async function revisedProposalVersion(params: {
   return {
     supersedesInvoiceId: prior.id,
     proposalVersion: Math.max(1, Math.floor(Number(prior.proposal_version || 1)) + 1),
+    prior,
   }
 }
 
@@ -438,7 +450,6 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(saved)
         }
       }
-      const calculated = await calculateServerProposal(selection)
       const revision = await revisedProposalVersion({
         supersedesInvoiceId: stringValue(body.supersedes_invoice_id),
         inquiryId,
@@ -446,6 +457,7 @@ export async function POST(request: NextRequest) {
       if (!revision) {
         return NextResponse.json({ error: 'A revised final proposal can only supersede an unsigned, unpaid proposal for this same lead.' }, { status: 409 })
       }
+      const calculated = await calculateServerProposal(selection, revision.prior)
 
       const invoice = await createInvoice({
         ...(requestId ? { id: requestId } : {}),
@@ -470,6 +482,7 @@ export async function POST(request: NextRequest) {
         lead_event_id: leadEventId,
         notes: stringValue(body.notes),
         invoice_kind: 'event',
+        ...(calculated.proposalContext.same_day_booking ? { original_proposal_created_at: String(calculated.proposalContext.original_proposal_created_at), same_day_booking_status: 'pending' as const } : {}),
         proposal_context: { ...calculated.proposalContext, ...(requestId ? { creation_request_fingerprint: requestFingerprint } : {}) },
         supersedes_invoice_id: revision.supersedesInvoiceId,
         proposal_version: revision.proposalVersion,

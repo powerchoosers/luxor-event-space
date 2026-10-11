@@ -11,6 +11,8 @@ import { getVerifiedLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPaymentSettings } from '@/lib/luxorPaymentSettingsServer'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import { getLuxorAgreementClientEmailStatus } from '@/lib/luxorTransactionalNoticeServer'
+import { sameDayBookingPromotion, sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
+import { SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -36,9 +38,12 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
   if (signature.status !== 'signed') return {}
   const booking = await getLuxorBooking(signature.booking_id)
   const masterInvoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
+  const benefit = sameDayBookingPromotion(masterInvoice)
+  if (masterInvoice && sameDayBookingRequiresRevision(masterInvoice)) return { same_day_booking: benefit, payment_review_required: masterInvoice.same_day_booking_status === 'review', payment_blocked: true, payment_message: masterInvoice.same_day_booking_status === 'review' ? 'Payment received — owner review required. Please do not pay again.' : SAME_DAY_REVISION_MESSAGE }
   let invoice = booking ? await getInvoiceByBookingAndKind(booking.id, 'deposit') : null
   invoice ||= masterInvoice
   if (!booking || booking.contract_status !== 'signed' || !invoice) return {}
+  if (benefit && masterInvoice?.same_day_booking_status === 'eligible' && invoice.status === 'paid') return { same_day_booking: benefit, same_day_completed: true, payment_blocked: true, payment_message: 'Your initial booking payment is complete.' }
   const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
   if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost') return {}
   const preference = booking.metadata?.client_payment_preference as { method?: unknown } | undefined
@@ -59,15 +64,18 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
         deposit: Number(invoice.total || 0),
         full: Number(masterInvoice.total || invoice.total || 0),
         initial_method: initialMethod,
+        ...(benefit ? { same_day_booking: benefit, same_day_completed: masterInvoice?.same_day_booking_status === 'eligible' } : {}),
         ...(zelleDetails ? { zelle: zelleDetails } : {}),
       }
     : null
+  const sameDayInfo = benefit ? { same_day_booking: benefit, same_day_completed: masterInvoice?.same_day_booking_status === 'eligible' } : {}
   // The signature flow creates Checkout only after it has verified the signed
   // agreement. The client may now choose Card, Cash, or Zelle; only Card
   // continues to Stripe, while the other methods remain owner-confirmed.
-  if (!invoice.stripe_checkout_url) return paymentOptions ? { payment_options: paymentOptions } : {}
+  if (!invoice.stripe_checkout_url) return paymentOptions ? { ...sameDayInfo, payment_options: paymentOptions } : sameDayInfo
   const paymentEmailStatus = await getLuxorAgreementClientEmailStatus(signature.id, signature.client_email, invoice.stripe_checkout_url)
   return {
+    ...sameDayInfo,
     payment_email_status: paymentEmailStatus,
     payment_url: invoice.stripe_checkout_url,
     payment_amount: Number(invoice.payment_requested_amount || invoice.total || 0),
@@ -137,7 +145,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ...publicSignature(responseSignature), ...await publicPayment(responseSignature), status: responseSignature.status })
+    const relatedBooking = await getLuxorBooking(responseSignature.booking_id)
+    const relatedInvoice = relatedBooking?.invoice_id ? await getInvoice(relatedBooking.invoice_id) : null
+    return NextResponse.json({ ...publicSignature(responseSignature), same_day_booking: sameDayBookingPromotion(relatedInvoice), payment_blocked: relatedInvoice ? sameDayBookingRequiresRevision(relatedInvoice) : false, ...await publicPayment(responseSignature), status: responseSignature.status })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load signature request.'
     return NextResponse.json({ error: message }, { status: 500 })

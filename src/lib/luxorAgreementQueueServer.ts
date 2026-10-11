@@ -19,6 +19,7 @@ import {
 import { LUXOR_AGREEMENT_ATTACHMENT_MANIFEST } from './luxorAgreementDeliveryServer'
 import { syncLuxorPaymentInstallments } from './luxorPaymentInstallmentsServer'
 import { luxorCollectionAmounts } from './luxorPaymentOwnership'
+import { sameDayBookingRequiresRevision } from './luxorSameDayBooking'
 
 export type LuxorAgreementQueueDelivery = 'queued' | 'already_sent' | 'already_signed' | 'preparing'
 
@@ -96,7 +97,8 @@ function hasAcceptedLockedProposal(invoice: LuxorInvoice) {
     invoice.status === 'sent' &&
     invoice.price_locked_at &&
     invoice.proposal_accepted_at &&
-    invoice.offer_status !== 'withdrawn',
+    invoice.offer_status !== 'withdrawn' &&
+    !sameDayBookingRequiresRevision(invoice),
   )
 }
 

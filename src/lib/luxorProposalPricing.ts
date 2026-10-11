@@ -9,6 +9,7 @@ import { isLuxorCollectedLineItem } from './luxorPaymentOwnership'
 import { formatCatalogTime } from './luxorPricingCatalog'
 import { proposalEventTiming } from './luxorProposalTerms'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from './luxorDecorCatalog'
+import type { LuxorSameDayBookingSnapshot } from './luxorSameDayBooking'
 
 export type LuxorProposalPackageId =
   | 'rental_only'
@@ -79,6 +80,9 @@ export type LuxorProposalSelection = {
   /** Only the server resolves this to a saved promotion and its exact terms. */
   promotionId?: string | null
   promotion_id?: string | null
+  /** Additional saved benefit; independent from the existing price promotion. */
+  taxCoveragePromotionId?: string | null
+  tax_coverage_promotion_id?: string | null
   discountType?: 'percent' | 'fixed' | string | null
   discountValue?: number | string | null
   discountApproved?: boolean | null
@@ -105,6 +109,7 @@ export type LuxorProposalResolvedPromotion = Omit<LuxorProposalPromotionSnapshot
 export type LuxorProposalCalculationOptions = {
   /** Only server-resolved saved promotions are eligible to change the total. */
   promotion?: LuxorProposalResolvedPromotion | null
+  sameDayBooking?: LuxorSameDayBookingSnapshot | null
 }
 
 /**
@@ -1714,6 +1719,54 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
   result.context.booking_payment_default = readNumber(readRecord(config, 'luxor_costs') || config, 'booking_payment', 'amount')
   const extension = result.lineItems.find(item => item.id === 'venue-additional-hours')
   Object.assign(result.context, { event_access: formatCatalogTime(timing.arrival) + '–' + formatCatalogTime(timing.end) + ' access', additional_rental_hours: timing.additionalHours, additional_rental_charge: extension?.total || 0 })
+  const requestedCoverage = trimmedString(selection.taxCoveragePromotionId ?? selection.tax_coverage_promotion_id)
+  if (requestedCoverage && !options.sameDayBooking) {
+    const error = 'The same-day booking promotion could not be verified. Refresh saved promotions.'
+    result.calculationErrors.push(error)
+    result.errors.push(error)
+    result.valid = false
+    result.publishable = false
+  }
+  if (options.sameDayBooking) {
+    const terms = options.sameDayBooking
+    const coverage = terms.status === 'active' ? result.taxAmount : 0
+    const coveredCalculation = coverage > 0 ? calculateProposal({ ...normalized, taxRate: 0 }, config, { promotion: options.promotion }) : null
+    const coverageLine = (amount: number): LuxorInvoiceLineItem => ({ id: 'same-day-sales-tax-coverage', category: 'Seller-paid sales tax',
+      description: 'LUXOR pays your applicable sales tax', quantity: 1, unitPrice: -amount, total: -amount,
+      pricingRole: 'tax_coverage', paymentBucket: 'venue', pricingRuleId: 'promotion.' + terms.id, detail: terms.terms })
+    for (const item of result.packages) {
+      const amount = terms.status === 'active' ? item.taxAmount : 0
+      if (amount > 0) item.lineItems.push(coverageLine(amount))
+      item.finalEventPrice = item.final_event_price = rounded(item.finalEventPrice - amount)
+      const coveredPackage = coveredCalculation?.packages.find(candidate => candidate.id === item.id)
+      if (coveredPackage) item.amountDueToBook = item.amount_due_to_book = coveredPackage.amountDueToBook
+    }
+    // Package and selected lines may share the same array; add exactly once.
+    if (coverage > 0 && !result.lineItems.some(item => item.pricingRole === 'tax_coverage')) result.lineItems.push(coverageLine(coverage))
+    const oldTotal = result.total
+    result.context.same_day_uncovered_amount_due_to_book = result.amountDueToBook
+    result.total = result.finalEventPrice = result.final_event_price = rounded(oldTotal - coverage)
+    result.totalWithSecurityDeposit = rounded(result.total + result.securityDepositAmount)
+    if (coveredCalculation) result.amountDueToBook = result.amount_due_to_book = coveredCalculation.amountDueToBook
+    for (const key of ['venue_services_total', 'event_services_total', 'luxor_services_total', 'planner_services_total']) {
+      if (coveredCalculation && typeof coveredCalculation.context[key] === 'number') result.context[key] = coveredCalculation.context[key]
+    }
+    const snapshot = { ...terms, coverage_amount: coverage }
+    Object.assign(result.context, { same_day_booking: snapshot, original_proposal_created_at: terms.original_created_at,
+      final_event_price: result.total, amount_due_to_book: result.amountDueToBook })
+    if (result.confirmedLuxorTotal !== undefined) {
+      result.confirmedLuxorTotal = result.confirmed_luxor_total = result.total
+      result.estimatedOverallInvestment = result.estimated_overall_investment = rounded(result.total + (result.estimatedVendorTotal || 0))
+      Object.assign(result.context, { confirmed_luxor_total: result.total, estimated_overall_investment: result.estimatedOverallInvestment })
+    }
+    result.context.pricing_selection = { ...result.context.pricing_selection, taxCoveragePromotionId: terms.id, tax_coverage_promotion_id: terms.id }
+    Object.assign(result.snapshot, { same_day_booking: snapshot, selection: result.context.pricing_selection,
+      ...(result.estimatedOverallInvestment !== undefined ? { estimated_overall_investment: result.estimatedOverallInvestment } : {}),
+      line_items: result.lineItems, final_event_price: result.total, tax_coverage_amount: coverage,
+      ...(typeof result.snapshot.selected_package === 'object' ? { selected_package: { ...result.snapshot.selected_package as Record<string, unknown>, final_event_price: result.total, amount_due_to_book: result.amountDueToBook, tax_coverage_amount: coverage } } : {}),
+      ...(typeof result.snapshot.confirmed_luxor === 'object' ? { confirmed_luxor: { ...result.snapshot.confirmed_luxor as Record<string, unknown>, total: result.total, final_event_price: result.total, amount_due_to_book: result.amountDueToBook, tax_coverage_amount: coverage } } : {}),
+      ...(typeof result.snapshot.totals === 'object' ? { totals: { ...result.snapshot.totals as Record<string, unknown>, final_event_price: result.total, tax_coverage_amount: coverage } } : {}) })
+  }
   return result
 }
 

@@ -21,6 +21,8 @@ import {
   Type,
 } from 'lucide-react'
 import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
+import { SameDayBookingNotice } from '@/components/proposal/SameDayBookingNotice'
+import type { LuxorSameDayBookingSnapshot } from '@/lib/luxorSameDayBooking'
 import { LUXOR_LEGACY_CONTRACT_SIGNATURE_PLACEMENT, type LuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
 
 const ContractPdfViewer = dynamic(() => import('./ContractPdfViewer'), {
@@ -39,6 +41,11 @@ type PublicLuxorSignatureRequest = LuxorSignatureRequest & {
   payment_url?: string
   payment_amount?: number
   payment_label?: string
+  same_day_booking?: LuxorSameDayBookingSnapshot
+  same_day_completed?: boolean
+  payment_blocked?: boolean
+  payment_review_required?: boolean
+  payment_message?: string
   payment_options?: {
     proposal_token: string
     deposit: number
@@ -276,6 +283,18 @@ export default function SignaturePage() {
     return `/api/public/signatures/download?token=${encodeURIComponent(params.token)}&kind=${kind}`
   }, [complete, params.token])
   const signatureStatus = signature?.status
+  useEffect(() => {
+    const benefit = signature?.same_day_booking
+    if (!benefit || signature?.same_day_completed) return
+    const refresh = async () => {
+      const response = await fetch(`/api/public/signatures?token=${encodeURIComponent(params.token)}`, { cache: 'no-store' })
+      if (response.ok) setSignature(await response.json())
+    }
+    const deadlineTimer = window.setTimeout(() => void refresh(), Math.max(0, Math.min(new Date(benefit.expires_at).getTime() - Date.now(), 2_147_483_647)))
+    const focus = () => void refresh()
+    window.addEventListener('focus', focus)
+    return () => { window.clearTimeout(deadlineTimer); window.removeEventListener('focus', focus) }
+  }, [params.token, signature?.same_day_booking?.expires_at, signature?.same_day_completed])
 
   useEffect(() => {
     let active = true
@@ -494,7 +513,7 @@ export default function SignaturePage() {
         </a>
       </div>
 
-      <div className="grid overflow-hidden rounded-xl border border-white/10 bg-[#211d18] shadow-[0_24px_70px_rgba(0,0,0,0.34)] lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_390px]">
+      <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-white/10 bg-[#211d18] shadow-[0_24px_70px_rgba(0,0,0,0.34)] lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_390px]">
         <section className="flex min-w-0 flex-col border-b border-white/10 lg:min-h-0 lg:border-b-0 lg:border-r">
           <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/10 bg-[#1b1814] px-3 sm:px-4">
             <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9f9589]">
@@ -554,7 +573,7 @@ export default function SignaturePage() {
           </div>
         </section>
 
-        <aside className="flex min-h-0 flex-col bg-[#f4efe7] text-[#2d251e]">
+        <aside className="flex min-h-0 min-w-0 flex-col bg-[#f4efe7] text-[#2d251e]">
           {complete ? (
             <div className="flex min-h-[520px] flex-1 flex-col lg:min-h-0">
               <div className="flex-1 overflow-y-auto p-6 sm:p-8">
@@ -590,10 +609,11 @@ export default function SignaturePage() {
                     </div>
                   </div>
                 </div>
-                {signature.payment_options ? <SignaturePaymentChoice options={signature.payment_options} /> : null}
+                {signature.same_day_booking ? <div className="mt-5 border-y border-[#ded5c8] py-4 text-[#6f665b]"><SameDayBookingNotice benefit={signature.same_day_booking} completed={signature.same_day_completed} review={signature.payment_review_required} /></div> : null}
+                {signature.payment_options && !signature.payment_blocked ? <SignaturePaymentChoice options={signature.payment_options} /> : null}
               </div>
               <div className="shrink-0 border-t border-[#ded5c8] bg-[#eee8df] p-4 sm:p-5">
-                {signature.payment_url && !signature.payment_options ? (
+                {signature.payment_url && !signature.payment_options && !signature.payment_blocked ? (
                   <a href={signature.payment_url} className="mb-2 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c89d4b] px-4 text-sm font-semibold text-[#20170d] transition hover:bg-[#d7ae60]">
                     <CreditCard size={16} /> Complete secure booking payment
                   </a>
@@ -632,6 +652,7 @@ export default function SignaturePage() {
                   Your event details are already filled in. Review the PDF, then sign once below. Your signature will be placed on the agreement automatically.
                 </p>
 
+                {signature.same_day_booking ? <div className="mt-5 border-y border-[#ded5c8] py-4 text-[#6f665b]"><SameDayBookingNotice benefit={signature.same_day_booking} /></div> : null}
                 <label className="mt-6 block text-xs font-semibold text-[#554b41]" htmlFor="legal-name">Full legal name</label>
                 <input
                   id="legal-name"
@@ -698,7 +719,7 @@ export default function SignaturePage() {
               <div className="sticky bottom-0 z-10 shrink-0 border-t border-[#ded5c8] bg-[#eee8df]/98 p-4 backdrop-blur sm:p-5 lg:static">
                 <button
                   type="submit"
-                  disabled={submitting || !accepted || !signedName.trim() || !signatureDataUrl}
+                  disabled={submitting || signature.payment_blocked || !accepted || !signedName.trim() || !signatureDataUrl}
                   className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2d251e] px-4 text-sm font-semibold text-white transition hover:bg-[#45392f] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {submitting ? <><LoaderCircle className="animate-spin" size={16} /> Finalizing agreement…</> : <><PenLine size={16} /> Sign & complete agreement</>}
