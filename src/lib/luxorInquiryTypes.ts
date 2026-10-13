@@ -204,6 +204,10 @@ export type LuxorProposalPriceBreakdown = {
   quantity: number
   unit_price: number
   subtotal: number
+  included_hours?: number
+  minimum_price?: number
+  additional_hours?: number
+  additional_hour_rate?: number
   per_guest_rate?: number
   minimum?: number
   applied_minimum?: boolean
@@ -376,6 +380,11 @@ export type LuxorInvoice = {
   invoice_kind?: LuxorInvoiceKind
   public_token?: string | null
   proposal_sent_at?: string | null
+  /** Assigned on the first successful handoff for this lead's proposal family. */
+  proposal_family_id?: string | null
+  proposal_number?: number | null
+  proposal_first_sent_at?: string | null
+  proposal_latest_sent_at?: string | null
   proposal_viewed_at?: string | null
   payment_requested_at?: string | null
   payment_requested_amount?: number | null

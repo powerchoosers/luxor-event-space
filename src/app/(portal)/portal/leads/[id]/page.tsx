@@ -338,7 +338,7 @@ type EditableLeadField =
   | 'address'
 
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select'
-type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'messages' | 'notes'
+type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'vendors' | 'timeline' | 'proposals' | 'documents' | 'messages' | 'notes'
 
 const LEAD_BUDGET_OPTIONS = [
   { value: 'Under $5,000', label: 'Under $5,000' },
@@ -374,6 +374,11 @@ const PLANNING_LAYOUT_OPTIONS = [
 ] as const
 
 type PlanningEditSection = 'event' | 'preferences' | 'layout' | 'decor' | null
+type ProposalHistoryPayload = {
+  enabled: boolean
+  activities: Array<{ id: number; event_type: string; actor_email?: string | null; recipient_email?: string | null; occurred_at: string; details?: Record<string, unknown> }>
+  sendAttempts: Array<{ id: string; channel: string; state: string; recipient_email?: string | null; provider?: string | null; started_at: string; sent_at?: string | null; delivery_confirmed_at?: string | null; failed_at?: string | null; failure_reason?: string | null }>
+}
 
 export default function LeadDetailPage({
   params,
@@ -391,6 +396,7 @@ export default function LeadDetailPage({
   const [callRecords, setCallRecords] = useState<LuxorCall[]>([])
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
+  const [proposalHistory, setProposalHistory] = useState<Record<string, ProposalHistoryPayload>>({})
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
   const [documents, setDocuments] = useState<LuxorDocument[]>([])
   const [signatureRequests, setSignatureRequests] = useState<Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null }>>([])
@@ -592,6 +598,24 @@ export default function LeadDetailPage({
       fetchVendors()
     }
   }, [activeLeadTab])
+
+  useEffect(() => {
+    if (activeLeadTab !== 'proposals' || process.env.NEXT_PUBLIC_LUXOR_PROPOSAL_HISTORY_READY !== 'true') return
+    let cancelled = false
+    const proposals = invoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event')
+    void Promise.all(proposals.map(async (proposal) => {
+      try {
+        const response = await fetch(`/api/invoices/${encodeURIComponent(proposal.id)}/history`, { cache: 'no-store' })
+        if (response.ok) return [proposal.id, await response.json() as ProposalHistoryPayload] as const
+      } catch (historyError) {
+        console.error('Proposal history could not be loaded:', historyError)
+      }
+      return [proposal.id, { enabled: false, activities: [], sendAttempts: [] }] as const
+    })).then((items) => {
+      if (!cancelled) setProposalHistory(Object.fromEntries(items))
+    })
+    return () => { cancelled = true }
+  }, [activeLeadTab, id, invoices])
 
   const handleMetadataUpdate = async (updatedMetadata: Record<string, unknown>) => {
     if (!lead) return false
@@ -2322,6 +2346,10 @@ export default function LeadDetailPage({
       guestCount,
       eventType: activeEventForDisplay?.event_type || lead?.event_type || context.event_type || null,
       rentalPeriod,
+      rentalStartTime: String(context.rental_start_time || context.start_time || context.guest_arrival_time || context.guestArrivalTime || calculationContext.rental_start_time || calculationContext.start_time || ''),
+      rentalEndTime: String(context.rental_end_time || context.end_time || context.event_end_time || context.eventEndTime || calculationContext.rental_end_time || calculationContext.end_time || ''),
+      guestArrivalTime: String(context.guest_arrival_time || context.guestArrivalTime || ''),
+      eventEndTime: String(context.event_end_time || context.eventEndTime || ''),
       addOns,
       ...proposalDecorSelection(calculationSelection),
       ...proposalDecorSelection(contextSelection),
@@ -2958,16 +2986,16 @@ export default function LeadDetailPage({
     setProposalDeliveryPreview({ invoice, initialTab })
   }
 
-  const handleSendFinalProposal = async (invoice: LuxorInvoice, propagateError = false) => {
+  const handleSendFinalProposal = async (invoice: LuxorInvoice, propagateError = false, resend = false) => {
     try {
       setSendingInvoiceId(invoice.id)
-      const response = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'proposal' }) })
+      const response = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'proposal', ...(resend ? { resend: true } : {}) }) })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload.invoice || !payload.reviewUrl) throw new Error(payload.error || 'Delivery could not be confirmed. Retry to recover the same proposal.')
       void fetchAllData(false)
       notify({
-        title: 'Final proposal sent',
-        description: 'The client can accept the final proposal. Acceptance automatically sends the Event Agreement; Stripe is emailed only after signature.',
+        title: resend ? 'Proposal resent' : 'Final proposal sent',
+        description: resend ? 'A new send attempt was recorded for this saved proposal.' : 'The client can accept the final proposal. Acceptance automatically sends the Event Agreement; Stripe is emailed only after signature.',
         variant: 'success',
       })
     } catch (error) {
@@ -3748,6 +3776,7 @@ export default function LeadDetailPage({
     { id: 'tasks', label: 'Tasks', count: pendingTaskCount },
     { id: 'vendors', label: 'Vendors', count: (lead?.metadata?.vendors as unknown[])?.length || 0 },
     { id: 'timeline', label: 'Timeline', count: (lead?.metadata?.timeline as unknown[])?.length || 0 },
+    { id: 'proposals', label: 'Proposals', count: sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').length },
     { id: 'documents', label: 'Documents', count: documents.length + signatureRequests.length },
     { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
@@ -7349,6 +7378,80 @@ export default function LeadDetailPage({
           </div>
           ) : null}
 
+          {activeLeadTab === 'proposals' ? (
+          <section id="lead-proposals" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]"><FileText size={16} className="text-[#a8792f] dark:text-[#caa24c]" /> Proposals</h3>
+                <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[color:var(--portal-muted)]">Each saved event proposal stays available here with its own quoted total and delivery status.</p>
+              </div>
+              <button type="button" onClick={() => openProposalBuilder()} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition hover:bg-[#dfbd68]"><Plus size={14} /> Add new proposal</button>
+            </div>
+            {sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').length === 0 ? (
+              <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">
+                <p className="font-semibold text-[color:var(--portal-text)]">No proposals saved for this lead yet.</p>
+                <p className="mt-1">Start a draft. It will appear here after it is saved.</p>
+                <button type="button" onClick={() => openProposalBuilder()} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><Plus size={13} /> Build proposal</button>
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-3 xl:grid-cols-2">
+                {sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').map((proposal) => {
+                  const context = asProposalRecord(proposal.proposal_context) || {}
+                  const selection = asProposalRecord(context.pricing_selection) || {}
+                  const date = String(context.event_date || context.eventDate || '')
+                  const period = String(context.rental_period || selection.rentalPeriod || 'Rental')
+                  const custom = period === 'custom'
+                  const rentalStart = String(context.rental_start_time || context.start_time || selection.rentalStartTime || selection.rental_start_time || '')
+                  const rentalEnd = String(context.rental_end_time || context.end_time || selection.rentalEndTime || selection.rental_end_time || '')
+                  const shownPeriod = custom ? `Custom time${rentalStart && rentalEnd ? ` · ${formatProposalClock(rentalStart)}–${formatProposalClock(rentalEnd)}` : ''}` : `${period.replaceAll('_', ' ')} rental`
+                  const latestView = proposal.proposal_viewed_at ? formatVenueDateTime(proposal.proposal_viewed_at) : null
+                  const acceptedAt = proposal.proposal_accepted_at ? formatVenueDateTime(proposal.proposal_accepted_at) : null
+                  const proposalLabel = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
+                    ? Number(proposal.proposal_number) === 1 ? 'Proposal' : `Proposal #${proposal.proposal_number}`
+                    : proposal.status === 'sent' ? 'Existing proposal' : 'Draft proposal'
+                  return <article key={proposal.id} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#8c6529] dark:text-[#f1d27a]">{proposalLabel}</p><h4 className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{proposal.description || `${proposal.event_type || 'Event'} proposal`}</h4></div>
+                      <PortalStatusBadge status={proposal.status} />
+                    </div>
+                    <p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">{date ? formatDisplayDate(date) : 'Event date not set'}</p>
+                    <p className="mt-1 text-[11px] capitalize text-[color:var(--portal-muted)]">{shownPeriod}</p>
+                    <p className="mt-3 text-lg font-mono font-bold text-[color:var(--portal-text)]">{formatMoney(proposal.total)}</p>
+                    <dl className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[10px] sm:grid-cols-2">
+                      <div><dt className="text-[color:var(--portal-muted)]">Created</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.created_at)}</dd></div>
+                      {(proposal.proposal_latest_sent_at || proposal.proposal_sent_at) ? <div><dt className="text-[color:var(--portal-muted)]">Latest send</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.proposal_latest_sent_at || proposal.proposal_sent_at)}</dd></div> : null}
+                      {latestView ? <div><dt className="text-[color:var(--portal-muted)]">Latest customer view</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestView}</dd></div> : null}
+                      {acceptedAt ? <div><dt className="text-[color:var(--portal-muted)]">Accepted</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{acceptedAt}</dd></div> : null}
+                    </dl>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => openProposalDeliveryPreview(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Eye size={12} /> View proposal</button>
+                      {proposal.status === 'sent' && proposalHistory[proposal.id]?.enabled === true ? <button type="button" onClick={() => void handleSendFinalProposal(proposal, false, true)} disabled={!lead.email || sendingInvoiceId === proposal.id} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === proposal.id ? 'Sending…' : 'Resend proposal'}</button> : null}
+                      <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> Edit proposal</button>
+                    </div>
+                    {proposalHistory[proposal.id]?.enabled ? <details className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+                      <summary className="min-h-11 cursor-pointer px-3 py-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Proposal activity and send history</summary>
+                      <div className="space-y-3 border-t border-[color:var(--portal-border)] px-3 py-3">
+                        {proposalHistory[proposal.id].sendAttempts.map((attempt) => <div key={attempt.id} className="rounded-md bg-[color:var(--portal-soft)] px-3 py-2 text-[10px]">
+                          <p className="font-semibold capitalize text-[color:var(--portal-text)]">{attempt.channel === 'email' ? 'Email' : 'In-person handoff'} {attempt.state.replaceAll('_', ' ')}{attempt.recipient_email ? ` · ${attempt.recipient_email}` : ''}</p>
+                          <p className="mt-1 text-[color:var(--portal-muted)]">Started {formatVenueDateTime(attempt.started_at)}{attempt.sent_at ? ` · Sent ${formatVenueDateTime(attempt.sent_at)}` : ''}{attempt.delivery_confirmed_at ? ` · Delivered ${formatVenueDateTime(attempt.delivery_confirmed_at)}` : ''}</p>
+                          {attempt.failure_reason ? <p className="mt-1 text-red-700 dark:text-red-300">{attempt.failure_reason}</p> : null}
+                        </div>)}
+                        {proposalHistory[proposal.id].activities.map((activity) => <div key={activity.id} className="flex flex-col gap-0.5 text-[10px] sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                          <p className="capitalize text-[color:var(--portal-text)]">{activity.event_type.replaceAll('_', ' ')}{activity.recipient_email ? ` · ${activity.recipient_email}` : ''}</p>
+                          <time className="shrink-0 text-[color:var(--portal-muted)]">{formatVenueDateTime(activity.occurred_at)}</time>
+                        </div>)}
+                        {!proposalHistory[proposal.id].activities.length && !proposalHistory[proposal.id].sendAttempts.length ? <p className="text-[10px] text-[color:var(--portal-muted)]">No proposal activity recorded yet.</p> : null}
+                      </div>
+                    </details> : null}
+                  </article>
+                })}
+              </div>
+            )}
+            {process.env.NEXT_PUBLIC_LUXOR_PROPOSAL_HISTORY_READY !== 'true' ? <p className="mt-4 text-[10px] leading-4 text-[color:var(--portal-muted)]">Proposal sequence numbers and complete send history remain disabled until the reviewed database migration is applied.</p> : null}
+            {process.env.NEXT_PUBLIC_LUXOR_PROPOSAL_HISTORY_READY === 'true' && sortedInvoices.some((proposal) => (!proposal.invoice_kind || proposal.invoice_kind === 'event') && proposalHistory[proposal.id]?.enabled === false) ? <p role="status" className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Proposal history is unavailable until its database migration is applied. Existing proposals remain available.</p> : null}
+          </section>
+          ) : null}
+
           {activeLeadTab === 'documents' ? (
           <div id="lead-documents" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -7606,7 +7709,7 @@ export default function LeadDetailPage({
       </div>
       )}
 
-      <div className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 grid grid-cols-3 gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
+      {activeLeadTab !== 'proposals' ? <div className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 grid grid-cols-3 gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
         <button type="button" onClick={() => lead.phone && startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40">
           <Phone size={14} /> Call
         </button>
@@ -7616,7 +7719,7 @@ export default function LeadDetailPage({
         <button type="button" onClick={recommendedActions[0]?.onClick} disabled={!recommendedActions[0] || recommendedActions[0].disabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-45">
           <ChevronRight size={14} /> Next
         </button>
-      </div>
+      </div> : null}
 
       <AnimatePresence>
         {textPopupOpen && lead.phone ? <LuxorThreadPopup inquiryId={lead.id} phone={lead.phone} contactName={lead.full_name} onClose={() => setTextPopupOpen(false)} /> : null}
@@ -9781,6 +9884,29 @@ function formatDisplayDate(value: string | null | undefined): string {
     day: 'numeric',
     year: 'numeric',
   })
+}
+
+function formatVenueDateTime(value: string | null | undefined): string {
+  if (!value) return 'Not recorded'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function formatProposalClock(value: string): string {
+  const match = /^(\d{2}):(\d{2})$/.exec(value)
+  if (!match) return value
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  if (hour > 23 || minute > 59) return value
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }).format(new Date(Date.UTC(2026, 0, 1, hour, minute)))
 }
 
 function parseLocalCalendarDate(value: string | null | undefined): Date | null {

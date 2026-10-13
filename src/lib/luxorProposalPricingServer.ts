@@ -159,6 +159,7 @@ export async function getLuxorProposalPricingForInvoice(existing?: LuxorInvoice 
 export function getLuxorWeekdayRentalClientPolicy(config: LuxorProposalPricingConfig) {
   if (process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_ENABLED !== 'true' || process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_BOOKING_GUARD_READY !== 'true') return null
   const policy = getWeekdayCustomRentalPolicy(config)
+  if (policy?.pricing_version === 3 && process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_V3_BOOKING_GUARD_READY !== 'true') return null
   return policy?.booking_policy === 'one_per_date' && policy.selection_surface === 'portal_only' ? policy : null
 }
 

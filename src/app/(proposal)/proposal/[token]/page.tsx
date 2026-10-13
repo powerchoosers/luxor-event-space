@@ -106,8 +106,8 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   if (directAgreementUrl) redirect(directAgreementUrl)
   const contractSigned = booking?.contract_status === 'signed'
   const agreementReady = booking?.contract_status === 'sent' || booking?.contract_status === 'viewed'
-  if (isPublished && !invoice.proposal_viewed_at && !isInternalOwner) {
-    const firstView = await markLuxorProposalViewed(invoice.id)
+  if (isPublished && !isInternalOwner && (process.env.LUXOR_PROPOSAL_HISTORY_READY === 'true' || !invoice.proposal_viewed_at)) {
+    const firstView = await markLuxorProposalViewed(invoice.id, invoice.public_token || token)
     if (firstView && invoice.inquiry_id) {
       const results = await Promise.allSettled([
         cancelQueuedLuxorEmailJobs(invoice.inquiry_id, ['proposal_view_reminder']),

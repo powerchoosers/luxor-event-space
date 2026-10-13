@@ -46,8 +46,12 @@ export async function claimLuxorWeekdayProposalAcceptance(
   if (!invoice.proposal_accepted_at || !invoice.booking_id) {
     assertLuxorWeekdayRentalAdmission()
     const snapshot = invoice.proposal_context.weekday_custom_rental as Record<string, unknown>
-    if (snapshot.version !== 2) {
-      throw new LuxorWeekdayRentalError('Historical custom rental terms require administrator review before acceptance.')
+    if (snapshot.version !== 2 && snapshot.version !== 3) {
+      throw new LuxorWeekdayRentalError('This custom weekday offer requires its matching database booking guard before it can be accepted.')
+    }
+    if (process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_V3_BOOKING_GUARD_READY !== 'true' &&
+        (invoice.proposal_context.weekday_custom_rental as Record<string, unknown>).version === 3) {
+      throw new LuxorWeekdayRentalError('This custom weekday offer requires its matching database booking guard before it can be accepted.')
     }
     if (snapshot.booking_policy === 'multiple_per_date') {
       throw new LuxorWeekdayRentalError('Multiple weekday events require approved cleanup-buffer rules and agreement wording before booking can open.')

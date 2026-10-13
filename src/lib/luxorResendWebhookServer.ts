@@ -10,6 +10,7 @@ import { broadcastLuxorEmailArrival, broadcastLuxorPortalNotification } from './
 import { enqueueLuxorInvoiceAttachments } from './luxorBillIntakeServer'
 import { sendLuxorWebPush } from './luxorWebPushServer'
 import { handleLuxorResendBounce } from './luxorResendBounceHandler'
+import { recordLuxorProposalDeliveryEvent } from './luxorInvoicesServer'
 
 export type ResendEvent = {
   type: string; created_at: string
@@ -189,6 +190,14 @@ async function processDelivery(event: ResendEvent, eventId: string) {
   // that cannot belong to a local portal message. Current Luxor sends carry
   // both a provider id and a Luxor message tag, so they continue below.
   if (!row) return
+  if (event.type === 'email.delivered' || event.type === 'email.bounced') {
+    await recordLuxorProposalDeliveryEvent({
+      providerMessageId: providerId,
+      eventType: event.type,
+      occurredAt: event.created_at,
+      providerEventId: eventId,
+    })
+  }
   // Events may arrive out of order. Retain the event log, but never regress status.
   const rank: Record<string, number> = { prepared: 0, sending: 1, sent: 2, delivery_delayed: 3, delivered: 4, opened: 5, clicked: 6, failed: 7, bounced: 8, suppressed: 9, complained: 10 }
   const next = event.type.replace(/^email\./, '')

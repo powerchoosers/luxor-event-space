@@ -281,7 +281,20 @@ export async function updateInvoice(
  * the private link in more than one tab at the same time: exactly one request
  * wins and can create the matching owner activity notification.
  */
-export async function markLuxorProposalViewed(id: string, viewedAt = new Date().toISOString()) {
+export async function markLuxorProposalViewed(id: string, publicToken?: string | null, viewedAt = new Date().toISOString()) {
+  if (isLuxorProposalHistoryReady()) {
+    if (!publicToken) return null
+    try {
+      const firstView = await supabaseRest<boolean>('rpc/luxor_record_proposal_view', {
+        method: 'POST',
+        body: JSON.stringify({ p_invoice_id: id, p_public_token: publicToken, p_viewed_at: viewedAt }),
+      })
+      return firstView ? getInvoice(id) : null
+    } catch (error) {
+      if (!isMissingLuxorProposalHistorySchema(error)) throw error
+      console.warn('Proposal history migration is absent; using the existing first-view record path.')
+    }
+  }
   const [updated] = await supabaseRest<LuxorInvoice[]>(
     `luxor_invoices?select=*&id=eq.${encodeURIComponent(id)}&proposal_viewed_at=is.null`,
     {
@@ -295,6 +308,148 @@ export async function markLuxorProposalViewed(id: string, viewedAt = new Date().
   )
 
   return updated ?? null
+}
+
+/** Proposal family history stays dormant until its database migration is applied and the server gate is enabled. */
+export function isLuxorProposalHistoryReady() {
+  return process.env.LUXOR_PROPOSAL_HISTORY_READY === 'true'
+}
+
+/** Detect only schema-cache misses from an unapplied migration. Transient
+ * database failures should still surface instead of silently losing history. */
+export function isMissingLuxorProposalHistorySchema(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '')
+  return /PGRST202|PGRST204|PGRST205|could not find (?:the )?(?:function|table|column)|schema cache|relation ["'][^"']*luxor_proposal_[^"']*["'] does not exist|function [^\n]*luxor_(?:begin|complete|fail|mark|record|append)_proposal_[^\n]* does not exist/i.test(message)
+}
+
+export type LuxorProposalSendReservation = {
+  attempt_id: string
+  proposal_number: number
+  proposal_label: string
+  idempotency_key: string
+  state: string
+}
+
+export async function beginLuxorProposalSend(input: {
+  invoiceId: string
+  attemptId: string
+  channel: 'email' | 'in_person'
+  provider: string | null
+  recipientEmail: string | null
+  actorEmail: string
+}) {
+  if (!isLuxorProposalHistoryReady()) return null
+  try {
+    return await supabaseRest<LuxorProposalSendReservation>('rpc/luxor_begin_proposal_send', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_invoice_id: input.invoiceId,
+        p_attempt_id: input.attemptId,
+        p_channel: input.channel,
+        p_provider: input.provider,
+        p_recipient_email: input.recipientEmail,
+        p_actor_email: input.actorEmail,
+      }),
+    })
+  } catch (error) {
+    if (!isMissingLuxorProposalHistorySchema(error)) throw error
+    console.warn('Proposal history migration is absent; continuing through the existing proposal send path.')
+    return null
+  }
+}
+
+export async function completeLuxorProposalSend(attemptId: string, providerMessageId: string | null, sentAt: string) {
+  if (!isLuxorProposalHistoryReady()) return null
+  return supabaseRest<LuxorInvoice>('rpc/luxor_complete_proposal_send', {
+    method: 'POST',
+    body: JSON.stringify({ p_attempt_id: attemptId, p_provider_message_id: providerMessageId, p_sent_at: sentAt }),
+  })
+}
+
+export async function markLuxorProposalSendAttemptSending(attemptId: string) {
+  if (!isLuxorProposalHistoryReady()) return false
+  return supabaseRest<boolean>('rpc/luxor_mark_proposal_send_attempt_sending', {
+    method: 'POST',
+    body: JSON.stringify({ p_attempt_id: attemptId }),
+  })
+}
+
+export async function failLuxorProposalSend(attemptId: string, reason: string, deliveryUnconfirmed: boolean) {
+  if (!isLuxorProposalHistoryReady()) return false
+  return supabaseRest<boolean>('rpc/luxor_fail_proposal_send', {
+    method: 'POST',
+    body: JSON.stringify({ p_attempt_id: attemptId, p_failure_reason: reason, p_delivery_unconfirmed: deliveryUnconfirmed }),
+  })
+}
+
+export async function recordLuxorProposalDeliveryEvent(input: {
+  providerMessageId: string
+  eventType: 'email.delivered' | 'email.bounced'
+  occurredAt: string
+  providerEventId: string
+}) {
+  if (!isLuxorProposalHistoryReady()) return false
+  try {
+    return await supabaseRest<boolean>('rpc/luxor_record_proposal_delivery_event', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_provider_message_id: input.providerMessageId,
+        p_event_type: input.eventType,
+        p_occurred_at: input.occurredAt,
+        p_provider_event_id: input.providerEventId,
+      }),
+    })
+  } catch (error) {
+    if (!isMissingLuxorProposalHistorySchema(error)) throw error
+    console.warn('Proposal history migration is absent; skipping the optional delivery history event.')
+    return false
+  }
+}
+
+export async function listLuxorProposalHistory(invoiceId: string) {
+  if (!isLuxorProposalHistoryReady()) return null
+  const invoice = await getInvoice(invoiceId)
+  if (!invoice || invoice.invoice_kind !== 'event') return { activities: [], sendAttempts: [] }
+  if (!invoice.proposal_family_id) return null
+  const family = encodeURIComponent(invoice.proposal_family_id)
+  try {
+    const [activities, sendAttempts] = await Promise.all([
+      supabaseRest<Array<Record<string, unknown>>>(`luxor_proposal_activity?select=*&proposal_family_id=eq.${family}&order=occurred_at.desc,id.desc&limit=100`),
+      supabaseRest<Array<Record<string, unknown>>>(`luxor_proposal_send_attempts?select=id,invoice_id,attempt_number,channel,provider,state,recipient_email,provider_message_id,started_at,sent_at,delivery_confirmed_at,failed_at,failure_reason&proposal_family_id=eq.${family}&order=started_at.desc&limit=50`),
+    ])
+    return { activities, sendAttempts }
+  } catch (error) {
+    if (!isMissingLuxorProposalHistorySchema(error)) throw error
+    console.warn('Proposal history migration is absent; returning disabled proposal history.')
+    return null
+  }
+}
+
+export async function recordLuxorProposalActivity(input: {
+  invoiceId: string
+  eventType: 'edited'
+  actorEmail: string
+  occurredAt?: string
+}) {
+  if (!isLuxorProposalHistoryReady()) return false
+  try {
+    await supabaseRest('rpc/luxor_append_proposal_activity', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_invoice_id: input.invoiceId,
+        p_event_type: input.eventType,
+        p_actor_type: 'administrator',
+        p_actor_email: input.actorEmail,
+        p_occurred_at: input.occurredAt || new Date().toISOString(),
+        p_activity_key: `edited:${input.invoiceId}:${crypto.randomUUID()}`,
+      }),
+    })
+    return true
+  } catch (error) {
+    if (!isMissingLuxorProposalHistorySchema(error)) throw error
+    console.warn('Proposal history migration is absent; skipping the optional edit activity event.')
+    return false
+  }
 }
 
 /**

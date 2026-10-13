@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
-import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, recordLuxorProposalActivity, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 import { calculateLuxorProposal, type LuxorProposalSelection } from '@/lib/luxorProposalPricing'
@@ -698,6 +698,14 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updatedInvoice = await updateInvoice(id, updates)
+    const proposalTermsEdited = Boolean(selection || body.description !== undefined || body.event_type !== undefined || body.notes !== undefined || body.offer_expires_at !== undefined || attemptsManualEventPricing)
+    if (updatedInvoice?.invoice_kind === 'event' && proposalTermsEdited) {
+      try {
+        await recordLuxorProposalActivity({ invoiceId: updatedInvoice.id, eventType: 'edited', actorEmail: session.email })
+      } catch (activityError) {
+        console.error('Proposal saved, but its edit activity could not be recorded:', activityError)
+      }
+    }
     if (updatedInvoice && offerTermsChanged) {
       const booking = await getLuxorBookingByInvoice(updatedInvoice.id)
       if (booking) {

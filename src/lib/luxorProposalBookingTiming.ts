@@ -23,8 +23,9 @@ export function proposalBookingTiming(context: ProposalTimingContext) {
   if (snapshot && snapshot.event_date !== context.event_date) {
     throw new LuxorProposalBookingTimingError('The saved custom rental date does not match the proposal. A revised proposal is required.')
   }
-  const starts = [snapshot?.start_time, context.guest_arrival_time, context.guestArrivalTime, context.start_time].map(time).filter((value): value is string => value !== null)
-  const ends = [snapshot?.end_time, context.event_end_time, context.eventEndTime, context.end_time].map(time).filter((value): value is string => value !== null)
+  const separatedRentalTimes = snapshot?.version === 3
+  const starts = [snapshot?.start_time, context.rental_start_time, ...(separatedRentalTimes ? [] : [context.guest_arrival_time, context.guestArrivalTime]), context.start_time].map(time).filter((value): value is string => value !== null)
+  const ends = [snapshot?.end_time, context.rental_end_time, ...(separatedRentalTimes ? [] : [context.event_end_time, context.eventEndTime]), context.end_time].map(time).filter((value): value is string => value !== null)
   if (new Set(starts).size > 1 || new Set(ends).size > 1) {
     throw new LuxorProposalBookingTimingError('The saved proposal contains conflicting rental times. Review its agreement before creating a booking.')
   }

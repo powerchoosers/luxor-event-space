@@ -228,6 +228,16 @@ export function ProposalPricingManager() {
                   {day.id === 'monday_thursday' ? <>
                     <MoneyInput draft={draft} field={{ label: 'Daytime hourly rate', path: ['luxor_costs', 'rental_rate_rules', day.id, 'morning', 'hourly_rate'] }} onChange={update} />
                     <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Minimum hours</span><input type="number" min="1" step="1" value={String(catalogNumber(draft, 'luxor_costs', 'rental_rate_rules', day.id, 'morning', 'minimum_hours') ?? '')} onChange={(event) => update(['luxor_costs', 'rental_rate_rules', day.id, 'morning', 'minimum_hours'], Number(event.target.value))} className={inputClass} /></label>
+                    <div className="sm:col-span-2 rounded-lg border border-[#caa24c]/20 bg-[color:var(--portal-card)] p-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">Custom Time pricing</p>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <MoneyInput draft={draft} field={{ label: 'Base hourly rate', path: ['luxor_costs', 'weekday_custom_rental', 'hourly_rate'], suffix: 'for the initial hours' }} onChange={update} />
+                        <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Minimum billed hours</span><input type="number" min="1" max="19" step="1" value={String(catalogNumber(draft, 'luxor_costs', 'weekday_custom_rental', 'minimum_hours') ?? '')} onChange={(event) => update(['luxor_costs', 'weekday_custom_rental', 'minimum_hours'], Number(event.target.value))} className={inputClass} /></label>
+                        <MoneyInput draft={draft} field={{ label: 'Minimum rental price', path: ['luxor_costs', 'weekday_custom_rental', 'minimum_price'] }} onChange={update} />
+                        <MoneyInput draft={draft} field={{ label: 'Each additional hour', path: ['luxor_costs', 'weekday_custom_rental', 'additional_hour_rate'] }} onChange={update} />
+                      </div>
+                      <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Custom rentals shorter than the minimum billed hours still use the minimum price. Extra whole hours use the additional-hour rate. Existing sent proposals retain their saved totals.</p>
+                    </div>
                   </> : null}
                 </div>
               </article>

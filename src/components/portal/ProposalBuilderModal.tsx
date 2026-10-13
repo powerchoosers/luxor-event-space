@@ -28,7 +28,7 @@ import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidTh
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from '@/lib/luxorDecorCatalog'
 import { SAME_DAY_BOOKING_CODE, SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBookingSnapshot } from '@/lib/luxorSameDayBooking'
-import { formatWeekdayCustomRentalDuration, getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekdayCustomRentalDate, validateWeekdayCustomRentalTiming, type LuxorWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
+import { formatWeekdayCustomRentalDuration, getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekdayCustomRentalDate, validateWeekdayCustomRentalSchedule, validateWeekdayCustomRentalTiming, type LuxorWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
 
 const PROPOSAL_TIME_OPTIONS = [
   { value: '06:00', label: '6:00 AM' },
@@ -738,6 +738,12 @@ export function ProposalBuilderModal({
   // Switching into hourly pricing requires deliberate start/end selections;
   // a historic fixed-period default is not a custom rental instruction.
   const customTimesSelected = effectiveContext.rental_period === 'custom'
+  const rentalStartTime = isCustomRental
+    ? customTimesSelected ? asString(effectiveContext.rental_start_time ?? effectiveContext.start_time ?? effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || '' : ''
+    : asString(effectiveContext.rental_start_time ?? effectiveContext.start_time) || RENTAL_WINDOWS[rentalPeriod].start
+  const rentalEndTime = isCustomRental
+    ? customTimesSelected ? asString(effectiveContext.rental_end_time ?? effectiveContext.end_time ?? effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || '' : ''
+    : asString(effectiveContext.rental_end_time ?? effectiveContext.end_time) || RENTAL_WINDOWS[rentalPeriod].end
   const guestArrivalTime = isCustomRental
     ? customTimesSelected ? asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || '' : ''
     : asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || RENTAL_WINDOWS[rentalPeriod].start
@@ -747,9 +753,9 @@ export function ProposalBuilderModal({
   const rentalAccess = asRecord(calculation?.rental_access)
   const timeValidation = useMemo(
     () => isCustomRental
-      ? validateWeekdayCustomRentalTiming(eventDateValue, guestArrivalTime, eventEndTime, weekdayPolicy)
+      ? validateWeekdayCustomRentalSchedule(eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, weekdayPolicy)
       : validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod),
-    [eventDateValue, guestArrivalTime, eventEndTime, isCustomRental, rentalPeriod, weekdayPolicy]
+    [eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, isCustomRental, rentalPeriod, weekdayPolicy]
   )
   const customTimeOptions = useMemo(() => weekdayPolicy ? Array.from({ length: 25 * 60 - 6 * 60 + 1 }, (_, index) => index + 6 * 60)
     .filter(minutes => minutes % weekdayPolicy.time_increment_minutes === 0)
@@ -767,11 +773,13 @@ export function ProposalBuilderModal({
     setValidationMessage(null)
   }
 
-  const handleTimeChange = (field: 'guest_arrival_time' | 'event_end_time', value: string) => {
+  const handleTimeChange = (field: 'rental_start_time' | 'rental_end_time' | 'guest_arrival_time' | 'event_end_time', value: string) => {
+    const nextRentalStart = field === 'rental_start_time' ? value : rentalStartTime
+    const nextRentalEnd = field === 'rental_end_time' ? value : rentalEndTime
     const nextArrival = field === 'guest_arrival_time' ? value : guestArrivalTime
     const nextEnd = field === 'event_end_time' ? value : eventEndTime
     const check = isCustomRental
-      ? validateWeekdayCustomRentalTiming(eventDateValue, nextArrival, nextEnd, weekdayPolicy)
+      ? validateWeekdayCustomRentalSchedule(eventDateValue, nextRentalStart, nextRentalEnd, nextArrival, nextEnd, weekdayPolicy)
       : validateEventTimes(nextArrival, nextEnd, rentalPeriod)
     if (!check.valid) {
       setValidationMessage(check.error || null)
@@ -785,13 +793,17 @@ export function ProposalBuilderModal({
     }
     updateProposalContext(isCustomRental ? {
       rental_period: 'custom',
+      rental_start_time: nextRentalStart || undefined,
+      rental_end_time: nextRentalEnd || undefined,
+      start_time: nextRentalStart || undefined,
+      end_time: nextRentalEnd || undefined,
       guest_arrival_time: nextArrival || undefined, guestArrivalTime: nextArrival || undefined,
       event_end_time: nextEnd || undefined, eventEndTime: nextEnd || undefined,
-      start_time: nextArrival || undefined, end_time: nextEnd || undefined,
       pricing_selection: nextSelection,
     } : {
       [field]: value || undefined,
-      [field === 'guest_arrival_time' ? 'guestArrivalTime' : 'eventEndTime']: value || undefined,
+      ...(field === 'guest_arrival_time' ? { guestArrivalTime: value || undefined } : {}),
+      ...(field === 'event_end_time' ? { eventEndTime: value || undefined } : {}),
     })
   }
   const handleSecurityHoursChange = (value: string) => {
@@ -1151,6 +1163,10 @@ export function ProposalBuilderModal({
       guestCount: guestCount || null,
       eventType: eventType || effectiveContext.event_type || null,
       rentalPeriod,
+      rentalStartTime: rentalStartTime || null,
+      rental_start_time: rentalStartTime || null,
+      rentalEndTime: rentalEndTime || null,
+      rental_end_time: rentalEndTime || null,
       guestArrivalTime: guestArrivalTime || null,
       guest_arrival_time: guestArrivalTime || null,
       eventEndTime: eventEndTime || null,
@@ -1170,6 +1186,8 @@ export function ProposalBuilderModal({
     expected_guest_count: guestCount || null,
     event_type: eventType || effectiveContext.event_type || null,
     rental_period: rentalPeriod,
+    rental_start_time: rentalStartTime || null,
+    rental_end_time: rentalEndTime || null,
     guest_arrival_time: guestArrivalTime || null,
     event_end_time: eventEndTime || null,
     package_id: 'luxor_venue_proposal',
@@ -1193,7 +1211,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [invoiceId, supersedesInvoiceId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, isCustomRental, items, removedServiceIds, rentalPeriod, securityHoursValue, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate, weekdayPolicy?.security_hours_policy])
+  }), [invoiceId, supersedesInvoiceId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, isCustomRental, items, removedServiceIds, rentalEndTime, rentalPeriod, rentalStartTime, securityHoursValue, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate, weekdayPolicy?.security_hours_policy])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1566,38 +1584,23 @@ export function ProposalBuilderModal({
                     </div>
                   </div>
                   <div className="border-t border-[color:var(--portal-border)] pt-3 space-y-2">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <label className="space-y-1.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{isCustomRental ? 'Rental start time' : 'Guest arrival time'}</span>
-                        <PortalSelect
-                          value={guestArrivalTime}
-                          onChange={(value) => handleTimeChange('guest_arrival_time', value)}
-                          options={[
-                            { value: '', label: 'Select arrival time' },
-                            ...(isCustomRental ? customTimeOptions : PROPOSAL_TIME_OPTIONS),
-                          ]}
-                          className="w-full"
-                          buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
-                          placeholder="Select arrival time"
-                        />
-                      </label>
-                      <label className="space-y-1.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{isCustomRental ? 'Rental end time' : 'Event end time'}</span>
-                        <PortalSelect
-                          value={eventEndTime}
-                          onChange={(value) => handleTimeChange('event_end_time', value)}
-                          options={[
-                            { value: '', label: 'Select end time' },
-                            ...(isCustomRental ? customTimeOptions : PROPOSAL_TIME_OPTIONS),
-                          ]}
-                          className="w-full"
-                          buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
-                          placeholder="Select end time"
-                        />
-                      </label>
-                    </div>
-                    {isCustomRental && weekdayPolicy && timeValidation.valid && 'durationMinutes' in timeValidation ? <p role="status" className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">{formatWeekdayCustomRentalDuration(timeValidation.durationMinutes)} at {formatMoney(weekdayPolicy.hourly_rate)} per hour = {formatMoney(Math.round(timeValidation.durationMinutes * Math.round(weekdayPolicy.hourly_rate * 100) / 60) / 100)} venue rental.</p> : null}
-                    {!isCustomRental && timeValidation.valid && timeValidation.additionalHours > 0 ? <p role="status" className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Additional rental time: {timeValidation.additionalHours} hour(s). {pricingStatus === 'ready' ? formatMoney(asNumber(selectedContext.additional_rental_charge) || 0) + ' added at the saved hourly rate.' : 'Updating the additional-hour charge…'}</p> : null}
+                    {isCustomRental ? <>
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8c6529] dark:text-[#f1d27a]">Rental period</p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Rental start time</span><PortalSelect value={rentalStartTime} onChange={(value) => handleTimeChange('rental_start_time', value)} options={[{ value: '', label: 'Select rental start' }, ...customTimeOptions]} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" placeholder="Select rental start" /></label>
+                        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Rental end time</span><PortalSelect value={rentalEndTime} onChange={(value) => handleTimeChange('rental_end_time', value)} options={[{ value: '', label: 'Select rental end' }, ...customTimeOptions]} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" placeholder="Select rental end" /></label>
+                      </div>
+                      <p className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-[#8c6529] dark:text-[#f1d27a]">Event schedule</p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Guest arrival time</span><PortalSelect value={guestArrivalTime} onChange={(value) => handleTimeChange('guest_arrival_time', value)} options={[{ value: '', label: 'Select guest arrival' }, ...PROPOSAL_TIME_OPTIONS]} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" placeholder="Select guest arrival" /></label>
+                        <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event end time</span><PortalSelect value={eventEndTime} onChange={(value) => handleTimeChange('event_end_time', value)} options={[{ value: '', label: 'Select event end' }, ...PROPOSAL_TIME_OPTIONS]} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" placeholder="Select event end" /></label>
+                      </div>
+                    </> : <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Guest arrival time</span><PortalSelect value={guestArrivalTime} onChange={(value) => handleTimeChange('guest_arrival_time', value)} options={[{ value: '', label: 'Select arrival time' }, ...PROPOSAL_TIME_OPTIONS]} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" placeholder="Select arrival time" /></label>
+                      <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event end time</span><PortalSelect value={eventEndTime} onChange={(value) => handleTimeChange('event_end_time', value)} options={[{ value: '', label: 'Select end time' }, ...PROPOSAL_TIME_OPTIONS]} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" placeholder="Select end time" /></label>
+                    </div>}
+                    {isCustomRental && weekdayPolicy && timeValidation.valid && 'durationMinutes' in timeValidation ? <p role="status" className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">{formatWeekdayCustomRentalDuration(timeValidation.durationMinutes)} venue access · minimum {formatMoney(weekdayPolicy.minimum_price)} covers the first {weekdayPolicy.minimum_hours} billed hours; additional hours are {formatMoney(weekdayPolicy.additional_hour_rate)} each. Current rental price: {formatMoney(asNumber(selectedContext.rental_total) ?? weekdayPolicy.minimum_price)}.</p> : null}
+                    {!isCustomRental && timeValidation.valid && 'additionalHours' in timeValidation && timeValidation.additionalHours > 0 ? <p role="status" className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Additional rental time: {timeValidation.additionalHours} hour(s). {pricingStatus === 'ready' ? formatMoney(asNumber(selectedContext.additional_rental_charge) || 0) + ' added at the saved hourly rate.' : 'Updating the additional-hour charge…'}</p> : null}
                     {!timeValidation.valid ? (
                       <p role="alert" className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
                         <AlertCircle size={14} className="shrink-0" />
@@ -1605,7 +1608,7 @@ export function ProposalBuilderModal({
                       </p>
                     ) : (
                       <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                        {isCustomRental ? `Choose the venue rental start and end times. Venue access is available 6:00 AM–1:00 AM the next day, in ${weekdayPolicy?.time_increment_minutes || ''}-minute increments. Minimum rental: ${weekdayPolicy?.minimum_hours || ''} hours.${weekdayPolicy?.reset_window_policy === 'blocked' ? ' The 3:00–5:00 PM reset period is reserved.' : ''}` : <>{rentalPeriod === 'morning' ? 'Morning access can start before 9:00 AM and must end by 3:00 PM.' : rentalPeriod === 'evening' ? 'Evening access starts at or after 5:00 PM and can extend after 11:00 PM.' : 'Full-day access includes the 3:00–5:00 PM period and can extend before 9:00 AM or after 11:00 PM.'} Extensions are billed in whole hours, within 6:00 AM–1:00 AM.</>}
+                        {isCustomRental ? `Choose rental boundaries separately from guest arrival and event end. Venue access is available 6:00 AM–1:00 AM the next day, in ${weekdayPolicy?.time_increment_minutes || ''}-minute increments. The ${formatMoney(weekdayPolicy?.minimum_price || 0)} minimum covers ${weekdayPolicy?.minimum_hours || ''} billed hours; shorter valid rentals still use this minimum.${weekdayPolicy?.reset_window_policy === 'blocked' ? ' The 3:00–5:00 PM reset period is reserved.' : ''}` : <>{rentalPeriod === 'morning' ? 'Morning access can start before 9:00 AM and must end by 3:00 PM.' : rentalPeriod === 'evening' ? 'Evening access starts at or after 5:00 PM and can extend after 11:00 PM.' : 'Full-day access includes the 3:00–5:00 PM period and can extend before 9:00 AM or after 11:00 PM.'} Extensions are billed in whole hours, within 6:00 AM–1:00 AM.</>}
                       </p>
                     )}
                     {isCustomRental && weekdayPolicy?.security_hours_policy === 'owner_entered' ? <label className="mt-4 block space-y-1.5"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Approved security hours</span><input type="number" min="0" step="any" inputMode="decimal" value={securityHoursValue} onChange={event => handleSecurityHoursChange(event.target.value)} placeholder="Enter approved hours" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /><span className="block text-[10px] leading-4 text-[color:var(--portal-muted)]">Required for this custom rental. Luxor verifies the saved minimum and hourly security rate.</span></label> : isCustomRental && weekdayPolicy?.security_hours_policy === 'arrival_to_end' ? <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Security is calculated from guest arrival through event end, using the existing security rate and officer rules with a four-hour minimum.</p> : isCustomRental && weekdayPolicy?.security_hours_policy === 'rental_duration' ? <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Security hours follow the selected rental duration, subject to the existing minimum. Security and cleaning rates are unchanged.</p> : null}

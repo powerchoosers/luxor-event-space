@@ -16,6 +16,8 @@ export const INACTIVE_WEEKDAY_CUSTOM_RENTAL_POLICY = {
 export const APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE = {
   hourly_rate: 400,
   minimum_hours: 3,
+  minimum_price: 1200,
+  additional_hour_rate: 200,
   time_increment_minutes: 60,
   reset_window_policy: 'allowed',
   booking_policy: 'one_per_date',
@@ -34,8 +36,11 @@ export function isWeekdayCustomRentalContext(value: unknown) {
 
 export type LuxorWeekdayCustomRentalPolicy = {
   enabled: true
+  pricing_version: 2 | 3
   hourly_rate: number
   minimum_hours: number
+  minimum_price: number
+  additional_hour_rate: number
   time_increment_minutes: number
   reset_window_policy: 'blocked' | 'allowed'
   booking_policy: 'one_per_date' | 'multiple_per_date'
@@ -54,14 +59,28 @@ export type LuxorWeekdayCustomRentalTiming = {
   additionalHours: 0
 }
 
+export type LuxorWeekdayCustomRentalSchedule = {
+  valid: boolean
+  error?: string
+  rentalStart: string
+  rentalEnd: string
+  guestArrival: string
+  eventEnd: string
+  durationMinutes: number
+  durationHours: number
+  securityHours: number
+}
+
 export type LuxorWeekdayCustomRentalSnapshot = {
-  version: 1 | 2
+  version: 1 | 2 | 3
   event_date: string
   start_time: string
   end_time: string
   duration_minutes: number
   duration_hours: number
   hourly_rate: number
+  minimum_price?: number
+  additional_hour_rate?: number
   rental_total: number
   minimum_hours: number
   time_increment_minutes: number
@@ -102,33 +121,40 @@ export function validateWeekdayCustomRentalPolicy(config: unknown, options: { hi
   if (!policy) return []
   if (policy.enabled !== true) return policy.enabled === false ? [] : ['Choose whether weekday custom rentals are enabled.']
   const errors: string[] = []
-  if (number(policy.hourly_rate) !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.hourly_rate) errors.push('Weekday custom rental pricing must use the approved $400 hourly rate.')
+  const hourlyRate = number(policy.hourly_rate)
+  if (hourlyRate === null || hourlyRate <= 0) errors.push('Set a valid weekday custom base hourly rate.')
   const minimum = number(policy.minimum_hours)
   const minimumMinutes = minimum === null ? null : weekdayRentalMinutesFromHours(minimum)
-  if (minimum === null || minimum <= 0 || minimum > 19 || minimumMinutes === null) errors.push('Set the weekday minimum rental duration in whole minutes, up to 19 hours.')
-  else if (!options.historicalSnapshot && minimum !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.minimum_hours) errors.push('New weekday custom proposals require the approved 3-hour minimum.')
+  if (minimum === null || minimum <= 0 || minimum > 19 || minimumMinutes === null || (!options.historicalSnapshot && minimum % 1 !== 0)) errors.push('Set the weekday minimum billed hours as a whole number, up to 19 hours.')
+  const hasNewPricingFields = policy.minimum_price !== undefined || policy.additional_hour_rate !== undefined
+  if (!options.historicalSnapshot && hasNewPricingFields) {
+    const minimumPrice = number(policy.minimum_price)
+    const additionalHourRate = number(policy.additional_hour_rate)
+    if (minimumPrice === null || minimumPrice <= 0) errors.push('Set a valid weekday custom minimum price.')
+    if (additionalHourRate === null || additionalHourRate < 0) errors.push('Set a valid weekday custom additional-hour rate.')
+  }
   const increment = number(policy.time_increment_minutes)
   if (increment === null || !Number.isInteger(increment) || increment <= 0 || increment > 19 * 60) errors.push('Confirm the weekday time increment in whole minutes.')
-  else if (!options.historicalSnapshot && increment !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.time_increment_minutes) errors.push('New weekday custom proposals require full-hour time increments.')
+  else if (!options.historicalSnapshot && increment !== 60) errors.push('New weekday custom proposals require full-hour time increments.')
   if (policy.reset_window_policy !== 'blocked' && policy.reset_window_policy !== 'allowed') errors.push('Set the weekday reset-window rule.')
-  else if (!options.historicalSnapshot && policy.reset_window_policy !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.reset_window_policy) errors.push('New weekday custom proposals may use the 3:00–5:00 PM reset window.')
+  else if (!options.historicalSnapshot && policy.reset_window_policy !== 'allowed') errors.push('New weekday custom proposals may use the 3:00–5:00 PM reset window.')
   if (minimum !== null && minimum > 0 && increment !== null && Number.isInteger(increment) && increment > 0 && (policy.reset_window_policy === 'blocked' || policy.reset_window_policy === 'allowed')) {
     const windows = policy.reset_window_policy === 'blocked' ? [[6 * 60, 15 * 60], [17 * 60, 25 * 60]] : [[6 * 60, 25 * 60]]
     const maximum = Math.max(...windows.map(([start, end]) => Math.floor(end / increment) * increment - Math.ceil(start / increment) * increment))
     if (minimumMinutes !== null && minimumMinutes > maximum) errors.push('The weekday minimum and time increment must permit a rental within the approved access windows.')
   }
   if (policy.booking_policy !== 'one_per_date' && policy.booking_policy !== 'multiple_per_date') errors.push('Set the weekday event-capacity rule.')
-  else if (!options.historicalSnapshot && policy.booking_policy !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.booking_policy) errors.push('New weekday custom proposals are limited to one event per date.')
+  else if (!options.historicalSnapshot && policy.booking_policy !== 'one_per_date') errors.push('New weekday custom proposals are limited to one event per date.')
   const buffer = number(policy.cleanup_buffer_minutes)
   if (buffer === null || !Number.isInteger(buffer) || buffer < 0 || buffer > 19 * 60) errors.push('Confirm the weekday cleanup buffer in whole minutes, including zero if none is required.')
-  else if (!options.historicalSnapshot && buffer !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.cleanup_buffer_minutes) errors.push('New weekday custom rentals require a zero-minute additional cleanup buffer.')
+  else if (!options.historicalSnapshot && buffer !== 0) errors.push('New weekday custom rentals require a zero-minute additional cleanup buffer.')
   if (options.historicalSnapshot) {
     if (policy.security_hours_policy !== 'rental_duration' && policy.security_hours_policy !== 'owner_entered' && policy.security_hours_policy !== 'arrival_to_end') errors.push('The saved historical security-hour policy is invalid.')
-  } else if (policy.security_hours_policy !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.security_hours_policy) {
+  } else if (policy.security_hours_policy !== 'arrival_to_end') {
     errors.push('New weekday security pricing must use guest arrival through event end, with the existing four-hour minimum.')
   }
   if (policy.selection_surface !== 'portal_only' && policy.selection_surface !== 'public_and_portal') errors.push('Set where weekday custom rental times may be selected.')
-  else if (!options.historicalSnapshot && policy.selection_surface !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.selection_surface) errors.push('New weekday custom proposals may select times in the owner portal only.')
+  else if (!options.historicalSnapshot && policy.selection_surface !== 'portal_only') errors.push('New weekday custom proposals may select times in the owner portal only.')
   return errors
 }
 
@@ -138,8 +164,11 @@ export function getWeekdayCustomRentalPolicy(config: unknown, options: { histori
   if (policy?.enabled !== true || validateWeekdayCustomRentalPolicy(config, options).length) return null
   return {
     enabled: true,
+    pricing_version: policy.minimum_price !== undefined || policy.additional_hour_rate !== undefined ? 3 : 2,
     hourly_rate: number(policy.hourly_rate)!,
     minimum_hours: number(policy.minimum_hours)!,
+    minimum_price: number(policy.minimum_price) ?? number(policy.hourly_rate)! * number(policy.minimum_hours)!,
+    additional_hour_rate: number(policy.additional_hour_rate) ?? 0,
     time_increment_minutes: number(policy.time_increment_minutes)!,
     reset_window_policy: policy.reset_window_policy as LuxorWeekdayCustomRentalPolicy['reset_window_policy'],
     booking_policy: policy.booking_policy as LuxorWeekdayCustomRentalPolicy['booking_policy'],
@@ -178,23 +207,72 @@ export function validateWeekdayCustomRentalTiming(eventDate: string, start?: str
   if (first % policy.time_increment_minutes || last % policy.time_increment_minutes) return fail(`Choose custom rental times in ${policy.time_increment_minutes}-minute increments.`)
   if (policy.reset_window_policy === 'blocked' && first < 17 * 60 && last > 15 * 60) return fail('The 3:00-5:00 PM reset period is reserved.')
   const durationMinutes = last - first
-  if (durationMinutes < weekdayRentalMinutesFromHours(policy.minimum_hours)!) return fail(`Custom weekday rentals require at least ${policy.minimum_hours} hours.`)
+  if ((options.historicalSnapshot || policy.pricing_version === 2) && durationMinutes < weekdayRentalMinutesFromHours(policy.minimum_hours)!) return fail(`Custom weekday rentals require at least ${policy.minimum_hours} hours.`)
   return { valid: true, arrival, end: finishTime, durationMinutes, durationHours: durationMinutes / 60, additionalHours: 0 }
 }
 
+/** Validate independent rental and event boundaries on actual calendar days. */
+export function validateWeekdayCustomRentalSchedule(
+  eventDate: string,
+  rentalStartValue?: string | null,
+  rentalEndValue?: string | null,
+  guestArrivalValue?: string | null,
+  eventEndValue?: string | null,
+  policy?: LuxorWeekdayCustomRentalPolicy | null,
+): LuxorWeekdayCustomRentalSchedule {
+  const rentalStart = typeof rentalStartValue === 'string' ? rentalStartValue.trim() : ''
+  const rentalEnd = typeof rentalEndValue === 'string' ? rentalEndValue.trim() : ''
+  const guestArrival = typeof guestArrivalValue === 'string' ? guestArrivalValue.trim() : ''
+  const eventEnd = typeof eventEndValue === 'string' ? eventEndValue.trim() : ''
+  const fail = (error: string): LuxorWeekdayCustomRentalSchedule => ({ valid: false, error, rentalStart, rentalEnd, guestArrival, eventEnd, durationMinutes: 0, durationHours: 0, securityHours: 0 })
+  if (!policy || validateWeekdayCustomRentalPolicy({ weekday_custom_rental: policy }).length) return fail('Weekday custom rentals require a complete approved pricing and scheduling policy.')
+  if (!validCalendarDate(eventDate) || !isWeekdayCustomRentalDate(eventDate)) return fail('Custom rentals are currently available Monday through Thursday only.')
+  const start = minutes(rentalStart)
+  const rawEnd = minutes(rentalEnd)
+  const arrival = minutes(guestArrival)
+  const rawEventEnd = minutes(eventEnd)
+  if (start === null) return fail('Choose a valid rental start time.')
+  if (rawEnd === null) return fail('Choose a valid rental end time.')
+  if (arrival === null) return fail('Choose a valid guest arrival time.')
+  if (rawEventEnd === null) return fail('Choose a valid event end time.')
+  const onEventDate = (clock: number) => clock < 6 * 60 ? clock + 24 * 60 : clock
+  const end = onEventDate(rawEnd)
+  const guest = onEventDate(arrival)
+  const finish = onEventDate(rawEventEnd)
+  const increment = policy.time_increment_minutes
+  if (start < 360 || end > 1500) return fail('Venue access is available from 6:00 AM through 1:00 AM the following day.')
+  if (start % increment || end % increment) return fail(`Choose rental times in ${increment}-minute increments.`)
+  if (end <= start) return fail('Rental start time must be before rental end time.')
+  if (policy.reset_window_policy === 'blocked' && start < 17 * 60 && end > 15 * 60) return fail('The 3:00–5:00 PM reset period is reserved.')
+  if (guest < start || guest > end) return fail('Guest arrival time must be within the rental period.')
+  if (finish < guest) return fail('Event end time must be at or after guest arrival time.')
+  if (finish > end) return fail('Your event end time must be at or before your rental end time. Please adjust your event schedule or extend your rental period.')
+  const durationMinutes = end - start
+  return { valid: true, rentalStart, rentalEnd, guestArrival, eventEnd, durationMinutes, durationHours: durationMinutes / 60, securityHours: (finish - guest) / 60 }
+}
+
 /** Price integer minutes in cents once; never stack the fixed-period extension. */
-export function weekdayCustomRentalSnapshot(eventDate: string, timing: LuxorWeekdayCustomRentalTiming, policy: LuxorWeekdayCustomRentalPolicy, options: { historicalSnapshot?: boolean } = {}): LuxorWeekdayCustomRentalSnapshot {
+export function weekdayCustomRentalSnapshot(eventDate: string, timing: LuxorWeekdayCustomRentalTiming, policy: LuxorWeekdayCustomRentalPolicy, options: { historicalSnapshot?: boolean; legacyVersion?: 1 | 2 } = {}): LuxorWeekdayCustomRentalSnapshot {
   const verified = validateWeekdayCustomRentalTiming(eventDate, timing.arrival, timing.end, policy, options)
   if (!timing.valid || !verified.valid || verified.durationMinutes !== timing.durationMinutes || verified.durationHours !== timing.durationHours) throw new Error('A valid weekday custom rental duration is required.')
+  const historical = options.historicalSnapshot === true
+  const legacyPricing = historical || policy.pricing_version === 2
+  const legacyTotal = Math.round(verified.durationMinutes * Math.round(policy.hourly_rate * 100) / 60)
+  const baseCents = Math.round(policy.minimum_price * 100)
+  const extraCents = Math.round(policy.additional_hour_rate * 100)
+  const rentalCents = legacyPricing
+    ? legacyTotal
+    : baseCents + Math.max(0, Math.round(verified.durationHours - policy.minimum_hours)) * extraCents
   return {
-    version: options.historicalSnapshot ? 1 : 2,
+    version: historical ? (options.legacyVersion || 1) : policy.pricing_version,
     event_date: eventDate,
     start_time: timing.arrival,
     end_time: timing.end,
     duration_minutes: timing.durationMinutes,
     duration_hours: timing.durationHours,
     hourly_rate: policy.hourly_rate,
-    rental_total: Math.round(timing.durationMinutes * Math.round(policy.hourly_rate * 100) / 60) / 100,
+    ...(policy.pricing_version === 3 && !historical ? { minimum_price: policy.minimum_price, additional_hour_rate: policy.additional_hour_rate } : {}),
+    rental_total: rentalCents / 100,
     minimum_hours: policy.minimum_hours,
     time_increment_minutes: policy.time_increment_minutes,
     reset_window_policy: policy.reset_window_policy,
@@ -209,13 +287,13 @@ export function weekdayCustomRentalSnapshot(eventDate: string, timing: LuxorWeek
 /** Read frozen terms without consulting or adopting a subsequently edited catalog. */
 export function getWeekdayCustomRentalSnapshot(value: unknown): LuxorWeekdayCustomRentalSnapshot | null {
   const snapshot = record(value)
-  if (!snapshot || (snapshot.version !== 1 && snapshot.version !== 2) || snapshot.time_zone !== 'America/Chicago' || typeof snapshot.event_date !== 'string' || typeof snapshot.start_time !== 'string' || typeof snapshot.end_time !== 'string') return null
-  const historicalSnapshot = snapshot.version === 1
+  if (!snapshot || (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3) || snapshot.time_zone !== 'America/Chicago' || typeof snapshot.event_date !== 'string' || typeof snapshot.start_time !== 'string' || typeof snapshot.end_time !== 'string') return null
+  const historicalSnapshot = snapshot.version !== 3
   const policy = getWeekdayCustomRentalPolicy({ weekday_custom_rental: { ...snapshot, enabled: true } }, { historicalSnapshot })
   if (!policy) return null
   const timing = validateWeekdayCustomRentalTiming(snapshot.event_date, snapshot.start_time, snapshot.end_time, policy, { historicalSnapshot })
   if (!timing.valid) return null
-  const verified = weekdayCustomRentalSnapshot(snapshot.event_date, timing, policy, { historicalSnapshot })
+  const verified = weekdayCustomRentalSnapshot(snapshot.event_date, timing, policy, { historicalSnapshot, ...(historicalSnapshot ? { legacyVersion: snapshot.version as 1 | 2 } : {}) })
   for (const key of Object.keys(verified) as Array<keyof LuxorWeekdayCustomRentalSnapshot>) {
     if (snapshot[key] !== verified[key]) return null
   }
