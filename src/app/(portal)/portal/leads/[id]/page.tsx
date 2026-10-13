@@ -474,6 +474,7 @@ export default function LeadDetailPage({
   const [invoiceDiscountValue, setInvoiceDiscountValue] = useState('0')
   const [invoiceOfferExpiryTime, setInvoiceOfferExpiryTime] = useState(DEFAULT_OFFER_EXPIRY_TIME)
   const [proposalContext, setProposalContext] = useState<ProposalBuilderContext | null>(null)
+  const [proposalLeadEventId, setProposalLeadEventId] = useState<string | null>(null)
   const [selectedProposalPackageId, setSelectedProposalPackageId] = useState<string | null>(null)
   const [selectedProposalPromotionId, setSelectedProposalPromotionId] = useState<string | null>(null)
   const [legacyProposalDiscount, setLegacyProposalDiscount] = useState<{ type: 'percent' | 'fixed'; value: number } | null>(null)
@@ -1008,7 +1009,8 @@ export default function LeadDetailPage({
 
   const activeStage = useMemo(() => {
     if (!lead) return 'inquiry'
-    const steps = getLeadLifecycleSteps(lifecycleLead || lead, lifecycleBooking, currentProposalInvoice)
+    const hasAcceptedProposalEvidence = Boolean(currentProposalInvoice?.proposal_accepted_at || currentProposalBooking?.invoice_id === currentProposalInvoice?.id)
+    const steps = getLeadLifecycleSteps(lifecycleLead || lead, lifecycleBooking, currentProposalInvoice, hasAcceptedProposalEvidence)
 
     const activeIndex = steps.findIndex(s => s.isActive)
     if (activeIndex !== -1) {
@@ -2163,26 +2165,28 @@ export default function LeadDetailPage({
     setPublicationPending(false)
     proposalEditorOpenRef.current = true
     setEditingInvoiceId(invoice?.id || null)
+    const sourceEvent = (invoice?.lead_event_id ? leadEvents.find((event) => event.id === invoice.lead_event_id) : null) || selectedLeadEvent
+    setProposalLeadEventId(invoice?.lead_event_id || sourceEvent?.id || null)
     setProposalCalculation(null)
 
     const savedContext = invoice?.proposal_context || null
-    const eventDate = String(savedContext?.event_date || activeEventForDisplay?.target_date || lead?.target_date || '')
-    const guestCount = asProposalNumber(savedContext?.expected_guest_count, activeEventForDisplay?.guest_count, lead?.guest_count)
-    const requestedRentalPeriod = String(savedContext?.rental_period || activeEventForDisplay?.metadata?.rental_period || 'evening')
+    const eventDate = String(savedContext?.event_date || sourceEvent?.target_date || lead?.target_date || '')
+    const guestCount = asProposalNumber(savedContext?.expected_guest_count, sourceEvent?.guest_count, lead?.guest_count)
+    const requestedRentalPeriod = String(savedContext?.rental_period || sourceEvent?.metadata?.rental_period || 'evening')
     const rentalPeriod = requestedRentalPeriod === 'morning' || requestedRentalPeriod === 'full_day'
       ? requestedRentalPeriod
       : 'evening'
     const packageId = normalizeProposalPackageId(
       savedContext?.package_id
       || invoice?.proposal_context?.package_name
-      || activeEventForDisplay?.package_interest
+      || sourceEvent?.package_interest
       || lead?.package_interest,
     ) || 'rent_only'
     const savedSelection = asProposalRecord(savedContext?.pricing_selection) || {}
     const savedPromotionId = String(savedSelection.promotionId || savedSelection.promotion_id || savedContext?.promotionId || savedContext?.promotion_id || '').trim() || null
     const nextContext: ProposalBuilderContext = {
       version: asProposalNumber(savedContext?.version, 1) || 1,
-      event_type: String(savedContext?.event_type || activeEventForDisplay?.event_type || lead?.event_type || 'Event Booking'),
+      event_type: String(savedContext?.event_type || sourceEvent?.event_type || lead?.event_type || 'Event Booking'),
       ...(eventDate ? { event_date: eventDate } : {}),
       ...(guestCount ? { expected_guest_count: guestCount } : {}),
       rental_period: rentalPeriod,
@@ -2227,22 +2231,78 @@ export default function LeadDetailPage({
       setInvoiceTaxRate(String(Number(invoice.tax_rate || 0) * 100))
       setLegacyProposalDiscount(!savedPromotionId && discountValue > 0 ? { type: discountType, value: discountValue } : null)
     } else {
-      const savedItems = activeEventForDisplay?.metadata?.proposalLineItems
       setInvoiceDesc(defaultProposalTitle(lead?.full_name, activeEventForDisplay?.event_type || lead?.event_type || 'Event'))
       setInvoiceDueDate('')
       setInvoiceOfferExpiryTime(DEFAULT_OFFER_EXPIRY_TIME)
       setInvoiceDiscountType('percent')
       setInvoiceDiscountValue('0')
       setInvoiceDiscountPercent('0')
-      setInvoiceItems(Array.isArray(savedItems) && savedItems.length
-        ? savedItems as LuxorInvoiceLineItem[]
-        : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
+      // A genuinely new proposal starts without a previous quote's amounts.
+      // Dossier summary line items can be stale; only an explicit duplicate
+      // action should copy a saved proposal into a new draft.
+      setInvoiceItems([{ description: '', quantity: 1, unitPrice: 0, total: 0 }])
       setInvoiceNotes('')
       setInvoiceTaxRate(DEFAULT_TEXAS_SALES_TAX_RATE_PERCENT)
       setLegacyProposalDiscount(null)
     }
 
     setIsInvoiceModalOpen(true)
+  }
+
+  const duplicateProposalDraft = (invoice: LuxorInvoice) => {
+    openProposalBuilder()
+    const sourceEvent = (invoice.lead_event_id ? leadEvents.find((event) => event.id === invoice.lead_event_id) : null) || selectedLeadEvent
+    const savedContext = asProposalRecord(invoice.proposal_context) || {}
+    const savedSelection = asProposalRecord(savedContext.pricing_selection) || {}
+    const promotionSnapshot = asProposalRecord(invoice.promotion_snapshot) || {}
+    const savedPromotionId = String(savedSelection.promotionId || savedSelection.promotion_id || savedContext.promotionId || savedContext.promotion_id || invoice.promotion_id || promotionSnapshot.id || '').trim() || null
+    const packageId = normalizeProposalPackageId(savedContext.package_id || savedContext.package_name) || 'rent_only'
+    const rentalPeriod = String(savedContext.rental_period || 'evening')
+    const sourceRentalPeriod = sourceEvent?.metadata?.rental_period
+    const sourceRentalPeriodFallback = sourceRentalPeriod === 'morning' || sourceRentalPeriod === 'full_day' || sourceRentalPeriod === 'custom' || sourceRentalPeriod === 'evening'
+      ? sourceRentalPeriod
+      : 'evening'
+    const duplicateSelection = { ...savedSelection }
+    delete duplicateSelection.promotionId
+    delete duplicateSelection.promotion_id
+    const discountType = invoice.discount_type === 'fixed' ? 'fixed' : 'percent'
+    const discountValue = asProposalNumber(invoice.discount_value, invoice.discount_percent, 0) || 0
+    const nextContext: ProposalBuilderContext = {
+      version: 1,
+      event_type: String(savedContext.event_type || invoice.event_type || sourceEvent?.event_type || lead?.event_type || 'Event Booking'),
+      ...(savedContext.event_date || savedContext.eventDate || sourceEvent?.target_date ? { event_date: String(savedContext.event_date || savedContext.eventDate || sourceEvent?.target_date) } : {}),
+      ...(asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count) ? { expected_guest_count: asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count)! } : {}),
+      rental_period: rentalPeriod === 'morning' || rentalPeriod === 'full_day' || rentalPeriod === 'custom' || rentalPeriod === 'evening' ? rentalPeriod : sourceRentalPeriodFallback,
+      ...(savedContext.event_access ? { event_access: String(savedContext.event_access) } : {}),
+      ...(savedContext.guest_arrival_time || savedContext.guestArrivalTime ? { guest_arrival_time: String(savedContext.guest_arrival_time || savedContext.guestArrivalTime) } : {}),
+      ...(savedContext.event_end_time || savedContext.eventEndTime ? { event_end_time: String(savedContext.event_end_time || savedContext.eventEndTime) } : {}),
+      package_id: packageId,
+      package_name: String(savedContext.package_name || packageId.replace('_', ' ')),
+      pricing_selection: duplicateSelection,
+      ...(savedPromotionId ? { promotion_id: savedPromotionId } : {}),
+      ...(savedContext.payment_plan && typeof savedContext.payment_plan === 'object'
+        ? { payment_plan: savedContext.payment_plan as ProposalBuilderContext['payment_plan'] }
+        : {}),
+    }
+    const lineItems = Array.isArray(invoice.line_items) && invoice.line_items.length
+      ? invoice.line_items.map((item) => ({ ...item }))
+      : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }]
+
+    setProposalContext(nextContext)
+    setProposalLeadEventId(invoice.lead_event_id || sourceEvent?.id || null)
+    setSelectedProposalPackageId(packageId)
+    setSelectedProposalPromotionId(savedPromotionId)
+    setProposalGuestCount(asProposalNumber(savedContext.expected_guest_count) ? String(asProposalNumber(savedContext.expected_guest_count)) : '')
+    setInvoiceDesc(`${invoice.description?.trim() || defaultProposalTitle(lead?.full_name, invoice.event_type || lead?.event_type || 'Event')} copy`)
+    setInvoiceDueDate('')
+    setInvoiceOfferExpiryTime(DEFAULT_OFFER_EXPIRY_TIME)
+    setInvoiceDiscountType(discountType)
+    setInvoiceDiscountValue(String(discountValue))
+    setInvoiceDiscountPercent(String(discountType === 'percent' ? discountValue : 0))
+    setInvoiceItems(lineItems)
+    setInvoiceNotes(invoice.notes || '')
+    setInvoiceTaxRate(String(Math.max(0, Number(invoice.tax_rate || 0)) * 100))
+    setLegacyProposalDiscount(!savedPromotionId && discountValue > 0 ? { type: discountType, value: discountValue } : null)
   }
 
   const handleProposalCalculationChange = (calculation: ProposalPricingCalculation | null) => {
@@ -2373,7 +2433,7 @@ export default function LeadDetailPage({
       packageId,
       eventDate,
       guestCount,
-      eventType: activeEventForDisplay?.event_type || lead?.event_type || context.event_type || null,
+      eventType: context.event_type || activeEventForDisplay?.event_type || lead?.event_type || null,
       rentalPeriod,
       rentalStartTime: String(context.rental_start_time || context.start_time || context.guest_arrival_time || context.guestArrivalTime || calculationContext.rental_start_time || calculationContext.start_time || ''),
       rentalEndTime: String(context.rental_end_time || context.end_time || context.event_end_time || context.eventEndTime || calculationContext.rental_end_time || calculationContext.end_time || ''),
@@ -2438,7 +2498,7 @@ export default function LeadDetailPage({
           ...(updateExistingDraft && editingInvoiceId ? { id: editingInvoiceId } : { creation_request_id: invoiceCreationRequest.current ||= crypto.randomUUID() }),
           ...(createRevision && editingInvoice ? { supersedes_invoice_id: editingInvoice.id } : {}),
           client_name: lead.full_name,
-          event_type: activeEventForDisplay?.event_type || lead.event_type || 'Event Booking',
+          event_type: proposalContext?.event_type || activeEventForDisplay?.event_type || lead.event_type || 'Event Booking',
           description: invoiceDesc || (editingInvoice ? editingInvoice.description || null : defaultProposalTitle(lead.full_name, activeEventForDisplay?.event_type || lead.event_type || 'Event')),
           line_items: invoiceItems,
           tax_rate: taxRate,
@@ -2446,7 +2506,7 @@ export default function LeadDetailPage({
           offer_expires_at: offerExpiresAt,
           proposal_selection: proposalSelection,
           inquiry_id: id,
-          lead_event_id: selectedLeadEvent?.id || null,
+          lead_event_id: proposalLeadEventId,
           notes: invoiceNotes || null,
         }),
       })
@@ -2456,15 +2516,18 @@ export default function LeadDetailPage({
       if (!responseBody.id || !responseBody.proposal_context) throw new Error('The save response was interrupted. Retry to recover the same proposal.')
       const invoice = responseBody as LuxorInvoice
       setInvoices((prev) => [invoice, ...prev.filter(item => item.id !== invoice.id)])
+      setActiveLeadTab('proposals')
       if (action !== 'save') {
         savedPublicationInvoice.current = invoice
         setPublicationPending(true)
       }
       // Optional dossier summaries cannot turn a successful save into a duplicate retry.
-      await (selectedLeadEvent
-        ? handleEventMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) })
-        : handleMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) }))
-        .catch(error => console.error('Proposal saved; dossier summary refresh failed:', error))
+      if ((selectedLeadEvent?.id || null) === proposalLeadEventId) {
+        await (selectedLeadEvent
+          ? handleEventMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) })
+          : handleMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) }))
+          .catch(error => console.error('Proposal saved; dossier summary refresh failed:', error))
+      }
       if (action === 'email') await handleSendFinalProposal(invoice, true)
       if (action === 'in_person') await prepareClientProposalHandoff(invoice, handoffWindow)
       if (action === 'save') {
@@ -3810,7 +3873,7 @@ export default function LeadDetailPage({
     { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
   ]
-  const primaryLeadTabIds: LeadDetailTab[] = ['overview', 'activity', 'tasks', 'messages']
+  const primaryLeadTabIds: LeadDetailTab[] = ['overview', 'proposals', 'activity', 'tasks', 'messages']
   const isPrimaryLeadTab = (tabId: LeadDetailTab) => primaryLeadTabIds.includes(tabId)
   const primaryLeadTabs = tabItems.filter((item) => isPrimaryLeadTab(item.id))
   const secondaryLeadTabs = tabItems.filter((item) => !isPrimaryLeadTab(item.id))
@@ -4315,6 +4378,7 @@ export default function LeadDetailPage({
             bookings={eventBookings}
             latestBooking={agreementBooking}
             latestInvoice={proposalInvoice}
+            hasAcceptedProposalEvidence={Boolean(proposalInvoice?.proposal_accepted_at || proposalBooking?.invoice_id === proposalInvoice?.id)}
             agreementDeliveryConfirmed={agreementDeliveryConfirmed}
             agreementDeliveryPending={agreementDeliveryPending}
             isSaving={updatingStatus}
@@ -4336,7 +4400,7 @@ export default function LeadDetailPage({
         }}
       >
         <div className="lg:hidden px-3 py-2.5">
-          <div role="tablist" aria-label="Lead detail sections" className="grid grid-cols-4 gap-1 rounded-xl bg-[color:var(--portal-soft)] p-1">
+          <div role="tablist" aria-label="Lead detail sections" className="grid grid-cols-5 gap-1 rounded-xl bg-[color:var(--portal-soft)] p-1">
             {primaryLeadTabs.map((item) => {
               const isActive = activeLeadTab === item.id
               return (
@@ -7414,7 +7478,7 @@ export default function LeadDetailPage({
                 <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]"><FileText size={16} className="text-[#a8792f] dark:text-[#caa24c]" /> Proposals</h3>
                 <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[color:var(--portal-muted)]">Each saved event proposal stays available here with its own quoted total and delivery status.</p>
               </div>
-              <button type="button" onClick={() => openProposalBuilder()} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition hover:bg-[#dfbd68]"><Plus size={14} /> Add new proposal</button>
+              <button type="button" onClick={() => openProposalBuilder()} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition hover:bg-[#dfbd68]"><Plus size={14} /> Create New Proposal</button>
             </div>
             {sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').length === 0 ? (
               <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">
@@ -7424,55 +7488,123 @@ export default function LeadDetailPage({
               </div>
             ) : (
               <div className="mt-5 grid gap-3 xl:grid-cols-2">
-                {sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').map((proposal) => {
+                {sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').map((proposal, proposalIndex) => {
                   const context = asProposalRecord(proposal.proposal_context) || {}
                   const selection = asProposalRecord(context.pricing_selection) || {}
                   const date = String(context.event_date || context.eventDate || '')
+                  const guestCount = asProposalNumber(context.expected_guest_count, context.expectedGuestCount)
                   const period = String(context.rental_period || selection.rentalPeriod || 'Rental')
                   const custom = period === 'custom'
                   const rentalStart = String(context.rental_start_time || context.start_time || selection.rentalStartTime || selection.rental_start_time || '')
                   const rentalEnd = String(context.rental_end_time || context.end_time || selection.rentalEndTime || selection.rental_end_time || '')
-                   const fixedWindow = String(context.event_access || '')
-                   const nextDayEnd = custom && rentalEnd && Number(rentalEnd.slice(0, 2)) < 6
-                   const shownPeriod = custom
-                     ? `Custom time${rentalStart && rentalEnd ? ` · ${formatProposalClock(rentalStart)}-${formatProposalClock(rentalEnd)}${nextDayEnd ? ' (next day)' : ''}` : ''}`
-                     : `${period.replaceAll('_', ' ')} rental${fixedWindow ? ` · ${fixedWindow}` : ''}`
+                  const fixedWindow = String(context.event_access || '')
+                  const nextDayEnd = custom && rentalEnd && Number(rentalEnd.slice(0, 2)) < 6
+                  const shownPeriod = custom
+                    ? `Custom time${rentalStart && rentalEnd ? ` · ${formatProposalClock(rentalStart)}-${formatProposalClock(rentalEnd)}${nextDayEnd ? ' (next day)' : ''}` : ''}`
+                    : `${period.replaceAll('_', ' ')} rental${fixedWindow ? ` · ${fixedWindow}` : ''}`
                   const proposalActivities = (proposalHistory[proposal.id]?.activities || []).filter((activity) => activity.invoice_id === proposal.id)
                   const proposalActivityTypes = new Set(proposalActivities.map((activity) => activity.event_type))
+                  const proposalBooking = eventBookings.find((booking) => booking.invoice_id === proposal.id) || null
+                  const acceptedActivity = proposalActivities.find((activity) => activity.event_type === 'accepted') || null
+                  const hasAcceptanceEvidence = Boolean(proposal.proposal_accepted_at || acceptedActivity || proposalBooking)
                   const firstView = proposal.proposal_viewed_at ? formatVenueDateTime(proposal.proposal_viewed_at) : null
                   const latestView = proposal.proposal_latest_viewed_at ? formatVenueDateTime(proposal.proposal_latest_viewed_at) : firstView
                   const acceptedAt = proposal.proposal_accepted_at ? formatVenueDateTime(proposal.proposal_accepted_at) : null
-                   const hasActiveSend = (proposalHistory[proposal.id]?.sendAttempts || []).some((attempt) => ['preparing', 'sending', 'delivery_unconfirmed'].includes(attempt.state))
-                   const offerExpired = proposal.offer_status === 'expired' || proposalActivityTypes.has('expired') || Boolean(proposal.offer_expires_at && Date.parse(proposal.offer_expires_at) <= Date.now())
-                  const lifecycleStatus = acceptedAt ? 'Accepted'
+                  const latestSentAt = proposal.proposal_latest_sent_at || proposal.proposal_sent_at || (proposal.status === 'sent' ? proposal.updated_at : null)
+                  const proposalHasBeenPublished = Boolean(proposal.proposal_sent_at || proposal.status === 'sent' || proposal.price_locked_at)
+                  const hasActiveSend = (proposalHistory[proposal.id]?.sendAttempts || []).some((attempt) => ['preparing', 'sending', 'delivery_unconfirmed'].includes(attempt.state))
+                  const offerExpired = proposal.offer_status === 'expired' || proposalActivityTypes.has('expired') || Boolean(proposal.offer_expires_at && Date.parse(proposal.offer_expires_at) <= Date.now())
+                  const lifecycleStatus = hasAcceptanceEvidence ? 'Accepted'
                     : proposalActivityTypes.has('superseded') ? 'Superseded'
                        : offerExpired ? 'Expired'
                          : hasActiveSend ? 'Sending'
                            : latestView ? 'Viewed'
                              : proposalActivityTypes.has('delivered') ? 'Delivered'
-                               : proposal.proposal_sent_at ? 'Sent' : 'Draft'
+                             : proposal.proposal_sent_at || proposal.status === 'sent' ? 'Sent' : 'Draft'
+                  const statusClass = lifecycleStatus === 'Accepted'
+                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : lifecycleStatus === 'Viewed'
+                      ? 'border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300'
+                      : lifecycleStatus === 'Sent' || lifecycleStatus === 'Delivered'
+                        ? 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300'
+                        : lifecycleStatus === 'Sending'
+                          ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                          : lifecycleStatus === 'Expired'
+                            ? 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                            : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
                   const proposalLabel = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
                     ? `${Number(proposal.proposal_number) === 1 ? 'Proposal' : `Proposal #${proposal.proposal_number}`}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
                     : proposal.status === 'sent' ? 'Existing proposal' : 'Draft proposal'
-                  return <article key={proposal.id} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#8c6529] dark:text-[#f1d27a]">{proposalLabel}</p><h4 className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{proposal.description || `${proposal.event_type || 'Event'} proposal`}</h4></div>
-                      <span className="shrink-0 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">{lifecycleStatus}</span>
-                    </div>
-                    <p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">{date ? formatDisplayDate(date) : 'Event date not set'}</p>
-                    <p className="mt-1 text-[11px] capitalize text-[color:var(--portal-muted)]">{shownPeriod}</p>
-                    <p className="mt-3 text-lg font-mono font-bold text-[color:var(--portal-text)]">{formatMoney(proposal.total)}</p>
-                    <dl className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[10px] sm:grid-cols-2">
+                  const taxRate = Number(proposal.tax_rate || 0)
+                  const shownTaxRate = taxRate > 1 ? taxRate : taxRate * 100
+                  const invoiceSubtotal = Number(proposal.original_subtotal ?? proposal.subtotal ?? proposal.total ?? 0)
+                  const proposalDiscount = Number(proposal.discount_amount || 0)
+                  const lineItems = Array.isArray(proposal.line_items) ? proposal.line_items : []
+                  const paymentInvoices = proposalBooking
+                    ? sortedInvoices.filter((invoice) => invoice.booking_id === proposalBooking.id && invoice.invoice_kind !== 'event')
+                    : []
+                  const paidProposalPayments = proposalBooking
+                    ? payments.filter((payment) => payment.booking_id === proposalBooking.id && payment.status === 'paid')
+                    : []
+                  const latestProposalPayment = [...paidProposalPayments].sort((a, b) => Date.parse(b.paid_at || b.updated_at) - Date.parse(a.paid_at || a.updated_at))[0]
+                  const paidPaymentInvoice = paymentInvoices.find((invoice) => invoice.status === 'paid')
+                  const proposalMilestones: Array<[string, string, string | null, string]> = [
+                    ['sent', 'Proposal sent', latestSentAt, 'Not sent yet'],
+                    ['viewed', 'Proposal viewed', proposal.proposal_viewed_at || null, 'Not yet viewed'],
+                    ['accepted', 'Proposal accepted', proposal.proposal_accepted_at || acceptedActivity?.occurred_at || null, hasAcceptanceEvidence && !proposal.proposal_accepted_at && !acceptedActivity ? 'Booking linked; acceptance timestamp unavailable' : hasAcceptanceEvidence && !proposal.proposal_accepted_at ? 'Acceptance recorded in proposal history' : 'Not yet accepted'],
+                    ['agreement', 'Agreement signed', proposalBooking?.contract_status === 'signed' ? proposalBooking.contract_signed_at || proposalBooking.updated_at : null, 'Not yet signed'],
+                    ['invoice', 'Payment invoice created', paymentInvoices[0]?.created_at || null, 'Not yet created'],
+                    ['payment', 'Payment received', latestProposalPayment?.paid_at || paidPaymentInvoice?.paid_at || null, 'Not yet received'],
+                  ]
+                  return <article key={proposal.id} className="min-w-0 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                    <details open={proposalIndex === 0} className="group">
+                      <summary className="flex min-h-20 cursor-pointer list-none items-center justify-between gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/50 sm:px-5 [&::-webkit-details-marker]:hidden">
+                        <span className="min-w-0">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="text-[9px] font-black uppercase tracking-[0.16em] text-[#8c6529] dark:text-[#f1d27a]">{proposalLabel}</span>
+                            <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${statusClass}`}>{lifecycleStatus}</span>
+                          </span>
+                          <span className="mt-1 block truncate text-sm font-bold text-[color:var(--portal-text)]">{proposal.description || `${proposal.event_type || 'Event'} proposal`}</span>
+                          <span className="mt-1 block truncate text-[10px] text-[color:var(--portal-muted)]">{date ? formatDisplayDate(date) : 'Event date not set'}{guestCount ? ` · ${guestCount} guests` : ''}</span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-3">
+                          <span className="text-right"><span className="block font-mono text-sm font-bold text-[color:var(--portal-text)]">{formatMoney(proposal.total)}</span><span className="mt-1 block text-[9px] text-[color:var(--portal-muted)]">{latestSentAt ? `Sent ${formatVenueDateTime(latestSentAt)}` : 'Not sent yet'}</span></span>
+                          <ChevronDown size={14} aria-hidden="true" className="text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" />
+                        </span>
+                      </summary>
+                      <div className="border-t border-[color:var(--portal-border)] p-4 sm:p-5">
+                    <p className="text-[11px] capitalize text-[color:var(--portal-muted)]">{shownPeriod}</p>
+                    <dl className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[10px] sm:grid-cols-4">
                       <div><dt className="text-[color:var(--portal-muted)]">Created</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.created_at)}</dd></div>
-                      {(proposal.proposal_latest_sent_at || proposal.proposal_sent_at) ? <div><dt className="text-[color:var(--portal-muted)]">Latest send</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.proposal_latest_sent_at || proposal.proposal_sent_at)}</dd></div> : null}
-                      {firstView ? <div><dt className="text-[color:var(--portal-muted)]">First customer view</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{firstView}</dd></div> : null}
-                      {latestView && latestView !== firstView ? <div><dt className="text-[color:var(--portal-muted)]">Latest customer view</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestView}</dd></div> : null}
-                      {acceptedAt ? <div><dt className="text-[color:var(--portal-muted)]">Accepted</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{acceptedAt}</dd></div> : null}
+                      <div><dt className="text-[color:var(--portal-muted)]">Last sent</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestSentAt ? formatVenueDateTime(latestSentAt) : 'Not sent yet'}</dd></div>
+                      <div><dt className="text-[color:var(--portal-muted)]">Last viewed</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestView || 'Not viewed'}</dd></div>
+                      <div><dt className="text-[color:var(--portal-muted)]">Expires</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{proposal.offer_expires_at ? formatVenueDateTime(proposal.offer_expires_at) : 'No expiry set'}</dd></div>
                     </dl>
+                    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                      <section className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3" aria-label="Proposal details">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Proposal details</h4>
+                        {lineItems.length ? <ul className="mt-2 divide-y divide-[color:var(--portal-border)] text-[10px]">
+                          {lineItems.map((item, index) => <li key={`${proposal.id}-line-${index}`} className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0"><span className="min-w-0 text-[color:var(--portal-muted)]">{item.description || 'Service'}{Number(item.quantity) > 1 ? ` × ${item.quantity}` : ''}</span><span className="shrink-0 font-medium text-[color:var(--portal-text)]">{formatMoney(item.total)}</span></li>)}
+                        </ul> : <p className="mt-2 text-[10px] text-[color:var(--portal-muted)]">No itemized services are saved on this proposal.</p>}
+                        <dl className="mt-3 space-y-1.5 border-t border-[color:var(--portal-border)] pt-3 text-[10px]">
+                          <div className="flex justify-between gap-3"><dt className="text-[color:var(--portal-muted)]">Subtotal</dt><dd className="text-[color:var(--portal-text)]">{formatMoney(invoiceSubtotal)}</dd></div>
+                          {proposalDiscount > 0 ? <div className="flex justify-between gap-3"><dt className="text-[color:var(--portal-muted)]">Discount</dt><dd className="text-[color:var(--portal-text)]">−{formatMoney(proposalDiscount)}</dd></div> : null}
+                          {shownTaxRate > 0 ? <div className="flex justify-between gap-3"><dt className="text-[color:var(--portal-muted)]">Sales tax ({shownTaxRate.toFixed(2)}%)</dt><dd className="text-[color:var(--portal-text)]">{formatMoney(Math.max(0, Number(proposal.total || 0) - (invoiceSubtotal - proposalDiscount)))}</dd></div> : null}
+                          <div className="flex justify-between gap-3 border-t border-[color:var(--portal-border)] pt-2 font-bold"><dt className="text-[color:var(--portal-text)]">Total proposal amount</dt><dd className="text-[color:var(--portal-text)]">{formatMoney(proposal.total)}</dd></div>
+                        </dl>
+                      </section>
+                      <section className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3" aria-label="Proposal activity">
+                        <div className="flex items-center justify-between gap-2"><h4 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Delivery & activity</h4><span className="text-[9px] text-[color:var(--portal-muted)]">{proposalActivityTypes.size} events</span></div>
+                        <ol className="mt-2 space-y-2 border-l border-[color:var(--portal-border)] pl-3 text-[10px]">
+                          {proposalMilestones.map(([key, label, occurredAt, emptyText]) => <li key={key} className="relative"><span className="absolute -left-[17px] top-1 h-2 w-2 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"/><p className="font-semibold text-[color:var(--portal-text)]">{label}</p><p className="mt-0.5 text-[color:var(--portal-muted)]">{occurredAt ? formatVenueDateTime(occurredAt) : emptyText}</p></li>)}
+                        </ol>
+                      </section>
+                    </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button type="button" onClick={() => openProposalDeliveryPreview(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Eye size={12} /> View proposal</button>
                       {proposal.status === 'sent' && proposalHistory[proposal.id]?.enabled === true ? <button type="button" onClick={() => void handleSendFinalProposal(proposal, false, true)} disabled={!lead.email || sendingInvoiceId === proposal.id} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === proposal.id ? 'Sending…' : 'Resend proposal'}</button> : null}
-                      <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> Edit proposal</button>
+                      <button type="button" onClick={() => duplicateProposalDraft(proposal)} aria-label={`Duplicate ${proposalLabel} to a new draft`} title="Starts a new draft from these event selections. Review the current price and discount before saving." className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Copy size={12} /> Duplicate</button>
+                      <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> {proposalHasBeenPublished ? 'Revise proposal' : 'Edit draft'}</button>
                     </div>
                     {proposalHistory[proposal.id]?.enabled ? <details className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
                       <summary className="min-h-11 cursor-pointer px-3 py-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Proposal activity and send history</summary>
@@ -7490,6 +7622,8 @@ export default function LeadDetailPage({
                         {!proposalHistory[proposal.id].activities.length && !proposalHistory[proposal.id].sendAttempts.length ? <p className="text-[10px] text-[color:var(--portal-muted)]">No proposal activity recorded yet.</p> : null}
                       </div>
                     </details> : null}
+                      </div>
+                    </details>
                   </article>
                 })}
               </div>
@@ -8298,8 +8432,8 @@ export default function LeadDetailPage({
         }}
         clientName={lead.full_name}
         clientEmail={lead.email}
-        eventType={activeEventForDisplay?.event_type || lead.event_type}
-        eventDate={activeEventForDisplay?.target_date || lead.target_date}
+        eventType={proposalContext?.event_type || activeEventForDisplay?.event_type || lead.event_type}
+        eventDate={proposalContext?.event_date || activeEventForDisplay?.target_date || lead.target_date}
         onEventDateChange={(value) => {
           setProposalContext((current) => ({ ...current, event_date: value }))
         }}
@@ -8868,6 +9002,7 @@ function LeadLifecycleRail({
   bookings,
   latestBooking,
   latestInvoice,
+  hasAcceptedProposalEvidence = false,
   agreementDeliveryConfirmed = false,
   agreementDeliveryPending = false,
   isSaving = false,
@@ -8878,6 +9013,7 @@ function LeadLifecycleRail({
   bookings: LuxorBooking[]
   latestBooking: LuxorBooking | null
   latestInvoice: LuxorInvoice | null
+  hasAcceptedProposalEvidence?: boolean
   agreementDeliveryConfirmed?: boolean
   agreementDeliveryPending?: boolean
   isSaving?: boolean
@@ -8900,7 +9036,8 @@ function LeadLifecycleRail({
       ? new Date(lead.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : ''
 
-  const steps = getLeadLifecycleSteps(lead, latestBooking, latestInvoice).map((step) => {
+  const proposalAccepted = Boolean(latestInvoice?.proposal_accepted_at || hasAcceptedProposalEvidence || latestBooking?.invoice_id === latestInvoice?.id)
+  const steps = getLeadLifecycleSteps(lead, latestBooking, latestInvoice, proposalAccepted).map((step) => {
     if (step.id === 'newsletter') {
       return { ...step, label: 'Newsletter', subtext: formattedInquiryDate }
     }
@@ -8927,7 +9064,7 @@ function LeadLifecycleRail({
         ...step,
         label: 'Proposal',
         subtext:
-          latestInvoice?.proposal_accepted_at || lead.status === 'booked'
+          proposalAccepted
             ? 'Accepted'
             : hasPublishedFinalProposal(latestInvoice) || lead.status === 'proposal_sent'
               ? formattedProposalSentDate || ''
@@ -8946,7 +9083,7 @@ function LeadLifecycleRail({
             ? 'Sent'
             : agreementDeliveryPending
               ? 'Sending'
-              : latestInvoice?.proposal_accepted_at
+              : proposalAccepted
                 ? 'Pending'
                 : hasPublishedFinalProposal(latestInvoice)
                   ? 'Awaiting acceptance'
@@ -9775,11 +9912,12 @@ type LeadLifecycleStepState = {
   isActive: boolean
 }
 
-function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking | null, currentProposal: LuxorInvoice | null = null): LeadLifecycleStepState[] {
+function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking | null, currentProposal: LuxorInvoice | null = null, proposalAcceptanceRecorded = false): LeadLifecycleStepState[] {
   const isNewsletter = isNewsletterLead(lead) || lead.pipeline_stage === 'newsletter'
   const hasProposalOrContractWorkflow = Boolean(
     hasPublishedFinalProposal(currentProposal) ||
     currentProposal?.proposal_accepted_at ||
+    proposalAcceptanceRecorded ||
     latestBooking,
   )
   const hasTourBeenCompleted = lead.tour_attendance_status === 'attended'

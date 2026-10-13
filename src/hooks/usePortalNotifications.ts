@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { isLuxorBounceForCurrentAddress, luxorBounceNotificationId } from '@/lib/luxorEmailBounce'
+import { getLuxorOutstandingPaymentRequestAmount } from '@/lib/luxorInvoiceNotificationEligibility'
 
 export type NotificationType = 'email' | 'call' | 'sms' | 'form' | 'booking' | 'calendar_response' | 'proposal_opened' | 'checkout_opened' | 'invoice_paid' | 'bill_due' | 'contract' | 'email_open' | 'layout_feedback' | 'email_delivery_issue'
 
@@ -450,6 +451,7 @@ export function usePortalNotifications() {
 
       // 6. Actual payment records, with invoice status as a fallback.
       const paidInvoiceIds = new Set<string>()
+      const paidInvoiceAmounts = new Map<string, number>()
       if (paymentsRes.status === 'fulfilled' && paymentsRes.value.ok) {
         const data = await paymentsRes.value.json()
         if (Array.isArray(data)) {
@@ -457,7 +459,10 @@ export function usePortalNotifications() {
             const paymentId = String(payment.id || '')
             const inquiryId = String(payment.inquiry_id || '')
             const invoiceId = String(payment.invoice_id || '')
-            if (invoiceId) paidInvoiceIds.add(invoiceId)
+            if (invoiceId) {
+              paidInvoiceIds.add(invoiceId)
+              paidInvoiceAmounts.set(invoiceId, (paidInvoiceAmounts.get(invoiceId) || 0) + Math.max(0, Number(payment.amount || 0)))
+            }
             const invoiceInquiryId = String(invoiceById.get(invoiceId)?.inquiry_id || '')
             const inquiry = inquiryId || invoiceInquiryId ? null : inquiryByEmail.get(normalizeEmail(payment.metadata && (payment.metadata as RawRecord).email))
             const resolvedInquiryId = inquiryId || invoiceInquiryId || String(inquiry?.id || '')
@@ -490,6 +495,7 @@ export function usePortalNotifications() {
             const timestamp = String(inv.updated_at || inv.created_at || new Date().toISOString())
 
             const isPaid = inv.status === 'paid'
+            const paymentDueAmount = getLuxorOutstandingPaymentRequestAmount(inv, paidInvoiceAmounts.get(String(inv.id || '')) || 0)
             const isRead = currentReadIds.has(`${invId}_paid`) || currentReadIds.has(invId)
             const inquiryId = String(inv.inquiry_id || '')
             const proposalViewedAt = inv.proposal_viewed_at ? String(inv.proposal_viewed_at) : ''
@@ -531,12 +537,12 @@ export function usePortalNotifications() {
                 targetUrl: leadUrl(inquiryId, 'documents'),
                 metadata: { invoiceId: inv.id, inquiryId },
               })
-            } else if (inv.status !== 'draft' && inv.status !== 'cancelled') {
+            } else if (paymentDueAmount !== null) {
               aggregated.push({
                 id: invId,
                 type: 'bill_due',
                 title: `Invoice Payment Due: ${clientName}`,
-                subtitle: `$${total.toLocaleString('en-US', { minimumFractionDigits: 2 })} due ${dueDate ? `on ${dueDate}` : 'soon'}`,
+                subtitle: `$${paymentDueAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} due ${dueDate ? `on ${dueDate}` : 'soon'}`,
                 timestamp: String(inv.created_at || new Date().toISOString()),
                 isRead,
                 targetUrl: inquiryId ? leadUrl(inquiryId, 'documents') : '/portal/finances?tab=invoices',

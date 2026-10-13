@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 
-const sql = fs.readFileSync(new URL('../supabase/migrations/20261013160425_luxor_proposal_family_history_v3.sql', import.meta.url), 'utf8')
+const sql = fs.readFileSync(new URL('../supabase/migrations/20261013210311_luxor_proposal_family_history_v3.sql', import.meta.url), 'utf8')
 
 test('failed preparation cannot release a sending or delivery-unconfirmed reservation', () => {
   const body = sql.match(/create or replace function public\.luxor_fail_proposal_send\([\s\S]*?\n\$\$;/)?.[0]

@@ -2123,7 +2123,7 @@ function LeadsProposalsTab({
   return (
     <PortalTableCard controls={<h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Sent Proposals ({proposals.length})</h3>}>
       {proposals.length === 0 ? (
-        <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No proposals awaiting signature.</div>
+        <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No sent proposals are waiting for client review.</div>
       ) : (
         <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
           {proposals.map((lead) => (
