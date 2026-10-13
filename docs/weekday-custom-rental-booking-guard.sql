@@ -17,7 +17,10 @@ declare
   increment_min integer;
 begin
   if s is null then return null; end if;
-  if jsonb_typeof(s) is distinct from 'object' or s -> 'version' not in ('1'::jsonb, '2'::jsonb) or s ->> 'time_zone' is distinct from 'America/Chicago' then
+  if jsonb_typeof(s) is distinct from 'object'
+     or jsonb_typeof(s -> 'version') is distinct from 'number'
+     or s -> 'version' not in ('1'::jsonb, '2'::jsonb)
+     or s ->> 'time_zone' is distinct from 'America/Chicago' then
     raise exception 'LUXOR_WEEKDAY_INVALID: Invalid saved rental snapshot.' using errcode = 'P0001';
   end if;
   foreach field in array array['duration_minutes', 'duration_hours', 'hourly_rate', 'rental_total', 'minimum_hours', 'time_increment_minutes', 'cleanup_buffer_minutes'] loop
@@ -49,6 +52,7 @@ begin
      or mod((s ->> 'time_increment_minutes')::numeric, 1) <> 0
      or (s ->> 'cleanup_buffer_minutes')::numeric < 0 or (s ->> 'cleanup_buffer_minutes')::numeric > 1140
      or mod((s ->> 'cleanup_buffer_minutes')::numeric, 1) <> 0
+     or (s -> 'version' = '2'::jsonb and (s ->> 'cleanup_buffer_minutes')::numeric <> 0)
      or (s -> 'version' = '2'::jsonb and coalesce(s ->> 'reset_window_policy', '') <> 'allowed')
      or (s -> 'version' = '2'::jsonb and coalesce(s ->> 'booking_policy', '') <> 'one_per_date')
      or (s -> 'version' = '1'::jsonb and coalesce(s ->> 'reset_window_policy', '') not in ('blocked', 'allowed'))
@@ -114,7 +118,7 @@ $$;
 
 -- All active writers take the same transaction lock, including legacy writers.
 -- Legacy-versus-legacy behavior is retained. Every conflict involving a custom
--- rental is authoritative here, including cross-date cleanup boundaries.
+-- rental is authoritative here, including actual event overlap across dates.
 create or replace function public.luxor_guard_weekday_booking_schedule()
 returns trigger language plpgsql security invoker set search_path = '' as $$
 declare

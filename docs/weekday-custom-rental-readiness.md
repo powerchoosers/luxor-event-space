@@ -4,13 +4,13 @@
 
 Lewis approved Monday–Thursday rentals at $400 per actual rental hour. Arianna's authenticated replies in the original `Weekday` email thread resolve the operating rules: three-hour minimum, whole-hour start/end increments, access through the 3:00–5:00 PM reset, one event per date, portal proposals only, and security calculated from guest arrival through event end using the existing rate and officer-count rules with the existing four-hour minimum. Any selectable time remains inside the current 6:00 AM–1:00 AM venue access window.
 
-The proposal builder, server calculator, frozen booking context and proposal/email/PDF/agreement summaries support an explicit `custom` rental period. Integer minutes determine one hourly rental charge; fixed-period extensions do not also apply. New version-2 snapshots capture the resolved schedule and security basis. Version-1 snapshots remain readable with their original terms, but cannot be accepted as new custom bookings. Friday–Sunday pricing, cleaning, existing security rates and officer tiers, tax, deposit and promotion calculations retain their existing paths. Existing proposal and booking snapshots are not rewritten. One event per date makes same-day cleanup-buffer policy inapplicable; the frozen legacy buffer field is retained as inert data and is not used to permit a second event.
+The proposal builder, server calculator, frozen booking context and proposal/email/PDF/agreement summaries support an explicit `custom` rental period. Integer minutes determine one hourly rental charge; fixed-period extensions do not also apply. New version-2 snapshots capture the resolved schedule and security basis. Version-1 snapshots remain readable with their original terms, but cannot be accepted as new custom bookings. Friday–Sunday pricing, cleaning, existing security rates and officer tiers, tax, deposit and promotion calculations retain their existing paths. Existing proposal and booking snapshots are not rewritten. New version-2 policies and snapshots require a zero-minute additional cleanup buffer. The existing 6:00 AM–1:00 AM access window supplies the natural overnight gap; no extra cleanup interval is added to cross-date conflict checks.
 
 New custom calculation, save, send and acceptance remain held behind both server flags and the database booking guard. The code does not change flags or the saved catalog policy. Public time selection is not implemented. The agreement's whole-date exclusivity wording is unchanged.
 
 ## Business decisions
 
-The minimum, increment, reset window, per-date capacity and proposal surface are now fixed in the new-policy validator. Security uses `max(4 hours, guest-arrival-to-event-end duration)` multiplied by the existing security hourly rate and the existing guest-count officer tier. This rules out a guest-entered override for new policy snapshots.
+The minimum, increment, reset window, per-date capacity, zero additional buffer and proposal surface are fixed in the new-policy validator. Security uses `max(4 hours, guest-arrival-to-event-end duration)` multiplied by the existing security hourly rate and the existing guest-count officer tier. This rules out a guest-entered override for new policy snapshots.
 
 ## Database deployment dependency
 
@@ -23,7 +23,7 @@ The minimum, increment, reset window, per-date capacity and proposal surface are
 5. Deploy reviewed application code with activation disabled. Save the complete approved catalog policy. Enable `LUXOR_WEEKDAY_CUSTOM_RENTAL_BOOKING_GUARD_READY` and `LUXOR_WEEKDAY_CUSTOM_RENTAL_ENABLED` only after database and release checks pass; redeploy if required by environment handling.
 6. Recheck new weekday draft pricing, delivery, acceptance and conflict behavior in a safe fixture/test environment before approving customer use. Existing weekend and historical flows must pass again.
 
-The atomic RPC claims the booking and first proposal acceptance together. Direct REST insertion cannot bypass this custom path. A venue-wide transaction lock serializes active scheduling changes; existing legacy bookings reserve their entire date. Missing RPC/schema or conflicting frozen terms returns an explicit held/review error rather than a fallback booking.
+The atomic RPC claims the booking and first proposal acceptance together on the server application path. The trigger protects schedule consistency and conflicts, but it is not an authorization boundary against a caller that already has `service_role` authority; such a caller retains its existing direct table-write authority. A venue-wide transaction lock serializes active scheduling changes; existing legacy bookings reserve their entire date. Missing RPC/schema or conflicting frozen terms returns an explicit held/review error rather than a fallback booking.
 
 ## Owner click path after activation
 
@@ -55,13 +55,13 @@ Chrome was unavailable in the session, so browser QA used an existing standalone
 
 Independent final review found no remaining source blocker for the held local checkpoint. It confirmed unchanged legal exclusivity, preserved weekend/historical paths and correction of the status-only publication bypass. The unrelated `src/app/(portal)/portal/leads/page.tsx` edit remains untouched; its SHA256 is `2DDE7868A8F99628E16A5B4D74485970FC245C91F451D607396C8CDB83E04C34`.
 
-Reviewed SQL artifact SHA256: `1E61D9739C3FDE4870348154311E3C101DBD888C02793E9683192BE2F64E83A5`. This evidence does not remove the business, production schema/RLS or real concurrency prerequisites above.
+Reviewed SQL artifact SHA256 before the follow-up corrections: `1E61D9739C3FDE4870348154311E3C101DBD888C02793E9683192BE2F64E83A5`. This evidence does not remove the business, production schema/RLS or real concurrency prerequisites above.
 
 The disabled-publication review confirmed both weekday flags are absent from the connected Vercel project and absent or disabled locally. The exact staged source snapshot, excluding the unrelated working-tree edit, was used for the publication validation. No environment values or catalog settings were changed.
 
 ## Cloud continuation after Arianna’s answers — October 13, 2026
 
-The checkout was verified on `main` at the parent-authorized starting commit `b56476a048dc3982d114841b8b31854d07f803e8`. Arianna’s six answers were available in the supplied handoff; no Gmail polling or customer messaging was performed. Implementation changes and the generated migration are present locally and remain disabled/unapplied. The unrelated `src/app/(portal)/portal/leads/page.tsx` work remains untouched.
+The checkout was verified on `main` at the parent-authorized starting commit `b56476a048dc3982d114841b8b31854d07f803e8`. Arianna’s six answers were available in the supplied handoff; no Gmail polling or customer messaging was performed. Implementation changes and the generated migration are pushed to `main` and remain disabled/unapplied. The unrelated `src/app/(portal)/portal/leads/page.tsx` work remains untouched.
 
 | Check | Result |
 | --- | --- |
@@ -73,7 +73,19 @@ The checkout was verified on `main` at the parent-authorized starting commit `b5
 | Isolated PostgreSQL 17 | Migration applied to a disposable synthetic schema; policy validation, acceptance retries, competing inserts, cancellation/reschedule and finalizer lock races passed across independent sessions. `anon` and `authenticated` cannot execute protected functions. This does not verify the production schema/RLS. |
 | SQL consistency | Review artifact matches generated migration body; `git diff --check` passed |
 
-The migration has not been applied. Production-schema/RLS review, migration deployment approval, and any later activation/catalog writes remain prerequisites. The migration adds three server-only functions (`service_role` execution); it does not change table grants or RLS. No credentials, customer records, legal wording, catalog values, flags or production data were changed. Browser and PostgreSQL checks used temporary synthetic fixtures which were removed; no test route or test artifact is included in the repository.
+The migration has not been applied. No credentials, customer records, legal wording, catalog values, flags or production data were changed. Browser and PostgreSQL checks use temporary synthetic fixtures; no test route or test artifact is included in the repository.
+
+## Read-only production review — October 13, 2026
+
+The Supabase connector verified active project `ofjvbzdwijjnajgjotmx` (PostgreSQL 17.6.1.141). Read-only catalog inspection found default pricing catalog version 12 with no `luxor_costs.weekday_custom_rental` policy. The three target tables exist with the expected migration columns and types: `luxor_bookings.invoice_id` is UUID and unique, booking date/time fields are `date`/`time without time zone`, invoice proposal context is `jsonb`, and inquiry status is `text`. RLS is enabled on all three target tables (not forced); their current policies grant table operations to `service_role`. The new weekday functions and trigger are absent, as expected before migration. Independent review confirmed the database default is READ COMMITTED with no role/database override, and the existing same-day finalizer uses a compatible invoice-first lock order. No database write was made.
+
+The migration's schedule guard remains an integrity/conflict check, not an authorization boundary against a caller that already has `service_role` table-write authority. The acceptance RPC is used by the server application path; a privileged service-role caller can still write directly under its existing table authority.
+
+## Follow-up fixes after independent review
+
+Version-2 policy validation now requires `cleanup_buffer_minutes = 0`, while historical version-1 snapshots retain their frozen values. SQL snapshot validation now rejects missing, JSON-null, string, and unsupported numeric versions before the trigger or acceptance RPC can treat a snapshot as valid. The version-2 zero-buffer and version-fail-closed regression cases ran in disposable TypeScript and PostgreSQL 17 fixtures; the concurrent booking, acceptance retry, cancellation, reschedule, and finalizer-lock checks were rerun in that synthetic database. Cross-date regression checks preserve the historical overlap rejection and allow adjacent version-2 late/early rentals across the natural 1:00–6:00 AM gap. `npm run typecheck`, `npm run lint -- --quiet`, `npm run test:follow-ups` (14/14), `npm run build` (146 pages), and `git diff --check` passed after the changes. Typecheck was rerun after clearing stale `.next/dev` route types from the removed browser fixture. These checks do not replace the production metadata review above or a controlled migration rollout.
+
+Updated SQL review artifact SHA256: `bffebdccd028f51c1b1f24e40745f50ddc267c69027cdbc94c5455d599b7015c`.
 
 ## Cloud continuation
 

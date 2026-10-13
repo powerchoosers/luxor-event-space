@@ -19,6 +19,7 @@ export const APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE = {
   time_increment_minutes: 60,
   reset_window_policy: 'allowed',
   booking_policy: 'one_per_date',
+  cleanup_buffer_minutes: 0,
   security_hours_policy: 'arrival_to_end',
   selection_surface: 'portal_only',
 } as const
@@ -120,6 +121,7 @@ export function validateWeekdayCustomRentalPolicy(config: unknown, options: { hi
   else if (!options.historicalSnapshot && policy.booking_policy !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.booking_policy) errors.push('New weekday custom proposals are limited to one event per date.')
   const buffer = number(policy.cleanup_buffer_minutes)
   if (buffer === null || !Number.isInteger(buffer) || buffer < 0 || buffer > 19 * 60) errors.push('Confirm the weekday cleanup buffer in whole minutes, including zero if none is required.')
+  else if (!options.historicalSnapshot && buffer !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.cleanup_buffer_minutes) errors.push('New weekday custom rentals require a zero-minute additional cleanup buffer.')
   if (options.historicalSnapshot) {
     if (policy.security_hours_policy !== 'rental_duration' && policy.security_hours_policy !== 'owner_entered' && policy.security_hours_policy !== 'arrival_to_end') errors.push('The saved historical security-hour policy is invalid.')
   } else if (policy.security_hours_policy !== APPROVED_WEEKDAY_CUSTOM_RENTAL_SCHEDULE.security_hours_policy) {
