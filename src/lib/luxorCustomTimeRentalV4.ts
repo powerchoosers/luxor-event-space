@@ -1,5 +1,5 @@
 import { validCalendarDate } from './luxorProposalTerms'
-import { catalogNumber, setCatalogValue, type PricingCatalog } from './luxorPricingCatalog'
+import { catalogNumber, catalogValue, setCatalogValue, type PricingCatalog } from './luxorPricingCatalog'
 
 export const LUXOR_CUSTOM_TIME_V4_GATE = 'LUXOR_CUSTOM_TIME_V4_READY'
 export const LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_GATE = 'LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY'
@@ -53,7 +53,8 @@ export function updateLuxorCustomTimeWeekdayPricingV4(config: PricingCatalog, fi
   const path = ['luxor_costs', 'custom_time_rental_v4', 'monday_thursday']
   const storedHours = catalogNumber(config, ...path, 'minimum_hours')
   const storedPrice = catalogNumber(config, ...path, 'minimum_price')
-  const rate = catalogNumber(config, ...path, 'hourly_rate')
+  const storedRateValue = catalogValue(config, ...path, 'hourly_rate')
+  const rate = storedRateValue === null ? null : catalogNumber(config, ...path, 'hourly_rate')
     ?? (storedPrice !== undefined && storedHours ? Math.round(storedPrice / storedHours * 100) / 100 : 400)
   const hours = field === 'minimum_hours' ? value : storedHours ?? 3
   const nextRate = field === 'hourly_rate' ? value : rate

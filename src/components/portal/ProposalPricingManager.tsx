@@ -179,10 +179,11 @@ export function ProposalPricingManager() {
       if (day.id === 'monday_thursday') {
         const hours = catalogNumber(next, ...path, 'minimum_hours') ?? day.minimumHours
         const price = catalogNumber(next, ...path, 'minimum_price')
-        const rate = catalogNumber(next, ...path, 'hourly_rate') ?? (price !== undefined && catalogNumber(next, ...path, 'minimum_hours') ? Math.round(price / catalogNumber(next, ...path, 'minimum_hours')! * 100) / 100 : day.minimumPrice / day.minimumHours)
+        const hourlyRateValue = catalogValue(next, ...path, 'hourly_rate')
+        const rate = hourlyRateValue === null ? null : catalogNumber(next, ...path, 'hourly_rate') ?? (price !== undefined && catalogNumber(next, ...path, 'minimum_hours') ? Math.round(price / catalogNumber(next, ...path, 'minimum_hours')! * 100) / 100 : day.minimumPrice / day.minimumHours)
         if (catalogValue(next, ...path, 'minimum_hours') === undefined || catalogValue(next, ...path, 'minimum_hours') === null) next = setCatalogValue(next, [...path, 'minimum_hours'], hours)
         next = setCatalogValue(next, [...path, 'hourly_rate'], rate)
-        if (price === undefined || price === null) next = setCatalogValue(next, [...path, 'minimum_price'], Math.round(rate * hours * 100) / 100)
+        if (price === undefined || price === null) next = setCatalogValue(next, [...path, 'minimum_price'], rate === null ? null : Math.round(rate * hours * 100) / 100)
       } else {
         if (catalogValue(next, ...path, 'minimum_hours') === undefined || catalogValue(next, ...path, 'minimum_hours') === null) next = setCatalogValue(next, [...path, 'minimum_hours'], day.minimumHours)
         if (catalogValue(next, ...path, 'minimum_price') === undefined || catalogValue(next, ...path, 'minimum_price') === null) next = setCatalogValue(next, [...path, 'minimum_price'], day.minimumPrice)
@@ -295,7 +296,8 @@ export function ProposalPricingManager() {
             const enabled = catalogValue(draft, ...path, 'enabled') === true
             const minimumPrice = catalogNumber(draft, ...path, 'minimum_price')
             const minimumHours = catalogNumber(draft, ...path, 'minimum_hours')
-            const weekdayHourlyRate = catalogNumber(draft, ...path, 'hourly_rate') ?? (minimumPrice != null && minimumHours ? Math.round(minimumPrice / minimumHours * 100) / 100 : day.id === 'monday_thursday' ? 400 : null)
+            const weekdayHourlyRateValue = catalogValue(draft, ...path, 'hourly_rate')
+            const weekdayHourlyRate = weekdayHourlyRateValue === null ? null : catalogNumber(draft, ...path, 'hourly_rate') ?? (minimumPrice != null && minimumHours ? Math.round(minimumPrice / minimumHours * 100) / 100 : day.id === 'monday_thursday' ? 400 : null)
             const shownMinimumHours = minimumHours ?? (day.id === 'monday_thursday' && catalogValue(draft, ...path, 'minimum_hours') === undefined ? day.minimumHours : null)
             const shownMinimumPrice = minimumPrice ?? (day.id === 'monday_thursday' && catalogValue(draft, ...path, 'minimum_price') === undefined ? Math.round((weekdayHourlyRate ?? 400) * (shownMinimumHours ?? day.minimumHours) * 100) / 100 : null)
             return <article key={day.id} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">

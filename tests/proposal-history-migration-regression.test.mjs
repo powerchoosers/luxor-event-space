@@ -42,7 +42,11 @@ test('proposal send retries reserve before claiming and keep the original active
   const claim = route.indexOf('claimLuxorProposalPublication(invoice, attemptId)')
   assert.ok(reservation >= 0 && claim > reservation, 'history reservation must be resolved before publication is claimed')
   assert.match(route.slice(reservation, claim), /attemptId = sendReservation\.attempt_id/)
-  assert.match(route.slice(claim, claim + 500), /failLuxorProposalSend\(sendReservation\.attempt_id/)
+  const lostClaim = route.indexOf('if (!claimed)', claim)
+  const wonClaim = route.indexOf('invoice = sendReservation ? { ...claimed', lostClaim)
+  assert.ok(lostClaim > claim && wonClaim > lostClaim, 'claim loser branch exists')
+  assert.doesNotMatch(route.slice(lostClaim, wonClaim), /failLuxorProposalSend/)
+  assert.match(route.slice(lostClaim, wonClaim), /shared preparing/)
 })
 
 test('V4 SQL validates rounded rates and every duplicated boundary and time alias', () => {

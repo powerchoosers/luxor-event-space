@@ -4,7 +4,7 @@ import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, isLuxor
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 import { calculateLuxorProposal, type LuxorProposalSelection } from '@/lib/luxorProposalPricing'
-import { getDefaultLuxorProposalPricing, getLuxorProposalPricingForInvoice, LuxorPromotionSelectionError, resolveLuxorProposalPromotion, resolveLuxorSameDayBooking, resolveLuxorOriginalProposalCreatedAt, assertLuxorWeekdayRentalSelection } from '@/lib/luxorProposalPricingServer'
+import { getDefaultLuxorProposalPricing, getLuxorProposalPricingForInvoice, hasFrozenLegacyCustomTimeProposal, LuxorPromotionSelectionError, resolveLuxorProposalPromotion, resolveLuxorSameDayBooking, resolveLuxorOriginalProposalCreatedAt, assertLuxorWeekdayRentalSelection } from '@/lib/luxorProposalPricingServer'
 import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
@@ -238,7 +238,7 @@ async function calculateServerProposal(selection: LuxorProposalSelection, existi
   let promotion: Awaited<ReturnType<typeof resolveLuxorProposalPromotion>>
   try {
     pricingRecord = await getLuxorProposalPricingForInvoice(existing)
-    assertLuxorWeekdayRentalSelection(selection, pricingRecord.config, true)
+    assertLuxorWeekdayRentalSelection(selection, pricingRecord.config, true, hasFrozenLegacyCustomTimeProposal(existing))
     promotion = await resolveLuxorProposalPromotion(selection, existing)
     const sameDayBooking = await resolveLuxorSameDayBooking(selection, existing, originalCreatedAt)
     calculation = calculateLuxorProposal(selection, pricingRecord.config, { promotion, sameDayBooking })

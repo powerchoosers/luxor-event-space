@@ -6,6 +6,7 @@ import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import {
   getDefaultLuxorProposalPricing,
   getLuxorProposalPricingForInvoice,
+  hasFrozenLegacyCustomTimeProposal,
   LuxorPromotionSelectionError,
   resolveLuxorProposalPromotion,
   resolveLuxorSameDayBooking,
@@ -60,15 +61,18 @@ export async function POST(request: NextRequest) {
     if (revisionId && existing?.invoice_kind !== 'event') return NextResponse.json({ error: 'Only an event proposal can be revised.' }, {status: 409})
     if (invoiceId && existing && (existing.invoice_kind !== 'event' || existing.status !== 'draft' || existing.price_locked_at || existing.proposal_accepted_at || existing.proposal_sent_at)) return NextResponse.json({error: 'This proposal is locked. Create a revision.'}, {status: 409})
     const pricing = await getLuxorProposalPricingForInvoice(existing)
-    assertLuxorWeekdayRentalSelection(selection as LuxorProposalSelection, pricing.config)
+    const historicalLegacyCustomTime = hasFrozenLegacyCustomTimeProposal(existing)
+    assertLuxorWeekdayRentalSelection(selection as LuxorProposalSelection, pricing.config, false, historicalLegacyCustomTime)
     const promotion = await resolveLuxorProposalPromotion(selection as LuxorProposalSelection, existing)
     const originalCreatedAt = await resolveLuxorOriginalProposalCreatedAt(existing)
     const sameDayBooking = await resolveLuxorSameDayBooking(selection as LuxorProposalSelection, existing, originalCreatedAt)
     const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion, sameDayBooking })
     const customTimeV4Ready = process.env.LUXOR_CUSTOM_TIME_V4_READY === 'true'
       && process.env.LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY === 'true'
-    const customPolicy = customTimeV4Ready ? null : getLuxorWeekdayRentalClientPolicy(pricing.config)
-    const customTimeV4Policy = customTimeV4Ready
+    const customPolicy = historicalLegacyCustomTime
+      ? getLuxorWeekdayRentalClientPolicy(pricing.config, true)
+      : customTimeV4Ready ? null : getLuxorWeekdayRentalClientPolicy(pricing.config)
+    const customTimeV4Policy = customTimeV4Ready && !historicalLegacyCustomTime
       ? getLuxorCustomTimeRentalPolicyV4(pricing.config, (selection as LuxorProposalSelection).eventDate)
       : null
     const createdOn = luxorCalendarDate(new Date(originalCreatedAt))

@@ -16,6 +16,7 @@ const {
   luxorCustomTimeRentalSnapshotV4,
   validateLuxorCustomTimeRentalV4Config,
   validateLuxorCustomTimeScheduleV4,
+  updateLuxorCustomTimeWeekdayPricingV4,
 } = require('../src/lib/luxorCustomTimeRentalV4.ts')
 
 const config = {
@@ -71,6 +72,19 @@ test('additional hours use the approved weekday rate and immutable local date-ti
   assert.equal(snapshot.event_end_at, '2026-10-19T12:00:00')
   assert.equal(getLuxorCustomTimeRentalSnapshotV4(snapshot)?.rental_total, 1400)
   assert.equal(getLuxorCustomTimeRentalSnapshotV4({ ...snapshot, rental_end_at: '2026-10-20T13:00:00' }), null)
+})
+
+test('cleared weekday hourly rate stays blank, blocks save, and can be re-entered', () => {
+  const blankRate = updateLuxorCustomTimeWeekdayPricingV4(config, 'hourly_rate', null)
+  const weekday = blankRate.luxor_costs.custom_time_rental_v4.monday_thursday
+  assert.equal(weekday.hourly_rate, null)
+  assert.equal(weekday.minimum_price, null)
+  assert.ok(validateLuxorCustomTimeRentalV4Config(blankRate).some((error) => error.includes('base hourly rate')))
+
+  const reentered = updateLuxorCustomTimeWeekdayPricingV4(blankRate, 'hourly_rate', 400)
+  assert.equal(reentered.luxor_costs.custom_time_rental_v4.monday_thursday.hourly_rate, 400)
+  assert.equal(reentered.luxor_costs.custom_time_rental_v4.monday_thursday.minimum_price, 1200)
+  assert.deepEqual(validateLuxorCustomTimeRentalV4Config(reentered), [])
 })
 
 test('overnight times persist on their actual local calendar dates and enforce event boundaries', () => {

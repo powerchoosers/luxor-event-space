@@ -377,7 +377,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       const claimed = await claimLuxorProposalPublication(invoice, attemptId)
       if (!claimed) {
-        if (sendReservation) await failLuxorProposalSend(sendReservation.attempt_id, 'Publication changed before the send was prepared.', false)
+        // Another concurrent sender may already own this shared preparing
+        // reservation. A failed invoice compare-and-swap does not confer
+        // ownership of the attempt, so leave it available for the winner.
         return NextResponse.json({ error: 'This proposal changed in another request. Please retry to recover its current result.' }, { status: 409 })
       }
       invoice = sendReservation ? { ...claimed, proposal_number: sendReservation.proposal_number } : claimed
