@@ -282,7 +282,7 @@ export async function updateLuxorProposalAndRecordEditActivity(
   updates: Parameters<typeof updateInvoice>[1],
   actorEmail: string,
 ) {
-  const [updated] = await supabaseRest<LuxorInvoice[]>('rpc/luxor_update_proposal_and_record_edit', {
+  const updated = await supabaseRest<LuxorInvoice>('rpc/luxor_update_proposal_and_record_edit', {
     method: 'POST',
     body: JSON.stringify({ p_invoice_id: id, p_updates: updates, p_actor_email: actorEmail }),
   })
@@ -394,7 +394,7 @@ export async function reconcileLuxorProposalDeliveryReceipt(invoice: LuxorInvoic
   )
   if (!completed) throw new Error('The saved delivery receipt could not be reconciled with proposal history.')
   const publicationAttempt = invoice.proposal_context?.publication_attempt as { id?: string } | undefined
-  if (publicationAttempt?.id) {
+  if (publicationAttempt?.id === receipt.proposalSendAttemptId) {
     const finished = await finishLuxorProposalPublication(invoice.id, publicationAttempt.id, 'completed')
     if (!finished) {
       const latest = await getInvoice(invoice.id)

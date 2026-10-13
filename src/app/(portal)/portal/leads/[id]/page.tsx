@@ -633,8 +633,8 @@ export default function LeadDetailPage({
         ...previous,
         [invoiceId]: {
           ...previous[invoiceId],
-          activities: [...previous[invoiceId].activities, ...page.activities],
-          sendAttempts: [...previous[invoiceId].sendAttempts, ...page.sendAttempts],
+          activities: Array.from(new Map([...previous[invoiceId].activities, ...page.activities].map((item) => [item.id, item])).values()),
+          sendAttempts: Array.from(new Map([...previous[invoiceId].sendAttempts, ...page.sendAttempts].map((item) => [item.id, item])).values()),
           hasMoreActivities: page.hasMoreActivities,
           hasMoreSendAttempts: page.hasMoreSendAttempts,
         },
@@ -7432,18 +7432,25 @@ export default function LeadDetailPage({
                   const custom = period === 'custom'
                   const rentalStart = String(context.rental_start_time || context.start_time || selection.rentalStartTime || selection.rental_start_time || '')
                   const rentalEnd = String(context.rental_end_time || context.end_time || selection.rentalEndTime || selection.rental_end_time || '')
-                  const shownPeriod = custom ? `Custom time${rentalStart && rentalEnd ? ` · ${formatProposalClock(rentalStart)}–${formatProposalClock(rentalEnd)}` : ''}` : `${period.replaceAll('_', ' ')} rental`
+                   const fixedWindow = String(context.event_access || '')
+                   const nextDayEnd = custom && rentalEnd && Number(rentalEnd.slice(0, 2)) < 6
+                   const shownPeriod = custom
+                     ? `Custom time${rentalStart && rentalEnd ? ` · ${formatProposalClock(rentalStart)}-${formatProposalClock(rentalEnd)}${nextDayEnd ? ' (next day)' : ''}` : ''}`
+                     : `${period.replaceAll('_', ' ')} rental${fixedWindow ? ` · ${fixedWindow}` : ''}`
                   const proposalActivities = (proposalHistory[proposal.id]?.activities || []).filter((activity) => activity.invoice_id === proposal.id)
                   const proposalActivityTypes = new Set(proposalActivities.map((activity) => activity.event_type))
                   const firstView = proposal.proposal_viewed_at ? formatVenueDateTime(proposal.proposal_viewed_at) : null
                   const latestView = proposal.proposal_latest_viewed_at ? formatVenueDateTime(proposal.proposal_latest_viewed_at) : firstView
                   const acceptedAt = proposal.proposal_accepted_at ? formatVenueDateTime(proposal.proposal_accepted_at) : null
+                   const hasActiveSend = (proposalHistory[proposal.id]?.sendAttempts || []).some((attempt) => ['preparing', 'sending', 'delivery_unconfirmed'].includes(attempt.state))
+                   const offerExpired = proposal.offer_status === 'expired' || proposalActivityTypes.has('expired') || Boolean(proposal.offer_expires_at && Date.parse(proposal.offer_expires_at) <= Date.now())
                   const lifecycleStatus = acceptedAt ? 'Accepted'
                     : proposalActivityTypes.has('superseded') ? 'Superseded'
-                      : proposal.offer_status === 'expired' || proposalActivityTypes.has('expired') ? 'Expired'
-                        : proposalActivityTypes.has('delivered') ? 'Delivered'
-                          : latestView ? 'Viewed'
-                            : proposal.proposal_sent_at ? 'Sent' : 'Draft'
+                       : offerExpired ? 'Expired'
+                         : hasActiveSend ? 'Sending'
+                           : latestView ? 'Viewed'
+                             : proposalActivityTypes.has('delivered') ? 'Delivered'
+                               : proposal.proposal_sent_at ? 'Sent' : 'Draft'
                   const proposalLabel = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
                     ? `${Number(proposal.proposal_number) === 1 ? 'Proposal' : `Proposal #${proposal.proposal_number}`}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
                     : proposal.status === 'sent' ? 'Existing proposal' : 'Draft proposal'

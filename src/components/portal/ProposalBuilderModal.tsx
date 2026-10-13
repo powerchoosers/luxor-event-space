@@ -28,7 +28,7 @@ import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidTh
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from '@/lib/luxorDecorCatalog'
 import { SAME_DAY_BOOKING_CODE, SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBookingSnapshot } from '@/lib/luxorSameDayBooking'
-import { formatWeekdayCustomRentalDuration, getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekdayCustomRentalDate, validateWeekdayCustomRentalSchedule, validateWeekdayCustomRentalTiming, type LuxorWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
+import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown, getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekdayCustomRentalDate, validateWeekdayCustomRentalSchedule, validateWeekdayCustomRentalTiming, type LuxorWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
 import { formatLuxorCustomTimeRentalPriceBreakdownV4, getLuxorCustomTimeRentalSnapshotV4, validateLuxorCustomTimeScheduleV4, type LuxorCustomTimeRentalPolicyV4 } from '@/lib/luxorCustomTimeRentalV4'
 
 const PROPOSAL_TIME_OPTIONS = [
@@ -1900,7 +1900,7 @@ export function ProposalBuilderModal({
                         ['Venue access', formatEventAccess(eventAccess, rentalPeriod)],
                         ['Guest arrival', guestArrivalTime ? formatCatalogTime(guestArrivalTime) : 'To be confirmed'],
                         ['Event end', eventEndTime ? formatCatalogTime(eventEndTime) + (isCustomRental && Number(eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : '') : 'To be confirmed'],
-                        ...(customTimeV4Snapshot ? [['Rental duration', formatWeekdayCustomRentalDuration(customTimeV4Snapshot.duration_minutes)], ['Venue rental terms', formatLuxorCustomTimeRentalPriceBreakdownV4(customTimeV4Snapshot)], ['Venue rental', formatMoney(customTimeV4Snapshot.rental_total)]] : customRentalSnapshot ? [['Rental duration', formatWeekdayCustomRentalDuration(customRentalSnapshot.duration_minutes)], ['Hourly rental rate', `${formatMoney(customRentalSnapshot.hourly_rate)} per hour`], ['Venue rental', formatMoney(customRentalSnapshot.rental_total)]] : []),
+                        ...(customTimeV4Snapshot ? [['Rental duration', formatWeekdayCustomRentalDuration(customTimeV4Snapshot.duration_minutes)], ['Venue rental terms', formatLuxorCustomTimeRentalPriceBreakdownV4(customTimeV4Snapshot)], ['Venue rental', formatMoney(customTimeV4Snapshot.rental_total)]] : customRentalSnapshot ? [['Rental duration', formatWeekdayCustomRentalDuration(customRentalSnapshot.duration_minutes)], ['Venue rental terms', formatWeekdayCustomRentalPriceBreakdown(customRentalSnapshot)], ['Venue rental', formatMoney(customRentalSnapshot.rental_total)]] : []),
                       ].map(([label, value]) => <div key={label} className="min-w-0 px-1 py-1 sm:px-2"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">{label}</p><p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--portal-text)]">{value}</p></div>)}
                     </div>
 
@@ -2059,7 +2059,7 @@ export function ProposalBuilderModal({
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Venue Access / Rental Period</p>
                         <p className="mt-1 text-sm font-semibold">{formatEventAccess(eventAccess, rentalPeriod)}</p>
                       </div>
-                      {customTimeV4Snapshot ? <div className="sm:col-span-2 lg:col-span-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Custom Time venue rental</p><p className="mt-1 text-sm font-semibold">{formatWeekdayCustomRentalDuration(customTimeV4Snapshot.duration_minutes)} · {formatLuxorCustomTimeRentalPriceBreakdownV4(customTimeV4Snapshot)}</p></div> : customRentalSnapshot ? <div className="sm:col-span-2 lg:col-span-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Custom weekday venue rental</p><p className="mt-1 text-sm font-semibold">{formatWeekdayCustomRentalDuration(customRentalSnapshot.duration_minutes)} at {formatMoney(customRentalSnapshot.hourly_rate)} per hour = {formatMoney(customRentalSnapshot.rental_total)}</p></div> : null}
+                      {customTimeV4Snapshot ? <div className="sm:col-span-2 lg:col-span-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Custom Time venue rental</p><p className="mt-1 text-sm font-semibold">{formatWeekdayCustomRentalDuration(customTimeV4Snapshot.duration_minutes)} · {formatLuxorCustomTimeRentalPriceBreakdownV4(customTimeV4Snapshot)}</p></div> : customRentalSnapshot ? <div className="sm:col-span-2 lg:col-span-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Custom weekday venue rental</p><p className="mt-1 text-sm font-semibold">{formatWeekdayCustomRentalDuration(customRentalSnapshot.duration_minutes)} · {formatWeekdayCustomRentalPriceBreakdown(customRentalSnapshot)}</p></div> : null}
                     </div>
                   </div>
 

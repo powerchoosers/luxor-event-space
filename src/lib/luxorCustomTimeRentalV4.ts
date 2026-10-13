@@ -46,6 +46,7 @@ export type LuxorCustomTimeScheduleV4 = {
 }
 
 const DAY_GROUPS: LuxorCustomTimeDayGroup[] = ['monday_thursday', 'friday', 'saturday', 'sunday']
+const WEEKEND_DAY_GROUPS: LuxorCustomTimeDayGroup[] = ['friday', 'saturday', 'sunday']
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -86,6 +87,8 @@ export function validateLuxorCustomTimeRentalV4Config(config: unknown): string[]
     if (minimumHours === null || !Number.isInteger(minimumHours) || minimumHours < 1 || minimumHours > 19) errors.push(`Set the ${day.replace('_', ' ')} Custom Time minimum as a whole number from 1 to 19 hours.`)
     if (minimumPrice === null || minimumPrice <= 0) errors.push(`Set a positive ${day.replace('_', ' ')} Custom Time minimum price.`)
     if (additionalRate === null || additionalRate < 0) errors.push(`Set the ${day.replace('_', ' ')} Custom Time rate for every additional hour.`)
+    if (WEEKEND_DAY_GROUPS.includes(day) && minimumHours !== 6) errors.push(`Weekend Custom Time uses a six-hour minimum block for ${day}.`)
+    if (WEEKEND_DAY_GROUPS.includes(day) && additionalRate !== 350) errors.push(`Weekend Custom Time after six hours is $350 per additional hour for ${day}.`)
     if (policy.time_increment_minutes !== 60) errors.push(`Set ${day.replace('_', ' ')} Custom Time in 60-minute increments.`)
     if (policy.reset_window_policy !== 'allowed') errors.push(`Confirm the ${day.replace('_', ' ')} Custom Time reset-window rule.`)
     if (policy.booking_policy !== 'one_per_date') errors.push(`Confirm one ${day.replace('_', ' ')} custom rental per calendar date.`)
@@ -222,7 +225,11 @@ export function luxorCustomTimeRentalSnapshotV4(
 /** Validate frozen V4 arithmetic and actual local dates without reading live catalog values. */
 export function getLuxorCustomTimeRentalSnapshotV4(value: unknown): LuxorCustomTimeRentalSnapshotV4 | null {
   const snapshot = record(value)
-  if (!snapshot || snapshot.version !== 4 || !validCalendarDate(snapshot.event_date)) return null
+  if (!snapshot || snapshot.version !== 4 || !validCalendarDate(snapshot.event_date) || snapshot.time_zone !== 'America/Chicago') return null
+  if (!DAY_GROUPS.includes(snapshot.day_group as LuxorCustomTimeDayGroup) || snapshot.day_group !== luxorCustomTimeDayGroup(snapshot.event_date)) return null
+  if (!Number.isInteger(numeric(snapshot.minimum_hours)) || numeric(snapshot.minimum_hours)! < 1 || numeric(snapshot.minimum_hours)! > 19) return null
+  if (!Number.isFinite(numeric(snapshot.minimum_price)) || numeric(snapshot.minimum_price)! <= 0) return null
+  if (!Number.isFinite(numeric(snapshot.duration_minutes)) || !Number.isFinite(numeric(snapshot.duration_hours)) || !Number.isFinite(numeric(snapshot.rental_total)) || !Number.isFinite(numeric(snapshot.hourly_rate)) || !Number.isFinite(numeric(snapshot.security_hours))) return null
   const additionalHourRate = numeric(snapshot.additional_hour_rate)
   if (additionalHourRate === null || additionalHourRate < 0) return null
   const policy = {
@@ -238,6 +245,7 @@ export function getLuxorCustomTimeRentalSnapshotV4(value: unknown): LuxorCustomT
     selection_surface: snapshot.selection_surface as LuxorCustomTimeRentalPolicyV4['selection_surface'],
   }
   if (!['portal_only', 'public_and_portal'].includes(policy.selection_surface)) return null
+  if (validateLuxorCustomTimeRentalV4Config({ custom_time_rental_v4: { [snapshot.day_group as string]: policy } }).length) return null
   try {
     const computed = luxorCustomTimeRentalSnapshotV4(String(snapshot.event_date), String(snapshot.start_time), String(snapshot.end_time), String(snapshot.guest_arrival_at).slice(11, 16), String(snapshot.event_end_at).slice(11, 16), policy)
     for (const key of Object.keys(computed) as Array<keyof LuxorCustomTimeRentalSnapshotV4>) {

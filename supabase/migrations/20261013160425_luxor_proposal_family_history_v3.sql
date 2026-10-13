@@ -438,7 +438,7 @@ declare
   allowed_keys text[] := array[
     'status','due_date','paid_at','notes','line_items','subtotal','tax_rate','total',
     'original_subtotal','original_total','discount_percent','discount_amount','discount_type','discount_value',
-    'promotion_id','promotion_snapshot','offer_expires_at','event_type','description'
+    'promotion_id','promotion_snapshot','offer_expires_at','event_type','description','proposal_context'
   ];
   edit_fields text[];
 begin
@@ -452,6 +452,11 @@ begin
   if not found or invoice.invoice_kind is distinct from 'event' then
     raise exception 'An event proposal is required.' using errcode = 'P0002';
   end if;
+  if invoice.status in ('sent', 'paid') or invoice.price_locked_at is not null or
+     invoice.proposal_sent_at is not null or invoice.proposal_accepted_at is not null or
+     invoice.booking_id is not null or invoice.offer_status in ('withdrawn', 'redeemed') then
+    raise exception 'Published or locked proposal terms cannot be edited.' using errcode = 'P0001';
+  end if;
   patched := pg_catalog.jsonb_populate_record(invoice, p_updates);
   update public.luxor_invoices i set
     status = patched.status, due_date = patched.due_date, paid_at = patched.paid_at, notes = patched.notes,
@@ -461,7 +466,8 @@ begin
     discount_type = patched.discount_type, discount_value = patched.discount_value,
     promotion_id = patched.promotion_id, promotion_snapshot = patched.promotion_snapshot,
     offer_expires_at = patched.offer_expires_at, event_type = patched.event_type,
-    description = patched.description, updated_at = now()
+    description = patched.description, proposal_context = patched.proposal_context,
+    updated_at = now()
   where i.id = p_invoice_id returning i.* into updated;
   select coalesce(array_agg(field order by field), array[]::text[]) into edit_fields from pg_catalog.jsonb_object_keys(p_updates) as fields(field);
   perform public.luxor_append_proposal_activity(
@@ -604,11 +610,14 @@ declare
   arrival_min integer;
   event_end_min integer;
   expected_total numeric;
+  day_group text;
+  guest_date date;
+  end_date date;
 begin
   if s is null then return null; end if;
   if jsonb_typeof(s) is distinct from 'object'
      or jsonb_typeof(s -> 'version') is distinct from 'number'
-     or s -> 'version' not in ('1'::jsonb, '2'::jsonb, '3'::jsonb)
+      or s -> 'version' not in ('1'::jsonb, '2'::jsonb, '3'::jsonb, '4'::jsonb)
      or s ->> 'time_zone' is distinct from 'America/Chicago' then
     raise exception 'LUXOR_WEEKDAY_INVALID: Invalid saved rental snapshot.' using errcode = 'P0001';
   end if;
@@ -624,6 +633,13 @@ begin
       end if;
     end loop;
   end if;
+  if s -> 'version' = '4'::jsonb then
+    foreach field in array array['minimum_price', 'additional_hour_rate', 'security_hours'] loop
+      if jsonb_typeof(s -> field) is distinct from 'number' then
+        raise exception 'LUXOR_WEEKDAY_INVALID: Missing version-4 rental terms.' using errcode = 'P0001';
+      end if;
+    end loop;
+  end if;
   if coalesce(s ->> 'event_date', '') !~ '^\d{4}-\d{2}-\d{2}$'
      or coalesce(s ->> 'start_time', '') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
      or coalesce(s ->> 'end_time', '') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' then
@@ -633,10 +649,29 @@ begin
   exception when datetime_field_overflow or invalid_datetime_format then
     raise exception 'LUXOR_WEEKDAY_INVALID: Invalid saved rental date.' using errcode = 'P0001';
   end;
-  if extract(isodow from event_day) not between 1 and 4 then
+  if s -> 'version' <> '4'::jsonb and extract(isodow from event_day) not between 1 and 4 then
     raise exception 'LUXOR_WEEKDAY_INVALID: Custom rentals require Monday through Thursday.' using errcode = 'P0001';
   end if;
-  if (s ->> 'hourly_rate')::numeric <> 400
+  if (s -> 'version' = '4'::jsonb and (
+        coalesce(s ->> 'day_group', '') not in ('monday_thursday', 'friday', 'saturday', 'sunday')
+        or (coalesce(s ->> 'day_group', '') = 'monday_thursday' and extract(isodow from event_day) not between 1 and 4)
+        or (s ->> 'day_group' = 'friday' and extract(isodow from event_day) <> 5)
+        or (s ->> 'day_group' = 'saturday' and extract(isodow from event_day) <> 6)
+        or (s ->> 'day_group' = 'sunday' and extract(isodow from event_day) <> 7)
+        or (s ->> 'minimum_hours')::numeric < 1 or (s ->> 'minimum_hours')::numeric > 19
+        or mod((s ->> 'minimum_hours')::numeric, 1) <> 0
+        or (s ->> 'minimum_price')::numeric <= 0 or (s ->> 'additional_hour_rate')::numeric < 0
+        or (s ->> 'hourly_rate')::numeric <> (s ->> 'minimum_price')::numeric / (s ->> 'minimum_hours')::numeric
+        or (s ->> 'day_group') in ('friday', 'saturday', 'sunday') and ((s ->> 'minimum_hours')::numeric <> 6 or (s ->> 'additional_hour_rate')::numeric <> 350)
+        or (s ->> 'time_increment_minutes')::numeric <> 60
+        or (s ->> 'cleanup_buffer_minutes')::numeric <> 0
+        or coalesce(s ->> 'reset_window_policy', '') <> 'allowed'
+        or coalesce(s ->> 'booking_policy', '') <> 'one_per_date'
+        or coalesce(s ->> 'security_hours_policy', '') <> 'arrival_to_end'
+        or coalesce(s ->> 'selection_surface', '') not in ('portal_only', 'public_and_portal')
+        or s ->> 'time_zone' <> 'America/Chicago'
+      ))
+      or (s -> 'version' <> '4'::jsonb and (s ->> 'hourly_rate')::numeric <> 400)
      or (s -> 'version' = '1'::jsonb and (
        (s ->> 'minimum_hours')::numeric <= 0 or (s ->> 'minimum_hours')::numeric > 19
        or abs((s ->> 'minimum_hours')::numeric * 60 - round((s ->> 'minimum_hours')::numeric * 60)) > 0.000000001
@@ -682,7 +717,7 @@ begin
      or abs((s ->> 'duration_hours')::numeric - duration_min::numeric / 60) > 0.000000001 then
     raise exception 'LUXOR_WEEKDAY_INVALID: Rental duration does not match the saved times.' using errcode = 'P0001';
   end if;
-  if s -> 'version' = '3'::jsonb then
+  if s -> 'version' in ('3'::jsonb, '4'::jsonb) then
     expected_total := round((s ->> 'minimum_price')::numeric +
       greatest(0, duration_min::numeric / 60 - (s ->> 'minimum_hours')::numeric) * (s ->> 'additional_hour_rate')::numeric, 2);
   else
@@ -714,6 +749,33 @@ begin
     if arrival_min < first_min or arrival_min > last_min or event_end_min < arrival_min or event_end_min > last_min then
       raise exception 'LUXOR_WEEKDAY_INVALID: Guest arrival and event end must fall within rental boundaries.' using errcode = 'P0001';
     end if;
+  elsif s -> 'version' = '4'::jsonb then
+    if coalesce(p_context ->> 'rental_start_at', '') !~ '^\d{4}-\d{2}-\d{2}T([01][0-9]|2[0-3]):[0-5][0-9]:00$'
+       or coalesce(p_context ->> 'rental_end_at', '') !~ '^\d{4}-\d{2}-\d{2}T([01][0-9]|2[0-3]):[0-5][0-9]:00$'
+       or coalesce(p_context ->> 'guest_arrival_at', '') !~ '^\d{4}-\d{2}-\d{2}T([01][0-9]|2[0-3]):[0-5][0-9]:00$'
+       or coalesce(p_context ->> 'event_end_at', '') !~ '^\d{4}-\d{2}-\d{2}T([01][0-9]|2[0-3]):[0-5][0-9]:00$'
+       or coalesce(p_context ->> 'guest_arrival_time', p_context ->> 'guestArrivalTime', '') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+       or coalesce(p_context ->> 'event_end_time', p_context ->> 'eventEndTime', '') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' then
+      raise exception 'LUXOR_WEEKDAY_INVALID: V4 actual rental boundaries are required.' using errcode = 'P0001';
+    end if;
+    guest_date := event_day + case when split_part(coalesce(p_context ->> 'guest_arrival_time', p_context ->> 'guestArrivalTime'), ':', 1)::integer < 6 then 1 else 0 end;
+    end_date := event_day + case when split_part(coalesce(p_context ->> 'event_end_time', p_context ->> 'eventEndTime'), ':', 1)::integer < 6 then 1 else 0 end;
+    if s ->> 'rental_start_at' is distinct from (event_day::text || 'T' || (s ->> 'start_time') || ':00')
+       or s ->> 'rental_end_at' is distinct from ((event_day + case when split_part(s ->> 'end_time', ':', 1)::integer < 6 then 1 else 0 end)::text || 'T' || (s ->> 'end_time') || ':00')
+       or s ->> 'guest_arrival_at' is distinct from (guest_date::text || 'T' || coalesce(p_context ->> 'guest_arrival_time', p_context ->> 'guestArrivalTime') || ':00')
+       or s ->> 'event_end_at' is distinct from (end_date::text || 'T' || coalesce(p_context ->> 'event_end_time', p_context ->> 'eventEndTime') || ':00') then
+      raise exception 'LUXOR_WEEKDAY_INVALID: V4 actual date-times conflict with their saved clock times.' using errcode = 'P0001';
+    end if;
+    arrival_min := split_part(coalesce(p_context ->> 'guest_arrival_time', p_context ->> 'guestArrivalTime'), ':', 1)::integer * 60
+      + split_part(coalesce(p_context ->> 'guest_arrival_time', p_context ->> 'guestArrivalTime'), ':', 2)::integer;
+    event_end_min := split_part(coalesce(p_context ->> 'event_end_time', p_context ->> 'eventEndTime'), ':', 1)::integer * 60
+      + split_part(coalesce(p_context ->> 'event_end_time', p_context ->> 'eventEndTime'), ':', 2)::integer;
+    if arrival_min < 360 then arrival_min := arrival_min + 1440; end if;
+    if event_end_min < 360 then event_end_min := event_end_min + 1440; end if;
+    if arrival_min < first_min or arrival_min > last_min or event_end_min < arrival_min or event_end_min > last_min
+       or (s ->> 'security_hours')::numeric <> greatest(4, (event_end_min - arrival_min)::numeric / 60) then
+      raise exception 'LUXOR_WEEKDAY_INVALID: V4 arrival and event end do not match the frozen rental.' using errcode = 'P0001';
+    end if;
   elsif (p_context ? 'guest_arrival_time' and p_context ->> 'guest_arrival_time' is distinct from s ->> 'start_time')
      or (p_context ? 'guestArrivalTime' and p_context ->> 'guestArrivalTime' is distinct from s ->> 'start_time')
      or (p_context ? 'event_end_time' and p_context ->> 'event_end_time' is distinct from s ->> 'end_time')
@@ -721,13 +783,14 @@ begin
     raise exception 'LUXOR_WEEKDAY_INVALID: Display timing conflicts with the canonical rental.' using errcode = 'P0001';
   end if;
   policy := coalesce(
+    case when s -> 'version' = '4'::jsonb then p_context #> ('{pricing_snapshot,pricing_config,luxor_costs,custom_time_rental_v4,' || (s ->> 'day_group') || '}')::text[] end,
     p_context #> '{pricing_snapshot,pricing_config,luxor_costs,weekday_custom_rental}',
     p_context #> '{pricing_snapshot,pricing_config,weekday_custom_rental}'
   );
   if jsonb_typeof(policy) is distinct from 'object' or policy -> 'enabled' is distinct from 'true'::jsonb then
     raise exception 'LUXOR_WEEKDAY_INVALID: The frozen pricing policy is unavailable.' using errcode = 'P0001';
   end if;
-  foreach field in array array['hourly_rate', 'minimum_hours', 'time_increment_minutes', 'cleanup_buffer_minutes'] loop
+  foreach field in array case when s -> 'version' = '4'::jsonb then array['minimum_hours', 'minimum_price', 'additional_hour_rate', 'time_increment_minutes', 'cleanup_buffer_minutes'] else array['hourly_rate', 'minimum_hours', 'time_increment_minutes', 'cleanup_buffer_minutes'] end loop
     if coalesce(jsonb_typeof(policy -> field), '') not in ('number', 'string') then
       raise exception 'LUXOR_WEEKDAY_INVALID: The frozen numeric policy is unavailable.' using errcode = 'P0001';
     end if;
@@ -746,6 +809,9 @@ begin
         raise exception 'LUXOR_WEEKDAY_INVALID: Rental price differs from the frozen catalog.' using errcode = 'P0001';
       end if;
     end loop;
+  end if;
+  if s -> 'version' = '4'::jsonb and policy -> 'enabled' is distinct from 'true'::jsonb then
+    raise exception 'LUXOR_WEEKDAY_INVALID: The frozen Custom Time day is disabled.' using errcode = 'P0001';
   end if;
   foreach field in array array['reset_window_policy', 'booking_policy', 'security_hours_policy', 'selection_surface'] loop
     if policy -> field is distinct from s -> field then
@@ -780,7 +846,7 @@ begin
   end if;
   snapshot := public.luxor_validate_weekday_rental_context(invoice.proposal_context);
   if snapshot is null then raise exception 'LUXOR_WEEKDAY_INVALID: A saved custom rental is required.' using errcode = 'P0001'; end if;
-  if snapshot -> 'version' not in ('2'::jsonb, '3'::jsonb) then
+  if snapshot -> 'version' not in ('2'::jsonb, '3'::jsonb, '4'::jsonb) then
     raise exception 'LUXOR_WEEKDAY_INVALID: Historical custom rental terms require administrator review before acceptance.' using errcode = 'P0001';
   end if;
   -- This SECURITY INVOKER RPC is executable only by service_role. The

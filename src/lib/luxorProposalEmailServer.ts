@@ -5,7 +5,7 @@ import { formatLuxorDate } from './luxorDateFormatting'
 import { formatCatalogTime } from './luxorPricingCatalog'
 import { getOfficialDecorService } from './luxorDecorCatalog'
 import { SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBookingSnapshot } from './luxorSameDayBooking'
-import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown, getWeekdayCustomRentalSnapshot, type LuxorWeekdayCustomRentalSnapshot } from './luxorWeekdayRental'
+import { formatLuxorCustomRentalPriceBreakdown, getLuxorCustomRentalSnapshot, type LuxorCustomRentalSnapshot } from './luxorCustomRentalSnapshot'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT = 750
@@ -47,7 +47,7 @@ export type LuxorProposalPricingSummary = {
   eventAccess: string | null
   guestArrivalTime?: string | null
   eventEndTime?: string | null
-  weekdayCustomRental: LuxorWeekdayCustomRentalSnapshot | null
+  weekdayCustomRental: LuxorCustomRentalSnapshot | null
   lines: LuxorProposalDisplayLine[]
   decorSubtotal: number | null
   subtotal: number
@@ -235,7 +235,7 @@ function normalizedLineItem(value: unknown) {
 export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProposalPricingSummary {
   const rawInvoice = invoice as unknown as UnknownRecord
   const context = proposalContext(rawInvoice.proposal_context)
-  const weekdayCustomRental = getWeekdayCustomRentalSnapshot(context.weekday_custom_rental)
+  const weekdayCustomRental = getLuxorCustomRentalSnapshot(context.weekday_custom_rental)
   const rawItems = Array.isArray(rawInvoice.line_items) ? rawInvoice.line_items : []
   const items = rawItems.map(normalizedLineItem).filter((item): item is NonNullable<typeof item> => item !== null)
   const serviceItems = items.filter((item) => !item.isSecurityDeposit && !item.isTax && !item.isDiscount && !item.isTaxCoverage)
@@ -451,7 +451,7 @@ export function buildLuxorProposalEmail(input: { invoice: LuxorInvoice; inquiry:
     summary.guestArrivalTime ? `${summary.weekdayCustomRental ? 'Rental start time' : 'Guest arrival'}: ${formatCatalogTime(summary.guestArrivalTime)}` : null,
     summary.eventEndTime ? `${summary.weekdayCustomRental ? 'Rental end time' : 'Event end'}: ${formatCatalogTime(summary.eventEndTime)}${summary.weekdayCustomRental && Number(summary.eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}` : null,
     summary.eventAccess ? `Venue access: ${summary.eventAccess}` : null,
-    summary.weekdayCustomRental ? `Venue rental: ${formatWeekdayCustomRentalPriceBreakdown(summary.weekdayCustomRental)}` : null,
+    summary.weekdayCustomRental ? `Venue rental: ${formatLuxorCustomRentalPriceBreakdown(summary.weekdayCustomRental)}` : null,
   ].filter(Boolean).join(' | ')
   return {
     subject: `${proposalLabel}: Your Luxor proposal is ready`,

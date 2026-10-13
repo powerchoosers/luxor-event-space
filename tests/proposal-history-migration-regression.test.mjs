@@ -28,10 +28,28 @@ test('proposal term edits and their append-only history event share one transact
   assert.ok(body, 'atomic edit RPC exists')
   assert.match(body, /for update/)
   assert.match(body, /update public\.luxor_invoices[\s\S]*?perform public\.luxor_append_proposal_activity/)
+  assert.match(body, /proposal_context = patched\.proposal_context/)
+  assert.match(body, /price_locked_at is not null[\s\S]*?proposal_sent_at is not null[\s\S]*?proposal_accepted_at is not null[\s\S]*?booking_id is not null/)
   assert.match(sql, /grant execute on function public\.luxor_update_proposal_and_record_edit\(uuid, jsonb, text\) to service_role;/)
   const route = fs.readFileSync(new URL('../src/app/api/invoices/route.ts', import.meta.url), 'utf8')
   assert.match(route, /updateLuxorProposalAndRecordEditActivity\(id, updates, session\.email\)/)
   assert.doesNotMatch(route, /Proposal saved, but its edit activity could not be recorded/)
+})
+
+test('proposal send retries reserve before claiming and keep the original active attempt id', () => {
+  const route = fs.readFileSync(new URL('../src/app/api/invoices/[id]/send/route.ts', import.meta.url), 'utf8')
+  const reservation = route.indexOf('const sendReservation = await beginLuxorProposalSend')
+  const claim = route.indexOf('claimLuxorProposalPublication(invoice, attemptId)')
+  assert.ok(reservation >= 0 && claim > reservation, 'history reservation must be resolved before publication is claimed')
+  assert.match(route.slice(reservation, claim), /attemptId = sendReservation\.attempt_id/)
+  assert.match(route.slice(claim, claim + 500), /failLuxorProposalSend\(sendReservation\.attempt_id/)
+})
+
+test('V4 SQL validator preserves weekend day-specific base requirements and six-hour surcharge terms', () => {
+  const validator = sql.match(/create or replace function public\.luxor_validate_weekday_rental_context\([\s\S]*?\n\$\$;/)?.[0]
+  assert.ok(validator, 'frozen rental validator exists')
+  assert.match(validator, /day_group.*friday.*saturday.*sunday[\s\S]*?minimum_hours.*<> 6[\s\S]*?additional_hour_rate.*<> 350/)
+  assert.match(validator, /minimum_price.*<= 0/)
 })
 
 test('separate proposal families receive independent first-send numbers and revisions inherit their family', () => {

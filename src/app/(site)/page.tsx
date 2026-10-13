@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Reveal } from '@/components/Reveal'
 import { VenueFilm } from '@/components/VenueFilm'
 import { LuxorBrochureForm } from '@/components/LuxorBrochureForm'
+import { LuxorCustomTimeStartingPrices } from '@/components/LuxorCustomTimeStartingPrices'
 
 const curatedPhotos = [
   {
@@ -77,6 +78,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <LuxorCustomTimeStartingPrices />
 
       {/* 3. CURATED GALLERY PREVIEW */}
       <section className="relative isolate overflow-hidden bg-[#050505] py-20 sm:py-28 border-b border-[#caa24c]/18">

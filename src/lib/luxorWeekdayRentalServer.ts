@@ -3,6 +3,7 @@ import 'server-only'
 import type { LuxorBooking, LuxorInvoice } from './luxorInquiryTypes'
 import { luxorBookingInsertPayload } from './luxorBookingsServer'
 import { supabaseRest } from './supabaseRestServer'
+import { LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_GATE, LUXOR_CUSTOM_TIME_V4_GATE } from './luxorCustomTimeRentalV4'
 
 export class LuxorWeekdayRentalError extends Error {
   constructor(message: string, readonly status = 409) {
@@ -44,14 +45,19 @@ export async function claimLuxorWeekdayProposalAcceptance(
     throw new LuxorWeekdayRentalError('A saved custom weekday rental is required for this acceptance path.')
   }
   if (!invoice.proposal_accepted_at || !invoice.booking_id) {
-    assertLuxorWeekdayRentalAdmission()
     const snapshot = invoice.proposal_context.weekday_custom_rental as Record<string, unknown>
-    if (snapshot.version !== 2 && snapshot.version !== 3) {
-      throw new LuxorWeekdayRentalError('This custom weekday offer requires its matching database booking guard before it can be accepted.')
-    }
-    if (process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_V3_BOOKING_GUARD_READY !== 'true' &&
-        (invoice.proposal_context.weekday_custom_rental as Record<string, unknown>).version === 3) {
-      throw new LuxorWeekdayRentalError('This custom weekday offer requires its matching database booking guard before it can be accepted.')
+    if (snapshot.version === 4) {
+      if (process.env[LUXOR_CUSTOM_TIME_V4_GATE] !== 'true' || process.env[LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_GATE] !== 'true') {
+        throw new LuxorWeekdayRentalError('This Custom Time offer requires its matching reviewed booking guard before it can be accepted.')
+      }
+    } else {
+      assertLuxorWeekdayRentalAdmission()
+      if (snapshot.version !== 2 && snapshot.version !== 3) {
+        throw new LuxorWeekdayRentalError('This custom weekday offer requires its matching database booking guard before it can be accepted.')
+      }
+      if (process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_V3_BOOKING_GUARD_READY !== 'true' && snapshot.version === 3) {
+        throw new LuxorWeekdayRentalError('This custom weekday offer requires its matching database booking guard before it can be accepted.')
+      }
     }
     if (snapshot.booking_policy === 'multiple_per_date') {
       throw new LuxorWeekdayRentalError('Multiple weekday events require approved cleanup-buffer rules and agreement wording before booking can open.')

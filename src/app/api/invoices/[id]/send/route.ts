@@ -356,11 +356,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       // Reuse the prior attempt id when reconciling a durable delivery receipt.
       // This completes the original history reservation without opening a new send.
-      const attemptId = hasConfirmedDeliveryReceipt && priorAttempt?.id ? priorAttempt.id : crypto.randomUUID()
-      const claimed = await claimLuxorProposalPublication(invoice, attemptId)
-      if (!claimed) return NextResponse.json({ error: 'This proposal changed in another request. Please retry to recover its current result.' }, { status: 409 })
-      invoice = claimed
-      publicationAttemptId = attemptId
+      let attemptId = hasConfirmedDeliveryReceipt && priorAttempt?.id ? priorAttempt.id : crypto.randomUUID()
       const sendReservation = await beginLuxorProposalSend({
         invoiceId: invoice.id,
         attemptId,
@@ -373,9 +369,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: 'Proposal history is not available yet. The existing offer was not resent.' }, { status: 503 })
       }
       if (sendReservation) {
+        // A retry after a crash may discover a reservation created by the
+        // earlier request. Continue using its original ID and idempotency key.
+        attemptId = sendReservation.attempt_id
         proposalSendAttemptId = sendReservation.attempt_id
         invoice = { ...invoice, proposal_number: sendReservation.proposal_number }
       }
+      const claimed = await claimLuxorProposalPublication(invoice, attemptId)
+      if (!claimed) {
+        if (sendReservation) await failLuxorProposalSend(sendReservation.attempt_id, 'Publication changed before the send was prepared.', false)
+        return NextResponse.json({ error: 'This proposal changed in another request. Please retry to recover its current result.' }, { status: 409 })
+      }
+      invoice = claimed
+      publicationAttemptId = attemptId
       const now = new Date().toISOString()
       const publicToken = invoice.public_token!
       // An older workflow could have attached a Checkout Session directly to

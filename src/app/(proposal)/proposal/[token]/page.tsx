@@ -16,7 +16,7 @@ import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 import { sameDayBookingPromotion, sameDayBookingRequiresRevision, withoutExpiredSameDayCoverage } from '@/lib/luxorSameDayBooking'
 import { SameDayBookingNotice } from '@/components/proposal/SameDayBookingNotice'
-import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown } from '@/lib/luxorWeekdayRental'
+import { formatLuxorCustomRentalPriceBreakdown } from '@/lib/luxorCustomRentalSnapshot'
 
 export const dynamic = 'force-dynamic'
 
@@ -177,7 +177,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               {guestArrivalTime ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Guest Arrival:</span> {formatCatalogTime(guestArrivalTime)}</p> : null}
               {eventEndTime ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Event End:</span> {formatCatalogTime(eventEndTime)}{pricingSummary.weekdayCustomRental && Number(eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}</p> : null}
               {pricingSummary.eventAccess ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Venue Access:</span> {pricingSummary.eventAccess}</p> : null}
-              {pricingSummary.weekdayCustomRental ? <p className="mt-2 text-xs leading-5 text-zinc-300"><span className="font-medium">Venue rental:</span> {formatWeekdayCustomRentalPriceBreakdown(pricingSummary.weekdayCustomRental)}</p> : null}
+              {pricingSummary.weekdayCustomRental ? <p className="mt-2 text-xs leading-5 text-zinc-300"><span className="font-medium">Venue rental:</span> {formatLuxorCustomRentalPriceBreakdown(pricingSummary.weekdayCustomRental)}</p> : null}
               {expectedGuestCount > 0 ? <p className="mt-1 text-xs text-zinc-500">Expected guest count: {expectedGuestCount}</p> : null}
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">

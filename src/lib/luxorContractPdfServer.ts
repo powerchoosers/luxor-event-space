@@ -13,7 +13,7 @@ import { getOfficialDecorService } from './luxorDecorCatalog'
 import { formatLuxorOfferExpiry } from './luxorOffer'
 import { luxorCalendarDate } from './luxorProposalTerms'
 import { SAME_DAY_CARD_CUTOFF_TERMS } from './luxorSameDayBooking'
-import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown, getWeekdayCustomRentalSnapshot, type LuxorWeekdayCustomRentalSnapshot } from './luxorWeekdayRental'
+import { formatLuxorCustomRentalDuration, formatLuxorCustomRentalPriceBreakdown, getLuxorCustomRentalSnapshot, type LuxorCustomRentalSnapshot } from './luxorCustomRentalSnapshot'
 
 const gold = rgb(0.67, 0.47, 0.20)
 const paleGold = rgb(0.92, 0.85, 0.72)
@@ -53,7 +53,7 @@ type ContractProposalSummary = {
   paymentCollectionScope: 'luxor_services_only' | 'legacy_full_event' | null
   guestArrivalTime?: string | null
   eventEndTime?: string | null
-  weekdayCustomRental: LuxorWeekdayCustomRentalSnapshot | null
+  weekdayCustomRental: LuxorCustomRentalSnapshot | null
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -122,7 +122,7 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
     ?? recordFrom(metadata.proposal_context)
     ?? recordFrom(metadata.proposalContext)
     ?? {}
-  const weekdayCustomRental = getWeekdayCustomRentalSnapshot(context.weekday_custom_rental)
+  const weekdayCustomRental = getLuxorCustomRentalSnapshot(context.weekday_custom_rental)
   const pricingSnapshot = recordFrom(context.pricing_snapshot)
     ?? recordFrom(context.pricingSnapshot)
     ?? {}
@@ -456,7 +456,7 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   if (proposalSummary.weekdayCustomRental) {
     const rental = proposalSummary.weekdayCustomRental
     w.y -= 10
-    w.fieldPair('Custom rental duration', formatWeekdayCustomRentalDuration(rental.duration_minutes), 'Venue rental', formatWeekdayCustomRentalPriceBreakdown(rental))
+    w.fieldPair('Custom rental duration', formatLuxorCustomRentalDuration(rental), 'Venue rental', formatLuxorCustomRentalPriceBreakdown(rental))
   }
   w.y -= 10
   w.fieldPair('Package', booking.package_name || 'Custom venue booking', 'Email', booking.email || 'Not provided')

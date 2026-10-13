@@ -199,12 +199,6 @@ export function assertLuxorWeekdayRentalSelection(selection: LuxorProposalSelect
     for (const [camel, snake] of [[selection.guestArrivalTime, selection.guest_arrival_time], [selection.eventEndTime, selection.event_end_time]]) {
       if (typeof camel === 'string' && typeof snake === 'string' && camel.trim() !== snake.trim()) throw new LuxorWeekdayRentalError('The rental times changed. Refresh the proposal and select the times again.')
     }
-  } else if (requireCustomOnWeekdays && config.pricing_mode === 'venue_plus_preferred_vendor_estimates' && isWeekdayCustomRentalDate(selection.eventDate) &&
-    process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_ENABLED === 'true' && process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_BOOKING_GUARD_READY === 'true') {
-    const costs = isRecord(config.luxor_costs) ? config.luxor_costs : config
-    if (isRecord(costs.weekday_custom_rental) && costs.weekday_custom_rental.enabled === true) {
-      throw new LuxorWeekdayRentalError(policy ? 'Select custom weekday rental times before saving this proposal.' : 'The weekday rental policy is not ready for publication. Existing saved proposals keep their original terms.')
-    }
   }
 }
 

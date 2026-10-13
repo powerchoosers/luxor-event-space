@@ -22,7 +22,7 @@ const config = {
   luxor_costs: {
     custom_time_rental_v4: {
       monday_thursday: { enabled: true, minimum_hours: 3, minimum_price: 1200, additional_hour_rate: 200, time_increment_minutes: 60, reset_window_policy: 'allowed', booking_policy: 'one_per_date', cleanup_buffer_minutes: 0, security_hours_policy: 'arrival_to_end', selection_surface: 'portal_only' },
-      friday: { enabled: true, minimum_hours: 3, minimum_price: 1600, additional_hour_rate: 250, time_increment_minutes: 60, reset_window_policy: 'allowed', booking_policy: 'one_per_date', cleanup_buffer_minutes: 0, security_hours_policy: 'arrival_to_end', selection_surface: 'portal_only' },
+      friday: { enabled: false },
       saturday: { enabled: false },
       sunday: { enabled: false },
     },
@@ -39,24 +39,30 @@ test('Custom Time maps all days to the four configured day groups without guessi
   assert.deepEqual(validateLuxorCustomTimeRentalV4Config(config), [])
 })
 
-test('weekday and Friday minimums allow actual one and two hour rentals', () => {
+test('weekday minimum allows actual one and two hour rentals; unpriced weekend groups fail closed', () => {
   const weekday = getLuxorCustomTimeRentalPolicyV4(config, '2026-10-19')
-  const friday = getLuxorCustomTimeRentalPolicyV4(config, '2026-10-23')
   assert.equal(luxorCustomTimeRentalSnapshotV4('2026-10-19', '10:00', '11:00', '10:00', '11:00', weekday).rental_total, 1200)
   assert.equal(luxorCustomTimeRentalSnapshotV4('2026-10-19', '10:00', '12:00', '10:00', '12:00', weekday).rental_total, 1200)
-  assert.equal(luxorCustomTimeRentalSnapshotV4('2026-10-23', '10:00', '12:00', '10:00', '12:00', friday).rental_total, 1600)
+  assert.equal(getLuxorCustomTimeRentalPolicyV4(config, '2026-10-23'), null)
 })
 
-test('additional hours use the configured day group rate and immutable local date-times', () => {
-  const friday = getLuxorCustomTimeRentalPolicyV4(config, '2026-10-23')
-  const snapshot = luxorCustomTimeRentalSnapshotV4('2026-10-23', '09:00', '13:00', '09:00', '12:00', friday)
-  assert.equal(snapshot.rental_total, 1850)
-  assert.equal(snapshot.rental_start_at, '2026-10-23T09:00:00')
-  assert.equal(snapshot.rental_end_at, '2026-10-23T13:00:00')
-  assert.equal(snapshot.guest_arrival_at, '2026-10-23T09:00:00')
-  assert.equal(snapshot.event_end_at, '2026-10-23T12:00:00')
-  assert.equal(getLuxorCustomTimeRentalSnapshotV4(snapshot).rental_total, 1850)
-  assert.equal(getLuxorCustomTimeRentalSnapshotV4({ ...snapshot, rental_end_at: '2026-10-24T13:00:00' }), null)
+test('weekend Custom Time requires six-hour base blocks and the approved $350 extra-hour rate, without assuming base prices', () => {
+  const weekend = { enabled: true, minimum_hours: 6, minimum_price: null, additional_hour_rate: 350, time_increment_minutes: 60, reset_window_policy: 'allowed', booking_policy: 'one_per_date', cleanup_buffer_minutes: 0, security_hours_policy: 'arrival_to_end', selection_surface: 'portal_only' }
+  const weekendConfig = { luxor_costs: { custom_time_rental_v4: { ...config.luxor_costs.custom_time_rental_v4, friday: weekend } } }
+  assert.ok(validateLuxorCustomTimeRentalV4Config(weekendConfig).some((error) => /positive friday Custom Time minimum price/i.test(error)))
+  assert.equal(getLuxorCustomTimeRentalPolicyV4(weekendConfig, '2026-10-23'), null)
+})
+
+test('additional hours use the approved weekday rate and immutable local date-times', () => {
+  const monday = getLuxorCustomTimeRentalPolicyV4(config, '2026-10-19')
+  const snapshot = luxorCustomTimeRentalSnapshotV4('2026-10-19', '09:00', '13:00', '09:00', '12:00', monday)
+  assert.equal(snapshot.rental_total, 1400)
+  assert.equal(snapshot.rental_start_at, '2026-10-19T09:00:00')
+  assert.equal(snapshot.rental_end_at, '2026-10-19T13:00:00')
+  assert.equal(snapshot.guest_arrival_at, '2026-10-19T09:00:00')
+  assert.equal(snapshot.event_end_at, '2026-10-19T12:00:00')
+  assert.equal(getLuxorCustomTimeRentalSnapshotV4(snapshot)?.rental_total, 1400)
+  assert.equal(getLuxorCustomTimeRentalSnapshotV4({ ...snapshot, rental_end_at: '2026-10-20T13:00:00' }), null)
 })
 
 test('overnight times persist on their actual local calendar dates and enforce event boundaries', () => {
