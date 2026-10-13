@@ -46,6 +46,9 @@ export async function claimLuxorWeekdayProposalAcceptance(
   if (!invoice.proposal_accepted_at || !invoice.booking_id) {
     assertLuxorWeekdayRentalAdmission()
     const snapshot = invoice.proposal_context.weekday_custom_rental as Record<string, unknown>
+    if (snapshot.version !== 2) {
+      throw new LuxorWeekdayRentalError('Historical custom rental terms require administrator review before acceptance.')
+    }
     if (snapshot.booking_policy === 'multiple_per_date') {
       throw new LuxorWeekdayRentalError('Multiple weekday events require approved cleanup-buffer rules and agreement wording before booking can open.')
     }

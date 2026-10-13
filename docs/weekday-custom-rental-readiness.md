@@ -2,29 +2,22 @@
 
 ## Current checkpoint
 
-Lewis approved Monday–Thursday rentals at $400 per actual rental hour and authorized these edits. He subsequently authorized committing and pushing the safely disabled groundwork to `main` so work can continue in the saved cloud environment after Arianna replies. This permits application-code publication only. Feature activation, production configuration and database application remain held while the scheduling questions sent to Arianna are pending. No production flags or catalog records were changed.
+Lewis approved Monday–Thursday rentals at $400 per actual rental hour. Arianna's authenticated replies in the original `Weekday` email thread resolve the operating rules: three-hour minimum, whole-hour start/end increments, access through the 3:00–5:00 PM reset, one event per date, portal proposals only, and security calculated from guest arrival through event end using the existing rate and officer-count rules with the existing four-hour minimum. Any selectable time remains inside the current 6:00 AM–1:00 AM venue access window.
 
-The proposal builder, server calculator, frozen booking context and proposal/email/PDF/agreement summaries support an explicit `custom` rental period. Integer minutes determine the single hourly rental charge; fixed-period extensions do not also apply. Friday–Sunday pricing and existing cleaning, security-rate, tax, deposit and promotion calculations retain their existing paths. Historical proposals and bookings retain their captured terms.
+The proposal builder, server calculator, frozen booking context and proposal/email/PDF/agreement summaries support an explicit `custom` rental period. Integer minutes determine one hourly rental charge; fixed-period extensions do not also apply. New version-2 snapshots capture the resolved schedule and security basis. Version-1 snapshots remain readable with their original terms, but cannot be accepted as new custom bookings. Friday–Sunday pricing, cleaning, existing security rates and officer tiers, tax, deposit and promotion calculations retain their existing paths. Existing proposal and booking snapshots are not rewritten. One event per date makes same-day cleanup-buffer policy inapplicable; the frozen legacy buffer field is retained as inert data and is not used to permit a second event.
 
-New custom calculation, save, send and acceptance require both server flags and a complete captured owner policy. Missing policy or booking protection fails closed. Only `one_per_date` and `portal_only` can be admitted by this checkpoint. Public time selection is not implemented. The agreement's whole-date exclusivity wording is unchanged.
+New custom calculation, save, send and acceptance remain held behind both server flags and the database booking guard. The code does not change flags or the saved catalog policy. Public time selection is not implemented. The agreement's whole-date exclusivity wording is unchanged.
 
-## Business decisions pending
+## Business decisions
 
-1. Minimum rental duration; the request gives a two-hour example while existing public copy references three hours.
-2. Permitted selection increments, including whether half-hour times are allowed.
-3. Whether the 3:00–5:00 PM reset window remains unavailable.
-4. One event per date versus multiple events, and the cleanup buffer. Multiple events require a separate Lewis decision and approved reservation terms before conflicting booking behavior can open.
-5. Security-hour calculation: actual rental duration with the existing configured minimum, or explicit owner-entered hours.
-6. Selection surface: portal proposals only, or a public customer picker as well.
-
-No default answer to these questions has been activated. The pure calculator and draft SQL can model alternate policy values for synthetic review; server admission deliberately holds unsupported policies.
+The minimum, increment, reset window, per-date capacity and proposal surface are now fixed in the new-policy validator. Security uses `max(4 hours, guest-arrival-to-event-end duration)` multiplied by the existing security hourly rate and the existing guest-count officer tier. This rules out a guest-entered override for new policy snapshots.
 
 ## Database deployment dependency
 
-`weekday-custom-rental-booking-guard.sql` is an unapplied review artifact. Supabase CLI was unavailable in this environment, so it is not a numbered migration. Before activating:
+`supabase/migrations/20261013044133_luxor_weekday_custom_rental_booking_guard.sql` was generated with Supabase CLI 2.120.0. It is a review-only migration and has not been applied. Before activation:
 
-1. Resolve the business policy and obtain independent implementation review.
-2. Use Supabase CLI to generate an additive migration from the reviewed SQL. Confirm the connected target contains the intended Luxor tables, expected column types, constraints, RLS and service-role grants; review relevant advisors.
+1. Obtain the final readiness review and confirm the exact approved catalog policy values.
+2. Review the already generated numbered migration against the SQL artifact and target schema. Confirm the connected target contains the intended Luxor tables, expected column types, constraints, RLS and service-role grants; review relevant advisors. The migration creates/replaces three protected functions and grants their execution to `service_role`; it does not alter table grants or RLS policies.
 3. Verify scheduling writers use READ COMMITTED. Run real PostgreSQL multi-session checks for competing custom and legacy booking inserts, cancellation/rescheduling, duplicate acceptance, and acceptance retry versus same-day payment finalization. Local PGlite uses a serialized connection and cannot prove these races.
 4. Apply the reviewed migration only under the parent-approved deployment plan. Verify the service-only atomic acceptance RPC, trigger, rollback, retry and conflict behavior. Preserve RLS and existing financial finalizers.
 5. Deploy reviewed application code with activation disabled. Save the complete approved catalog policy. Enable `LUXOR_WEEKDAY_CUSTOM_RENTAL_BOOKING_GUARD_READY` and `LUXOR_WEEKDAY_CUSTOM_RENTAL_ENABLED` only after database and release checks pass; redeploy if required by environment handling.
@@ -36,11 +29,11 @@ The atomic RPC claims the booking and first proposal acceptance together. Direct
 
 1. Open a lead and create a new proposal in the current venue catalog.
 2. Choose a Monday–Thursday event date; the builder switches to custom start/end controls under the approved policy.
-3. Choose the rental start and end times, and enter security hours if the approved policy requires them.
+3. Choose the rental start and end times. Security is calculated automatically from guest arrival through event end, at the existing rate and officer tier, with a four-hour minimum.
 4. Review the exact duration, $400 hourly rental line, existing fees, promotions, tax and amount due to book; save the draft.
 5. Preview the proposal and paperwork, then use the existing send and agreement workflow. Availability is claimed atomically at acceptance.
 
-Until activation, the existing rental controls remain available and new custom drafts cannot be sent or accepted.
+Until activation, the existing rental controls remain available and new custom drafts cannot be sent or accepted. No activation flag, catalog setting, production database, customer record, credential, or legal term was changed during this continuation.
 
 ## Local verification — October 13, 2026
 
@@ -66,10 +59,24 @@ Reviewed SQL artifact SHA256: `1E61D9739C3FDE4870348154311E3C101DBD888C02793E968
 
 The disabled-publication review confirmed both weekday flags are absent from the connected Vercel project and absent or disabled locally. The exact staged source snapshot, excluding the unrelated working-tree edit, was used for the publication validation. No environment values or catalog settings were changed.
 
+## Cloud continuation after Arianna’s answers — October 13, 2026
+
+The checkout was verified on `main` at the parent-authorized starting commit `b56476a048dc3982d114841b8b31854d07f803e8`. Arianna’s six answers were available in the supplied handoff; no Gmail polling or customer messaging was performed. Implementation changes and the generated migration are present locally and remain disabled/unapplied. The unrelated `src/app/(portal)/portal/leads/page.tsx` work remains untouched.
+
+| Check | Result |
+| --- | --- |
+| TypeScript | `npm run typecheck` passed |
+| Lint | `npm run lint -- --quiet` passed |
+| Existing follow-up tests | `npm run test:follow-ups`: 14/14 passed |
+| Production build | `npm run build` passed; 146 pages generated |
+| Actual proposal-builder browser fixture | Passed with synthetic pricing/promotions; guidance rendered, time menus provided whole-hour choices through 1:00 AM next day, 390px viewport had no horizontal overflow. Fixture was removed. |
+| Isolated PostgreSQL 17 | Migration applied to a disposable synthetic schema; policy validation, acceptance retries, competing inserts, cancellation/reschedule and finalizer lock races passed across independent sessions. `anon` and `authenticated` cannot execute protected functions. This does not verify the production schema/RLS. |
+| SQL consistency | Review artifact matches generated migration body; `git diff --check` passed |
+
+The migration has not been applied. Production-schema/RLS review, migration deployment approval, and any later activation/catalog writes remain prerequisites. The migration adds three server-only functions (`service_role` execution); it does not change table grants or RLS. No credentials, customer records, legal wording, catalog values, flags or production data were changed. Browser and PostgreSQL checks used temporary synthetic fixtures which were removed; no test route or test artifact is included in the repository.
+
 ## Cloud continuation
 
-1. Use the saved cloud environment for `powerchoosers/luxor-event-space`, fetch the latest `origin/main`, and read `AGENTS.md` and this document before editing. The unrelated local leads-page edit was deliberately excluded from the groundwork commit.
-2. The parent owns Arianna communications. Her verified original weekday request and the six-question clarification are in Gmail thread `1a1326d99a43bfdd`, subject `Weekday`, sender `luxoratlaspalmas@gmail.com`. Read any reply through the authorized Gmail connector; do not send duplicate questions. The examples used in synthetic fixtures are not approved scheduling defaults.
-3. Confirm both weekday flags remain absent or disabled and the catalog has no enabled weekday policy. Code presence alone must not activate hourly booking. Standard pricing, legacy booking timing, same-day promotion behavior and current contract exclusivity continue through their existing paths.
-4. Incorporate the approved answers locally. A public picker needs implementation and review; multiple events require separate Lewis approval and revised reservation terms. Complete the database and concurrency prerequisites above before proposing activation.
-5. Re-run scoped regression fixtures, `npm run typecheck`, `npm run lint -- --quiet`, relevant existing tests and a production build before any further release. Disposable verification belongs outside the repository; do not commit test-only routes or fixtures, secrets, environment files or QA artifacts.
+1. Preserve the unrelated `src/app/(portal)/portal/leads/page.tsx` edit from the previously published branch; it was deliberately excluded from the groundwork commit and remains untouched.
+2. Keep activation, catalog writes and migration application held until the final readiness review. Validate the migration against production schema/RLS, then proceed only under the approved deployment plan.
+3. Do not commit temporary test routes, fixtures, secrets, environment files or QA artifacts.

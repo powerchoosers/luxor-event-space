@@ -1,12 +1,8 @@
--- LOCAL REVIEW ONLY: this is deliberately not a numbered migration.
--- Supabase CLI was unavailable while staging the implementation. After owner
--- policy approval and target-schema/RLS verification, create the migration with
--- `supabase migration new weekday_custom_rental_booking_guard` and move this SQL
--- into the generated file. Do not apply or activate from this review artifact.
--- No customer rows are backfilled, repriced, merged, deleted, or granted access.
--- Cleanup is modeled AFTER the earlier rental in synthetic multiple-event
--- fixtures. That meaning and new slot-based contract wording remain unapproved;
--- application publication/admission currently blocks multiple_per_date.
+-- Review copy of supabase/migrations/20261013044133_luxor_weekday_custom_rental_booking_guard.sql.
+-- The numbered migration is generated but remains held for final readiness review.
+-- Version 2 carries the newly approved schedule and guest-arrival-to-end
+-- security basis. Version 1 remains readable for existing snapshots, but the
+-- atomic acceptance RPC requires version 2. No customer rows are changed.
 
 create or replace function public.luxor_validate_weekday_rental_context(p_context jsonb)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
@@ -21,7 +17,7 @@ declare
   increment_min integer;
 begin
   if s is null then return null; end if;
-  if jsonb_typeof(s) is distinct from 'object' or s -> 'version' is distinct from '1'::jsonb or s ->> 'time_zone' is distinct from 'America/Chicago' then
+  if jsonb_typeof(s) is distinct from 'object' or s -> 'version' not in ('1'::jsonb, '2'::jsonb) or s ->> 'time_zone' is distinct from 'America/Chicago' then
     raise exception 'LUXOR_WEEKDAY_INVALID: Invalid saved rental snapshot.' using errcode = 'P0001';
   end if;
   foreach field in array array['duration_minutes', 'duration_hours', 'hourly_rate', 'rental_total', 'minimum_hours', 'time_increment_minutes', 'cleanup_buffer_minutes'] loop
@@ -43,6 +39,8 @@ begin
     raise exception 'LUXOR_WEEKDAY_INVALID: Custom rentals require Monday through Thursday.' using errcode = 'P0001';
   end if;
   if (s ->> 'hourly_rate')::numeric <> 400
+     or (s -> 'version' = '2'::jsonb and (s ->> 'minimum_hours')::numeric <> 3)
+     or (s -> 'version' = '2'::jsonb and (s ->> 'time_increment_minutes')::numeric <> 60)
      or (s ->> 'minimum_hours')::numeric <= 0 or (s ->> 'minimum_hours')::numeric > 19
      -- Hours are serialized from JavaScript numbers. Recognize the approved
      -- whole-minute value without rejecting its binary decimal representation.
@@ -51,10 +49,14 @@ begin
      or mod((s ->> 'time_increment_minutes')::numeric, 1) <> 0
      or (s ->> 'cleanup_buffer_minutes')::numeric < 0 or (s ->> 'cleanup_buffer_minutes')::numeric > 1140
      or mod((s ->> 'cleanup_buffer_minutes')::numeric, 1) <> 0
-     or coalesce(s ->> 'reset_window_policy', '') not in ('blocked', 'allowed')
-     or coalesce(s ->> 'booking_policy', '') not in ('one_per_date', 'multiple_per_date')
-     or coalesce(s ->> 'security_hours_policy', '') not in ('rental_duration', 'owner_entered')
-     or coalesce(s ->> 'selection_surface', '') not in ('portal_only', 'public_and_portal') then
+     or (s -> 'version' = '2'::jsonb and coalesce(s ->> 'reset_window_policy', '') <> 'allowed')
+     or (s -> 'version' = '2'::jsonb and coalesce(s ->> 'booking_policy', '') <> 'one_per_date')
+     or (s -> 'version' = '1'::jsonb and coalesce(s ->> 'reset_window_policy', '') not in ('blocked', 'allowed'))
+     or (s -> 'version' = '1'::jsonb and coalesce(s ->> 'booking_policy', '') not in ('one_per_date', 'multiple_per_date'))
+     or (s -> 'version' = '2'::jsonb and coalesce(s ->> 'security_hours_policy', '') <> 'arrival_to_end')
+     or (s -> 'version' = '1'::jsonb and coalesce(s ->> 'security_hours_policy', '') not in ('rental_duration', 'owner_entered'))
+     or (s -> 'version' = '2'::jsonb and coalesce(s ->> 'selection_surface', '') <> 'portal_only')
+     or (s -> 'version' = '1'::jsonb and coalesce(s ->> 'selection_surface', '') not in ('portal_only', 'public_and_portal')) then
     raise exception 'LUXOR_WEEKDAY_INVALID: Incomplete approved rental policy.' using errcode = 'P0001';
   end if;
   first_min := split_part(s ->> 'start_time', ':', 1)::integer * 60 + split_part(s ->> 'start_time', ':', 2)::integer;
@@ -65,7 +67,7 @@ begin
   if first_min < 360 or last_min > 1500 or duration_min <= 0
      or mod(first_min, increment_min) <> 0 or mod(last_min, increment_min) <> 0
      or duration_min < round((s ->> 'minimum_hours')::numeric * 60)
-     or (s ->> 'reset_window_policy' = 'blocked' and first_min < 1020 and last_min > 900)
+     or (s -> 'version' = '1'::jsonb and s ->> 'reset_window_policy' = 'blocked' and first_min < 1020 and last_min > 900)
      or (s ->> 'duration_minutes')::numeric <> duration_min
      or abs((s ->> 'duration_hours')::numeric - duration_min::numeric / 60) > 0.000000001
      or (s ->> 'rental_total')::numeric <> round(duration_min::numeric * 400 / 60, 2) then
@@ -225,6 +227,9 @@ begin
   end if;
   snapshot := public.luxor_validate_weekday_rental_context(invoice.proposal_context);
   if snapshot is null then raise exception 'LUXOR_WEEKDAY_INVALID: A saved custom rental is required.' using errcode = 'P0001'; end if;
+  if snapshot -> 'version' is distinct from '2'::jsonb then
+    raise exception 'LUXOR_WEEKDAY_INVALID: Historical custom rental terms require administrator review before acceptance.' using errcode = 'P0001';
+  end if;
   if exists(select 1 from public.luxor_inquiries q where q.id = invoice.inquiry_id and q.status = 'closed_lost') then
     raise exception 'LUXOR_WEEKDAY_INVALID: The client opportunity is closed.' using errcode = 'P0001';
   end if;

@@ -1384,11 +1384,13 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
     } else if (customPolicy.security_hours_policy === 'owner_entered' && !ownerHoursValid) {
       errors.push(`Enter weekday security hours of at least ${securityMinHours} hours, within the venue access window.`)
     } else {
-      const billableHours = customPolicy.security_hours_policy === 'rental_duration' ? Math.max(securityMinHours, customRental.duration_hours) : customHours!
+      const billableHours = customPolicy.security_hours_policy === 'arrival_to_end' || customPolicy.security_hours_policy === 'rental_duration'
+        ? Math.max(4, securityMinHours, customRental.duration_hours)
+        : customHours!
       securityBillableHours = billableHours
       effectiveSecurityRate = securityHourlyRate
       securityAmount = rounded(officers * billableHours * securityHourlyRate)
-      securityDetail = `${officers} Security Officer${officers > 1 ? 's' : ''} | ${billableHours} hours | $${securityHourlyRate}/hour | Total: $${securityAmount}`
+      securityDetail = `${officers} Security Officer${officers > 1 ? 's' : ''} | guest arrival through event end | ${billableHours} hours (4-hour minimum) | $${securityHourlyRate}/hour | Total: $${securityAmount}`
     }
   } else if (securityHourlyRate !== undefined && securityHourlyRate > 0) {
     const customHours = numberValue(selection.securityHours ?? selection.security_hours)
