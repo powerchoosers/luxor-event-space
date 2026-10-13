@@ -249,6 +249,27 @@ export function ProposalPricingManager() {
         </div>
       </details>
 
+      <details className="group overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-4 sm:px-6"><span><span className="block text-sm font-bold text-[color:var(--portal-text)]">Custom Time rates by day</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">Custom Time stays unavailable until its day is enabled and has a minimum, minimum hours, and extra-hour rate. Weekend fields start blank; existing fixed rates above are unchanged.</span></span><ChevronDown size={17} className="mt-1 shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>
+        <div className="grid gap-4 border-t border-[color:var(--portal-border)] p-4 sm:grid-cols-2 sm:p-6">
+          {DAY_GROUPS.map((day) => {
+            const path = ['luxor_costs', 'custom_time_rental_v4', day.id]
+            const enabled = catalogValue(draft, ...path, 'enabled') === true
+            return <article key={day.id} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-xs font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)]">{day.label}</h4><label className="flex min-h-10 items-center gap-2 text-[10px] font-semibold text-[color:var(--portal-muted)]"><input type="checkbox" checked={enabled} onChange={(event) => update([...path, 'enabled'], event.target.checked)} className="h-4 w-4 accent-[#caa24c]" /> Enable Custom Time</label></div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <MoneyInput draft={draft} field={{ label: 'Minimum rental price', path: [...path, 'minimum_price'], optional: true }} onChange={update} />
+                <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Minimum billed hours</span><input type="number" min="1" max="19" step="1" value={String(catalogNumber(draft, ...path, 'minimum_hours') ?? '')} onChange={(event) => update([...path, 'minimum_hours'], event.target.value === '' ? null : Number(event.target.value))} className={inputClass} /></label>
+                <MoneyInput draft={draft} field={{ label: 'Each additional hour', path: [...path, 'additional_hour_rate'], optional: true }} onChange={update} />
+                <label className="flex min-h-11 items-center gap-2 self-end text-[10px] font-semibold text-[color:var(--portal-muted)]"><input type="checkbox" checked={catalogValue(draft, ...path, 'show_publicly') === true} onChange={(event) => update([...path, 'show_publicly'], event.target.checked)} className="h-4 w-4 accent-[#caa24c]" /> Show Custom Time starting price publicly</label>
+              </div>
+              <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Custom Time uses the minimum price through the minimum billed hours, then adds the configured extra-hour rate. Venue access is 6:00 AM–1:00 AM the next day. Security uses guest arrival through event end with the existing four-hour minimum.</p>
+              {enabled && (!catalogNumber(draft, ...path, 'minimum_price') || !catalogNumber(draft, ...path, 'minimum_hours') || catalogNumber(draft, ...path, 'additional_hour_rate') === undefined) ? <p role="status" className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Complete all three price fields before saving. This day remains unavailable until its rules are complete.</p> : null}
+            </article>
+          })}
+        </div>
+      </details>
+
       {MONEY_GROUPS.map((group) => (
         <details key={group.title} className="group overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
           <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-4 sm:px-6"><span><span className="block text-sm font-bold text-[color:var(--portal-text)]">{group.title}</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">{group.description}</span></span><ChevronDown size={17} className="mt-1 shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>

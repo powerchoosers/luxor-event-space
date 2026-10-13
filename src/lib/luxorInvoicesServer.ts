@@ -4,6 +4,7 @@ import { LuxorInvoice, LuxorInvoiceKind, LuxorInvoiceLineItem, LuxorInvoiceStatu
 import { roundLuxorMoney } from './luxorOffer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
 import { luxorCollectionAmounts } from './luxorPaymentOwnership'
+import { getLuxorProposalDeliveryReceipt } from './luxorProposalDeliveryReceipt'
 
 type SupabaseError = {
   message?: string
@@ -275,6 +276,20 @@ export async function updateInvoice(
   return updated ?? null
 }
 
+/** Update proposal terms and append their edit event in the same database transaction. */
+export async function updateLuxorProposalAndRecordEditActivity(
+  id: string,
+  updates: Parameters<typeof updateInvoice>[1],
+  actorEmail: string,
+) {
+  const [updated] = await supabaseRest<LuxorInvoice[]>('rpc/luxor_update_proposal_and_record_edit', {
+    method: 'POST',
+    body: JSON.stringify({ p_invoice_id: id, p_updates: updates, p_actor_email: actorEmail }),
+  })
+  if (!updated || updated.id !== id) throw new Error('Proposal edit and history could not be verified.')
+  return updated
+}
+
 /**
  * Records the first real client opening of a published proposal. The
  * `proposal_viewed_at=is.null` condition makes this safe if a browser opens
@@ -366,6 +381,32 @@ export async function completeLuxorProposalSend(attemptId: string, providerMessa
   })
 }
 
+/** Reconcile an invoice receipt saved before the append-only send history write. */
+export async function reconcileLuxorProposalDeliveryReceipt(invoice: LuxorInvoice) {
+  if (!isLuxorProposalHistoryReady()) return invoice
+  const receipt = getLuxorProposalDeliveryReceipt(invoice.proposal_context)
+  if (!receipt) return invoice
+
+  const completed = await completeLuxorProposalSend(
+    receipt.proposalSendAttemptId,
+    receipt.providerMessageId,
+    receipt.sentAt,
+  )
+  if (!completed) throw new Error('The saved delivery receipt could not be reconciled with proposal history.')
+  const publicationAttempt = invoice.proposal_context?.publication_attempt as { id?: string } | undefined
+  if (publicationAttempt?.id) {
+    const finished = await finishLuxorProposalPublication(invoice.id, publicationAttempt.id, 'completed')
+    if (!finished) {
+      const latest = await getInvoice(invoice.id)
+      const latestAttempt = latest?.proposal_context?.publication_attempt as { id?: string; state?: string } | undefined
+      if (latestAttempt?.id === publicationAttempt.id && latestAttempt.state !== 'completed') {
+        throw new Error('The saved delivery receipt was reconciled, but publication state needs retry.')
+      }
+    }
+  }
+  return completed
+}
+
 export async function markLuxorProposalSendAttemptSending(attemptId: string) {
   if (!isLuxorProposalHistoryReady()) return false
   return supabaseRest<boolean>('rpc/luxor_mark_proposal_send_attempt_sending', {
@@ -406,18 +447,20 @@ export async function recordLuxorProposalDeliveryEvent(input: {
   }
 }
 
-export async function listLuxorProposalHistory(invoiceId: string) {
+export async function listLuxorProposalHistory(invoiceId: string, offsets: { activities?: number; sendAttempts?: number } = {}) {
   if (!isLuxorProposalHistoryReady()) return null
   const invoice = await getInvoice(invoiceId)
   if (!invoice || invoice.invoice_kind !== 'event') return { activities: [], sendAttempts: [] }
   if (!invoice.proposal_family_id) return null
   const family = encodeURIComponent(invoice.proposal_family_id)
+  const activityOffset = Math.max(0, Math.floor(offsets.activities || 0))
+  const attemptOffset = Math.max(0, Math.floor(offsets.sendAttempts || 0))
   try {
     const [activities, sendAttempts] = await Promise.all([
-      supabaseRest<Array<Record<string, unknown>>>(`luxor_proposal_activity?select=*&proposal_family_id=eq.${family}&order=occurred_at.desc,id.desc&limit=100`),
-      supabaseRest<Array<Record<string, unknown>>>(`luxor_proposal_send_attempts?select=id,invoice_id,attempt_number,channel,provider,state,recipient_email,provider_message_id,started_at,sent_at,delivery_confirmed_at,failed_at,failure_reason&proposal_family_id=eq.${family}&order=started_at.desc&limit=50`),
+      supabaseRest<Array<Record<string, unknown>>>(`luxor_proposal_activity?select=*&proposal_family_id=eq.${family}&order=occurred_at.desc,id.desc&limit=100&offset=${activityOffset}`),
+      supabaseRest<Array<Record<string, unknown>>>(`luxor_proposal_send_attempts?select=id,invoice_id,attempt_number,channel,provider,state,recipient_email,provider_message_id,started_at,sent_at,delivery_confirmed_at,failed_at,failure_reason&proposal_family_id=eq.${family}&order=started_at.desc&limit=50&offset=${attemptOffset}`),
     ])
-    return { activities, sendAttempts }
+    return { activities, sendAttempts, hasMoreActivities: activities.length === 100, hasMoreSendAttempts: sendAttempts.length === 50 }
   } catch (error) {
     if (!isMissingLuxorProposalHistorySchema(error)) throw error
     console.warn('Proposal history migration is absent; returning disabled proposal history.')

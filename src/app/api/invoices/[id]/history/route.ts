@@ -4,7 +4,7 @@ import { getInvoice, isLuxorProposalHistoryReady, isMissingLuxorProposalHistoryS
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getLuxorPortalSession()
   if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
   if (!isLuxorProposalHistoryReady()) return NextResponse.json({ enabled: false, activities: [], sendAttempts: [] })
@@ -12,7 +12,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   try {
     const invoice = await getInvoice(id)
     if (!invoice || invoice.invoice_kind !== 'event') return NextResponse.json({ error: 'Proposal not found.' }, { status: 404 })
-    const history = await listLuxorProposalHistory(id)
+    const query = new URL(request.url).searchParams
+    const offset = (name: string) => {
+      const value = Number(query.get(name))
+      return Number.isFinite(value) ? Math.min(1_000_000, Math.max(0, Math.floor(value))) : 0
+    }
+    const history = await listLuxorProposalHistory(id, { activities: offset('activityOffset'), sendAttempts: offset('attemptOffset') })
     if (!history) return NextResponse.json({ enabled: false, activities: [], sendAttempts: [] })
     return NextResponse.json({ enabled: true, ...history })
   } catch (error) {

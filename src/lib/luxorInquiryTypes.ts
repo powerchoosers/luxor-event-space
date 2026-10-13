@@ -306,7 +306,11 @@ export type LuxorProposalContext = {
   event_end_time?: string
   eventEndTime?: string
   /** Immutable owner-approved custom weekday rental math and scheduling rules. */
-  weekday_custom_rental?: import('./luxorWeekdayRental').LuxorWeekdayCustomRentalSnapshot
+  weekday_custom_rental?: import('./luxorWeekdayRental').LuxorWeekdayCustomRentalSnapshot | import('./luxorCustomTimeRentalV4').LuxorCustomTimeRentalSnapshotV4
+  rental_start_at?: string
+  rental_end_at?: string
+  guest_arrival_at?: string
+  event_end_at?: string
   rental_hours?: number
   rental_hourly_rate?: number
   rental_total?: number
@@ -386,6 +390,7 @@ export type LuxorInvoice = {
   proposal_first_sent_at?: string | null
   proposal_latest_sent_at?: string | null
   proposal_viewed_at?: string | null
+  proposal_latest_viewed_at?: string | null
   payment_requested_at?: string | null
   payment_requested_amount?: number | null
   payment_requested_label?: string | null

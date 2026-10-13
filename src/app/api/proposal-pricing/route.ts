@@ -21,8 +21,9 @@ import {
 } from '@/lib/luxorProposalPricing'
 import { catalogNumber, catalogValue } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
-import { validateWeekdayCustomRentalPolicy, isWeekdayCustomRentalDate } from '@/lib/luxorWeekdayRental'
+import { validateWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
 import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
+import { getLuxorCustomTimeRentalPolicyV4, validateLuxorCustomTimeRentalV4Config } from '@/lib/luxorCustomTimeRentalV4'
 
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -63,12 +64,10 @@ export async function POST(request: NextRequest) {
     const sameDayBooking = await resolveLuxorSameDayBooking(selection as LuxorProposalSelection, existing, originalCreatedAt)
     const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion, sameDayBooking })
     const customPolicy = getLuxorWeekdayRentalClientPolicy(pricing.config)
-    if (customPolicy && pricing.config.pricing_mode === 'venue_plus_preferred_vendor_estimates' && isWeekdayCustomRentalDate((selection as LuxorProposalSelection).eventDate) && (selection as LuxorProposalSelection).rentalPeriod !== 'custom') {
-      const requirement = 'Select custom weekday rental times before saving this proposal.'
-      calculation.publicationErrors.push(requirement)
-      calculation.errors.push(requirement)
-      calculation.publishable = false
-    }
+    const customTimeV4Policy = process.env.LUXOR_CUSTOM_TIME_V4_READY === 'true'
+      && process.env.LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY === 'true'
+      ? getLuxorCustomTimeRentalPolicyV4(pricing.config, (selection as LuxorProposalSelection).eventDate)
+      : null
     const createdOn = luxorCalendarDate(new Date(originalCreatedAt))
     Object.assign(calculation.context, { original_proposal_created_at: originalCreatedAt, proposal_created_on: createdOn, valid_through: proposalValidThrough(createdOn, promotion) })
     const luxorCosts = object(pricing.config.luxor_costs) || pricing.config
@@ -76,6 +75,7 @@ export async function POST(request: NextRequest) {
       pricing_config_version: pricing.version,
       rental_access: object(luxorCosts.rental_access) || {},
       weekday_custom_rental: customPolicy,
+      custom_time_rental_v4_policy: customTimeV4Policy,
       calculation,
     })
   } catch (error) {
@@ -119,6 +119,7 @@ export async function PATCH(request: NextRequest) {
     const luxorCosts = object(config.luxor_costs) || config
     const structuralErrors: string[] = []
     structuralErrors.push(...validateWeekdayCustomRentalPolicy(config))
+    structuralErrors.push(...validateLuxorCustomTimeRentalV4Config(config))
     const bookingPayment = catalogNumber(luxorCosts, 'booking_payment', 'amount')
     if (bookingPayment === undefined || bookingPayment < 0.5) structuralErrors.push('Set a booking payment of at least $0.50.')
     for (const day of ['monday_thursday', 'friday', 'saturday', 'sunday']) {

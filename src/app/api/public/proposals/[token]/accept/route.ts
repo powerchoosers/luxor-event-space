@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prepareLuxorAcceptedProposalBooking, queueLuxorAcceptedProposalAgreement } from '@/lib/luxorAgreementQueueServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { claimLuxorProposalAcceptance, getInvoice, getInvoiceByPublicToken } from '@/lib/luxorInvoicesServer'
+import { claimLuxorProposalAcceptance, getInvoice, getInvoiceByPublicToken, reconcileLuxorProposalDeliveryReceipt } from '@/lib/luxorInvoicesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 import { hasLuxorSignatureDeliveryDocuments } from '@/lib/luxorSignaturesServer'
 import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
@@ -28,7 +28,8 @@ function requestUserAgent(request: Request) {
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await params
-    const invoice = await getInvoiceByPublicToken(token)
+    let invoice = await getInvoiceByPublicToken(token)
+    if (invoice) invoice = await reconcileLuxorProposalDeliveryReceipt(invoice)
     if (!invoice || invoice.status === 'cancelled' || invoice.offer_status === 'withdrawn') {
       return NextResponse.json({ error: 'This proposal is no longer available.' }, { status: 404 })
     }

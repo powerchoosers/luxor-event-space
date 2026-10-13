@@ -13,6 +13,7 @@ import { getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekday
 import { weekdayRentalPolicyMatchesSnapshot } from './luxorWeekdayRentalPolicyMatchesSnapshot'
 import { proposalBookingTiming } from './luxorProposalBookingTiming'
 import { assertLuxorWeekdayRentalAdmission, LuxorWeekdayRentalError } from './luxorWeekdayRentalServer'
+import { getLuxorCustomTimeRentalPolicyV4, validateLuxorCustomTimeScheduleV4, luxorCustomTimeRentalPolicyMatchesV4, getLuxorCustomTimeRentalSnapshotV4, luxorCustomTimeDayGroup } from './luxorCustomTimeRentalV4'
 
 export type LuxorProposalPricingRecord = {
   id: string
@@ -170,11 +171,31 @@ export function assertLuxorWeekdayRentalSelection(selection: LuxorProposalSelect
   const policy = getLuxorWeekdayRentalClientPolicy(config)
   const savedPolicy = getWeekdayCustomRentalPolicy(config)
   if (requested) {
-    assertLuxorWeekdayRentalAdmission()
     if (selection.rentalPeriod !== 'custom') throw new LuxorWeekdayRentalError('Select a valid custom rental period.')
-    if (savedPolicy?.booking_policy === 'multiple_per_date') throw new LuxorWeekdayRentalError('Multiple weekday events require a separate approved scheduling and reservation decision.')
-    if (savedPolicy?.selection_surface === 'public_and_portal') throw new LuxorWeekdayRentalError('Public weekday time selection must be implemented and reviewed before this policy can open.')
-    if (!policy || config.pricing_mode !== 'venue_plus_preferred_vendor_estimates') throw new LuxorWeekdayRentalError('Custom weekday rentals require a complete approved policy in the current venue catalog.')
+    const v4Policy = getLuxorCustomTimeRentalPolicyV4(config, selection.eventDate)
+    if (v4Policy) {
+      if (process.env.LUXOR_CUSTOM_TIME_V4_READY !== 'true' || process.env.LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY !== 'true') {
+        throw new LuxorWeekdayRentalError('Custom Time for this day is awaiting its reviewed booking guard.')
+      }
+      if (v4Policy.booking_policy !== 'one_per_date') throw new LuxorWeekdayRentalError('Custom Time booking capacity is not available.')
+      if (v4Policy.selection_surface !== 'portal_only') throw new LuxorWeekdayRentalError('Public Custom Time selection is not available until its public flow is reviewed.')
+      const dayGroup = luxorCustomTimeDayGroup(selection.eventDate)
+      if (!dayGroup) throw new LuxorWeekdayRentalError('Choose a valid Custom Time event date.')
+      const schedule = validateLuxorCustomTimeScheduleV4(
+        String(selection.eventDate || ''),
+        String(selection.rentalStartTime ?? selection.rental_start_time ?? selection.guestArrivalTime ?? selection.guest_arrival_time ?? ''),
+        String(selection.rentalEndTime ?? selection.rental_end_time ?? selection.eventEndTime ?? selection.event_end_time ?? ''),
+        String(selection.guestArrivalTime ?? selection.guest_arrival_time ?? ''),
+        String(selection.eventEndTime ?? selection.event_end_time ?? ''),
+        v4Policy,
+      )
+      if (!schedule.valid) throw new LuxorWeekdayRentalError(schedule.error || 'Custom Time details are invalid.')
+    } else {
+      assertLuxorWeekdayRentalAdmission()
+      if (savedPolicy?.booking_policy === 'multiple_per_date') throw new LuxorWeekdayRentalError('Multiple weekday events require a separate approved scheduling and reservation decision.')
+      if (savedPolicy?.selection_surface === 'public_and_portal') throw new LuxorWeekdayRentalError('Public weekday time selection must be implemented and reviewed before this policy can open.')
+      if (!policy || config.pricing_mode !== 'venue_plus_preferred_vendor_estimates') throw new LuxorWeekdayRentalError('Custom Time requires a complete approved policy for the selected day.')
+    }
     for (const [camel, snake] of [[selection.guestArrivalTime, selection.guest_arrival_time], [selection.eventEndTime, selection.event_end_time]]) {
       if (typeof camel === 'string' && typeof snake === 'string' && camel.trim() !== snake.trim()) throw new LuxorWeekdayRentalError('The rental times changed. Refresh the proposal and select the times again.')
     }
@@ -193,8 +214,22 @@ export function assertLuxorWeekdayRentalPublication(invoice: LuxorInvoice) {
   // Owner-editable status labels alone do not prove a proposal was published.
   if (invoice.invoice_kind !== 'event' || !context || !isWeekdayCustomRentalContext(context) || invoice.proposal_sent_at || invoice.proposal_accepted_at) return
   const snapshot = getWeekdayCustomRentalSnapshot(context.weekday_custom_rental)
+  const customTimeV4Snapshot = getLuxorCustomTimeRentalSnapshotV4(context.weekday_custom_rental)
   const pricingSnapshot = isRecord(context.pricing_snapshot) ? context.pricing_snapshot : null
   const config = pricingSnapshot && isRecord(pricingSnapshot.pricing_config) ? pricingSnapshot.pricing_config : null
+  if (customTimeV4Snapshot) {
+    if (!config || process.env.LUXOR_CUSTOM_TIME_V4_READY !== 'true' || process.env.LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY !== 'true') {
+      throw new LuxorWeekdayRentalError('The saved Custom Time offer requires its matching reviewed database guard before publication.')
+    }
+    const v4Policy = getLuxorCustomTimeRentalPolicyV4(config, customTimeV4Snapshot.event_date)
+    if (!v4Policy || !luxorCustomTimeRentalPolicyMatchesV4(v4Policy, customTimeV4Snapshot)) {
+      throw new LuxorWeekdayRentalError('The saved Custom Time rules do not match their pricing snapshot. Create a revised proposal.')
+    }
+    const schedule = validateLuxorCustomTimeScheduleV4(customTimeV4Snapshot.event_date, customTimeV4Snapshot.start_time, customTimeV4Snapshot.end_time,
+      customTimeV4Snapshot.guest_arrival_at.slice(11, 16), customTimeV4Snapshot.event_end_at.slice(11, 16), v4Policy)
+    if (!schedule.valid) throw new LuxorWeekdayRentalError(schedule.error || 'The saved Custom Time schedule is invalid.')
+    return
+  }
   if (!snapshot || !config) throw new LuxorWeekdayRentalError('The saved custom rental pricing snapshot is invalid. Create a revised proposal.')
   const times = proposalBookingTiming(context)
   assertLuxorWeekdayRentalSelection({ rentalPeriod: 'custom', eventDate: context.event_date, guestArrivalTime: times.startTime, eventEndTime: times.endTime }, config, true)

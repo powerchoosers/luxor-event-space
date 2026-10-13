@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { beginLuxorProposalSend, claimLuxorProposalPublication, completeLuxorProposalSend, failLuxorProposalSend, finishLuxorProposalPublication, isLuxorProposalHistoryReady, markLuxorProposalSendAttemptSending, ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { beginLuxorProposalSend, claimLuxorProposalPublication, completeLuxorProposalSend, failLuxorProposalSend, finishLuxorProposalPublication, isLuxorProposalHistoryReady, markLuxorProposalSendAttemptSending, ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice, reconcileLuxorProposalDeliveryReceipt, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     invoiceId = id
     let invoice = await getInvoice(id)
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
+    invoice = await reconcileLuxorProposalDeliveryReceipt(invoice)
     assertLuxorWeekdayRentalPublication(invoice)
     if (sameDayBookingRequiresRevision(invoice)) return NextResponse.json({ error: SAME_DAY_REVISION_MESSAGE }, { status: 410 })
     const finalProposalContext = invoice.invoice_kind === 'event' && invoice.proposal_context && typeof invoice.proposal_context === 'object'
@@ -574,6 +575,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             delivery_state: 'delivered',
             delivery_sent_at: now,
             provider_message_id: providerMessageId,
+            proposal_send_attempt_id: sendReservation?.attempt_id || null,
           },
         }
         // Persist the actual delivery receipt before the non-critical job

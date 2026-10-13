@@ -376,8 +376,10 @@ const PLANNING_LAYOUT_OPTIONS = [
 type PlanningEditSection = 'event' | 'preferences' | 'layout' | 'decor' | null
 type ProposalHistoryPayload = {
   enabled: boolean
-  activities: Array<{ id: number; event_type: string; actor_email?: string | null; recipient_email?: string | null; occurred_at: string; details?: Record<string, unknown> }>
+  activities: Array<{ id: number; invoice_id?: string; event_type: string; actor_email?: string | null; recipient_email?: string | null; occurred_at: string; details?: Record<string, unknown> }>
   sendAttempts: Array<{ id: string; channel: string; state: string; recipient_email?: string | null; provider?: string | null; started_at: string; sent_at?: string | null; delivery_confirmed_at?: string | null; failed_at?: string | null; failure_reason?: string | null }>
+  hasMoreActivities?: boolean
+  hasMoreSendAttempts?: boolean
 }
 
 export default function LeadDetailPage({
@@ -397,6 +399,7 @@ export default function LeadDetailPage({
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [proposalHistory, setProposalHistory] = useState<Record<string, ProposalHistoryPayload>>({})
+  const [proposalHistoryLoadingId, setProposalHistoryLoadingId] = useState<string | null>(null)
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
   const [documents, setDocuments] = useState<LuxorDocument[]>([])
   const [signatureRequests, setSignatureRequests] = useState<Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null }>>([])
@@ -616,6 +619,32 @@ export default function LeadDetailPage({
     })
     return () => { cancelled = true }
   }, [activeLeadTab, id, invoices])
+
+  const loadOlderProposalHistory = async (invoiceId: string) => {
+    const current = proposalHistory[invoiceId]
+    if (!current?.enabled || proposalHistoryLoadingId) return
+    setProposalHistoryLoadingId(invoiceId)
+    try {
+      const query = new URLSearchParams({ activityOffset: String(current.activities.length), attemptOffset: String(current.sendAttempts.length) })
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/history?${query}`, { cache: 'no-store' })
+      if (!response.ok) throw new Error('Proposal history could not be loaded.')
+      const page = await response.json() as ProposalHistoryPayload
+      setProposalHistory((previous) => ({
+        ...previous,
+        [invoiceId]: {
+          ...previous[invoiceId],
+          activities: [...previous[invoiceId].activities, ...page.activities],
+          sendAttempts: [...previous[invoiceId].sendAttempts, ...page.sendAttempts],
+          hasMoreActivities: page.hasMoreActivities,
+          hasMoreSendAttempts: page.hasMoreSendAttempts,
+        },
+      }))
+    } catch (historyError) {
+      console.error('Older proposal history could not be loaded:', historyError)
+    } finally {
+      setProposalHistoryLoadingId(null)
+    }
+  }
 
   const handleMetadataUpdate = async (updatedMetadata: Record<string, unknown>) => {
     if (!lead) return false
@@ -7404,15 +7433,24 @@ export default function LeadDetailPage({
                   const rentalStart = String(context.rental_start_time || context.start_time || selection.rentalStartTime || selection.rental_start_time || '')
                   const rentalEnd = String(context.rental_end_time || context.end_time || selection.rentalEndTime || selection.rental_end_time || '')
                   const shownPeriod = custom ? `Custom time${rentalStart && rentalEnd ? ` · ${formatProposalClock(rentalStart)}–${formatProposalClock(rentalEnd)}` : ''}` : `${period.replaceAll('_', ' ')} rental`
-                  const latestView = proposal.proposal_viewed_at ? formatVenueDateTime(proposal.proposal_viewed_at) : null
+                  const proposalActivities = (proposalHistory[proposal.id]?.activities || []).filter((activity) => activity.invoice_id === proposal.id)
+                  const proposalActivityTypes = new Set(proposalActivities.map((activity) => activity.event_type))
+                  const firstView = proposal.proposal_viewed_at ? formatVenueDateTime(proposal.proposal_viewed_at) : null
+                  const latestView = proposal.proposal_latest_viewed_at ? formatVenueDateTime(proposal.proposal_latest_viewed_at) : firstView
                   const acceptedAt = proposal.proposal_accepted_at ? formatVenueDateTime(proposal.proposal_accepted_at) : null
+                  const lifecycleStatus = acceptedAt ? 'Accepted'
+                    : proposalActivityTypes.has('superseded') ? 'Superseded'
+                      : proposal.offer_status === 'expired' || proposalActivityTypes.has('expired') ? 'Expired'
+                        : proposalActivityTypes.has('delivered') ? 'Delivered'
+                          : latestView ? 'Viewed'
+                            : proposal.proposal_sent_at ? 'Sent' : 'Draft'
                   const proposalLabel = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
-                    ? Number(proposal.proposal_number) === 1 ? 'Proposal' : `Proposal #${proposal.proposal_number}`
+                    ? `${Number(proposal.proposal_number) === 1 ? 'Proposal' : `Proposal #${proposal.proposal_number}`}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
                     : proposal.status === 'sent' ? 'Existing proposal' : 'Draft proposal'
                   return <article key={proposal.id} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#8c6529] dark:text-[#f1d27a]">{proposalLabel}</p><h4 className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{proposal.description || `${proposal.event_type || 'Event'} proposal`}</h4></div>
-                      <PortalStatusBadge status={proposal.status} />
+                      <span className="shrink-0 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)]">{lifecycleStatus}</span>
                     </div>
                     <p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">{date ? formatDisplayDate(date) : 'Event date not set'}</p>
                     <p className="mt-1 text-[11px] capitalize text-[color:var(--portal-muted)]">{shownPeriod}</p>
@@ -7420,7 +7458,8 @@ export default function LeadDetailPage({
                     <dl className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[10px] sm:grid-cols-2">
                       <div><dt className="text-[color:var(--portal-muted)]">Created</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.created_at)}</dd></div>
                       {(proposal.proposal_latest_sent_at || proposal.proposal_sent_at) ? <div><dt className="text-[color:var(--portal-muted)]">Latest send</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.proposal_latest_sent_at || proposal.proposal_sent_at)}</dd></div> : null}
-                      {latestView ? <div><dt className="text-[color:var(--portal-muted)]">Latest customer view</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestView}</dd></div> : null}
+                      {firstView ? <div><dt className="text-[color:var(--portal-muted)]">First customer view</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{firstView}</dd></div> : null}
+                      {latestView && latestView !== firstView ? <div><dt className="text-[color:var(--portal-muted)]">Latest customer view</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestView}</dd></div> : null}
                       {acceptedAt ? <div><dt className="text-[color:var(--portal-muted)]">Accepted</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{acceptedAt}</dd></div> : null}
                     </dl>
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -7440,6 +7479,7 @@ export default function LeadDetailPage({
                           <p className="capitalize text-[color:var(--portal-text)]">{activity.event_type.replaceAll('_', ' ')}{activity.recipient_email ? ` · ${activity.recipient_email}` : ''}</p>
                           <time className="shrink-0 text-[color:var(--portal-muted)]">{formatVenueDateTime(activity.occurred_at)}</time>
                         </div>)}
+                        {proposalHistory[proposal.id].hasMoreActivities || proposalHistory[proposal.id].hasMoreSendAttempts ? <button type="button" onClick={() => void loadOlderProposalHistory(proposal.id)} disabled={proposalHistoryLoadingId !== null} className="min-h-10 rounded-md border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:opacity-50">{proposalHistoryLoadingId === proposal.id ? 'Loading history…' : 'Load older history'}</button> : null}
                         {!proposalHistory[proposal.id].activities.length && !proposalHistory[proposal.id].sendAttempts.length ? <p className="text-[10px] text-[color:var(--portal-muted)]">No proposal activity recorded yet.</p> : null}
                       </div>
                     </details> : null}

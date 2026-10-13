@@ -6,7 +6,8 @@ alter table public.luxor_invoices
   add column if not exists proposal_family_id uuid,
   add column if not exists proposal_number integer,
   add column if not exists proposal_first_sent_at timestamptz,
-  add column if not exists proposal_latest_sent_at timestamptz;
+  add column if not exists proposal_latest_sent_at timestamptz,
+  add column if not exists proposal_latest_viewed_at timestamptz;
 
 create table if not exists public.luxor_proposal_families (
   id uuid primary key,
@@ -160,7 +161,9 @@ alter table public.luxor_proposal_send_attempts enable row level security;
 alter table public.luxor_proposal_activity enable row level security;
 revoke all on public.luxor_proposal_families, public.luxor_proposal_send_attempts, public.luxor_proposal_activity from public, anon, authenticated;
 grant select, insert, update, delete on public.luxor_proposal_families, public.luxor_proposal_send_attempts to service_role;
+revoke all on public.luxor_proposal_activity from service_role;
 grant select, insert on public.luxor_proposal_activity to service_role;
+revoke all on sequence public.luxor_proposal_activity_id_seq from public, anon, authenticated, service_role;
 grant usage, select on sequence public.luxor_proposal_activity_id_seq to service_role;
 
 create or replace function public.luxor_reject_proposal_activity_mutation()
@@ -274,6 +277,9 @@ begin
      and exists (select 1 from public.luxor_invoices child where child.supersedes_invoice_id = new.id and child.invoice_kind = 'event') then
     perform public.luxor_append_proposal_activity(new.id, 'superseded', 'system', null, null, null, null, now(),
       'superseded:' || new.id::text, jsonb_build_object('replaced_by_invoice_id', (select child.id from public.luxor_invoices child where child.supersedes_invoice_id = new.id and child.invoice_kind = 'event' order by child.created_at desc limit 1)));
+  elsif tg_op = 'UPDATE' and new.offer_status = 'expired' and old.offer_status is distinct from new.offer_status then
+    perform public.luxor_append_proposal_activity(new.id, 'expired', 'system', null, null, null, null, now(),
+      'expired:' || new.id::text, jsonb_build_object('proposal_number', new.proposal_number));
   end if;
   return new;
 end;
@@ -419,6 +425,54 @@ begin
 end;
 $$;
 
+-- Proposal term changes and their append-only audit event commit or roll back together.
+create or replace function public.luxor_update_proposal_and_record_edit(
+  p_invoice_id uuid,
+  p_updates jsonb,
+  p_actor_email text
+) returns jsonb language plpgsql security invoker set search_path = '' as $$
+declare
+  invoice public.luxor_invoices%rowtype;
+  patched public.luxor_invoices%rowtype;
+  updated public.luxor_invoices%rowtype;
+  allowed_keys text[] := array[
+    'status','due_date','paid_at','notes','line_items','subtotal','tax_rate','total',
+    'original_subtotal','original_total','discount_percent','discount_amount','discount_type','discount_value',
+    'promotion_id','promotion_snapshot','offer_expires_at','event_type','description'
+  ];
+  edit_fields text[];
+begin
+  if jsonb_typeof(p_updates) is distinct from 'object' or p_actor_email is null or btrim(p_actor_email) = '' then
+    raise exception 'Proposal edit facts are required.' using errcode = '22023';
+  end if;
+  if exists(select 1 from pg_catalog.jsonb_object_keys(p_updates) as fields(field) where not (field = any(allowed_keys))) then
+    raise exception 'Proposal edit contains an unsupported field.' using errcode = '22023';
+  end if;
+  select i.* into invoice from public.luxor_invoices i where i.id = p_invoice_id for update;
+  if not found or invoice.invoice_kind is distinct from 'event' then
+    raise exception 'An event proposal is required.' using errcode = 'P0002';
+  end if;
+  patched := pg_catalog.jsonb_populate_record(invoice, p_updates);
+  update public.luxor_invoices i set
+    status = patched.status, due_date = patched.due_date, paid_at = patched.paid_at, notes = patched.notes,
+    line_items = patched.line_items, subtotal = patched.subtotal, tax_rate = patched.tax_rate, total = patched.total,
+    original_subtotal = patched.original_subtotal, original_total = patched.original_total,
+    discount_percent = patched.discount_percent, discount_amount = patched.discount_amount,
+    discount_type = patched.discount_type, discount_value = patched.discount_value,
+    promotion_id = patched.promotion_id, promotion_snapshot = patched.promotion_snapshot,
+    offer_expires_at = patched.offer_expires_at, event_type = patched.event_type,
+    description = patched.description, updated_at = now()
+  where i.id = p_invoice_id returning i.* into updated;
+  select coalesce(array_agg(field order by field), array[]::text[]) into edit_fields from pg_catalog.jsonb_object_keys(p_updates) as fields(field);
+  perform public.luxor_append_proposal_activity(
+    p_invoice_id, 'edited', 'administrator', p_actor_email, null, null, null, now(),
+    'edited:' || p_invoice_id::text || ':' || updated.updated_at::text,
+    pg_catalog.jsonb_build_object('fields', edit_fields)
+  );
+  return pg_catalog.to_jsonb(updated);
+end;
+$$;
+
 create or replace function public.luxor_fail_proposal_send(
   p_attempt_id uuid,
   p_failure_reason text,
@@ -427,21 +481,23 @@ create or replace function public.luxor_fail_proposal_send(
 ) returns boolean language plpgsql security invoker set search_path = '' as $$
 declare
   attempt public.luxor_proposal_send_attempts%rowtype;
+  delivery_unconfirmed boolean;
 begin
   select * into attempt from public.luxor_proposal_send_attempts a where a.id = p_attempt_id for update;
   if not found or attempt.state in ('sent', 'delivered', 'bounced') then return false; end if;
+  delivery_unconfirmed := p_delivery_unconfirmed or attempt.state in ('sending', 'delivery_unconfirmed');
   update public.luxor_proposal_send_attempts a set
     -- Once marked sending, a crash/error cannot prove that the provider did
     -- not accept the message. Retain the reservation and its idempotency key.
-    state = case when p_delivery_unconfirmed or attempt.state = 'sending' then 'delivery_unconfirmed' else 'failed' end,
-    failed_at = case when p_delivery_unconfirmed or attempt.state = 'sending' then null else coalesce(p_failed_at, now()) end,
+    state = case when delivery_unconfirmed then 'delivery_unconfirmed' else 'failed' end,
+    failed_at = case when delivery_unconfirmed then null else coalesce(p_failed_at, now()) end,
     failure_reason = left(coalesce(p_failure_reason, 'Delivery failed.'), 1000), updated_at = now()
   where a.id = attempt.id;
   perform public.luxor_append_proposal_activity(attempt.invoice_id,
     case when p_delivery_unconfirmed then 'send_failed' else 'send_failed' end,
     'administrator', attempt.actor_email, attempt.recipient_email, attempt.provider,
     attempt.provider_message_id, coalesce(p_failed_at, now()), 'send-failed:' || attempt.id::text,
-    jsonb_build_object('attempt_id', attempt.id, 'delivery_unconfirmed', p_delivery_unconfirmed or attempt.state = 'sending',
+    jsonb_build_object('attempt_id', attempt.id, 'delivery_unconfirmed', delivery_unconfirmed,
       'failure_reason', left(coalesce(p_failure_reason, 'Delivery failed.'), 1000)));
   return true;
 end;
@@ -499,6 +555,7 @@ begin
   end if;
   first_view := invoice.proposal_viewed_at is null;
   update public.luxor_invoices i set proposal_viewed_at = coalesce(i.proposal_viewed_at, p_viewed_at),
+    proposal_latest_viewed_at = greatest(coalesce(i.proposal_latest_viewed_at, p_viewed_at), p_viewed_at),
     updated_at = greatest(i.updated_at, coalesce(p_viewed_at, now())) where i.id = invoice.id;
   perform public.luxor_append_proposal_activity(invoice.id, 'viewed', 'customer', null, null, null, null,
     coalesce(p_viewed_at, now()), 'customer-view:' || invoice.id::text || ':' || date_trunc('minute', coalesce(p_viewed_at, now()))::text,
@@ -812,6 +869,7 @@ revoke all on function public.luxor_reject_proposal_activity_mutation() from pub
 revoke all on function public.luxor_assign_proposal_family() from public, anon, authenticated;
 revoke all on function public.luxor_proposal_activity_trigger() from public, anon, authenticated;
 revoke all on function public.luxor_append_proposal_activity(uuid, text, text, text, text, text, text, timestamptz, text, jsonb) from public, anon, authenticated;
+revoke all on function public.luxor_update_proposal_and_record_edit(uuid, jsonb, text) from public, anon, authenticated;
 revoke all on function public.luxor_begin_proposal_send(uuid, uuid, text, text, text, text) from public, anon, authenticated;
 revoke all on function public.luxor_complete_proposal_send(uuid, text, timestamptz) from public, anon, authenticated;
 revoke all on function public.luxor_mark_proposal_send_attempt_sending(uuid) from public, anon, authenticated;
@@ -822,6 +880,7 @@ revoke all on function public.luxor_guard_single_accepted_proposal_per_event() f
 revoke all on function public.luxor_validate_weekday_rental_context(jsonb) from public, anon, authenticated;
 revoke all on function public.luxor_claim_weekday_proposal_acceptance(uuid, jsonb, timestamptz, text, text) from public, anon, authenticated;
 grant execute on function public.luxor_append_proposal_activity(uuid, text, text, text, text, text, text, timestamptz, text, jsonb) to service_role;
+grant execute on function public.luxor_update_proposal_and_record_edit(uuid, jsonb, text) to service_role;
 grant execute on function public.luxor_begin_proposal_send(uuid, uuid, text, text, text, text) to service_role;
 grant execute on function public.luxor_complete_proposal_send(uuid, text, timestamptz) to service_role;
 grant execute on function public.luxor_mark_proposal_send_attempt_sending(uuid) to service_role;
