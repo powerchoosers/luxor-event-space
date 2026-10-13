@@ -372,7 +372,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         // A retry after a crash may discover a reservation created by the
         // earlier request. Continue using its original ID and idempotency key.
         attemptId = sendReservation.attempt_id
-        proposalSendAttemptId = sendReservation.attempt_id
         invoice = { ...invoice, proposal_number: sendReservation.proposal_number }
       }
       const claimed = await claimLuxorProposalPublication(invoice, attemptId)
@@ -383,6 +382,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: 'This proposal changed in another request. Please retry to recover its current result.' }, { status: 409 })
       }
       invoice = sendReservation ? { ...claimed, proposal_number: sendReservation.proposal_number } : claimed
+      // Only a confirmed publication claim grants this request permission to
+      // fail the attempt in its outer error handler. A thrown/uncertain claim
+      // may have succeeded for a concurrent sender and must remain recoverable.
+      if (sendReservation) proposalSendAttemptId = sendReservation.attempt_id
       publicationAttemptId = attemptId
       const now = new Date().toISOString()
       const publicToken = invoice.public_token!

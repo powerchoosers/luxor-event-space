@@ -47,6 +47,19 @@ test('proposal send retries reserve before claiming and keep the original active
   assert.ok(lostClaim > claim && wonClaim > lostClaim, 'claim loser branch exists')
   assert.doesNotMatch(route.slice(lostClaim, wonClaim), /failLuxorProposalSend/)
   assert.match(route.slice(lostClaim, wonClaim), /shared preparing/)
+  const ownerAssignment = route.indexOf('proposalSendAttemptId = sendReservation.attempt_id')
+  assert.ok(ownerAssignment > wonClaim, 'only a confirmed claim assigns the failure owner')
+})
+
+test('a thrown or uncertain publication claim cannot fail another sender reservation', () => {
+  const route = fs.readFileSync(new URL('../src/app/api/invoices/[id]/send/route.ts', import.meta.url), 'utf8')
+  const claim = route.indexOf('const claimed = await claimLuxorProposalPublication(invoice, attemptId)')
+  const ownerAssignment = route.indexOf('proposalSendAttemptId = sendReservation.attempt_id')
+  const outerCatch = route.lastIndexOf('  } catch (error) {')
+  const failureCall = route.indexOf('failLuxorProposalSend(', outerCatch)
+  assert.ok(claim > 0 && ownerAssignment > claim && outerCatch > ownerAssignment && failureCall > outerCatch)
+  assert.match(route.slice(ownerAssignment - 350, ownerAssignment), /Only a confirmed publication claim grants this request permission/)
+  assert.match(route.slice(failureCall, failureCall + 180), /proposalSendAttemptId/)
 })
 
 test('V4 SQL validates rounded rates and every duplicated boundary and time alias', () => {
