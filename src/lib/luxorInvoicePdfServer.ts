@@ -5,7 +5,7 @@ import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './lux
 import { decorQuantityLabel, getLuxorProposalPricingSummary } from './luxorProposalEmailServer'
 import { formatLuxorDate } from './luxorDateFormatting'
 import { formatCatalogTime } from './luxorPricingCatalog'
-import { formatWeekdayCustomRentalDuration } from './luxorWeekdayRental'
+import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown } from './luxorWeekdayRental'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const pageWidth = 612
@@ -174,7 +174,7 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
     const endText = summary.eventEndTime ? `${summary.weekdayCustomRental ? 'Rental End' : 'Event End'}: ${formatCatalogTime(summary.eventEndTime)}${summary.weekdayCustomRental && Number(summary.eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}` : null
     const eventAccess = summary.eventAccess ? `Venue Access: ${summary.eventAccess}` : null
     const detailLines = wrap([guestText, arrivalText, endText, eventAccess].filter(Boolean).join(' | '), regular, 9.5, contentRight - margin - 24)
-    if (summary.weekdayCustomRental) detailLines.push(`Venue rental: ${formatWeekdayCustomRentalDuration(summary.weekdayCustomRental.duration_minutes)} at ${money(summary.weekdayCustomRental.hourly_rate)} per hour = ${money(summary.weekdayCustomRental.rental_total)}`)
+    if (summary.weekdayCustomRental) detailLines.push(`Venue rental: ${formatWeekdayCustomRentalPriceBreakdown(summary.weekdayCustomRental)}`)
     const detailHeight = 28 + detailLines.length * 12
     ensureSpace(detailHeight + 18)
     page.drawRectangle({ x: margin, y: y - detailHeight, width: contentRight - margin, height: detailHeight, color: rgb(0.94, 0.91, 0.84) })

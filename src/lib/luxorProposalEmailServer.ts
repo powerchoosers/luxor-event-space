@@ -5,7 +5,7 @@ import { formatLuxorDate } from './luxorDateFormatting'
 import { formatCatalogTime } from './luxorPricingCatalog'
 import { getOfficialDecorService } from './luxorDecorCatalog'
 import { SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBookingSnapshot } from './luxorSameDayBooking'
-import { formatWeekdayCustomRentalDuration, getWeekdayCustomRentalSnapshot, type LuxorWeekdayCustomRentalSnapshot } from './luxorWeekdayRental'
+import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown, getWeekdayCustomRentalSnapshot, type LuxorWeekdayCustomRentalSnapshot } from './luxorWeekdayRental'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT = 750
@@ -451,7 +451,7 @@ export function buildLuxorProposalEmail(input: { invoice: LuxorInvoice; inquiry:
     summary.guestArrivalTime ? `${summary.weekdayCustomRental ? 'Rental start time' : 'Guest arrival'}: ${formatCatalogTime(summary.guestArrivalTime)}` : null,
     summary.eventEndTime ? `${summary.weekdayCustomRental ? 'Rental end time' : 'Event end'}: ${formatCatalogTime(summary.eventEndTime)}${summary.weekdayCustomRental && Number(summary.eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}` : null,
     summary.eventAccess ? `Venue access: ${summary.eventAccess}` : null,
-    summary.weekdayCustomRental ? `Venue rental: ${formatWeekdayCustomRentalDuration(summary.weekdayCustomRental.duration_minutes)} at ${money(summary.weekdayCustomRental.hourly_rate)} per hour = ${money(summary.weekdayCustomRental.rental_total)}` : null,
+    summary.weekdayCustomRental ? `Venue rental: ${formatWeekdayCustomRentalPriceBreakdown(summary.weekdayCustomRental)}` : null,
   ].filter(Boolean).join(' | ')
   return {
     subject: `${proposalLabel}: Your Luxor proposal is ready`,

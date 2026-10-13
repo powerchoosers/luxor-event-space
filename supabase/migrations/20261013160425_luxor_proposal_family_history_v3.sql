@@ -414,7 +414,7 @@ create or replace function public.luxor_mark_proposal_send_attempt_sending(p_att
 returns boolean language plpgsql security invoker set search_path = '' as $$
 begin
   update public.luxor_proposal_send_attempts a set state = 'sending', updated_at = now()
-  where a.id = p_attempt_id and a.state in ('preparing', 'delivery_unconfirmed');
+  where a.id = p_attempt_id and a.state in ('preparing', 'sending', 'delivery_unconfirmed');
   return found;
 end;
 $$;
@@ -431,15 +431,17 @@ begin
   select * into attempt from public.luxor_proposal_send_attempts a where a.id = p_attempt_id for update;
   if not found or attempt.state in ('sent', 'delivered', 'bounced') then return false; end if;
   update public.luxor_proposal_send_attempts a set
-    state = case when p_delivery_unconfirmed then 'delivery_unconfirmed' else 'failed' end,
-    failed_at = case when p_delivery_unconfirmed then null else coalesce(p_failed_at, now()) end,
+    -- Once marked sending, a crash/error cannot prove that the provider did
+    -- not accept the message. Retain the reservation and its idempotency key.
+    state = case when p_delivery_unconfirmed or attempt.state = 'sending' then 'delivery_unconfirmed' else 'failed' end,
+    failed_at = case when p_delivery_unconfirmed or attempt.state = 'sending' then null else coalesce(p_failed_at, now()) end,
     failure_reason = left(coalesce(p_failure_reason, 'Delivery failed.'), 1000), updated_at = now()
   where a.id = attempt.id;
   perform public.luxor_append_proposal_activity(attempt.invoice_id,
     case when p_delivery_unconfirmed then 'send_failed' else 'send_failed' end,
     'administrator', attempt.actor_email, attempt.recipient_email, attempt.provider,
     attempt.provider_message_id, coalesce(p_failed_at, now()), 'send-failed:' || attempt.id::text,
-    jsonb_build_object('attempt_id', attempt.id, 'delivery_unconfirmed', p_delivery_unconfirmed,
+    jsonb_build_object('attempt_id', attempt.id, 'delivery_unconfirmed', p_delivery_unconfirmed or attempt.state = 'sending',
       'failure_reason', left(coalesce(p_failure_reason, 'Delivery failed.'), 1000)));
   return true;
 end;
@@ -512,6 +514,11 @@ declare
 begin
   if tg_op <> 'UPDATE' or old.proposal_accepted_at is not null or new.proposal_accepted_at is null
      or new.invoice_kind is distinct from 'event' or new.inquiry_id is null then return new; end if;
+  -- The advisory lock only makes the following conflict query reliable when
+  -- each statement gets a fresh snapshot after waiting for a concurrent accept.
+  if current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'LUXOR_PROPOSAL_ALTERNATE_ACCEPTED: Proposal acceptance requires READ COMMITTED isolation.' using errcode = 'P0001';
+  end if;
   scope_key := new.inquiry_id::text || ':' || coalesce(new.lead_event_id::text, 'primary');
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(scope_key, 87211));
   if exists (select 1 from public.luxor_invoices i
@@ -572,17 +579,37 @@ begin
   if extract(isodow from event_day) not between 1 and 4 then
     raise exception 'LUXOR_WEEKDAY_INVALID: Custom rentals require Monday through Thursday.' using errcode = 'P0001';
   end if;
-  if (s ->> 'hourly_rate')::numeric <= 0
-     or (s ->> 'minimum_hours')::numeric <= 0 or (s ->> 'minimum_hours')::numeric > 19
-     or mod((s ->> 'minimum_hours')::numeric, 1) <> 0
-     or (s ->> 'time_increment_minutes')::numeric <> 60
-     or (s ->> 'cleanup_buffer_minutes')::numeric <> 0
-     or (s ->> 'minimum_price')::numeric < 0 and s -> 'version' = '3'::jsonb
-     or (s ->> 'additional_hour_rate')::numeric < 0 and s -> 'version' = '3'::jsonb
-     or coalesce(s ->> 'reset_window_policy', '') <> 'allowed'
-     or coalesce(s ->> 'booking_policy', '') <> 'one_per_date'
-     or coalesce(s ->> 'security_hours_policy', '') <> 'arrival_to_end'
-     or coalesce(s ->> 'selection_surface', '') <> 'portal_only' then
+  if (s ->> 'hourly_rate')::numeric <> 400
+     or (s -> 'version' = '1'::jsonb and (
+       (s ->> 'minimum_hours')::numeric <= 0 or (s ->> 'minimum_hours')::numeric > 19
+       or abs((s ->> 'minimum_hours')::numeric * 60 - round((s ->> 'minimum_hours')::numeric * 60)) > 0.000000001
+       or (s ->> 'time_increment_minutes')::numeric <= 0 or (s ->> 'time_increment_minutes')::numeric > 1140
+       or mod((s ->> 'time_increment_minutes')::numeric, 1) <> 0
+       or (s ->> 'cleanup_buffer_minutes')::numeric < 0 or (s ->> 'cleanup_buffer_minutes')::numeric > 1140
+       or mod((s ->> 'cleanup_buffer_minutes')::numeric, 1) <> 0
+       or coalesce(s ->> 'reset_window_policy', '') not in ('blocked', 'allowed')
+       or coalesce(s ->> 'booking_policy', '') not in ('one_per_date', 'multiple_per_date')
+       or coalesce(s ->> 'security_hours_policy', '') not in ('rental_duration', 'owner_entered')
+       or coalesce(s ->> 'selection_surface', '') not in ('portal_only', 'public_and_portal')
+     ))
+     or (s -> 'version' = '2'::jsonb and (
+       (s ->> 'minimum_hours')::numeric <> 3 or (s ->> 'time_increment_minutes')::numeric <> 60
+       or (s ->> 'cleanup_buffer_minutes')::numeric <> 0
+       or coalesce(s ->> 'reset_window_policy', '') <> 'allowed'
+       or coalesce(s ->> 'booking_policy', '') <> 'one_per_date'
+       or coalesce(s ->> 'security_hours_policy', '') <> 'arrival_to_end'
+       or coalesce(s ->> 'selection_surface', '') <> 'portal_only'
+     ))
+     or (s -> 'version' = '3'::jsonb and (
+       (s ->> 'minimum_hours')::numeric <> 3 or (s ->> 'time_increment_minutes')::numeric <> 60
+       or (s ->> 'cleanup_buffer_minutes')::numeric <> 0
+       or (s ->> 'minimum_price')::numeric <= 0
+       or (s ->> 'additional_hour_rate')::numeric < 0
+       or coalesce(s ->> 'reset_window_policy', '') <> 'allowed'
+       or coalesce(s ->> 'booking_policy', '') <> 'one_per_date'
+       or coalesce(s ->> 'security_hours_policy', '') <> 'arrival_to_end'
+       or coalesce(s ->> 'selection_surface', '') <> 'portal_only'
+     )) then
     raise exception 'LUXOR_WEEKDAY_INVALID: Incomplete approved rental policy.' using errcode = 'P0001';
   end if;
   first_min := split_part(s ->> 'start_time', ':', 1)::integer * 60 + split_part(s ->> 'start_time', ':', 2)::integer;
@@ -593,6 +620,7 @@ begin
   if first_min < 360 or last_min > 1500 or duration_min <= 0
      or mod(first_min, increment_min) <> 0 or mod(last_min, increment_min) <> 0
      or (s -> 'version' in ('1'::jsonb, '2'::jsonb) and duration_min < round((s ->> 'minimum_hours')::numeric * 60))
+     or (s -> 'version' = '1'::jsonb and s ->> 'reset_window_policy' = 'blocked' and first_min < 1020 and last_min > 900)
      or (s ->> 'duration_minutes')::numeric <> duration_min
      or abs((s ->> 'duration_hours')::numeric - duration_min::numeric / 60) > 0.000000001 then
     raise exception 'LUXOR_WEEKDAY_INVALID: Rental duration does not match the saved times.' using errcode = 'P0001';

@@ -306,3 +306,17 @@ export function formatWeekdayCustomRentalDuration(durationMinutes: number) {
   const minutes = durationMinutes % 60
   return [hours ? `${hours} hour${hours === 1 ? '' : 's'}` : '', minutes ? `${minutes} minute${minutes === 1 ? '' : 's'}` : ''].filter(Boolean).join(' ')
 }
+
+/** Explain the frozen rental formula, including V2's historical hourly terms. */
+export function formatWeekdayCustomRentalPriceBreakdown(snapshot: LuxorWeekdayCustomRentalSnapshot) {
+  const money = (amount: number) => amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  if (snapshot.version === 3 && snapshot.minimum_price !== undefined && snapshot.additional_hour_rate !== undefined) {
+    const extraHours = Math.max(0, snapshot.duration_hours - snapshot.minimum_hours)
+    const minimum = `${money(snapshot.minimum_price)} minimum (first ${snapshot.minimum_hours} billed hours)`
+    const extras = extraHours > 0
+      ? ` + ${extraHours} additional hour${extraHours === 1 ? '' : 's'} at ${money(snapshot.additional_hour_rate)} each`
+      : ''
+    return `${minimum}${extras} = ${money(snapshot.rental_total)}`
+  }
+  return `${formatWeekdayCustomRentalDuration(snapshot.duration_minutes)} at ${money(snapshot.hourly_rate)} per hour = ${money(snapshot.rental_total)}`
+}

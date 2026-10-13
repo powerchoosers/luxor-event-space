@@ -10,7 +10,7 @@ import { formatCatalogTime } from './luxorPricingCatalog'
 import { proposalEventTiming } from './luxorProposalTerms'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from './luxorDecorCatalog'
 import type { LuxorSameDayBookingSnapshot } from './luxorSameDayBooking'
-import { getWeekdayCustomRentalPolicy, validateWeekdayCustomRentalTiming, validateWeekdayCustomRentalSchedule, weekdayCustomRentalSnapshot, formatWeekdayCustomRentalDuration, weekdayRentalMinutesFromHours } from './luxorWeekdayRental'
+import { getWeekdayCustomRentalPolicy, validateWeekdayCustomRentalTiming, validateWeekdayCustomRentalSchedule, weekdayCustomRentalSnapshot, formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown, weekdayRentalMinutesFromHours } from './luxorWeekdayRental'
 
 export type LuxorProposalPackageId =
   | 'rental_only'
@@ -1368,11 +1368,27 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   if (safePeriod === 'custom') {
     if (customRental) {
       const extraHours = Math.max(0, customRental.duration_hours - customRental.minimum_hours)
-      const money = (amount: number) => amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
-      const priceDetail = extraHours
-        ? `${money(customRental.minimum_price || 0)} minimum + ${extraHours} additional hour${extraHours === 1 ? '' : 's'} × ${money(customRental.additional_hour_rate || 0)}`
-        : `${money(customRental.minimum_price || customRental.rental_total)} minimum price`
-      confirmed.push({ ...lineItem({ id: 'venue-rental', category: 'Venue Rental — Confirmed Price', description: 'Luxor custom weekday venue rental', quantity: customRental.duration_hours, unitPrice: customRental.hourly_rate, required: true, pricingRole: 'required', paymentBucket: 'venue', pricingRuleId: 'weekday_custom_rental.minimum_price_and_additional_hour_rate', detail: `${formatCatalogTime(customRental.start_time)}-${formatCatalogTime(customRental.end_time)}${Number(customRental.end_time.slice(0, 2)) < 6 ? " (next day)" : ""} access | ${formatWeekdayCustomRentalDuration(customRental.duration_minutes)} | ${priceDetail} = ${money(customRental.rental_total)}`, quoteBreakdown: { quantity: customRental.duration_hours, unit_price: customRental.hourly_rate, subtotal: customRental.rental_total, included_hours: customRental.minimum_hours, minimum_price: customRental.minimum_price, additional_hours: extraHours, additional_hour_rate: customRental.additional_hour_rate } }), total: customRental.rental_total })
+      const versionThree = customRental.version === 3
+      const quantity = versionThree ? 1 : customRental.duration_hours
+      const unitPrice = versionThree ? customRental.rental_total : customRental.hourly_rate
+      const pricingRuleId = versionThree ? 'weekday_custom_rental.minimum_price_and_additional_hour_rate' : 'weekday_custom_rental.hourly_rate'
+      const priceDetail = formatWeekdayCustomRentalPriceBreakdown(customRental)
+      const quoteBreakdown = versionThree
+        ? { quantity: 1, unit_price: customRental.rental_total, subtotal: customRental.rental_total, included_hours: customRental.minimum_hours, minimum_price: customRental.minimum_price, additional_hours: extraHours, additional_hour_rate: customRental.additional_hour_rate }
+        : { quantity: customRental.duration_hours, unit_price: customRental.hourly_rate, subtotal: customRental.rental_total }
+      confirmed.push({ ...lineItem({
+        id: 'venue-rental',
+        category: 'Venue Rental - Confirmed Price',
+        description: 'Luxor custom weekday venue rental',
+        quantity,
+        unitPrice,
+        required: true,
+        pricingRole: 'required',
+        paymentBucket: 'venue',
+        pricingRuleId,
+        detail: `${formatCatalogTime(customRental.start_time)}-${formatCatalogTime(customRental.end_time)}${Number(customRental.end_time.slice(0, 2)) < 6 ? ' (next day)' : ''} access | ${formatWeekdayCustomRentalDuration(customRental.duration_minutes)} | ${priceDetail}`,
+        quoteBreakdown,
+      }), total: customRental.rental_total })
     }
   } else {
     const rentalAmount = rentalGroup ? readNumber(luxor, 'rental_rates', rentalGroup, safePeriod) : undefined

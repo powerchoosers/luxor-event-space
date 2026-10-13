@@ -333,7 +333,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       const previousDelivery = invoice.proposal_context?.delivery_snapshot as Record<string, Record<string, unknown>> | undefined
       const previousEmail = previousDelivery?.proposal_email
-      const priorAttempt = invoice.proposal_context?.publication_attempt as { state?: string; started_at?: string } | undefined
+      const priorAttempt = invoice.proposal_context?.publication_attempt as { id?: string; state?: string; started_at?: string } | undefined
+      const hasConfirmedDeliveryReceipt = previousEmail?.delivery_state === 'delivered' && typeof previousEmail.delivery_sent_at === 'string' && body.resend !== true
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
       // Repeated actions return the original receipt and link; never resend or regress an accepted booking.
       if (invoice.public_token && !(body.resend === true && isLuxorProposalHistoryReady()) && (!priorAttempt || priorAttempt.state === 'completed' || invoice.proposal_accepted_at || invoice.booking_id) && ((inPersonHandoff && previousDelivery?.in_person?.handoff_state === 'ready') ||
@@ -343,16 +344,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (invoice.proposal_accepted_at || invoice.booking_id || invoice.status === 'cancelled' || invoice.offer_status === 'withdrawn') {
         return NextResponse.json({ error: 'This proposal has already been accepted or withdrawn. Open its existing agreement from Documents.' }, { status: 409 })
       }
-      if (priorAttempt?.state === 'delivery_unconfirmed' && luxorMailProvider() !== 'resend') {
+      if (priorAttempt?.state === 'delivery_unconfirmed' && luxorMailProvider() !== 'resend' && !hasConfirmedDeliveryReceipt) {
         return NextResponse.json({ error: 'Email delivery is unconfirmed. Check the mailbox before another send; automatic retry is paused to prevent a duplicate.' }, { status: 409 })
       }
-      if (['preparing', 'sending'].includes(priorAttempt?.state || '') && Date.now() - Date.parse(priorAttempt?.started_at || '') < 5 * 60_000) {
+      if (['preparing', 'sending'].includes(priorAttempt?.state || '') && Date.now() - Date.parse(priorAttempt?.started_at || '') < 5 * 60_000 && !hasConfirmedDeliveryReceipt) {
         return NextResponse.json({ error: 'This proposal is already being prepared. Wait a moment, then retry to recover its result.' }, { status: 409 })
       }
-      if (priorAttempt?.state === 'sending' && luxorMailProvider() !== 'resend') {
+      if (priorAttempt?.state === 'sending' && luxorMailProvider() !== 'resend' && !hasConfirmedDeliveryReceipt) {
         return NextResponse.json({ error: 'Email delivery needs review before retrying to avoid sending twice.' }, { status: 409 })
       }
-      const attemptId = crypto.randomUUID()
+      // Reuse the prior attempt id when reconciling a durable delivery receipt.
+      // This completes the original history reservation without opening a new send.
+      const attemptId = hasConfirmedDeliveryReceipt && priorAttempt?.id ? priorAttempt.id : crypto.randomUUID()
       const claimed = await claimLuxorProposalPublication(invoice, attemptId)
       if (!claimed) return NextResponse.json({ error: 'This proposal changed in another request. Please retry to recover its current result.' }, { status: 409 })
       invoice = claimed
@@ -496,6 +499,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const snapshotReviewUrl = typeof storedProposalEmail?.review_url === 'string' ? storedProposalEmail.review_url : null
       const snapshotDeliveryState = typeof storedProposalEmail?.delivery_state === 'string' ? storedProposalEmail.delivery_state : null
       const snapshotDeliverySentAt = typeof storedProposalEmail?.delivery_sent_at === 'string' ? storedProposalEmail.delivery_sent_at : null
+      const snapshotProviderMessageId = typeof storedProposalEmail?.provider_message_id === 'string' ? storedProposalEmail.provider_message_id : null
       // Freeze prepared content too: provider retries must use the same payload and delivery key.
       const hasConfirmedDelivery = snapshotDeliveryState === 'delivered' && Boolean(snapshotDeliverySentAt) && body.resend !== true
       const hasStoredDeliverySnapshot = Boolean(snapshotSubject && snapshotHtml && snapshotRecipient && snapshotReviewUrl)
@@ -527,6 +531,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             : now,
           delivery_state: hasConfirmedDelivery ? 'delivered' : 'prepared',
           delivery_sent_at: hasConfirmedDelivery ? snapshotDeliverySentAt : null,
+          provider_message_id: hasConfirmedDelivery ? snapshotProviderMessageId : null,
         },
       }
       // The private link and exact email payload must be durable before Zoho
@@ -551,14 +556,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let updated = preparedInvoice
       if (!hasConfirmedDelivery) {
       const job = await createLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking?.id || null, jobType: 'booking_package', recipientEmail: email.recipient, subject: email.subject, body: `Your Luxor final proposal is ready: ${email.reviewUrl}`, scheduledFor: now, metadata: { manual: true, requestedBy: session.email, flow_stage: 'final_proposal', proposal_version: preparedInvoice.proposal_version || 1, price_locked_at: preparedInvoice.price_locked_at, review_url: email.reviewUrl, attachment_filename: deliverySnapshot.proposal_email.attachment_filename, rendered_at: deliverySnapshot.proposal_email.rendered_at } })
-      const deliveredSnapshot = {
-        ...deliverySnapshot,
-        proposal_email: {
-          ...deliverySnapshot.proposal_email,
-          delivery_state: 'delivered',
-          delivery_sent_at: now,
-        },
-      }
       try {
         const ownsDelivery = await finishLuxorProposalPublication(preparedInvoice.id, attemptId, 'sending')
         if (!ownsDelivery) throw new Error('The proposal changed before delivery. Retry to recover its current state.')
@@ -567,6 +564,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
         publicationState = 'delivery_unconfirmed'
         const receipt = await sendLuxorZohoEmail({ idempotencyKey: sendReservation?.idempotency_key || `final-proposal/${preparedInvoice.id}/${preparedInvoice.proposal_version || 1}`, metadata: sendReservation ? { proposal_send_attempt_id: sendReservation.attempt_id, proposal_number: sendReservation.proposal_number } : undefined, to: email.recipient, subject: email.subject, content: email.html, from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Event Space', attachments: [{ filename: deliverySnapshot.proposal_email.attachment_filename, content: pdf, contentType: 'application/pdf' }] })
+        const providerMessageId = 'providerMessageId' in receipt && typeof receipt.providerMessageId === 'string'
+          ? receipt.providerMessageId
+          : 'messageId' in receipt && typeof receipt.messageId === 'string' ? receipt.messageId : null
+        const deliveredSnapshot = {
+          ...deliverySnapshot,
+          proposal_email: {
+            ...deliverySnapshot.proposal_email,
+            delivery_state: 'delivered',
+            delivery_sent_at: now,
+            provider_message_id: providerMessageId,
+          },
+        }
         // Persist the actual delivery receipt before the non-critical job
         // bookkeeping. If that later write fails, the owner sees the proposal
         // as delivered instead of being encouraged to send a duplicate.
@@ -581,9 +590,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })
         if (!updated) throw new Error('The final proposal email was accepted, but its delivery receipt could not be saved. Retry to recover its receipt without sending a new version.')
         if (sendReservation) {
-          const providerMessageId = 'providerMessageId' in receipt && typeof receipt.providerMessageId === 'string'
-            ? receipt.providerMessageId
-            : 'messageId' in receipt && typeof receipt.messageId === 'string' ? receipt.messageId : null
           const completed = await completeLuxorProposalSend(sendReservation.attempt_id, providerMessageId, now)
           if (!completed) throw new Error('The proposal email was accepted, but its send history could not be finalized. Retry to recover the saved receipt.')
           updated = completed
@@ -598,6 +604,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: now }).catch((error) => {
         console.error('Final proposal was delivered, but the email-job receipt could not be updated:', error)
       })
+      }
+      if (hasConfirmedDelivery && sendReservation) {
+        // The invoice receipt is durable before history completion. Recover it
+        // without calling the provider again after an interrupted request.
+        publicationState = 'delivery_unconfirmed'
+        const completed = await completeLuxorProposalSend(sendReservation.attempt_id, snapshotProviderMessageId, snapshotDeliverySentAt!)
+        if (!completed) throw new Error('The proposal email is already recorded as delivered, but its send history could not be finalized. Retry to recover the saved receipt.')
+        updated = completed
+        publicationState = 'failed'
       }
       if (booking) {
         booking = await updateLuxorBooking(booking.id, { metadata: { ...booking.metadata, proposal_sent_at: now, reservation_state: 'awaiting_proposal_selection', proposalLineItems: frozenInvoice.line_items, proposalInvoiceId: frozenInvoice.id } }) || booking

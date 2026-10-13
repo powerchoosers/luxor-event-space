@@ -13,7 +13,7 @@ import { getOfficialDecorService } from './luxorDecorCatalog'
 import { formatLuxorOfferExpiry } from './luxorOffer'
 import { luxorCalendarDate } from './luxorProposalTerms'
 import { SAME_DAY_CARD_CUTOFF_TERMS } from './luxorSameDayBooking'
-import { formatWeekdayCustomRentalDuration, getWeekdayCustomRentalSnapshot, type LuxorWeekdayCustomRentalSnapshot } from './luxorWeekdayRental'
+import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown, getWeekdayCustomRentalSnapshot, type LuxorWeekdayCustomRentalSnapshot } from './luxorWeekdayRental'
 
 const gold = rgb(0.67, 0.47, 0.20)
 const paleGold = rgb(0.92, 0.85, 0.72)
@@ -456,7 +456,7 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   if (proposalSummary.weekdayCustomRental) {
     const rental = proposalSummary.weekdayCustomRental
     w.y -= 10
-    w.fieldPair('Custom rental duration', formatWeekdayCustomRentalDuration(rental.duration_minutes), 'Venue rental', `${money(rental.hourly_rate)} / hour = ${money(rental.rental_total)}`)
+    w.fieldPair('Custom rental duration', formatWeekdayCustomRentalDuration(rental.duration_minutes), 'Venue rental', formatWeekdayCustomRentalPriceBreakdown(rental))
   }
   w.y -= 10
   w.fieldPair('Package', booking.package_name || 'Custom venue booking', 'Email', booking.email || 'Not provided')
