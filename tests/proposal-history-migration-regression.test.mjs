@@ -45,11 +45,13 @@ test('proposal send retries reserve before claiming and keep the original active
   assert.match(route.slice(claim, claim + 500), /failLuxorProposalSend\(sendReservation\.attempt_id/)
 })
 
-test('V4 SQL validator preserves weekend day-specific base requirements and six-hour surcharge terms', () => {
+test('V4 SQL validates rounded rates and every duplicated boundary and time alias', () => {
   const validator = sql.match(/create or replace function public\.luxor_validate_weekday_rental_context\([\s\S]*?\n\$\$;/)?.[0]
   assert.ok(validator, 'frozen rental validator exists')
-  assert.match(validator, /day_group.*friday.*saturday.*sunday[\s\S]*?minimum_hours.*<> 6[\s\S]*?additional_hour_rate.*<> 350/)
-  assert.match(validator, /minimum_price.*<= 0/)
+  assert.match(validator, /round\(\(s ->> 'minimum_price'\)::numeric.*minimum_hours.*::numeric, 2\)/)
+  assert.doesNotMatch(validator, /day_group.*friday.*saturday.*sunday[\s\S]*?minimum_hours.*<> 6(?![0-9])/)
+  assert.match(validator, /array\['rental_start_at', 'rental_end_at', 'guest_arrival_at', 'event_end_at'\]/)
+  assert.match(validator, /rentalStartTime[\s\S]*?rentalEndTime[\s\S]*?guestArrivalTime[\s\S]*?eventEndTime/)
 })
 
 test('separate proposal families receive independent first-send numbers and revisions inherit their family', () => {
@@ -71,4 +73,10 @@ test('resends keep the existing family number and acceptance is locked to one le
   assert.match(accepted, /i\.inquiry_id = new\.inquiry_id/)
   assert.match(accepted, /i\.lead_event_id is not distinct from new\.lead_event_id/)
   assert.match(claim, /select i\.\* into invoice[\s\S]*?where i\.id = p_invoice_id for update/)
+})
+
+test('proposal number from a send reservation survives claim and invoice updates before rendering', () => {
+  const route = fs.readFileSync(new URL('../src/app/api/invoices/[id]/send/route.ts', import.meta.url), 'utf8')
+  assert.match(route, /invoice = sendReservation \? \{ \.\.\.claimed, proposal_number: sendReservation\.proposal_number \} : claimed/)
+  assert.match(route, /const frozenInvoice = sendReservation \? \{ \.\.\.lockedInvoice, proposal_number: sendReservation\.proposal_number \} : lockedInvoice/)
 })

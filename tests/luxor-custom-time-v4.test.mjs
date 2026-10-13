@@ -46,11 +46,19 @@ test('weekday minimum allows actual one and two hour rentals; unpriced weekend g
   assert.equal(getLuxorCustomTimeRentalPolicyV4(config, '2026-10-23'), null)
 })
 
-test('weekend Custom Time requires six-hour base blocks and the approved $350 extra-hour rate, without assuming base prices', () => {
-  const weekend = { enabled: true, minimum_hours: 6, minimum_price: null, additional_hour_rate: 350, time_increment_minutes: 60, reset_window_policy: 'allowed', booking_policy: 'one_per_date', cleanup_buffer_minutes: 0, security_hours_policy: 'arrival_to_end', selection_surface: 'portal_only' }
-  const weekendConfig = { luxor_costs: { custom_time_rental_v4: { ...config.luxor_costs.custom_time_rental_v4, friday: weekend } } }
-  assert.ok(validateLuxorCustomTimeRentalV4Config(weekendConfig).some((error) => /positive friday Custom Time minimum price/i.test(error)))
-  assert.equal(getLuxorCustomTimeRentalPolicyV4(weekendConfig, '2026-10-23'), null)
+test('confirmed weekend prices support rentals shorter than six hours and round derived hourly rates to cents', () => {
+  const weekendPrices = { friday: 1700, saturday: 2100, sunday: 1400 }
+  const dates = { friday: '2026-10-23', saturday: '2026-10-24', sunday: '2026-10-25' }
+  for (const [day, minimumPrice] of Object.entries(weekendPrices)) {
+    const policy = { enabled: true, minimum_hours: 6, minimum_price: minimumPrice, additional_hour_rate: 350, time_increment_minutes: 60, reset_window_policy: 'allowed', booking_policy: 'one_per_date', cleanup_buffer_minutes: 0, security_hours_policy: 'arrival_to_end', selection_surface: 'portal_only' }
+    const weekendConfig = { luxor_costs: { custom_time_rental_v4: { ...config.luxor_costs.custom_time_rental_v4, [day]: policy } } }
+    assert.deepEqual(validateLuxorCustomTimeRentalV4Config(weekendConfig), [])
+    const actual = getLuxorCustomTimeRentalPolicyV4(weekendConfig, dates[day])
+    assert.ok(actual)
+    assert.equal(luxorCustomTimeRentalSnapshotV4(dates[day], '10:00', '12:00', '10:00', '12:00', actual).rental_total, minimumPrice)
+    assert.equal(luxorCustomTimeRentalSnapshotV4(dates[day], '10:00', '17:00', '10:00', '17:00', actual).rental_total, minimumPrice + 350)
+    assert.equal(luxorCustomTimeRentalSnapshotV4(dates[day], '10:00', '16:00', '10:00', '16:00', actual).hourly_rate, Math.round(minimumPrice / 6 * 100) / 100)
+  }
 })
 
 test('additional hours use the approved weekday rate and immutable local date-times', () => {

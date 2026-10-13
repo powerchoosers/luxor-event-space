@@ -46,7 +46,6 @@ export type LuxorCustomTimeScheduleV4 = {
 }
 
 const DAY_GROUPS: LuxorCustomTimeDayGroup[] = ['monday_thursday', 'friday', 'saturday', 'sunday']
-const WEEKEND_DAY_GROUPS: LuxorCustomTimeDayGroup[] = ['friday', 'saturday', 'sunday']
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -87,8 +86,6 @@ export function validateLuxorCustomTimeRentalV4Config(config: unknown): string[]
     if (minimumHours === null || !Number.isInteger(minimumHours) || minimumHours < 1 || minimumHours > 19) errors.push(`Set the ${day.replace('_', ' ')} Custom Time minimum as a whole number from 1 to 19 hours.`)
     if (minimumPrice === null || minimumPrice <= 0) errors.push(`Set a positive ${day.replace('_', ' ')} Custom Time minimum price.`)
     if (additionalRate === null || additionalRate < 0) errors.push(`Set the ${day.replace('_', ' ')} Custom Time rate for every additional hour.`)
-    if (WEEKEND_DAY_GROUPS.includes(day) && minimumHours !== 6) errors.push(`Weekend Custom Time uses a six-hour minimum block for ${day}.`)
-    if (WEEKEND_DAY_GROUPS.includes(day) && additionalRate !== 350) errors.push(`Weekend Custom Time after six hours is $350 per additional hour for ${day}.`)
     if (policy.time_increment_minutes !== 60) errors.push(`Set ${day.replace('_', ' ')} Custom Time in 60-minute increments.`)
     if (policy.reset_window_policy !== 'allowed') errors.push(`Confirm the ${day.replace('_', ' ')} Custom Time reset-window rule.`)
     if (policy.booking_policy !== 'one_per_date') errors.push(`Confirm one ${day.replace('_', ' ')} custom rental per calendar date.`)
@@ -202,7 +199,7 @@ export function luxorCustomTimeRentalSnapshotV4(
     end_time: rentalEnd,
     duration_minutes: schedule.durationMinutes,
     duration_hours: durationHours,
-    hourly_rate: policy.minimum_price / policy.minimum_hours,
+    hourly_rate: Math.round((policy.minimum_price / policy.minimum_hours) * 100) / 100,
     minimum_hours: policy.minimum_hours,
     minimum_price: policy.minimum_price,
     additional_hour_rate: policy.additional_hour_rate,

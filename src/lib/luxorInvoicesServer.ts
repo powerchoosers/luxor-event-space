@@ -5,6 +5,7 @@ import { roundLuxorMoney } from './luxorOffer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
 import { luxorCollectionAmounts } from './luxorPaymentOwnership'
 import { getLuxorProposalDeliveryReceipt } from './luxorProposalDeliveryReceipt'
+import { finishLuxorProposalPublicationAndFetchFreshInvoice } from './luxorProposalPublicationReconciliation'
 
 type SupabaseError = {
   message?: string
@@ -393,16 +394,14 @@ export async function reconcileLuxorProposalDeliveryReceipt(invoice: LuxorInvoic
     receipt.sentAt,
   )
   if (!completed) throw new Error('The saved delivery receipt could not be reconciled with proposal history.')
-  const publicationAttempt = invoice.proposal_context?.publication_attempt as { id?: string } | undefined
-  if (publicationAttempt?.id === receipt.proposalSendAttemptId) {
-    const finished = await finishLuxorProposalPublication(invoice.id, publicationAttempt.id, 'completed')
-    if (!finished) {
-      const latest = await getInvoice(invoice.id)
-      const latestAttempt = latest?.proposal_context?.publication_attempt as { id?: string; state?: string } | undefined
-      if (latestAttempt?.id === publicationAttempt.id && latestAttempt.state !== 'completed') {
-        throw new Error('The saved delivery receipt was reconciled, but publication state needs retry.')
-      }
-    }
+  const publicationAttempt = invoice.proposal_context?.publication_attempt as { id?: string; state?: string } | undefined
+  if (publicationAttempt?.id === receipt.proposalSendAttemptId && publicationAttempt.state !== 'completed') {
+    return finishLuxorProposalPublicationAndFetchFreshInvoice<LuxorInvoice>(
+      invoice.id,
+      publicationAttempt.id,
+      finishLuxorProposalPublication,
+      getInvoice,
+    )
   }
   return completed
 }

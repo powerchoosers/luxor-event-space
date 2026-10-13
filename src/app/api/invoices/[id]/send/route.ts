@@ -380,7 +380,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (sendReservation) await failLuxorProposalSend(sendReservation.attempt_id, 'Publication changed before the send was prepared.', false)
         return NextResponse.json({ error: 'This proposal changed in another request. Please retry to recover its current result.' }, { status: 409 })
       }
-      invoice = claimed
+      invoice = sendReservation ? { ...claimed, proposal_number: sendReservation.proposal_number } : claimed
       publicationAttemptId = attemptId
       const now = new Date().toISOString()
       const publicToken = invoice.public_token!
@@ -407,9 +407,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           await expireLuxorCheckoutForRepricing(prior)
         }
       }
-      const frozenInvoice = invoice.price_locked_at
+      const lockedInvoice = invoice.price_locked_at
         ? invoice
         : await updateInvoice(invoice.id, { price_locked_at: now, proposal_version: Math.max(1, Number(invoice.proposal_version || 1)) }) || invoice
+      const frozenInvoice = sendReservation ? { ...lockedInvoice, proposal_number: sendReservation.proposal_number } : lockedInvoice
       const persistedPublicToken = frozenInvoice.public_token || publicToken
       const persistedReviewUrl = `${origin}/proposal/${persistedPublicToken}`
       const existingPdf = await getLuxorDocumentByInvoice(frozenInvoice.id, 'proposal')

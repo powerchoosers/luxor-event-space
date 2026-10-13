@@ -661,8 +661,7 @@ begin
         or (s ->> 'minimum_hours')::numeric < 1 or (s ->> 'minimum_hours')::numeric > 19
         or mod((s ->> 'minimum_hours')::numeric, 1) <> 0
         or (s ->> 'minimum_price')::numeric <= 0 or (s ->> 'additional_hour_rate')::numeric < 0
-        or (s ->> 'hourly_rate')::numeric <> (s ->> 'minimum_price')::numeric / (s ->> 'minimum_hours')::numeric
-        or (s ->> 'day_group') in ('friday', 'saturday', 'sunday') and ((s ->> 'minimum_hours')::numeric <> 6 or (s ->> 'additional_hour_rate')::numeric <> 350)
+        or (s ->> 'hourly_rate')::numeric <> round((s ->> 'minimum_price')::numeric / (s ->> 'minimum_hours')::numeric, 2)
         or (s ->> 'time_increment_minutes')::numeric <> 60
         or (s ->> 'cleanup_buffer_minutes')::numeric <> 0
         or coalesce(s ->> 'reset_window_policy', '') <> 'allowed'
@@ -760,6 +759,21 @@ begin
     end if;
     guest_date := event_day + case when split_part(coalesce(p_context ->> 'guest_arrival_time', p_context ->> 'guestArrivalTime'), ':', 1)::integer < 6 then 1 else 0 end;
     end_date := event_day + case when split_part(coalesce(p_context ->> 'event_end_time', p_context ->> 'eventEndTime'), ':', 1)::integer < 6 then 1 else 0 end;
+    foreach field in array array['rental_start_at', 'rental_end_at', 'guest_arrival_at', 'event_end_at'] loop
+      if p_context ->> field is distinct from s ->> field then
+        raise exception 'LUXOR_WEEKDAY_INVALID: Canonical actual rental boundaries conflict with the snapshot.' using errcode = 'P0001';
+      end if;
+    end loop;
+    if (p_context ? 'rental_start_time' and p_context ->> 'rental_start_time' is distinct from s ->> 'start_time')
+       or (p_context ? 'rentalStartTime' and p_context ->> 'rentalStartTime' is distinct from s ->> 'start_time')
+       or (p_context ? 'rental_end_time' and p_context ->> 'rental_end_time' is distinct from s ->> 'end_time')
+       or (p_context ? 'rentalEndTime' and p_context ->> 'rentalEndTime' is distinct from s ->> 'end_time')
+       or (p_context ? 'guest_arrival_time' and p_context ->> 'guest_arrival_time' is distinct from substring(s ->> 'guest_arrival_at' from 12 for 5))
+       or (p_context ? 'guestArrivalTime' and p_context ->> 'guestArrivalTime' is distinct from substring(s ->> 'guest_arrival_at' from 12 for 5))
+       or (p_context ? 'event_end_time' and p_context ->> 'event_end_time' is distinct from substring(s ->> 'event_end_at' from 12 for 5))
+       or (p_context ? 'eventEndTime' and p_context ->> 'eventEndTime' is distinct from substring(s ->> 'event_end_at' from 12 for 5)) then
+      raise exception 'LUXOR_WEEKDAY_INVALID: Display clock aliases conflict with the snapshot.' using errcode = 'P0001';
+    end if;
     if s ->> 'rental_start_at' is distinct from (event_day::text || 'T' || (s ->> 'start_time') || ':00')
        or s ->> 'rental_end_at' is distinct from ((event_day + case when split_part(s ->> 'end_time', ':', 1)::integer < 6 then 1 else 0 end)::text || 'T' || (s ->> 'end_time') || ':00')
        or s ->> 'guest_arrival_at' is distinct from (guest_date::text || 'T' || coalesce(p_context ->> 'guest_arrival_time', p_context ->> 'guestArrivalTime') || ':00')
