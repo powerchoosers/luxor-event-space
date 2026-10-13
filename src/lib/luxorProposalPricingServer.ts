@@ -10,6 +10,7 @@ import type { LuxorInvoice, LuxorPromotion } from './luxorInquiryTypes'
 import { luxorCalendarDate } from './luxorProposalTerms'
 import { originalProposalCreatedAt, sameDayBookingSnapshot, SAME_DAY_BOOKING_CODE } from './luxorSameDayBooking'
 import { getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekdayCustomRentalDate, isWeekdayCustomRentalContext } from './luxorWeekdayRental'
+import { weekdayRentalPolicyMatchesSnapshot } from './luxorWeekdayRentalPolicyMatchesSnapshot'
 import { proposalBookingTiming } from './luxorProposalBookingTiming'
 import { assertLuxorWeekdayRentalAdmission, LuxorWeekdayRentalError } from './luxorWeekdayRentalServer'
 
@@ -198,7 +199,7 @@ export function assertLuxorWeekdayRentalPublication(invoice: LuxorInvoice) {
   const times = proposalBookingTiming(context)
   assertLuxorWeekdayRentalSelection({ rentalPeriod: 'custom', eventDate: context.event_date, guestArrivalTime: times.startTime, eventEndTime: times.endTime }, config, true)
   const policy = getWeekdayCustomRentalPolicy(config)
-  if (!policy || Object.keys(policy).some(key => key !== 'enabled' && policy[key as keyof typeof policy] !== snapshot[key as keyof typeof snapshot])) {
+  if (!policy || !weekdayRentalPolicyMatchesSnapshot(policy, snapshot)) {
     throw new LuxorWeekdayRentalError('The saved custom rental rules do not match its pricing snapshot. Create a revised proposal.')
   }
 }
