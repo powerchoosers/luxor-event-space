@@ -32,7 +32,9 @@ function object(value: unknown): Record<string, unknown> | null {
 export async function GET() {
   try {
     if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
-    return NextResponse.json(await getDefaultLuxorProposalPricing())
+    const customTimeV4Ready = process.env.LUXOR_CUSTOM_TIME_V4_READY === 'true'
+      && process.env.LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY === 'true'
+    return NextResponse.json({ ...await getDefaultLuxorProposalPricing(), custom_time_v4_ready: customTimeV4Ready })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Pricing configuration required — administrator review.' }, { status: 500 })
   }
@@ -63,9 +65,10 @@ export async function POST(request: NextRequest) {
     const originalCreatedAt = await resolveLuxorOriginalProposalCreatedAt(existing)
     const sameDayBooking = await resolveLuxorSameDayBooking(selection as LuxorProposalSelection, existing, originalCreatedAt)
     const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion, sameDayBooking })
-    const customPolicy = getLuxorWeekdayRentalClientPolicy(pricing.config)
-    const customTimeV4Policy = process.env.LUXOR_CUSTOM_TIME_V4_READY === 'true'
+    const customTimeV4Ready = process.env.LUXOR_CUSTOM_TIME_V4_READY === 'true'
       && process.env.LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY === 'true'
+    const customPolicy = customTimeV4Ready ? null : getLuxorWeekdayRentalClientPolicy(pricing.config)
+    const customTimeV4Policy = customTimeV4Ready
       ? getLuxorCustomTimeRentalPolicyV4(pricing.config, (selection as LuxorProposalSelection).eventDate)
       : null
     const createdOn = luxorCalendarDate(new Date(originalCreatedAt))

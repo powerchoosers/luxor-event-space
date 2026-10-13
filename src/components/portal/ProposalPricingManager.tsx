@@ -6,6 +6,7 @@ import { PortalButton, PortalSkeleton } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { catalogNumber, catalogValue, setCatalogValue, type PricingCatalog } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
+import { updateLuxorCustomTimeWeekdayPricingV4 } from '@/lib/luxorCustomTimeRentalV4'
 
 type PricingRecord = {
   id: string
@@ -127,6 +128,7 @@ export function ProposalPricingManager() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [customTimeV4Ready, setCustomTimeV4Ready] = useState(false)
 
   const load = useCallback(async () => {
     setState('loading')
@@ -136,6 +138,7 @@ export function ProposalPricingManager() {
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'Could not load the pricing catalog.')
       const loadedConfig = structuredClone(payload.config)
+      setCustomTimeV4Ready(payload.custom_time_v4_ready === true)
       if (catalogValue(loadedConfig, 'luxor_costs', 'required_fees', 'security', 'hourly_rate') === undefined) {
         setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], 40)
       }
@@ -173,24 +176,23 @@ export function ProposalPricingManager() {
     }
     const day = DAY_GROUPS.find((entry) => entry.id === path[path.length - 1])
     if (day) {
-      if (catalogValue(next, ...path, 'minimum_hours') === undefined || catalogValue(next, ...path, 'minimum_hours') === null) next = setCatalogValue(next, [...path, 'minimum_hours'], day.minimumHours)
-      if (catalogValue(next, ...path, 'minimum_price') === undefined || catalogValue(next, ...path, 'minimum_price') === null) next = setCatalogValue(next, [...path, 'minimum_price'], day.minimumPrice)
+      if (day.id === 'monday_thursday') {
+        const hours = catalogNumber(next, ...path, 'minimum_hours') ?? day.minimumHours
+        const price = catalogNumber(next, ...path, 'minimum_price')
+        const rate = catalogNumber(next, ...path, 'hourly_rate') ?? (price !== undefined && catalogNumber(next, ...path, 'minimum_hours') ? Math.round(price / catalogNumber(next, ...path, 'minimum_hours')! * 100) / 100 : day.minimumPrice / day.minimumHours)
+        if (catalogValue(next, ...path, 'minimum_hours') === undefined || catalogValue(next, ...path, 'minimum_hours') === null) next = setCatalogValue(next, [...path, 'minimum_hours'], hours)
+        next = setCatalogValue(next, [...path, 'hourly_rate'], rate)
+        if (price === undefined || price === null) next = setCatalogValue(next, [...path, 'minimum_price'], Math.round(rate * hours * 100) / 100)
+      } else {
+        if (catalogValue(next, ...path, 'minimum_hours') === undefined || catalogValue(next, ...path, 'minimum_hours') === null) next = setCatalogValue(next, [...path, 'minimum_hours'], day.minimumHours)
+        if (catalogValue(next, ...path, 'minimum_price') === undefined || catalogValue(next, ...path, 'minimum_price') === null) next = setCatalogValue(next, [...path, 'minimum_price'], day.minimumPrice)
+      }
       if (catalogValue(next, ...path, 'additional_hour_rate') === undefined || catalogValue(next, ...path, 'additional_hour_rate') === null) next = setCatalogValue(next, [...path, 'additional_hour_rate'], day.additionalHourRate)
     }
     return next
   })
 
-  const updateWeekdayCustomTime = (field: 'minimum_hours' | 'hourly_rate', value: number | null) => setDraft((current) => {
-    if (!current) return current
-    const path = ['luxor_costs', 'custom_time_rental_v4', 'monday_thursday']
-    let next = setCatalogValue(current, [...path, field === 'hourly_rate' ? 'minimum_price' : field], value)
-    const hours = field === 'minimum_hours' ? value : catalogNumber(current, ...path, 'minimum_hours')
-    const price = catalogNumber(current, ...path, 'minimum_price')
-    const currentHours = catalogNumber(current, ...path, 'minimum_hours')
-    const rate = field === 'hourly_rate' ? value : price != null && currentHours ? price / currentHours : null
-    if (hours && rate !== null) next = setCatalogValue(next, [...path, 'minimum_price'], Math.round(rate * hours * 100) / 100)
-    return next
-  })
+  const updateWeekdayCustomTime = (field: 'minimum_hours' | 'hourly_rate', value: number | null) => setDraft((current) => current ? updateLuxorCustomTimeWeekdayPricingV4(current, field, value) : current)
 
   const save = async () => {
     if (!record || !draft) return
@@ -264,7 +266,7 @@ export function ProposalPricingManager() {
                   {day.id === 'monday_thursday' ? <>
                     <MoneyInput draft={draft} field={{ label: 'Daytime hourly rate', path: ['luxor_costs', 'rental_rate_rules', day.id, 'morning', 'hourly_rate'] }} onChange={update} />
                     <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Minimum hours</span><input type="number" min="1" step="1" value={String(catalogNumber(draft, 'luxor_costs', 'rental_rate_rules', day.id, 'morning', 'minimum_hours') ?? '')} onChange={(event) => update(['luxor_costs', 'rental_rate_rules', day.id, 'morning', 'minimum_hours'], Number(event.target.value))} className={inputClass} /></label>
-                    <div className="sm:col-span-2 rounded-lg border border-[#caa24c]/20 bg-[color:var(--portal-card)] p-3">
+                    {!customTimeV4Ready ? <div className="sm:col-span-2 rounded-lg border border-[#caa24c]/20 bg-[color:var(--portal-card)] p-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">Custom Time pricing</p>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         <MoneyInput draft={draft} field={{ label: 'Base hourly rate', path: ['luxor_costs', 'weekday_custom_rental', 'hourly_rate'], suffix: 'for the initial hours' }} onChange={update} />
@@ -273,7 +275,7 @@ export function ProposalPricingManager() {
                         <MoneyInput draft={draft} field={{ label: 'Each additional hour', path: ['luxor_costs', 'weekday_custom_rental', 'additional_hour_rate'] }} onChange={update} />
                       </div>
                       <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Custom rentals shorter than the minimum billed hours still use the minimum price. Extra whole hours use the additional-hour rate. Existing sent proposals retain their saved totals.</p>
-                    </div>
+                    </div> : null}
                   </> : null}
                 </div>
               </article>
@@ -286,22 +288,25 @@ export function ProposalPricingManager() {
       </details>
 
       <details className="group overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-4 sm:px-6"><span><span className="block text-sm font-bold text-[color:var(--portal-text)]">Custom Time rates by day</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">Weekend rates use the configured base price through minimum hours, followed by the configured additional-hour rate. Set each base price before enabling a day. Existing fixed rental rates are unchanged.</span></span><ChevronDown size={17} className="mt-1 shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-4 sm:px-6"><span><span className="block text-sm font-bold text-[color:var(--portal-text)]">Custom Time rates by day</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">{customTimeV4Ready ? 'These are the current Custom Time rates. Existing fixed rental rates and sent proposals are unchanged.' : 'V4 rates are staged for the reviewed booking guard. The weekday settings above remain current until both V4 gates are ready.'} Weekend rentals use the configured minimum hours at the day-specific base price, then the configured additional-hour rate.</span></span><ChevronDown size={17} className="mt-1 shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>
         <div className="grid gap-4 border-t border-[color:var(--portal-border)] p-4 sm:grid-cols-2 sm:p-6">
           {DAY_GROUPS.map((day) => {
             const path = ['luxor_costs', 'custom_time_rental_v4', day.id]
             const enabled = catalogValue(draft, ...path, 'enabled') === true
             const minimumPrice = catalogNumber(draft, ...path, 'minimum_price')
             const minimumHours = catalogNumber(draft, ...path, 'minimum_hours')
+            const weekdayHourlyRate = catalogNumber(draft, ...path, 'hourly_rate') ?? (minimumPrice != null && minimumHours ? Math.round(minimumPrice / minimumHours * 100) / 100 : day.id === 'monday_thursday' ? 400 : null)
+            const shownMinimumHours = minimumHours ?? (day.id === 'monday_thursday' && catalogValue(draft, ...path, 'minimum_hours') === undefined ? day.minimumHours : null)
+            const shownMinimumPrice = minimumPrice ?? (day.id === 'monday_thursday' && catalogValue(draft, ...path, 'minimum_price') === undefined ? Math.round((weekdayHourlyRate ?? 400) * (shownMinimumHours ?? day.minimumHours) * 100) / 100 : null)
             return <article key={day.id} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
               <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-xs font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)]">{day.label}</h4><label className="flex min-h-10 items-center gap-2 text-[10px] font-semibold text-[color:var(--portal-muted)]"><input type="checkbox" checked={enabled} onChange={(event) => toggleCustomTimeDay(path, event.target.checked)} className="h-4 w-4 accent-[#caa24c]" /> Enable Custom Time</label></div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {day.id === 'monday_thursday' ? <MoneyInput draft={draft} field={{ label: 'Base hourly rate', path: [...path, 'minimum_price'], step: '0.01' }} onChange={(_fieldPath, value) => updateWeekdayCustomTime('hourly_rate', value)} valueOverride={minimumPrice != null && minimumHours ? Math.round(minimumPrice / minimumHours * 100) / 100 : null} /> : <MoneyInput draft={draft} field={{ label: 'Minimum rental price', path: [...path, 'minimum_price'], optional: true }} onChange={update} />}
-                <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Minimum billed hours</span><input type="number" min="1" max="19" step="1" value={String(catalogNumber(draft, ...path, 'minimum_hours') ?? '')} onChange={(event) => day.id === 'monday_thursday' ? updateWeekdayCustomTime('minimum_hours', event.target.value === '' ? null : Number(event.target.value)) : update([...path, 'minimum_hours'], event.target.value === '' ? null : Number(event.target.value))} className={inputClass} /></label>
+                {day.id === 'monday_thursday' ? <MoneyInput draft={draft} field={{ label: 'Base hourly rate', path: [...path, 'hourly_rate'], step: '0.01' }} onChange={(_fieldPath, value) => updateWeekdayCustomTime('hourly_rate', value)} valueOverride={weekdayHourlyRate} /> : <MoneyInput draft={draft} field={{ label: 'Minimum rental price', path: [...path, 'minimum_price'], optional: true }} onChange={update} />}
+                <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Minimum billed hours</span><input type="number" min="1" max="19" step="1" value={String(shownMinimumHours ?? '')} onChange={(event) => day.id === 'monday_thursday' ? updateWeekdayCustomTime('minimum_hours', event.target.value === '' ? null : Number(event.target.value)) : update([...path, 'minimum_hours'], event.target.value === '' ? null : Number(event.target.value))} className={inputClass} /></label>
                 <MoneyInput draft={draft} field={{ label: 'Each additional hour', path: [...path, 'additional_hour_rate'], optional: true }} onChange={update} />
                 <label className="flex min-h-11 items-center gap-2 self-end text-[10px] font-semibold text-[color:var(--portal-muted)]"><input type="checkbox" checked={catalogValue(draft, ...path, 'show_publicly') === true} onChange={(event) => update([...path, 'show_publicly'], event.target.checked)} className="h-4 w-4 accent-[#caa24c]" /> Show Custom Time starting price publicly</label>
               </div>
-              <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">{day.id === 'monday_thursday' ? 'The base hourly rate sets the minimum price for the minimum billed hours; each additional hour uses the editable extra-hour rate.' : 'Rentals up to six hours use the day-specific base price, then each additional hour uses the editable extra-hour rate.'} Venue access is 6:00 AM-1:00 AM the next day. Security uses guest arrival through event end with the existing four-hour minimum.</p>
+              <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">{day.id === 'monday_thursday' ? `The minimum price is ${shownMinimumPrice != null ? `$${shownMinimumPrice.toFixed(2)}` : 'set by the base hourly rate'} for ${shownMinimumHours ?? 'the configured'} minimum billed hours; each additional hour uses the editable extra-hour rate.` : `The base price covers the first ${minimumHours ?? 'configured'} minimum billed hours, then each additional hour uses the editable extra-hour rate.`} Venue access is 6:00 AM-1:00 AM the next day. Security uses guest arrival through event end with the existing four-hour minimum.</p>
               {enabled && !catalogNumber(draft, ...path, 'minimum_price') ? <p role="status" className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Set {day.id === 'monday_thursday' ? 'the' : `${day.label}'s`} base price before enabling this Custom Time day.</p> : null}
             </article>
           })}

@@ -13,7 +13,7 @@ import { getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekday
 import { weekdayRentalPolicyMatchesSnapshot } from './luxorWeekdayRentalPolicyMatchesSnapshot'
 import { proposalBookingTiming } from './luxorProposalBookingTiming'
 import { assertLuxorWeekdayRentalAdmission, LuxorWeekdayRentalError } from './luxorWeekdayRentalServer'
-import { getLuxorCustomTimeRentalPolicyV4, validateLuxorCustomTimeScheduleV4, luxorCustomTimeRentalPolicyMatchesV4, getLuxorCustomTimeRentalSnapshotV4, luxorCustomTimeDayGroup } from './luxorCustomTimeRentalV4'
+import { getLuxorCustomTimeRentalPolicyV4, validateLuxorCustomTimeScheduleV4, luxorCustomTimeRentalPolicyMatchesV4, getLuxorCustomTimeRentalSnapshotV4, luxorCustomTimeDayGroup, hasLuxorCustomTimeRentalV4DayConfig } from './luxorCustomTimeRentalV4'
 
 export type LuxorProposalPricingRecord = {
   id: string
@@ -173,8 +173,13 @@ export function assertLuxorWeekdayRentalSelection(selection: LuxorProposalSelect
   if (requested) {
     if (selection.rentalPeriod !== 'custom') throw new LuxorWeekdayRentalError('Select a valid custom rental period.')
     const v4Policy = getLuxorCustomTimeRentalPolicyV4(config, selection.eventDate)
+    const v4Ready = process.env.LUXOR_CUSTOM_TIME_V4_READY === 'true'
+      && process.env.LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY === 'true'
+    if (v4Ready && (!hasLuxorCustomTimeRentalV4DayConfig(config, selection.eventDate) || !v4Policy)) {
+      throw new LuxorWeekdayRentalError('Custom Time is not enabled with valid owner settings for this day.')
+    }
     if (v4Policy) {
-      if (process.env.LUXOR_CUSTOM_TIME_V4_READY !== 'true' || process.env.LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY !== 'true') {
+      if (!v4Ready) {
         throw new LuxorWeekdayRentalError('Custom Time for this day is awaiting its reviewed booking guard.')
       }
       if (v4Policy.booking_policy !== 'one_per_date') throw new LuxorWeekdayRentalError('Custom Time booking capacity is not available.')

@@ -1,4 +1,5 @@
 import { validCalendarDate } from './luxorProposalTerms'
+import { catalogNumber, setCatalogValue, type PricingCatalog } from './luxorPricingCatalog'
 
 export const LUXOR_CUSTOM_TIME_V4_GATE = 'LUXOR_CUSTOM_TIME_V4_READY'
 export const LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_GATE = 'LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY'
@@ -47,6 +48,21 @@ export type LuxorCustomTimeScheduleV4 = {
 
 const DAY_GROUPS: LuxorCustomTimeDayGroup[] = ['monday_thursday', 'friday', 'saturday', 'sunday']
 
+/** Keep the weekday hourly rate independent while deriving the billed minimum. */
+export function updateLuxorCustomTimeWeekdayPricingV4(config: PricingCatalog, field: 'minimum_hours' | 'hourly_rate', value: number | null): PricingCatalog {
+  const path = ['luxor_costs', 'custom_time_rental_v4', 'monday_thursday']
+  const storedHours = catalogNumber(config, ...path, 'minimum_hours')
+  const storedPrice = catalogNumber(config, ...path, 'minimum_price')
+  const rate = catalogNumber(config, ...path, 'hourly_rate')
+    ?? (storedPrice !== undefined && storedHours ? Math.round(storedPrice / storedHours * 100) / 100 : 400)
+  const hours = field === 'minimum_hours' ? value : storedHours ?? 3
+  const nextRate = field === 'hourly_rate' ? value : rate
+  let next = setCatalogValue(config, [...path, 'hourly_rate'], nextRate)
+  next = setCatalogValue(next, [...path, 'minimum_hours'], hours)
+  next = setCatalogValue(next, [...path, 'minimum_price'], nextRate !== null && hours !== null ? Math.round(nextRate * hours * 100) / 100 : null)
+  return next
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
 }
@@ -83,8 +99,11 @@ export function validateLuxorCustomTimeRentalV4Config(config: unknown): string[]
     const minimumHours = numeric(policy.minimum_hours)
     const minimumPrice = numeric(policy.minimum_price)
     const additionalRate = numeric(policy.additional_hour_rate)
+    const hourlyRate = numeric(policy.hourly_rate)
     if (minimumHours === null || !Number.isInteger(minimumHours) || minimumHours < 1 || minimumHours > 19) errors.push(`Set the ${day.replace('_', ' ')} Custom Time minimum as a whole number from 1 to 19 hours.`)
     if (minimumPrice === null || minimumPrice <= 0) errors.push(`Set a positive ${day.replace('_', ' ')} Custom Time minimum price.`)
+    if (policy.hourly_rate !== undefined && (hourlyRate === null || hourlyRate <= 0)) errors.push(`Set a positive ${day.replace('_', ' ')} Custom Time base hourly rate.`)
+    if (hourlyRate !== null && minimumHours !== null && Number.isInteger(minimumHours) && minimumPrice !== null && Math.round(hourlyRate * minimumHours * 100) / 100 !== minimumPrice) errors.push(`Keep the ${day.replace('_', ' ')} Custom Time minimum price equal to its base hourly rate times minimum hours.`)
     if (additionalRate === null || additionalRate < 0) errors.push(`Set the ${day.replace('_', ' ')} Custom Time rate for every additional hour.`)
     if (policy.time_increment_minutes !== 60) errors.push(`Set ${day.replace('_', ' ')} Custom Time in 60-minute increments.`)
     if (policy.reset_window_policy !== 'allowed') errors.push(`Confirm the ${day.replace('_', ' ')} Custom Time reset-window rule.`)
@@ -95,6 +114,16 @@ export function validateLuxorCustomTimeRentalV4Config(config: unknown): string[]
     if (policy.show_publicly !== undefined && typeof policy.show_publicly !== 'boolean') errors.push(`Choose whether the ${day.replace('_', ' ')} Custom Time starting price is shown publicly.`)
   }
   return errors
+}
+
+/** True only when the current catalog has an explicit policy entry for this day. */
+export function hasLuxorCustomTimeRentalV4DayConfig(config: unknown, eventDate: unknown): boolean {
+  const day = luxorCustomTimeDayGroup(eventDate)
+  if (!day) return false
+  const root = record(config)
+  const costs = record(root?.luxor_costs) || root
+  const days = record(costs?.custom_time_rental_v4)
+  return Boolean(days && Object.prototype.hasOwnProperty.call(days, day) && record(days[day]))
 }
 
 export function getLuxorCustomTimeRentalPolicyV4(config: unknown, eventDate: unknown): LuxorCustomTimeRentalPolicyV4 | null {
