@@ -89,6 +89,20 @@ Updated SQL review artifact SHA256: `bffebdccd028f51c1b1f24e40745f50ddc267c69027
 
 ## Cloud continuation
 
-1. Preserve the unrelated `src/app/(portal)/portal/leads/page.tsx` edit from the previously published branch; it was deliberately excluded from the groundwork commit and remains untouched.
-2. Keep activation, catalog writes and migration application held until the final readiness review. Validate the migration against production schema/RLS, then proceed only under the approved deployment plan.
-3. Do not commit temporary test routes, fixtures, secrets, environment files or QA artifacts.
+The implementation and production activation described above are complete. The unrelated `src/app/(portal)/portal/leads/page.tsx` work was deliberately excluded from the implementation and remains untouched. Do not commit temporary test routes, fixtures, secrets, environment files or QA artifacts.
+
+## Production rollout and migration identity reconciliation — October 13, 2026
+
+The approved migration was applied once to active Supabase project `ofjvbzdwijjnajgjotmx` (PostgreSQL 17.6.1.141). Production history records version `20261013085335`, name `luxor_weekday_custom_rental_booking_guard`, with one statement. Its stored statement SHA256 (`da2679e2d1da53de0dc1cba06fe51fcd711f4f3dcb11e31b669fedcb55e7cb6f`) exactly matches the checked-in migration file before its filename was aligned to that recorded version. The migration was not replayed and production migration history was not edited.
+
+The database guard, trigger and service-only acceptance RPC were verified after application. The three functions are `SECURITY INVOKER`, use an empty search path, and are executable only by `service_role`; the booking trigger is enabled. RLS and table grants on `luxor_bookings`, `luxor_invoices`, and `luxor_inquiries` match their pre-migration state. READ COMMITTED remains the database isolation level. The security and performance advisor scan found no weekday-specific findings.
+
+The default catalog is version 13 with the enabled weekday custom-rental policy: $400/hour, three-hour minimum, whole-hour increments, reset-window access, one event per date, zero additional cleanup buffer, security from guest arrival through event end, and proposal selection in the owner portal only. Existing Friday–Sunday rates, cleaning and security rates, deposit and tax were verified unchanged. The production flags `LUXOR_WEEKDAY_CUSTOM_RENTAL_BOOKING_GUARD_READY` and `LUXOR_WEEKDAY_CUSTOM_RENTAL_ENABLED` are both `true` for the production environment.
+
+Vercel production deployment `dpl_G32d5V9oB5SG7wfTy6oGD1P9WANd` for application commit `f4f60b454701cf4ec1d2335902c41daa1e21b920` reached `READY`. The subsequent migration-history alignment commit changes only the migration filename and this document; it does not change runtime code. The canonical homepage returned HTTP 200. The unauthenticated `/api/proposal-pricing` route returned HTTP 401, as expected for the owner-only workflow.
+
+Synthetic calculator checks used the current production catalog configuration and policy: a Monday 10:00–13:00 selection priced at $1,200 rental, $250 cleaning, and $160 security; a 14:00–18:00 selection across the reset window priced at $1,600, $250 cleaning, and $160 security; a 19:00–01:00 overnight selection priced at $2,400, $250 cleaning, and $240 security. All three calculator results were publishable with no calculation errors. A separate synthetic production SQL validator call accepted a matching version-2 context. These checks made no customer records.
+
+No authenticated owner portal session was available in the cloud tools, so the signed-in proposal-builder UI was not exercised. Arianna can verify the UI at [the owner portal login](https://www.luxoratlaspalmas.com/portal/login): sign in, open [Leads](https://www.luxoratlaspalmas.com/portal/leads), open an existing lead, begin a new proposal, select a Monday–Thursday date, then choose custom rental times. Confirm whole-hour choices, the three-hour minimum, reset-window availability, the $400/hour rental line and unchanged fees. Stop before saving, sending, accepting, or taking payment. No authentication was bypassed.
+
+No customer bookings, charges, messages, agreements, historical snapshots, credentials, legal terms, or unrelated access controls were changed during this rollout.
