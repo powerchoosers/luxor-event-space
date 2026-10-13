@@ -654,7 +654,7 @@ export default function LeadsPage() {
 
               </>
             )}
-            <PortalButton variant="primary" onClick={() => setIsLeadDrawerOpen(true)}>
+            <PortalButton variant="primary" className="!text-white hover:!text-white [&>svg]:!text-white" onClick={() => setIsLeadDrawerOpen(true)}>
               <Plus size={14} /> New Lead
             </PortalButton>
           </div>
@@ -1736,7 +1736,7 @@ function LeadsClientsTab({
               contact={client.email || (client.phone ? formatPhoneDisplay(client.phone) : 'No contact details')}
               actions={
                 <>
-                  <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition-colors hover:bg-[#916825]"><UserCheck size={14} /> Manage Dossier</Link>
+                  <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><UserCheck size={14} /> Manage Dossier</Link>
                   <LeadLifecycleActionsMenu lead={client} onAction={(action) => onLifecycleAction(client, action)} />
                 </>
               }
@@ -2041,24 +2041,25 @@ function LeadsToursTab({
         contact={tour.email || (tour.phone ? formatPhoneDisplay(tour.phone) : 'No contact details')}
         className={category === 'no_shows' ? 'border-rose-300 dark:border-rose-400/40' : ''}
         actions={
-          <>
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <PortalSelect className="w-full sm:w-auto" value={getPipelineStage(tour)} onChange={(value) => onMovePipelineStage(tour.id, value as LuxorPipelineStage)} options={PIPELINE_STAGE_OPTIONS} />
+          <div className="grid w-full min-w-0 gap-2.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0 text-[10px] font-semibold text-[color:var(--portal-muted)]">Stage</span>
+              <PortalSelect aria-label={`Pipeline stage for ${tour.full_name}`} className="min-w-0 flex-1" value={getPipelineStage(tour)} onChange={(value) => onMovePipelineStage(tour.id, value as LuxorPipelineStage)} options={PIPELINE_STAGE_OPTIONS} />
             </div>
-            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-              <Link href={'/portal/leads/' + tour.id + '?stage=tour'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition-colors hover:bg-[#916825]"><Calendar size={14} /> Manage Tour</Link>
-              <Link href={'/portal/leads/' + tour.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"><Eye size={14} /> View</Link>
-              <LeadLifecycleActionsMenu lead={tour} onAction={(action) => onLifecycleAction(tour, action)} />
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5">
+              <Link href={'/portal/leads/' + tour.id + '?stage=tour'} className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-[#a8792f] px-3 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><Calendar size={14} /> Manage Tour</Link>
+              <Link href={'/portal/leads/' + tour.id} className="inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"><Eye size={14} /> View</Link>
+              <LeadLifecycleActionsMenu lead={tour} onAction={(action) => onLifecycleAction(tour, action)} className="!h-11 !w-11" />
             </div>
-          </>
+          </div>
         }
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-3">
           <div><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Tour time</p><p className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">{tour.preferred_tour_date ? formatTourDate(tour.preferred_tour_date) : 'Date Pending'}</p><p className="text-xs text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Time TBD'} · Central</p></div>
           {tour.tour_attendance_status !== 'cancelled' && tour.tour_attendance_status !== 'attended' ? (
-            <div className="flex flex-wrap gap-2">
-              <LuxorCrmSecondaryAction disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'attended')}>{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : tour.tour_attendance_status === 'no_show' ? 'Correct to Completed' : 'Mark Completed'}</LuxorCrmSecondaryAction>
-              {!['attended', 'no_show'].includes(tour.tour_attendance_status || '') ? <LuxorCrmSecondaryAction disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'no_show')}>{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark No Show'}</LuxorCrmSecondaryAction> : null}
+            <div className={`grid w-full gap-2 ${tour.tour_attendance_status === 'no_show' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+              <LuxorCrmSecondaryAction className="w-full" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'attended')}>{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : tour.tour_attendance_status === 'no_show' ? 'Correct to Completed' : 'Mark Completed'}</LuxorCrmSecondaryAction>
+              {!['attended', 'no_show'].includes(tour.tour_attendance_status || '') ? <LuxorCrmSecondaryAction className="w-full" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'no_show')}>{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : 'Mark No Show'}</LuxorCrmSecondaryAction> : null}
             </div>
           ) : null}
         </div>
@@ -2134,7 +2135,7 @@ function LeadsProposalsTab({
               contact={lead.email || 'No email registered'}
               actions={
                 <>
-                  <Link href={'/portal/leads/' + lead.id + '?stage=proposal'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition-colors hover:bg-[#916825]"><FileCheck size={14} /> Review Proposal</Link>
+                  <Link href={'/portal/leads/' + lead.id + '?stage=proposal'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><FileCheck size={14} /> Review Proposal</Link>
                   <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
                 </>
               }
