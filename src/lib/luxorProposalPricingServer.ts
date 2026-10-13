@@ -9,6 +9,9 @@ import { supabaseRest } from './supabaseRestServer'
 import type { LuxorInvoice, LuxorPromotion } from './luxorInquiryTypes'
 import { luxorCalendarDate } from './luxorProposalTerms'
 import { originalProposalCreatedAt, sameDayBookingSnapshot, SAME_DAY_BOOKING_CODE } from './luxorSameDayBooking'
+import { getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekdayCustomRentalDate, isWeekdayCustomRentalContext } from './luxorWeekdayRental'
+import { proposalBookingTiming } from './luxorProposalBookingTiming'
+import { assertLuxorWeekdayRentalAdmission, LuxorWeekdayRentalError } from './luxorWeekdayRentalServer'
 
 export type LuxorProposalPricingRecord = {
   id: string
@@ -150,4 +153,51 @@ export async function getLuxorProposalPricingForInvoice(existing?: LuxorInvoice 
   const config = isRecord(snapshot) && isRecord(snapshot.pricing_config) ? snapshot.pricing_config : null
   if (config && existing) return { id: '', created_at: existing.created_at, updated_at: existing.updated_at, version: Number(existing.proposal_context?.pricing_config_version || 1), is_default: false, config }
   return getDefaultLuxorProposalPricing()
+}
+
+/** Expose a complete catalog policy only after the reviewed scheduling guard is ready. */
+export function getLuxorWeekdayRentalClientPolicy(config: LuxorProposalPricingConfig) {
+  if (process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_ENABLED !== 'true' || process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_BOOKING_GUARD_READY !== 'true') return null
+  const policy = getWeekdayCustomRentalPolicy(config)
+  return policy?.booking_policy === 'one_per_date' && policy.selection_surface === 'portal_only' ? policy : null
+}
+
+/** Clients select times; saved owner rules and deployment readiness select the pricing mode. */
+export function assertLuxorWeekdayRentalSelection(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig, requireCustomOnWeekdays = false) {
+  const requested = typeof selection.rentalPeriod === 'string' && selection.rentalPeriod.toLowerCase().replace(/[^a-z]/g, '') === 'custom'
+  const policy = getLuxorWeekdayRentalClientPolicy(config)
+  const savedPolicy = getWeekdayCustomRentalPolicy(config)
+  if (requested) {
+    assertLuxorWeekdayRentalAdmission()
+    if (selection.rentalPeriod !== 'custom') throw new LuxorWeekdayRentalError('Select a valid custom rental period.')
+    if (savedPolicy?.booking_policy === 'multiple_per_date') throw new LuxorWeekdayRentalError('Multiple weekday events require a separate approved scheduling and reservation decision.')
+    if (savedPolicy?.selection_surface === 'public_and_portal') throw new LuxorWeekdayRentalError('Public weekday time selection must be implemented and reviewed before this policy can open.')
+    if (!policy || config.pricing_mode !== 'venue_plus_preferred_vendor_estimates') throw new LuxorWeekdayRentalError('Custom weekday rentals require a complete approved policy in the current venue catalog.')
+    for (const [camel, snake] of [[selection.guestArrivalTime, selection.guest_arrival_time], [selection.eventEndTime, selection.event_end_time]]) {
+      if (typeof camel === 'string' && typeof snake === 'string' && camel.trim() !== snake.trim()) throw new LuxorWeekdayRentalError('The rental times changed. Refresh the proposal and select the times again.')
+    }
+  } else if (requireCustomOnWeekdays && config.pricing_mode === 'venue_plus_preferred_vendor_estimates' && isWeekdayCustomRentalDate(selection.eventDate) &&
+    process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_ENABLED === 'true' && process.env.LUXOR_WEEKDAY_CUSTOM_RENTAL_BOOKING_GUARD_READY === 'true') {
+    const costs = isRecord(config.luxor_costs) ? config.luxor_costs : config
+    if (isRecord(costs.weekday_custom_rental) && costs.weekday_custom_rental.enabled === true) {
+      throw new LuxorWeekdayRentalError(policy ? 'Select custom weekday rental times before saving this proposal.' : 'The weekday rental policy is not ready for publication. Existing saved proposals keep their original terms.')
+    }
+  }
+}
+
+/** Publishing a new custom draft must not bypass readiness through the delivery route. */
+export function assertLuxorWeekdayRentalPublication(invoice: LuxorInvoice) {
+  const context = invoice.proposal_context
+  // Owner-editable status labels alone do not prove a proposal was published.
+  if (invoice.invoice_kind !== 'event' || !context || !isWeekdayCustomRentalContext(context) || invoice.proposal_sent_at || invoice.proposal_accepted_at) return
+  const snapshot = getWeekdayCustomRentalSnapshot(context.weekday_custom_rental)
+  const pricingSnapshot = isRecord(context.pricing_snapshot) ? context.pricing_snapshot : null
+  const config = pricingSnapshot && isRecord(pricingSnapshot.pricing_config) ? pricingSnapshot.pricing_config : null
+  if (!snapshot || !config) throw new LuxorWeekdayRentalError('The saved custom rental pricing snapshot is invalid. Create a revised proposal.')
+  const times = proposalBookingTiming(context)
+  assertLuxorWeekdayRentalSelection({ rentalPeriod: 'custom', eventDate: context.event_date, guestArrivalTime: times.startTime, eventEndTime: times.endTime }, config, true)
+  const policy = getWeekdayCustomRentalPolicy(config)
+  if (!policy || Object.keys(policy).some(key => key !== 'enabled' && policy[key as keyof typeof policy] !== snapshot[key as keyof typeof snapshot])) {
+    throw new LuxorWeekdayRentalError('The saved custom rental rules do not match its pricing snapshot. Create a revised proposal.')
+  }
 }

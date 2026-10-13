@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server'
-import { queueLuxorAcceptedProposalAgreement } from '@/lib/luxorAgreementQueueServer'
+import { prepareLuxorAcceptedProposalBooking, queueLuxorAcceptedProposalAgreement } from '@/lib/luxorAgreementQueueServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { claimLuxorProposalAcceptance, getInvoice, getInvoiceByPublicToken } from '@/lib/luxorInvoicesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 import { hasLuxorSignatureDeliveryDocuments } from '@/lib/luxorSignaturesServer'
 import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
 import { SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
+import { claimLuxorWeekdayProposalAcceptance, LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
+import { LuxorProposalBookingTimingError } from '@/lib/luxorProposalBookingTiming'
+import { isWeekdayCustomRentalContext } from '@/lib/luxorWeekdayRental'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +50,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     }
 
     const now = new Date().toISOString()
-    const acceptanceClaim = invoice.proposal_accepted_at
+    const acceptanceClaim = isWeekdayCustomRentalContext(invoice.proposal_context)
+      ? await claimLuxorWeekdayProposalAcceptance(invoice, prepareLuxorAcceptedProposalBooking(invoice, inquiry), {
+          acceptedAt: now,
+          ip: requestIp(request),
+          userAgent: requestUserAgent(request),
+        })
+      : invoice.proposal_accepted_at
       ? invoice
       : await claimLuxorProposalAcceptance(invoice.id, {
           acceptedAt: now,
@@ -76,6 +85,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       signingUrl,
     }, { status: result.delivery === 'preparing' || result.delivery === 'queued' ? 202 : 200 })
   } catch (error) {
+    if (error instanceof LuxorWeekdayRentalError || error instanceof LuxorProposalBookingTimingError) return NextResponse.json({ error: error.message }, { status: error.status })
     // The client never needs to interpret a database or provider implementation
     // error while accepting a proposal. No email is sent from this request.
     console.error('Public proposal acceptance failed:', error)

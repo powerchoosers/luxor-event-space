@@ -10,6 +10,7 @@ import { formatCatalogTime } from './luxorPricingCatalog'
 import { proposalEventTiming } from './luxorProposalTerms'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from './luxorDecorCatalog'
 import type { LuxorSameDayBookingSnapshot } from './luxorSameDayBooking'
+import { getWeekdayCustomRentalPolicy, validateWeekdayCustomRentalTiming, weekdayCustomRentalSnapshot, formatWeekdayCustomRentalDuration, weekdayRentalMinutesFromHours } from './luxorWeekdayRental'
 
 export type LuxorProposalPackageId =
   | 'rental_only'
@@ -17,7 +18,7 @@ export type LuxorProposalPackageId =
   | 'silver_premier'
   | 'gold_all_inclusive'
 
-export type LuxorRentalPeriod = 'morning' | 'evening' | 'full_day'
+export type LuxorRentalPeriod = 'morning' | 'evening' | 'full_day' | 'custom'
 
 /**
  * A non-catalog line entered by an authenticated Luxor owner. Custom items
@@ -405,6 +406,7 @@ function normalizeRentalPeriod(value: unknown): LuxorRentalPeriod | null {
   if (normalized === 'morning' || normalized === 'am') return 'morning'
   if (normalized === 'evening' || normalized === 'pm') return 'evening'
   if (normalized === 'fullday' || normalized === 'full') return 'full_day'
+  if (normalized === 'custom') return 'custom'
   return null
 }
 
@@ -1345,12 +1347,21 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   const vendorCustomItems = custom.items.filter((item) => vendorCustom.has(String(item.id))).map((item) => ({ ...item, category: 'Preferred Vendor Services — Estimated Pricing', detail: item.detail || 'Owner-entered estimated vendor investment. Confirm directly with the vendor.' }))
   const confirmed: LuxorInvoiceLineItem[] = []
   const safePeriod = rentalPeriod || 'evening'
-  errors.push(...eventTimingErrors(selection, luxor, safePeriod))
+  const customPolicy = safePeriod === 'custom' ? getWeekdayCustomRentalPolicy(config) : null
+  const customTiming = safePeriod === 'custom' ? validateWeekdayCustomRentalTiming(eventDate, trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time), trimmedString(selection.eventEndTime ?? selection.event_end_time), customPolicy) : null
+  const customRental = customPolicy && customTiming?.valid ? weekdayCustomRentalSnapshot(eventDate, customTiming, customPolicy) : null
+  if (customTiming) {
+    if (!customTiming.valid) errors.push(customTiming.error!)
+  } else errors.push(...eventTimingErrors(selection, luxor, safePeriod))
   const rentalGroup = dateRateGroup(eventDate)
-  const rentalAmount = rentalGroup ? readNumber(luxor, 'rental_rates', rentalGroup, safePeriod) : undefined
-  if (rentalAmount === undefined || rentalAmount <= 0) errors.push(CONFIGURATION_ERROR)
-  else confirmed.push(lineItem({ id: 'venue-rental', category: 'Venue Rental — Confirmed Price', description: 'Luxor venue rental', unitPrice: rentalAmount, required: true, pricingRole: 'required', paymentBucket: 'venue', detail: `Official Luxor rate for ${safePeriod.replace('_', ' ')} venue access.` }))
-  addRentalExtension(confirmed, errors, selection, luxor, safePeriod, eventDate)
+  if (safePeriod === 'custom') {
+    if (customRental) confirmed.push({ ...lineItem({ id: 'venue-rental', category: 'Venue Rental — Confirmed Price', description: 'Luxor custom weekday venue rental', quantity: customRental.duration_hours, unitPrice: customRental.hourly_rate, required: true, pricingRole: 'required', paymentBucket: 'venue', pricingRuleId: 'weekday_custom_rental.hourly_rate', detail: `${formatCatalogTime(customRental.start_time)}-${formatCatalogTime(customRental.end_time)}${Number(customRental.end_time.slice(0, 2)) < 6 ? " (next day)" : ""} access | ${formatWeekdayCustomRentalDuration(customRental.duration_minutes)} at ${customRental.hourly_rate}/hour`, quoteBreakdown: { quantity: customRental.duration_hours, unit_price: customRental.hourly_rate, subtotal: customRental.rental_total } }), total: customRental.rental_total })
+  } else {
+    const rentalAmount = rentalGroup ? readNumber(luxor, 'rental_rates', rentalGroup, safePeriod) : undefined
+    if (rentalAmount === undefined || rentalAmount <= 0) errors.push(CONFIGURATION_ERROR)
+    else confirmed.push(lineItem({ id: 'venue-rental', category: 'Venue Rental — Confirmed Price', description: 'Luxor venue rental', unitPrice: rentalAmount, required: true, pricingRole: 'required', paymentBucket: 'venue', detail: `Official Luxor rate for ${safePeriod.replace('_', ' ')} venue access.` }))
+    addRentalExtension(confirmed, errors, selection, luxor, safePeriod, eventDate)
+  }
   const cleaning = tierForGuestCount(readRecord(luxor, 'required_fees', 'cleaning')?.retail, guestCount)
   const securityConfig = readRecord(luxor, 'required_fees', 'security') || readRecord(luxor, 'security') || readRecord(config, 'security')
   const security = tierForGuestCount(securityConfig?.retail, guestCount)
@@ -1363,7 +1374,23 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   let securityBillableHours: number | undefined
   let effectiveSecurityRate: number | undefined
 
-  if (securityHourlyRate !== undefined && securityHourlyRate > 0) {
+  if (safePeriod === 'custom') {
+    const customHours = numberValue(selection.securityHours ?? selection.security_hours)
+    const ownerHoursValid = customHours !== undefined && customHours >= securityMinHours && customHours <= 19 && weekdayRentalMinutesFromHours(customHours) !== null
+    if (!customRental || !customPolicy) {
+      errors.push('Confirm the custom rental duration and approved security-hour policy.')
+    } else if (securityHourlyRate === undefined || securityHourlyRate <= 0 || !Number.isFinite(securityMinHours) || securityMinHours <= 0) {
+      errors.push(CONFIGURATION_ERROR)
+    } else if (customPolicy.security_hours_policy === 'owner_entered' && !ownerHoursValid) {
+      errors.push(`Enter weekday security hours of at least ${securityMinHours} hours, within the venue access window.`)
+    } else {
+      const billableHours = customPolicy.security_hours_policy === 'rental_duration' ? Math.max(securityMinHours, customRental.duration_hours) : customHours!
+      securityBillableHours = billableHours
+      effectiveSecurityRate = securityHourlyRate
+      securityAmount = rounded(officers * billableHours * securityHourlyRate)
+      securityDetail = `${officers} Security Officer${officers > 1 ? 's' : ''} | ${billableHours} hours | $${securityHourlyRate}/hour | Total: $${securityAmount}`
+    }
+  } else if (securityHourlyRate !== undefined && securityHourlyRate > 0) {
     const customHours = numberValue(selection.securityHours ?? selection.security_hours)
     const configuredAccessHours = numberValue(readRecord(luxor, 'rental_access', safePeriod)?.hours)
     const accessHours = customHours && customHours > 0
@@ -1438,6 +1465,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
     guestArrivalTime: trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time) || undefined,
     event_end_time: trimmedString(selection.event_end_time ?? selection.eventEndTime) || undefined,
     eventEndTime: trimmedString(selection.eventEndTime ?? selection.event_end_time) || undefined,
+    ...(customRental ? { weekday_custom_rental: customRental, start_time: customRental.start_time, end_time: customRental.end_time, rental_hours: customRental.duration_hours, rental_hourly_rate: customRental.hourly_rate, rental_total: customRental.rental_total } : {}),
     security_rate: effectiveSecurityRate,
     security_guards: officers,
     security_hours: securityBillableHours,
@@ -1470,7 +1498,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
     calculation_warnings: warnings, calculation_errors: calculationErrors, publication_errors: publicationErrors,
   }
   const primary = { id: 'luxor_venue_proposal' as LuxorProposalPackageId, name: 'Luxor Venue Proposal', description: 'Confirmed venue rental and required Luxor charges.', finalEventPrice: confirmedLuxorTotal, final_event_price: confirmedLuxorTotal, refundableSecurityDeposit: securityDeposit, refundable_security_deposit: securityDeposit, amountDueToBook: finalContext.amount_due_to_book || null, amount_due_to_book: finalContext.amount_due_to_book || null, subtotal, discountAmount, discount_amount: discountAmount, taxAmount, tax_amount: taxAmount, taxRate, tax_rate: taxRate, lineItems: confirmed, line_items: confirmed, ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}), warnings, errors: calculationErrors }
-  const snapshot = { schema_version: 2, calculated_at: new Date().toISOString(), pricing_mode: 'venue_plus_preferred_vendor_estimates', pricing_config: config, confirmed_luxor: { line_items: confirmed, total: confirmedLuxorTotal, refundable_security_deposit: securityDeposit }, preferred_vendor_estimates: { selected_lines: selectedVendorEstimateLines, total: estimatedVendorTotal, disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER }, estimated_overall_investment: rounded(confirmedLuxorTotal + estimatedVendorTotal) }
+  const snapshot = { schema_version: 2, calculated_at: new Date().toISOString(), pricing_mode: 'venue_plus_preferred_vendor_estimates', pricing_config: config, ...(customRental ? { weekday_custom_rental: customRental, selection: finalContext.pricing_selection } : {}), confirmed_luxor: { line_items: confirmed, total: confirmedLuxorTotal, refundable_security_deposit: securityDeposit }, preferred_vendor_estimates: { selected_lines: selectedVendorEstimateLines, total: estimatedVendorTotal, disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER }, estimated_overall_investment: rounded(confirmedLuxorTotal + estimatedVendorTotal) }
   return { valid: calculationErrors.length === 0, publishable: calculationErrors.length === 0 && publicationErrors.length === 0, calculationErrors, publicationErrors, requirements: { paymentPlan: !paymentPlan }, errors: [...calculationErrors, ...publicationErrors], warnings, packages: [primary], lineItems: confirmed, line_items: confirmed, subtotal, discountAmount, discount_amount: discountAmount, taxAmount, tax_amount: taxAmount, taxRate, tax_rate: taxRate, total: confirmedLuxorTotal, finalEventPrice: confirmedLuxorTotal, final_event_price: confirmedLuxorTotal, securityDepositAmount: securityDeposit, refundable_security_deposit: securityDeposit, totalWithSecurityDeposit: rounded(confirmedLuxorTotal + securityDeposit), amountDueToBook: primary.amountDueToBook, amount_due_to_book: primary.amountDueToBook, addOnQuotes, selectedVendorEstimateLines, preferred_vendor_estimate_lines: selectedVendorEstimateLines, confirmedLuxorTotal, confirmed_luxor_total: confirmedLuxorTotal, estimatedVendorTotal, estimated_vendor_total: estimatedVendorTotal, estimatedOverallInvestment: rounded(confirmedLuxorTotal + estimatedVendorTotal), estimated_overall_investment: rounded(confirmedLuxorTotal + estimatedVendorTotal), ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}), proposalContext: finalContext, context: finalContext, snapshot }
 }
 
@@ -1507,6 +1535,7 @@ function calculateProposal(
     baseWarnings.push('Guest-count administrator override is recorded, but no approved pricing rule exists above ' + String(maxGuests) + ' guests.')
   }
   if (!requestedRentalPeriod) baseErrors.push('Choose a morning, evening, or full-day rental period.')
+  if (requestedRentalPeriod === 'custom') baseErrors.push('Custom weekday rentals require the current Luxor venue catalog. Saved legacy package pricing remains unchanged.')
   if (requestedPromotionId && !resolvedPromotion) {
     baseErrors.push('The selected promotion could not be verified. Refresh promotions and choose an active saved promotion.')
   }
@@ -1713,7 +1742,9 @@ function calculateProposal(
 }
 
 export function calculateLuxorProposal(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig = LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG, options: LuxorProposalCalculationOptions = {}): LuxorProposalCalculation {
-  const timing = proposalEventTiming(String(selection.rentalPeriod || 'evening'), trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time), trimmedString(selection.eventEndTime ?? selection.event_end_time))
+  const timing = normalizeRentalPeriod(selection.rentalPeriod) === 'custom'
+    ? validateWeekdayCustomRentalTiming(String(selection.eventDate || ''), trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time), trimmedString(selection.eventEndTime ?? selection.event_end_time), getWeekdayCustomRentalPolicy(config))
+    : proposalEventTiming(String(selection.rentalPeriod || 'evening'), trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time), trimmedString(selection.eventEndTime ?? selection.event_end_time))
   const normalized = { ...selection, guestArrivalTime: timing.arrival, guest_arrival_time: timing.arrival, eventEndTime: timing.end, event_end_time: timing.end }
   const result = calculateProposal(normalized, config, options)
   result.context.booking_payment_default = readNumber(readRecord(config, 'luxor_costs') || config, 'booking_payment', 'amount')

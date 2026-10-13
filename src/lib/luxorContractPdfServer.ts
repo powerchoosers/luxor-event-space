@@ -13,6 +13,7 @@ import { getOfficialDecorService } from './luxorDecorCatalog'
 import { formatLuxorOfferExpiry } from './luxorOffer'
 import { luxorCalendarDate } from './luxorProposalTerms'
 import { SAME_DAY_CARD_CUTOFF_TERMS } from './luxorSameDayBooking'
+import { formatWeekdayCustomRentalDuration, getWeekdayCustomRentalSnapshot, type LuxorWeekdayCustomRentalSnapshot } from './luxorWeekdayRental'
 
 const gold = rgb(0.67, 0.47, 0.20)
 const paleGold = rgb(0.92, 0.85, 0.72)
@@ -52,6 +53,7 @@ type ContractProposalSummary = {
   paymentCollectionScope: 'luxor_services_only' | 'legacy_full_event' | null
   guestArrivalTime?: string | null
   eventEndTime?: string | null
+  weekdayCustomRental: LuxorWeekdayCustomRentalSnapshot | null
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -120,6 +122,7 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
     ?? recordFrom(metadata.proposal_context)
     ?? recordFrom(metadata.proposalContext)
     ?? {}
+  const weekdayCustomRental = getWeekdayCustomRentalSnapshot(context.weekday_custom_rental)
   const pricingSnapshot = recordFrom(context.pricing_snapshot)
     ?? recordFrom(context.pricingSnapshot)
     ?? {}
@@ -181,8 +184,9 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
     finalEventPrice,
     promotion: promotionFromContext(context, metadata, discount),
     paymentCollectionScope: context.payment_collection_scope === 'luxor_services_only' ? 'luxor_services_only' : context.payment_collection_scope === 'legacy_full_event' ? 'legacy_full_event' : null,
-    guestArrivalTime: textValue(context.guest_arrival_time ?? context.guestArrivalTime ?? metadata.event_start_time ?? metadata.eventStartTime ?? booking.start_time),
-    eventEndTime: textValue(context.event_end_time ?? context.eventEndTime ?? metadata.event_end_time ?? metadata.eventEndTime ?? booking.end_time),
+    guestArrivalTime: weekdayCustomRental?.start_time ?? textValue(context.guest_arrival_time ?? context.guestArrivalTime ?? metadata.event_start_time ?? metadata.eventStartTime ?? booking.start_time),
+    eventEndTime: weekdayCustomRental?.end_time ?? textValue(context.event_end_time ?? context.eventEndTime ?? metadata.event_end_time ?? metadata.eventEndTime ?? booking.end_time),
+    weekdayCustomRental,
   }
 }
 
@@ -438,17 +442,22 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
     ?? recordFrom(metadata.proposal_context)
     ?? recordFrom(metadata.proposalContext)
     ?? {}
-  const guestArrivalTime = textValue(context.guest_arrival_time ?? context.guestArrivalTime ?? metadata.event_start_time ?? metadata.eventStartTime ?? booking.start_time)
-  const eventEndTime = textValue(context.event_end_time ?? context.eventEndTime ?? metadata.event_end_time ?? metadata.eventEndTime ?? booking.end_time)
+  const guestArrivalTime = proposalSummary.weekdayCustomRental?.start_time ?? textValue(context.guest_arrival_time ?? context.guestArrivalTime ?? metadata.event_start_time ?? metadata.eventStartTime ?? booking.start_time)
+  const eventEndTime = proposalSummary.weekdayCustomRental?.end_time ?? textValue(context.event_end_time ?? context.eventEndTime ?? metadata.event_end_time ?? metadata.eventEndTime ?? booking.end_time)
   const venueAccess = textValue(context.event_access) || (booking.start_time && booking.end_time ? `${displayTime(booking.start_time)} - ${displayTime(booking.end_time)}` : 'To be confirmed')
 
   w.heading('2. Event information')
   w.fieldPair('Agreement date', displayDate(agreementDate), 'Event date', displayDate(booking.event_date))
   w.fieldPair('Event type', booking.event_type || 'Private celebration', 'Expected guest count', `${booking.guest_count || 'To be confirmed'} (maximum 200)`)
   w.y -= 10
-  w.fieldPair('Guest arrival time', guestArrivalTime ? displayTime(guestArrivalTime) : 'To be confirmed', 'Event end time', eventEndTime ? displayTime(eventEndTime) : 'To be confirmed')
+  w.fieldPair(proposalSummary.weekdayCustomRental ? 'Rental start time' : 'Guest arrival time', guestArrivalTime ? displayTime(guestArrivalTime) : 'To be confirmed', proposalSummary.weekdayCustomRental ? 'Rental end time' : 'Event end time', eventEndTime ? displayTime(eventEndTime) + (proposalSummary.weekdayCustomRental && Number(eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : '') : 'To be confirmed')
   w.y -= 10
   w.fieldPair('Venue access / Rental period', venueAccess, 'Venue', 'Luxor at Las Palmas Events')
+  if (proposalSummary.weekdayCustomRental) {
+    const rental = proposalSummary.weekdayCustomRental
+    w.y -= 10
+    w.fieldPair('Custom rental duration', formatWeekdayCustomRentalDuration(rental.duration_minutes), 'Venue rental', `${money(rental.hourly_rate)} / hour = ${money(rental.rental_total)}`)
+  }
   w.y -= 10
   w.fieldPair('Package', booking.package_name || 'Custom venue booking', 'Email', booking.email || 'Not provided')
   w.y -= 14

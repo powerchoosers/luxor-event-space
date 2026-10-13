@@ -20,6 +20,8 @@ import { LUXOR_AGREEMENT_ATTACHMENT_MANIFEST } from './luxorAgreementDeliverySer
 import { syncLuxorPaymentInstallments } from './luxorPaymentInstallmentsServer'
 import { luxorCollectionAmounts } from './luxorPaymentOwnership'
 import { sameDayBookingRequiresRevision } from './luxorSameDayBooking'
+import { proposalBookingTiming } from './luxorProposalBookingTiming'
+import { isWeekdayCustomRentalContext } from './luxorWeekdayRental'
 
 export type LuxorAgreementQueueDelivery = 'queued' | 'already_sent' | 'already_signed' | 'preparing'
 
@@ -123,7 +125,7 @@ function agreementWasDelivered(signature: LuxorSignatureRequest, job: LuxorEmail
   )
 }
 
-async function getOrCreateBooking(invoice: LuxorInvoice, inquiry: LuxorInquiry) {
+function proposalBookingDetails(invoice: LuxorInvoice, inquiry: LuxorInquiry) {
   const context = proposalContext(invoice)
   const eventDate = typeof context.event_date === 'string' ? context.event_date : inquiry.target_date
   const guestCount = Number(context.expected_guest_count ?? inquiry.guest_count)
@@ -135,12 +137,6 @@ async function getOrCreateBooking(invoice: LuxorInvoice, inquiry: LuxorInquiry) 
   }
   if (!terms || !Number.isFinite(refundableSecurityDeposit) || refundableSecurityDeposit !== 750) {
     throw new Error('The final proposal needs a valid payment plan and refundable security deposit before the Event Agreement can be prepared.')
-  }
-
-  let booking = await getLuxorBookingByInvoice(invoice.id)
-  if (!booking && invoice.booking_id) {
-    const linkedBooking = await getLuxorBooking(invoice.booking_id)
-    if (linkedBooking?.invoice_id === invoice.id) booking = linkedBooking
   }
 
   const sharedFields = {
@@ -161,24 +157,43 @@ async function getOrCreateBooking(invoice: LuxorInvoice, inquiry: LuxorInquiry) 
     final_payment_due_date: finalPaymentDueDate(eventDate, terms.finalPaymentDays),
   }
 
+  return { context, terms, sharedFields }
+}
+
+/** Build the immutable proposal booking for both atomic acceptance and queue recovery. */
+export function prepareLuxorAcceptedProposalBooking(invoice: LuxorInvoice, inquiry: LuxorInquiry): Partial<LuxorBooking> & { client_name: string; invoice_id: string } {
+  const { context, terms, sharedFields } = proposalBookingDetails(invoice, inquiry)
+  const timing = isWeekdayCustomRentalContext(context) ? proposalBookingTiming(context) : null
+  return {
+    inquiry_id: inquiry.id,
+    ...sharedFields,
+    ...(timing ? { start_time: timing.startTime, end_time: timing.endTime } : {}),
+    status: 'tentative',
+    contract_status: 'not_sent',
+    security_deposit_status: 'due',
+    notes: invoice.notes,
+    metadata: {
+      proposal_invoice_id: invoice.id,
+      proposal_version: invoice.proposal_version || 1,
+      final_proposal_context: context,
+      reservation_payment_mode: terms.mode,
+      reservation_payment_percent: terms.percentage,
+      ...(typeof context.payment_plan === 'object' && context.payment_plan ? { client_payment_preference: { method: (context.payment_plan as Record<string, unknown>).preferred_payment_method || 'card', amount: 'deposit' } } : {}),
+      reservation_state: 'proposal_accepted_awaiting_contract',
+    },
+  }
+}
+
+async function getOrCreateBooking(invoice: LuxorInvoice, inquiry: LuxorInquiry) {
+  const { context, terms, sharedFields } = proposalBookingDetails(invoice, inquiry)
+  let booking = await getLuxorBookingByInvoice(invoice.id)
+  if (!booking && invoice.booking_id) {
+    const linkedBooking = await getLuxorBooking(invoice.booking_id)
+    if (linkedBooking?.invoice_id === invoice.id) booking = linkedBooking
+  }
+
   if (!booking) {
-    const claimedBooking = await createOrGetLuxorBookingForInvoice({
-      inquiry_id: inquiry.id,
-      ...sharedFields,
-      status: 'tentative',
-      contract_status: 'not_sent',
-      security_deposit_status: 'due',
-      notes: invoice.notes,
-      metadata: {
-        proposal_invoice_id: invoice.id,
-        proposal_version: invoice.proposal_version || 1,
-        final_proposal_context: context,
-        reservation_payment_mode: terms.mode,
-        reservation_payment_percent: terms.percentage,
-        ...(typeof context.payment_plan === 'object' && context.payment_plan ? { client_payment_preference: { method: (context.payment_plan as Record<string, unknown>).preferred_payment_method || 'card', amount: 'deposit' } } : {}),
-        reservation_state: 'proposal_accepted_awaiting_contract',
-      },
-    })
+    const claimedBooking = await createOrGetLuxorBookingForInvoice(prepareLuxorAcceptedProposalBooking(invoice, inquiry))
     booking = claimedBooking.booking
   } else if (booking.contract_status !== 'signed') {
     booking = await updateLuxorBooking(booking.id, {

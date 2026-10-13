@@ -28,6 +28,7 @@ import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidTh
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from '@/lib/luxorDecorCatalog'
 import { SAME_DAY_BOOKING_CODE, SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBookingSnapshot } from '@/lib/luxorSameDayBooking'
+import { formatWeekdayCustomRentalDuration, getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekdayCustomRentalDate, validateWeekdayCustomRentalTiming, type LuxorWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
 
 const PROPOSAL_TIME_OPTIONS = [
   { value: '06:00', label: '6:00 AM' },
@@ -51,7 +52,7 @@ export type ProposalBuilderContext = {
   event_type?: string
   event_date?: string
   expected_guest_count?: number
-  rental_period?: 'morning' | 'evening' | 'full_day'
+  rental_period?: 'morning' | 'evening' | 'full_day' | 'custom'
   event_access?: string
   guest_arrival_time?: string
   guestArrivalTime?: string
@@ -116,6 +117,7 @@ type CalculatedPackage = {
 
 export type ProposalPricingCalculation = {
   rental_access?: Record<string, unknown>
+  weekday_custom_rental?: LuxorWeekdayCustomRentalPolicy | null
   context?: Partial<LuxorProposalContext>
   packages?: CalculatedPackage[]
   lineItems?: LuxorInvoiceLineItem[]
@@ -519,6 +521,7 @@ function normalizeCalculation(payload: unknown): ProposalPricingCalculation | nu
   return {
     ...record,
     rental_access: asRecord(root.rental_access) || asRecord(record.rental_access) || undefined,
+    weekday_custom_rental: getWeekdayCustomRentalPolicy({ weekday_custom_rental: root.weekday_custom_rental }),
     context: context as Partial<LuxorProposalContext> | undefined,
     packages,
     lineItems: arrayFromUnknown(record.line_items || record.lineItems || record.items).map(normalizeLineItem).filter((item): item is LuxorInvoiceLineItem => Boolean(item)),
@@ -680,6 +683,7 @@ export function ProposalBuilderModal({
   const [pricingStatus, setPricingStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [calculation, setCalculation] = useState<ProposalPricingCalculation | null>(null)
+  const [weekdayPolicy, setWeekdayPolicy] = useState<LuxorWeekdayCustomRentalPolicy | null>(null)
   const [pricingClock, setPricingClock] = useState(0)
   const [validationMessage, setValidationMessage] = useState<string | null>(null)
   const [pendingPackageChange, setPendingPackageChange] = useState<{ packageId: string; absorbedServiceIds: string[]; clearedConflictServiceIds: string[] } | null>(null)
@@ -698,6 +702,10 @@ export function ProposalBuilderModal({
   }, [onCalculationChange])
 
   useEffect(() => {
+    setWeekdayPolicy(null)
+  }, [invoiceId, supersedesInvoiceId])
+
+  useEffect(() => {
     if (!proposalContext) return
     // The parent supplies a complete draft, including a fresh one on reopen.
     // Merging would retain times and payment terms from the discarded draft.
@@ -712,6 +720,7 @@ export function ProposalBuilderModal({
     setPendingPackageChange(null)
     setPromotionCreatorOpen(false)
     setPresentationMode('email')
+    setWeekdayPolicy(null)
   }, [isOpen])
 
   useEffect(() => {
@@ -723,16 +732,35 @@ export function ProposalBuilderModal({
   const selectedPackage = 'rent_only'
   const eventDateValue = normalizeEventDateValue(effectiveContext.event_date) || normalizeEventDateValue(eventDate)
   const guestCount = asNumber(effectiveContext.expected_guest_count, eventGuestCount) || 0
-  const rentalPeriod = effectiveContext.rental_period || 'evening'
-  const guestArrivalTime = asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || RENTAL_WINDOWS[rentalPeriod].start
-  const eventEndTime = asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || RENTAL_WINDOWS[rentalPeriod].end
+  const customWeekdayEnabled = Boolean(weekdayPolicy && isWeekdayCustomRentalDate(eventDateValue))
+  const rentalPeriod = customWeekdayEnabled ? 'custom' : effectiveContext.rental_period || 'evening'
+  const isCustomRental = rentalPeriod === 'custom'
+  // Switching into hourly pricing requires deliberate start/end selections;
+  // a historic fixed-period default is not a custom rental instruction.
+  const customTimesSelected = effectiveContext.rental_period === 'custom'
+  const guestArrivalTime = isCustomRental
+    ? customTimesSelected ? asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || '' : ''
+    : asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || RENTAL_WINDOWS[rentalPeriod].start
+  const eventEndTime = isCustomRental
+    ? customTimesSelected ? asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || '' : ''
+    : asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || RENTAL_WINDOWS[rentalPeriod].end
   const rentalAccess = asRecord(calculation?.rental_access)
   const timeValidation = useMemo(
-    () => validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod),
-    [guestArrivalTime, eventEndTime, rentalPeriod, rentalAccess]
+    () => isCustomRental
+      ? validateWeekdayCustomRentalTiming(eventDateValue, guestArrivalTime, eventEndTime, weekdayPolicy)
+      : validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod),
+    [eventDateValue, guestArrivalTime, eventEndTime, isCustomRental, rentalPeriod, weekdayPolicy]
   )
+  const customTimeOptions = useMemo(() => weekdayPolicy ? Array.from({ length: 25 * 60 - 6 * 60 + 1 }, (_, index) => index + 6 * 60)
+    .filter(minutes => minutes % weekdayPolicy.time_increment_minutes === 0)
+    .map(minutes => {
+      const clock = minutes % (24 * 60)
+      const value = `${String(Math.floor(clock / 60)).padStart(2, '0')}:${String(clock % 60).padStart(2, '0')}`
+      return { value, label: `${formatCatalogTime(value)}${minutes >= 24 * 60 ? ' (next day)' : ''}` }
+    }) : [], [weekdayPolicy])
 
   const handleRentalPeriodChange = (newPeriod: string) => {
+    if (isCustomRental) return
     const period = newPeriod as keyof typeof RENTAL_WINDOWS
     const window = RENTAL_WINDOWS[period]
     updateProposalContext({ rental_period: period, guest_arrival_time: window.start, guestArrivalTime: window.start, event_end_time: window.end, eventEndTime: window.end })
@@ -742,15 +770,36 @@ export function ProposalBuilderModal({
   const handleTimeChange = (field: 'guest_arrival_time' | 'event_end_time', value: string) => {
     const nextArrival = field === 'guest_arrival_time' ? value : guestArrivalTime
     const nextEnd = field === 'event_end_time' ? value : eventEndTime
-    const check = validateEventTimes(nextArrival, nextEnd, rentalPeriod)
+    const check = isCustomRental
+      ? validateWeekdayCustomRentalTiming(eventDateValue, nextArrival, nextEnd, weekdayPolicy)
+      : validateEventTimes(nextArrival, nextEnd, rentalPeriod)
     if (!check.valid) {
       setValidationMessage(check.error || null)
     } else {
       setValidationMessage(null)
     }
-    updateProposalContext({
+    const nextSelection = { ...(effectiveContext.pricing_selection || {}) }
+    if (isCustomRental && !customTimesSelected) {
+      delete nextSelection.securityHours
+      delete nextSelection.security_hours
+    }
+    updateProposalContext(isCustomRental ? {
+      rental_period: 'custom',
+      guest_arrival_time: nextArrival || undefined, guestArrivalTime: nextArrival || undefined,
+      event_end_time: nextEnd || undefined, eventEndTime: nextEnd || undefined,
+      start_time: nextArrival || undefined, end_time: nextEnd || undefined,
+      pricing_selection: nextSelection,
+    } : {
       [field]: value || undefined,
       [field === 'guest_arrival_time' ? 'guestArrivalTime' : 'eventEndTime']: value || undefined,
+    })
+  }
+  const handleSecurityHoursChange = (value: string) => {
+    updateProposalContext({
+      rental_period: 'custom',
+      guest_arrival_time: guestArrivalTime || undefined, guestArrivalTime: guestArrivalTime || undefined,
+      event_end_time: eventEndTime || undefined, eventEndTime: eventEndTime || undefined,
+      pricing_selection: { ...effectiveContext.pricing_selection, securityHours: value || null, security_hours: value || null },
     })
   }
   const selectedServiceIds = useMemo(() => selectedServiceIdsFrom(effectiveContext, items), [effectiveContext, items])
@@ -781,6 +830,8 @@ export function ProposalBuilderModal({
   const optionalServices = useMemo(() => selectedPackageOption ? availableServices : [], [availableServices, selectedPackageOption])
   const paymentPlanDraft = getPaymentPlanDraft(effectiveContext)
   const pricingSelection = asRecord(effectiveContext.pricing_selection)
+  const securityHoursSelection = customTimesSelected ? pricingSelection?.securityHours ?? pricingSelection?.security_hours : undefined
+  const securityHoursValue = typeof securityHoursSelection === 'number' || typeof securityHoursSelection === 'string' ? String(securityHoursSelection) : ''
   const selectedDecorPackageId = asString(pricingSelection && 'decor_package_id' in pricingSelection ? pricingSelection.decor_package_id : pricingSelection?.decorPackageId ?? effectiveContext.decor_package_id) || ''
   const decorAddOnQuantities = useMemo(() => {
     const saved = asRecord(pricingSelection?.decor_add_on_quantities ?? pricingSelection?.decorAddOnQuantities ?? effectiveContext.decor_add_on_quantities) || {}
@@ -888,7 +939,26 @@ export function ProposalBuilderModal({
   }
 
   const setEventDate = (value: string) => {
-    updateProposalContext({ event_date: value })
+    const nextIsCustom = Boolean(weekdayPolicy && isWeekdayCustomRentalDate(value))
+    const changingMode = nextIsCustom !== isCustomRental
+    const nextSelection = { ...(effectiveContext.pricing_selection || {}) }
+    if (changingMode) {
+      delete nextSelection.securityHours
+      delete nextSelection.security_hours
+    }
+    updateProposalContext({
+      event_date: value,
+      ...(changingMode ? {
+        rental_period: nextIsCustom ? 'custom' : 'evening',
+        guest_arrival_time: nextIsCustom ? undefined : RENTAL_WINDOWS.evening.start,
+        guestArrivalTime: nextIsCustom ? undefined : RENTAL_WINDOWS.evening.start,
+        event_end_time: nextIsCustom ? undefined : RENTAL_WINDOWS.evening.end,
+        eventEndTime: nextIsCustom ? undefined : RENTAL_WINDOWS.evening.end,
+        start_time: undefined, end_time: undefined, weekday_custom_rental: undefined,
+        pricing_selection: nextSelection,
+      } : {}),
+    })
+    setValidationMessage(null)
     onEventDateChange?.(value)
   }
 
@@ -1085,6 +1155,7 @@ export function ProposalBuilderModal({
       guest_arrival_time: guestArrivalTime || null,
       eventEndTime: eventEndTime || null,
       event_end_time: eventEndTime || null,
+      ...(isCustomRental && weekdayPolicy?.security_hours_policy === 'owner_entered' ? { securityHours: securityHoursValue.trim() ? Number(securityHoursValue) : null } : {}),
       addOns: selectedServiceIds,
       decorPackageId: selectedDecorPackageId || null,
       decorAddOnQuantities,
@@ -1122,7 +1193,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [invoiceId, supersedesInvoiceId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, items, removedServiceIds, rentalPeriod, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate])
+  }), [invoiceId, supersedesInvoiceId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, isCustomRental, items, removedServiceIds, rentalPeriod, securityHoursValue, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate, weekdayPolicy?.security_hours_policy])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1153,6 +1224,7 @@ export function ProposalBuilderModal({
         if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : 'Final pricing could not be calculated.')
         const nextCalculation = normalizeCalculation(payload)
         if (!nextCalculation) throw new Error('Pricing response was not recognized.')
+        setWeekdayPolicy(nextCalculation.weekday_custom_rental || null)
         setCalculation(nextCalculation)
         setPricingStatus('ready')
         calculationCallbackRef.current?.(nextCalculation)
@@ -1208,6 +1280,7 @@ export function ProposalBuilderModal({
   }, [calculation])
   const selectedCalculatedPackage = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === 'rent_only')
   const selectedContext = calculation?.context || effectiveContext
+  const customRentalSnapshot = getWeekdayCustomRentalSnapshot(selectedContext.weekday_custom_rental)
   const validThrough = asString(selectedContext.valid_through) || proposalValidThrough(asString(selectedContext.proposal_created_on) || luxorCalendarDate(), selectedPromotion)
   useEffect(() => {
     if (!isOpen) return
@@ -1268,7 +1341,7 @@ export function ProposalBuilderModal({
   const paymentPlanRequired = pricingRequirements?.paymentPlan === true || publicationErrors.some((error) => error.toLowerCase().includes('payment plan'))
   const isCalculating = pricingStatus === 'loading'
   const hasFinalPrice = pricingStatus === 'ready' && typeof finalEventPrice === 'number' && finalEventPrice >= 0
-  const canPublish = Boolean(eventDateValue && guestCount > 0 && hasFinalPrice && pricingErrors.length === 0 && !paymentPlanRequired)
+  const canPublish = Boolean(eventDateValue && guestCount > 0 && timeValidation.valid && hasFinalPrice && pricingErrors.length === 0 && publicationErrors.length === 0 && !paymentPlanRequired)
   const reviewTogether = presentationMode === 'in_person'
   const publishDisabled = submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount
   const publishTitle = hasUnmigratedLegacyDiscount
@@ -1276,7 +1349,7 @@ export function ProposalBuilderModal({
     : !canPublish
       ? paymentPlanRequired
         ? 'Set the payment plan in Step 5 before publishing.'
-        : 'Complete the required event details and final pricing before publishing.'
+        : publicationErrors[0] || 'Complete the required event details and final pricing before publishing.'
       : !clientEmail
         ? 'Add the client email before starting the signing flow.'
         : undefined
@@ -1289,6 +1362,10 @@ export function ProposalBuilderModal({
       }
       if (!timeValidation.valid) {
         setValidationMessage(timeValidation.error || 'Please correct the event times before continuing.')
+        return
+      }
+      if (isCustomRental && weekdayPolicy?.security_hours_policy === 'owner_entered' && !(Number(securityHoursValue) > 0)) {
+        setValidationMessage('Enter the approved security hours for this custom rental before continuing.')
         return
       }
     }
@@ -1470,7 +1547,7 @@ export function ProposalBuilderModal({
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-1.5">
                       <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Rental period</span>
-                      <PortalSelect
+                      {isCustomRental ? <div className="flex min-h-11 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm font-semibold">Custom weekday rental</div> : <PortalSelect
                         value={rentalPeriod}
                         onChange={handleRentalPeriodChange}
                         options={['morning', 'evening', 'full_day'].map((period) => ({
@@ -1479,7 +1556,7 @@ export function ProposalBuilderModal({
                         }))}
                         className="w-full"
                         buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
-                      />
+                      />}
                     </label>
                     <div className="space-y-1.5">
                       <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event type</span>
@@ -1491,13 +1568,13 @@ export function ProposalBuilderModal({
                   <div className="border-t border-[color:var(--portal-border)] pt-3 space-y-2">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <label className="space-y-1.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Guest arrival time</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{isCustomRental ? 'Rental start time' : 'Guest arrival time'}</span>
                         <PortalSelect
                           value={guestArrivalTime}
                           onChange={(value) => handleTimeChange('guest_arrival_time', value)}
                           options={[
                             { value: '', label: 'Select arrival time' },
-                            ...PROPOSAL_TIME_OPTIONS,
+                            ...(isCustomRental ? customTimeOptions : PROPOSAL_TIME_OPTIONS),
                           ]}
                           className="w-full"
                           buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
@@ -1505,13 +1582,13 @@ export function ProposalBuilderModal({
                         />
                       </label>
                       <label className="space-y-1.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event end time</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{isCustomRental ? 'Rental end time' : 'Event end time'}</span>
                         <PortalSelect
                           value={eventEndTime}
                           onChange={(value) => handleTimeChange('event_end_time', value)}
                           options={[
                             { value: '', label: 'Select end time' },
-                            ...PROPOSAL_TIME_OPTIONS,
+                            ...(isCustomRental ? customTimeOptions : PROPOSAL_TIME_OPTIONS),
                           ]}
                           className="w-full"
                           buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal"
@@ -1519,7 +1596,8 @@ export function ProposalBuilderModal({
                         />
                       </label>
                     </div>
-                    {timeValidation.valid && timeValidation.additionalHours > 0 ? <p role="status" className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Additional rental time: {timeValidation.additionalHours} hour(s). {pricingStatus === 'ready' ? formatMoney(asNumber(selectedContext.additional_rental_charge) || 0) + ' added at the saved hourly rate.' : 'Updating the additional-hour charge…'}</p> : null}
+                    {isCustomRental && weekdayPolicy && timeValidation.valid && 'durationMinutes' in timeValidation ? <p role="status" className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">{formatWeekdayCustomRentalDuration(timeValidation.durationMinutes)} at {formatMoney(weekdayPolicy.hourly_rate)} per hour = {formatMoney(Math.round(timeValidation.durationMinutes * Math.round(weekdayPolicy.hourly_rate * 100) / 60) / 100)} venue rental.</p> : null}
+                    {!isCustomRental && timeValidation.valid && timeValidation.additionalHours > 0 ? <p role="status" className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Additional rental time: {timeValidation.additionalHours} hour(s). {pricingStatus === 'ready' ? formatMoney(asNumber(selectedContext.additional_rental_charge) || 0) + ' added at the saved hourly rate.' : 'Updating the additional-hour charge…'}</p> : null}
                     {!timeValidation.valid ? (
                       <p role="alert" className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
                         <AlertCircle size={14} className="shrink-0" />
@@ -1527,9 +1605,10 @@ export function ProposalBuilderModal({
                       </p>
                     ) : (
                       <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                        {rentalPeriod === 'morning' ? 'Morning access can start before 9:00 AM and must end by 3:00 PM.' : rentalPeriod === 'evening' ? 'Evening access starts at or after 5:00 PM and can extend after 11:00 PM.' : 'Full-day access includes the 3:00–5:00 PM period and can extend before 9:00 AM or after 11:00 PM.'} Extensions are billed in whole hours, within 6:00 AM–1:00 AM.
+                        {isCustomRental ? `Choose the venue rental start and end times. Venue access is available 6:00 AM–1:00 AM the next day, in ${weekdayPolicy?.time_increment_minutes || ''}-minute increments. Minimum rental: ${weekdayPolicy?.minimum_hours || ''} hours.${weekdayPolicy?.reset_window_policy === 'blocked' ? ' The 3:00–5:00 PM reset period is reserved.' : ''}` : <>{rentalPeriod === 'morning' ? 'Morning access can start before 9:00 AM and must end by 3:00 PM.' : rentalPeriod === 'evening' ? 'Evening access starts at or after 5:00 PM and can extend after 11:00 PM.' : 'Full-day access includes the 3:00–5:00 PM period and can extend before 9:00 AM or after 11:00 PM.'} Extensions are billed in whole hours, within 6:00 AM–1:00 AM.</>}
                       </p>
                     )}
+                    {isCustomRental && weekdayPolicy?.security_hours_policy === 'owner_entered' ? <label className="mt-4 block space-y-1.5"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Approved security hours</span><input type="number" min="0" step="any" inputMode="decimal" value={securityHoursValue} onChange={event => handleSecurityHoursChange(event.target.value)} placeholder="Enter approved hours" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /><span className="block text-[10px] leading-4 text-[color:var(--portal-muted)]">Required for this custom rental. Luxor verifies the saved minimum and hourly security rate.</span></label> : isCustomRental && weekdayPolicy?.security_hours_policy === 'rental_duration' ? <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Security hours follow the selected rental duration, subject to the existing minimum. Security and cleaning rates are unchanged.</p> : null}
                   </div>
                 </div>
 
@@ -1802,7 +1881,8 @@ export function ProposalBuilderModal({
                         ['Guests', `${guestCount} expected`],
                         ['Venue access', formatEventAccess(eventAccess, rentalPeriod)],
                         ['Guest arrival', guestArrivalTime ? formatCatalogTime(guestArrivalTime) : 'To be confirmed'],
-                        ['Event end', eventEndTime ? formatCatalogTime(eventEndTime) : 'To be confirmed'],
+                        ['Event end', eventEndTime ? formatCatalogTime(eventEndTime) + (isCustomRental && Number(eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : '') : 'To be confirmed'],
+                        ...(customRentalSnapshot ? [['Rental duration', formatWeekdayCustomRentalDuration(customRentalSnapshot.duration_minutes)], ['Hourly rental rate', `${formatMoney(customRentalSnapshot.hourly_rate)} per hour`], ['Venue rental', formatMoney(customRentalSnapshot.rental_total)]] : []),
                       ].map(([label, value]) => <div key={label} className="min-w-0 px-1 py-1 sm:px-2"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">{label}</p><p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--portal-text)]">{value}</p></div>)}
                     </div>
 
@@ -1955,12 +2035,13 @@ export function ProposalBuilderModal({
                       </div>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event End Time</p>
-                        <p className="mt-1 text-sm font-bold text-[#8c6529] dark:text-[#f1d27a]">{eventEndTime ? formatCatalogTime(eventEndTime) : 'To be confirmed'}</p>
+                        <p className="mt-1 text-sm font-bold text-[#8c6529] dark:text-[#f1d27a]">{eventEndTime ? formatCatalogTime(eventEndTime) + (isCustomRental && Number(eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : '') : 'To be confirmed'}</p>
                       </div>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Venue Access / Rental Period</p>
                         <p className="mt-1 text-sm font-semibold">{formatEventAccess(eventAccess, rentalPeriod)}</p>
                       </div>
+                      {customRentalSnapshot ? <div className="sm:col-span-2 lg:col-span-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Custom weekday venue rental</p><p className="mt-1 text-sm font-semibold">{formatWeekdayCustomRentalDuration(customRentalSnapshot.duration_minutes)} at {formatMoney(customRentalSnapshot.hourly_rate)} per hour = {formatMoney(customRentalSnapshot.rental_total)}</p></div> : null}
                     </div>
                   </div>
 

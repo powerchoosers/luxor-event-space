@@ -20,6 +20,9 @@ import { calculateLuxorOfferPricing, isLuxorOfferExpired, luxorOfferSnapshot } f
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
 import { assertLuxorSameDayRevisionSafe, SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
+import { assertLuxorWeekdayRentalPublication } from '@/lib/luxorProposalPricingServer'
+import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
+import { LuxorProposalBookingTimingError } from '@/lib/luxorProposalBookingTiming'
 
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
 
@@ -46,6 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     invoiceId = id
     let invoice = await getInvoice(id)
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
+    assertLuxorWeekdayRentalPublication(invoice)
     if (sameDayBookingRequiresRevision(invoice)) return NextResponse.json({ error: SAME_DAY_REVISION_MESSAGE }, { status: 410 })
     const finalProposalContext = invoice.invoice_kind === 'event' && invoice.proposal_context && typeof invoice.proposal_context === 'object'
       ? invoice.proposal_context
@@ -851,6 +855,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, checkoutUrl: checkout.checkoutUrl, paymentAmount, balanceDue, reusedCheckout: checkout.reused })
   } catch (error) {
+    if (error instanceof LuxorWeekdayRentalError || error instanceof LuxorProposalBookingTimingError) return NextResponse.json({ error: error.message }, { status: error.status })
     console.error('[invoice-payment-request] failed', {
       invoiceId,
       error: error instanceof Error ? error.message : String(error),

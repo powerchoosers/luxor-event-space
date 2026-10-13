@@ -16,6 +16,7 @@ import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 import { sameDayBookingPromotion, sameDayBookingRequiresRevision, withoutExpiredSameDayCoverage } from '@/lib/luxorSameDayBooking'
 import { SameDayBookingNotice } from '@/components/proposal/SameDayBookingNotice'
+import { formatWeekdayCustomRentalDuration } from '@/lib/luxorWeekdayRental'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,18 +60,18 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const pricingSummary = getLuxorProposalPricingSummary(withoutExpiredSameDayCoverage(invoice))
   const finalPrice = pricingSummary.finalEventPrice
   const refundableSecurityDeposit = Number(context.refundable_security_deposit ?? booking?.security_deposit_amount ?? LUXOR_DEFAULT_SECURITY_DEPOSIT)
-  const eventDate = dateLabel(context.event_date)
+  const eventDate = dateLabel(pricingSummary.eventDate || context.event_date)
   const expectedGuestCount = Number(context.expected_guest_count || 0)
-  const guestArrivalTime = typeof context.guest_arrival_time === 'string'
+  const guestArrivalTime = pricingSummary.weekdayCustomRental?.start_time ?? (typeof context.guest_arrival_time === 'string'
     ? context.guest_arrival_time
     : typeof context.guestArrivalTime === 'string'
       ? context.guestArrivalTime
-      : null
-  const eventEndTime = typeof context.event_end_time === 'string'
+      : null)
+  const eventEndTime = pricingSummary.weekdayCustomRental?.end_time ?? (typeof context.event_end_time === 'string'
     ? context.event_end_time
     : typeof context.eventEndTime === 'string'
       ? context.eventEndTime
-      : null
+      : null)
   const packageItems = pricingSummary.lines
   const promotion = pricingSummary.promotion
   const promotionRate = promotion?.discountType === 'percent' && promotion.value !== null
@@ -174,8 +175,9 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               <p className="mt-2 text-sm font-bold text-white">{typeof context.event_type === 'string' ? context.event_type : invoice.event_type || 'Private event'}</p>
               {eventDate ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Event Date:</span> {eventDate}</p> : null}
               {guestArrivalTime ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Guest Arrival:</span> {formatCatalogTime(guestArrivalTime)}</p> : null}
-              {eventEndTime ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Event End:</span> {formatCatalogTime(eventEndTime)}</p> : null}
+              {eventEndTime ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Event End:</span> {formatCatalogTime(eventEndTime)}{pricingSummary.weekdayCustomRental && Number(eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}</p> : null}
               {pricingSummary.eventAccess ? <p className="mt-1 text-xs text-zinc-400"><span className="text-zinc-500 font-medium">Venue Access:</span> {pricingSummary.eventAccess}</p> : null}
+              {pricingSummary.weekdayCustomRental ? <p className="mt-2 text-xs leading-5 text-zinc-300"><span className="font-medium">Venue rental:</span> {formatWeekdayCustomRentalDuration(pricingSummary.weekdayCustomRental.duration_minutes)} at {money(pricingSummary.weekdayCustomRental.hourly_rate)} per hour = {money(pricingSummary.weekdayCustomRental.rental_total)}</p> : null}
               {expectedGuestCount > 0 ? <p className="mt-1 text-xs text-zinc-500">Expected guest count: {expectedGuestCount}</p> : null}
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">

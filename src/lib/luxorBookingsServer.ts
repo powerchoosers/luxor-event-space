@@ -2,6 +2,7 @@ import 'server-only'
 
 import { LuxorBooking, LuxorBookingStatus, LuxorContractStatus, LuxorPayment, LuxorBookingExpense } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
+import { isWeekdayCustomRentalContext } from './luxorWeekdayRental'
 
 export type LuxorBookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -78,9 +79,9 @@ export async function listLuxorBookingsWithPayments(limit = 1000): Promise<Luxor
   })
 }
 
-type LuxorBookingCreateInput = Partial<LuxorBooking> & { client_name: string }
+export type LuxorBookingCreateInput = Partial<LuxorBooking> & { client_name: string }
 
-function luxorBookingInsertPayload(data: LuxorBookingCreateInput) {
+export function luxorBookingInsertPayload(data: LuxorBookingCreateInput) {
   return {
     inquiry_id: data.inquiry_id || null,
     invoice_id: data.invoice_id || null,
@@ -108,6 +109,12 @@ function luxorBookingInsertPayload(data: LuxorBookingCreateInput) {
 }
 
 export async function createLuxorBooking(data: LuxorBookingCreateInput) {
+  if (isWeekdayCustomRentalContext(data.metadata?.final_proposal_context)) {
+    // A plain REST insert cannot prove that the scheduling migration exists.
+    // Custom rentals must claim acceptance and the booking in the guarded RPC.
+    const { LuxorWeekdayRentalError } = await import('./luxorWeekdayRentalServer')
+    throw new LuxorWeekdayRentalError('Accept the published weekday proposal through its protected booking workflow.')
+  }
   const [created] = await supabaseRest<LuxorBooking[]>('luxor_bookings?select=*', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
@@ -123,6 +130,12 @@ export async function createLuxorBooking(data: LuxorBookingCreateInput) {
  * the original booking instead of inserting another reservation.
  */
 export async function createOrGetLuxorBookingForInvoice(data: LuxorBookingCreateInput & { invoice_id: string }) {
+  if (isWeekdayCustomRentalContext(data.metadata?.final_proposal_context)) {
+    const existing = await getLuxorBookingByInvoice(data.invoice_id)
+    if (existing) return { booking: existing, created: false }
+    const { LuxorWeekdayRentalError } = await import('./luxorWeekdayRentalServer')
+    throw new LuxorWeekdayRentalError('Accept the published weekday proposal through its protected booking workflow.')
+  }
   try {
     const [created] = await supabaseRest<LuxorBooking[]>(
       'luxor_bookings?on_conflict=invoice_id&select=*',

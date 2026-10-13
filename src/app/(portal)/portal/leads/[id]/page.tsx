@@ -77,6 +77,7 @@ import {
 import { getLuxorTourSection, luxorTodayKey } from '@/lib/luxorTourMetrics'
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
 import { TourEmailResendDialog } from '@/components/portal/TourEmailResendDialog'
+import { WeekdayRentalSummary } from '@/components/portal/WeekdayRentalSummary'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -7439,6 +7440,7 @@ export default function LeadDetailPage({
                       </div>
                       <PortalStatusBadge status={booking.status} />
                     </div>
+                    <WeekdayRentalSummary booking={booking} />
                     <div className="mt-3 grid gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[10px] sm:grid-cols-3">
                       <div>
                         <span className="block text-[color:var(--portal-muted)]">Contract total</span>

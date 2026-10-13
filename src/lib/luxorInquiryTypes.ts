@@ -295,12 +295,17 @@ export type LuxorProposalContext = {
   start_time?: string
   end_time?: string
   expected_guest_count?: number
-  rental_period?: 'morning' | 'evening' | 'full_day'
+  rental_period?: 'morning' | 'evening' | 'full_day' | 'custom'
   event_access?: string
   guest_arrival_time?: string
   guestArrivalTime?: string
   event_end_time?: string
   eventEndTime?: string
+  /** Immutable owner-approved custom weekday rental math and scheduling rules. */
+  weekday_custom_rental?: import('./luxorWeekdayRental').LuxorWeekdayCustomRentalSnapshot
+  rental_hours?: number
+  rental_hourly_rate?: number
+  rental_total?: number
   security_rate?: number
   security_hours?: number
   security_guards?: number

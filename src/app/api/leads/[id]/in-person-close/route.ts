@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { queueLuxorAcceptedProposalAgreement } from '@/lib/luxorAgreementQueueServer'
+import { prepareLuxorAcceptedProposalBooking, queueLuxorAcceptedProposalAgreement } from '@/lib/luxorAgreementQueueServer'
 import { updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { claimLuxorProposalAcceptance, getInvoice } from '@/lib/luxorInvoicesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
+import { claimLuxorWeekdayProposalAcceptance, LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
+import { LuxorProposalBookingTimingError } from '@/lib/luxorProposalBookingTiming'
+import { isWeekdayCustomRentalContext } from '@/lib/luxorWeekdayRental'
 
 export const runtime = 'nodejs'
 
@@ -24,7 +27,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const acceptedAt = new Date().toISOString()
-    const claimed = invoice.proposal_accepted_at
+    const claimed = isWeekdayCustomRentalContext(invoice.proposal_context)
+      ? await claimLuxorWeekdayProposalAcceptance(invoice, prepareLuxorAcceptedProposalBooking(invoice, inquiry), {
+          acceptedAt,
+          userAgent: 'Luxor owner portal - in-person verbal acceptance',
+        })
+      : invoice.proposal_accepted_at
       ? invoice
       : await claimLuxorProposalAcceptance(invoice.id, { acceptedAt, userAgent: 'Luxor owner portal — in-person verbal acceptance' })
     const acceptedInvoice = claimed || await getInvoice(invoice.id)
@@ -54,6 +62,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     return NextResponse.json({ bookingId: result.booking.id, signatureId: result.signature.id, signingUrl, alreadyAccepted: Boolean(invoice.proposal_accepted_at) })
   } catch (error) {
+    if (error instanceof LuxorWeekdayRentalError || error instanceof LuxorProposalBookingTimingError) return NextResponse.json({ error: error.message }, { status: error.status })
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to start the client handoff.' }, { status: 500 })
   }
 }

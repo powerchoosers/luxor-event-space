@@ -11,6 +11,8 @@ import {
   resolveLuxorSameDayBooking,
   resolveLuxorOriginalProposalCreatedAt,
   updateDefaultLuxorProposalPricing,
+  getLuxorWeekdayRentalClientPolicy,
+  assertLuxorWeekdayRentalSelection,
 } from '@/lib/luxorProposalPricingServer'
 import {
   calculateLuxorProposal,
@@ -19,6 +21,8 @@ import {
 } from '@/lib/luxorProposalPricing'
 import { catalogNumber, catalogValue } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
+import { validateWeekdayCustomRentalPolicy, isWeekdayCustomRentalDate } from '@/lib/luxorWeekdayRental'
+import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -53,19 +57,29 @@ export async function POST(request: NextRequest) {
     if (revisionId && existing?.invoice_kind !== 'event') return NextResponse.json({ error: 'Only an event proposal can be revised.' }, {status: 409})
     if (invoiceId && existing && (existing.invoice_kind !== 'event' || existing.status !== 'draft' || existing.price_locked_at || existing.proposal_accepted_at || existing.proposal_sent_at)) return NextResponse.json({error: 'This proposal is locked. Create a revision.'}, {status: 409})
     const pricing = await getLuxorProposalPricingForInvoice(existing)
+    assertLuxorWeekdayRentalSelection(selection as LuxorProposalSelection, pricing.config)
     const promotion = await resolveLuxorProposalPromotion(selection as LuxorProposalSelection, existing)
     const originalCreatedAt = await resolveLuxorOriginalProposalCreatedAt(existing)
     const sameDayBooking = await resolveLuxorSameDayBooking(selection as LuxorProposalSelection, existing, originalCreatedAt)
     const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion, sameDayBooking })
+    const customPolicy = getLuxorWeekdayRentalClientPolicy(pricing.config)
+    if (customPolicy && pricing.config.pricing_mode === 'venue_plus_preferred_vendor_estimates' && isWeekdayCustomRentalDate((selection as LuxorProposalSelection).eventDate) && (selection as LuxorProposalSelection).rentalPeriod !== 'custom') {
+      const requirement = 'Select custom weekday rental times before saving this proposal.'
+      calculation.publicationErrors.push(requirement)
+      calculation.errors.push(requirement)
+      calculation.publishable = false
+    }
     const createdOn = luxorCalendarDate(new Date(originalCreatedAt))
     Object.assign(calculation.context, { original_proposal_created_at: originalCreatedAt, proposal_created_on: createdOn, valid_through: proposalValidThrough(createdOn, promotion) })
     const luxorCosts = object(pricing.config.luxor_costs) || pricing.config
     return NextResponse.json({
       pricing_config_version: pricing.version,
       rental_access: object(luxorCosts.rental_access) || {},
+      weekday_custom_rental: customPolicy,
       calculation,
     })
   } catch (error) {
+    if (error instanceof LuxorWeekdayRentalError) return NextResponse.json({ error: error.message }, { status: error.status })
     if (error instanceof LuxorPromotionSelectionError) return NextResponse.json({ error: error.message }, { status: 409 })
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Pricing configuration required — administrator review.' }, { status: 500 })
   }
@@ -104,6 +118,7 @@ export async function PATCH(request: NextRequest) {
     ]
     const luxorCosts = object(config.luxor_costs) || config
     const structuralErrors: string[] = []
+    structuralErrors.push(...validateWeekdayCustomRentalPolicy(config))
     const bookingPayment = catalogNumber(luxorCosts, 'booking_payment', 'amount')
     if (bookingPayment === undefined || bookingPayment < 0.5) structuralErrors.push('Set a booking payment of at least $0.50.')
     for (const day of ['monday_thursday', 'friday', 'saturday', 'sunday']) {

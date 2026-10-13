@@ -44,6 +44,7 @@ import {
 } from '@/components/portal/PortalBulkSelection'
 import type { LuxorBooking, LuxorBookingStatus, LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
+import { WeekdayRentalSummary } from '@/components/portal/WeekdayRentalSummary'
 
 const BOOKING_STATUS_OPTIONS: Array<{ value: LuxorBookingStatus; label: string }> = [
   { value: 'draft', label: 'Draft' },
@@ -317,6 +318,8 @@ export default function EventsPage() {
                     <p className="text-[9px] font-black uppercase tracking-widest text-[#caa24c]">Status: {selectedEvent.status}</p>
                   </div>
                 </div>
+
+                <WeekdayRentalSummary booking={selectedEvent} />
 
                 {/* Sub-tab switcher */}
                 <div className="flex flex-wrap gap-1 border-t border-[color:var(--portal-border)] pt-3 mt-1">

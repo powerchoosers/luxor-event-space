@@ -14,6 +14,10 @@ import { getLuxorLeadEventForInquiry, updateLuxorLeadEvent } from '@/lib/luxorLe
 import type { LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
+import { prepareLuxorAcceptedProposalBooking } from '@/lib/luxorAgreementQueueServer'
+import { proposalBookingTiming, LuxorProposalBookingTimingError } from '@/lib/luxorProposalBookingTiming'
+import { claimLuxorWeekdayProposalAcceptance, LuxorWeekdayRentalError, weekdayRentalDatabaseError } from '@/lib/luxorWeekdayRentalServer'
+import { isWeekdayCustomRentalContext } from '@/lib/luxorWeekdayRental'
 
 function isFinalProposalLocked(proposal: Awaited<ReturnType<typeof getInvoice>> | null) {
   return Boolean(
@@ -124,6 +128,7 @@ export async function POST(request: NextRequest) {
     const dueDate = new Date(`${eventDate}T12:00:00`)
     dueDate.setDate(dueDate.getDate() - finalPaymentDays)
     const contractTotal = Number(proposal.total || 0)
+    const proposalTiming = isWeekdayCustomRentalContext(context) ? proposalBookingTiming(context) : null
     const luxorServicesTotal = luxorCollectionAmounts(proposal).luxorServicesTotal
     const reservationPayment = paymentMode === 'pay_in_full'
       ? luxorServicesTotal
@@ -136,8 +141,8 @@ export async function POST(request: NextRequest) {
       client_name: proposal.client_name || body.client_name,
       event_type: typeof context.event_type === 'string' ? context.event_type : proposal.event_type || body.event_type,
       event_date: eventDate,
-      start_time: typeof context.start_time === 'string' ? context.start_time : null,
-      end_time: typeof context.end_time === 'string' ? context.end_time : null,
+      start_time: proposalTiming ? proposalTiming.startTime : typeof context.start_time === 'string' ? context.start_time : null,
+      end_time: proposalTiming ? proposalTiming.endTime : typeof context.end_time === 'string' ? context.end_time : null,
       guest_count: Number(context.expected_guest_count || body.guest_count || 0) || null,
       package_name: typeof context.package_name === 'string' ? context.package_name : body.package_name || null,
       status: 'tentative',
@@ -159,7 +164,15 @@ export async function POST(request: NextRequest) {
         reservation_state: 'proposal_accepted_awaiting_contract',
       },
     }
-    const booking = await createLuxorBooking(normalizedBody)
+    const booking = isWeekdayCustomRentalContext(context)
+      ? await (async () => {
+          if (!inquiryBeforeBooking) throw new LuxorWeekdayRentalError('The proposal client record is unavailable.')
+          const accepted = await claimLuxorWeekdayProposalAcceptance(proposal, prepareLuxorAcceptedProposalBooking(proposal, inquiryBeforeBooking), { acceptedAt: proposal.proposal_accepted_at || undefined })
+          const created = accepted.booking_id ? await getLuxorBooking(accepted.booking_id) : null
+          if (!created) throw new LuxorWeekdayRentalError('The custom rental booking could not be verified. Please retry.')
+          return created
+        })()
+      : await createLuxorBooking(normalizedBody)
     if (booking?.inquiry_id) {
       const inquiry = await getLuxorInquiry(booking.inquiry_id)
       if (inquiry && inquiry.status !== 'closed_lost') {
@@ -215,6 +228,8 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(booking, { status: 201 })
   } catch (error) {
+    const schedulingError = error instanceof LuxorWeekdayRentalError || error instanceof LuxorProposalBookingTimingError ? error : weekdayRentalDatabaseError(error)
+    if (schedulingError) return NextResponse.json({ error: schedulingError.message }, { status: schedulingError.status })
     const message = error instanceof Error ? error.message : 'Failed to create booking.'
     return NextResponse.json({ error: message }, { status: 500 })
   }
@@ -341,6 +356,8 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(booking)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update booking.'
+    const schedulingError = weekdayRentalDatabaseError(error)
+    if (schedulingError) return NextResponse.json({ error: schedulingError.message }, { status: schedulingError.status })
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

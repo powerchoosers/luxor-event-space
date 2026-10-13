@@ -5,6 +5,7 @@ import { formatLuxorDate } from './luxorDateFormatting'
 import { formatCatalogTime } from './luxorPricingCatalog'
 import { getOfficialDecorService } from './luxorDecorCatalog'
 import { SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBookingSnapshot } from './luxorSameDayBooking'
+import { formatWeekdayCustomRentalDuration, getWeekdayCustomRentalSnapshot, type LuxorWeekdayCustomRentalSnapshot } from './luxorWeekdayRental'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT = 750
@@ -46,6 +47,7 @@ export type LuxorProposalPricingSummary = {
   eventAccess: string | null
   guestArrivalTime?: string | null
   eventEndTime?: string | null
+  weekdayCustomRental: LuxorWeekdayCustomRentalSnapshot | null
   lines: LuxorProposalDisplayLine[]
   decorSubtotal: number | null
   subtotal: number
@@ -233,6 +235,7 @@ function normalizedLineItem(value: unknown) {
 export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProposalPricingSummary {
   const rawInvoice = invoice as unknown as UnknownRecord
   const context = proposalContext(rawInvoice.proposal_context)
+  const weekdayCustomRental = getWeekdayCustomRentalSnapshot(context.weekday_custom_rental)
   const rawItems = Array.isArray(rawInvoice.line_items) ? rawInvoice.line_items : []
   const items = rawItems.map(normalizedLineItem).filter((item): item is NonNullable<typeof item> => item !== null)
   const serviceItems = items.filter((item) => !item.isSecurityDeposit && !item.isTax && !item.isDiscount && !item.isTaxCoverage)
@@ -294,11 +297,12 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
 
   return {
     packageName: asText(context.package_name),
-    eventDate: asText(context.event_date),
+    eventDate: weekdayCustomRental?.event_date ?? asText(context.event_date),
     expectedGuestCount: asMoney(context.expected_guest_count),
     eventAccess: asText(context.event_access),
-    guestArrivalTime: asText(context.guest_arrival_time) ?? asText(context.guestArrivalTime),
-    eventEndTime: asText(context.event_end_time) ?? asText(context.eventEndTime),
+    guestArrivalTime: weekdayCustomRental?.start_time ?? asText(context.guest_arrival_time) ?? asText(context.guestArrivalTime),
+    eventEndTime: weekdayCustomRental?.end_time ?? asText(context.event_end_time) ?? asText(context.eventEndTime),
+    weekdayCustomRental,
     lines: serviceItems.map(({ id, officialDecor, category, service, quantity, unitPrice, lineTotal, included, detail }) => ({ id, officialDecor, category, service, quantity, unitPrice, lineTotal, included, detail })),
     decorSubtotal: serviceItems.some((item) => item.officialDecor)
       ? roundMoney(serviceItems.filter((item) => item.officialDecor).reduce((sum, item) => sum + item.lineTotal, 0))
@@ -443,9 +447,10 @@ export function buildLuxorProposalEmail(input: { invoice: LuxorInvoice; inquiry:
   const eventDetails = [
     proposalEventDate ? displayEventDate(proposalEventDate) : null,
     summary.expectedGuestCount === null ? null : `${displayQuantity(summary.expectedGuestCount)} guests`,
-    summary.guestArrivalTime ? `Guest arrival: ${formatCatalogTime(summary.guestArrivalTime)}` : null,
-    summary.eventEndTime ? `Event end: ${formatCatalogTime(summary.eventEndTime)}` : null,
+    summary.guestArrivalTime ? `${summary.weekdayCustomRental ? 'Rental start time' : 'Guest arrival'}: ${formatCatalogTime(summary.guestArrivalTime)}` : null,
+    summary.eventEndTime ? `${summary.weekdayCustomRental ? 'Rental end time' : 'Event end'}: ${formatCatalogTime(summary.eventEndTime)}${summary.weekdayCustomRental && Number(summary.eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}` : null,
     summary.eventAccess ? `Venue access: ${summary.eventAccess}` : null,
+    summary.weekdayCustomRental ? `Venue rental: ${formatWeekdayCustomRentalDuration(summary.weekdayCustomRental.duration_minutes)} at ${money(summary.weekdayCustomRental.hourly_rate)} per hour = ${money(summary.weekdayCustomRental.rental_total)}` : null,
   ].filter(Boolean).join(' | ')
   return {
     subject: 'Your Luxor final proposal is ready',

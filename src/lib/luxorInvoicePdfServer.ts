@@ -5,6 +5,7 @@ import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './lux
 import { decorQuantityLabel, getLuxorProposalPricingSummary } from './luxorProposalEmailServer'
 import { formatLuxorDate } from './luxorDateFormatting'
 import { formatCatalogTime } from './luxorPricingCatalog'
+import { formatWeekdayCustomRentalDuration } from './luxorWeekdayRental'
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const pageWidth = 612
@@ -167,16 +168,19 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   const rightBottom = drawDetailColumn(rightDetails, 348, 210)
   y = Math.min(leftBottom, rightBottom) - 11
 
-  if (isFinalProposal && (summary.expectedGuestCount !== null || summary.eventAccess || summary.guestArrivalTime || summary.eventEndTime)) {
-    ensureSpace(48)
-    page.drawRectangle({ x: margin, y: y - 40, width: contentRight - margin, height: 40, color: rgb(0.94, 0.91, 0.84) })
+  if ((isFinalProposal || summary.weekdayCustomRental) && (summary.expectedGuestCount !== null || summary.eventAccess || summary.guestArrivalTime || summary.eventEndTime)) {
     const guestText = summary.expectedGuestCount === null ? null : `${displayQuantity(summary.expectedGuestCount)} guests`
-    const arrivalText = summary.guestArrivalTime ? `Guest Arrival: ${formatCatalogTime(summary.guestArrivalTime)}` : null
-    const endText = summary.eventEndTime ? `Event End: ${formatCatalogTime(summary.eventEndTime)}` : null
+    const arrivalText = summary.guestArrivalTime ? `${summary.weekdayCustomRental ? 'Rental Start' : 'Guest Arrival'}: ${formatCatalogTime(summary.guestArrivalTime)}` : null
+    const endText = summary.eventEndTime ? `${summary.weekdayCustomRental ? 'Rental End' : 'Event End'}: ${formatCatalogTime(summary.eventEndTime)}${summary.weekdayCustomRental && Number(summary.eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}` : null
     const eventAccess = summary.eventAccess ? `Venue Access: ${summary.eventAccess}` : null
+    const detailLines = wrap([guestText, arrivalText, endText, eventAccess].filter(Boolean).join(' | '), regular, 9.5, contentRight - margin - 24)
+    if (summary.weekdayCustomRental) detailLines.push(`Venue rental: ${formatWeekdayCustomRentalDuration(summary.weekdayCustomRental.duration_minutes)} at ${money(summary.weekdayCustomRental.hourly_rate)} per hour = ${money(summary.weekdayCustomRental.rental_total)}`)
+    const detailHeight = 28 + detailLines.length * 12
+    ensureSpace(detailHeight + 18)
+    page.drawRectangle({ x: margin, y: y - detailHeight, width: contentRight - margin, height: detailHeight, color: rgb(0.94, 0.91, 0.84) })
     text('EVENT DETAILS', margin + 12, y - 13, 7, bold, paleMuted)
-    text([guestText, arrivalText, endText, eventAccess].filter(Boolean).join(' | '), margin + 12, y - 28, 9.5, regular, ink)
-    y -= 58
+    drawLines(detailLines, margin + 12, y - 28, 9.5, regular, ink, 12)
+    y -= detailHeight + 18
   }
 
   ensureSpace(42)

@@ -4,7 +4,8 @@ import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, updateI
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
 import { calculateLuxorProposal, type LuxorProposalSelection } from '@/lib/luxorProposalPricing'
-import { getDefaultLuxorProposalPricing, getLuxorProposalPricingForInvoice, LuxorPromotionSelectionError, resolveLuxorProposalPromotion, resolveLuxorSameDayBooking, resolveLuxorOriginalProposalCreatedAt } from '@/lib/luxorProposalPricingServer'
+import { getDefaultLuxorProposalPricing, getLuxorProposalPricingForInvoice, LuxorPromotionSelectionError, resolveLuxorProposalPromotion, resolveLuxorSameDayBooking, resolveLuxorOriginalProposalCreatedAt, assertLuxorWeekdayRentalSelection } from '@/lib/luxorProposalPricingServer'
+import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 import { calculateLuxorOfferPricing, clampLuxorDiscountPercent, luxorOfferSnapshot } from '@/lib/luxorOffer'
@@ -115,7 +116,9 @@ function normaliseCalculatedLineItems(value: unknown): LuxorInvoiceLineItem[] {
     const line = recordFrom(raw)
     if (!line) return null
     const description = stringValue(line.description)
-    const quantity = numberValue(line.quantity)
+    // Duration is a quantity, not money. Preserve exact fractional hours from the server calculator.
+    const rawQuantity = Number(line.quantity)
+    const quantity = line.pricingRuleId === 'weekday_custom_rental.hourly_rate' && Number.isFinite(rawQuantity) ? rawQuantity : numberValue(line.quantity)
     const unitPrice = numberValue(line.unitPrice ?? line.unit_price)
     const total = numberValue(line.total ?? line.lineTotal ?? line.line_total)
     if (!description || quantity === null || quantity <= 0 || unitPrice === null || total === null) return null
@@ -129,7 +132,8 @@ function normaliseCalculatedLineItems(value: unknown): LuxorInvoiceLineItem[] {
       ? rawPaymentBucket as NonNullable<LuxorInvoiceLineItem['paymentBucket']>
       : undefined
     const rawQuoteBreakdown = recordFrom(line.quoteBreakdown ?? line.quote_breakdown)
-    const breakdownQuantity = numberValue(rawQuoteBreakdown?.quantity)
+    const rawBreakdownQuantity = Number(rawQuoteBreakdown?.quantity)
+    const breakdownQuantity = line.pricingRuleId === 'weekday_custom_rental.hourly_rate' && Number.isFinite(rawBreakdownQuantity) ? rawBreakdownQuantity : numberValue(rawQuoteBreakdown?.quantity)
     const breakdownUnitPrice = numberValue(rawQuoteBreakdown?.unit_price ?? rawQuoteBreakdown?.unitPrice)
     const breakdownSubtotal = numberValue(rawQuoteBreakdown?.subtotal)
     const quoteBreakdown = rawQuoteBreakdown && breakdownQuantity !== null && breakdownQuantity > 0 &&
@@ -234,11 +238,12 @@ async function calculateServerProposal(selection: LuxorProposalSelection, existi
   let promotion: Awaited<ReturnType<typeof resolveLuxorProposalPromotion>>
   try {
     pricingRecord = await getLuxorProposalPricingForInvoice(existing)
+    assertLuxorWeekdayRentalSelection(selection, pricingRecord.config, true)
     promotion = await resolveLuxorProposalPromotion(selection, existing)
     const sameDayBooking = await resolveLuxorSameDayBooking(selection, existing, originalCreatedAt)
     calculation = calculateLuxorProposal(selection, pricingRecord.config, { promotion, sameDayBooking })
   } catch (error) {
-    if (error instanceof LuxorPromotionSelectionError) throw error
+    if (error instanceof LuxorPromotionSelectionError || error instanceof LuxorWeekdayRentalError) throw error
     throw new ProposalPricingConfigurationError()
   }
 
@@ -571,6 +576,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(invoice, { status: 201 })
   } catch (error) {
+    if (error instanceof LuxorWeekdayRentalError) return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof LuxorPromotionSelectionError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }
@@ -740,6 +746,7 @@ export async function PATCH(request: NextRequest) {
     }
     return NextResponse.json(updatedInvoice)
   } catch (error) {
+    if (error instanceof LuxorWeekdayRentalError) return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof LuxorPromotionSelectionError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }
