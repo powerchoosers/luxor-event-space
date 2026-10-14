@@ -455,7 +455,7 @@ export function LuxorConciergeChat() {
           <p className="text-xs leading-5 text-[#d7c29a]/70">No exact times are published right now. Pick a preferred window and the team will offer options.</p>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {['Morning', 'Afternoon', 'Evening'].map((window) => (
-              <button key={window} type="button" onClick={() => setPreferredTourWindow(window)} className={`rounded-md border px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${preferredTourWindow === window ? 'border-[#f1d27a] bg-[#caa24c] text-black' : 'border-[#caa24c]/22 text-[#eadcc8]'}`}>
+              <button key={window} type="button" onClick={() => setPreferredTourWindow(window)} className={`rounded-md border px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${preferredTourWindow === window ? 'border-[#f1d27a] bg-[#caa24c] text-white' : 'border-[#caa24c]/22 text-[#eadcc8]'}`}>
                 {window}
               </button>
             ))}
@@ -499,7 +499,7 @@ export function LuxorConciergeChat() {
                   const active = selectedTourDate === isoDate
 
                   return (
-                    <button key={isoDate} type="button" disabled={!available} onClick={() => { setSelectedTourDate(isoDate); setTourSelection(null); setBookingStep(2) }} className={`rounded-md py-2 text-xs transition ${active ? 'bg-[#caa24c] font-bold text-[#050505]' : available ? 'border border-[#caa24c]/25 text-[#eadcc8] hover:border-[#f1d27a]/60 hover:text-[#f1d27a]' : `text-[#d7c29a]/20 ${inMonth ? '' : 'opacity-40'}`}`} aria-label={available ? `Choose ${day.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : undefined}>
+                    <button key={isoDate} type="button" disabled={!available} onClick={() => { setSelectedTourDate(isoDate); setTourSelection(null); setBookingStep(2) }} className={`rounded-md py-2 text-xs transition ${active ? 'bg-[#caa24c] font-bold text-white' : available ? 'border border-[#caa24c]/25 text-[#eadcc8] hover:border-[#f1d27a]/60 hover:text-[#f1d27a]' : `text-[#d7c29a]/20 ${inMonth ? '' : 'opacity-40'}`}`} aria-label={available ? `Choose ${day.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : undefined}>
                       {day.getDate()}
                     </button>
                   )
@@ -626,7 +626,7 @@ export function LuxorConciergeChat() {
           type="button"
           onClick={submitTourRequest}
           disabled={!bookingReady || submitted || submittingInquiry}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-white hover:text-white focus-visible:text-white transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
         >
           {submitted ? (tourSelection ? 'Tour confirmed' : 'Tour request sent') : submittingInquiry ? (tourSelection ? 'Booking tour' : 'Sending request') : bookingReady ? (tourSelection ? 'Confirm tour' : 'Send tour request') : hasTourTime ? tourSelection && !bookingEmailComplete ? 'Add email to confirm' : 'Add name + phone' : 'Pick a time'}
           <Check className="h-4 w-4" />
@@ -752,7 +752,7 @@ export function LuxorConciergeChat() {
                       setStartChoicesVisible(false)
                       showBookingCard()
                     }}
-                    className="mt-2 w-full rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#050505] transition hover:bg-[#f1d27a]"
+                    className="mt-2 w-full rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-3 py-3 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-white hover:text-white focus-visible:text-white transition hover:bg-[#f1d27a]"
                   >
                     Schedule a visit
                   </button>
@@ -855,7 +855,7 @@ export function LuxorConciergeChat() {
                   <button
                     type="submit"
                     disabled={pending || !input.trim()}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[#f1d27a]/45 bg-[#caa24c] text-[#050505] transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[#f1d27a]/45 bg-[#caa24c] text-white hover:text-white focus-visible:text-white transition hover:bg-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45"
                     aria-label="Send message"
                   >
                     <Send className="h-4 w-4" />

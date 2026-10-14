@@ -95,7 +95,7 @@ export default function SmsSignupPage() {
                 <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">This optional marketing consent is separate from customer-care messages. Read the <Link href="/privacy" className="text-[#f1d27a] underline underline-offset-4">Privacy Policy</Link> and <Link href="/terms" className="text-[#f1d27a] underline underline-offset-4">Terms</Link>.</p>
               </div>
               {error ? <p role="alert" className="rounded-md border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</p> : null}
-              <button type="submit" disabled={submitting} className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-[#050505] transition hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-70">
+              <button type="submit" disabled={submitting} className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-white hover:text-white focus-visible:text-white transition hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-70">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
                 {submitting ? 'Saving preferences…' : 'Save preferences'}
               </button>

@@ -84,7 +84,7 @@ export const Footer = () => {
                 href={`${spanish ? '/es/visit' : '/visit'}#visit-booking`}
                 data-conversion="visit_cta_click"
                 data-conversion-label="Footer"
-                className="mt-4 inline-flex items-center justify-center gap-2.5 rounded-md border border-[#f1d27a]/40 bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.16em] text-[#050505] shadow-2xl transition-all duration-300 hover:scale-[1.03] hover:shadow-[#caa24c]/30 active:scale-95"
+                className="mt-4 inline-flex items-center justify-center gap-2.5 rounded-md border border-[#f1d27a]/40 bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.16em] text-white hover:text-white focus-visible:text-white shadow-2xl transition-all duration-300 hover:scale-[1.03] hover:shadow-[#caa24c]/30 active:scale-95"
               >
                 <CalendarDays className="h-4 w-4" />
                 {spanish ? 'Agendar una visita' : 'Schedule a Visit'}

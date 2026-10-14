@@ -38,7 +38,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             <h1 className="mt-5 font-serif text-5xl leading-[.9] sm:text-7xl lg:text-8xl">{event.headline}</h1>
             <p className="mt-7 max-w-2xl text-base leading-7 text-[#eadcc8]/82 sm:text-lg">{event.introduction}</p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href={visitHref} data-conversion="visit_cta_click" data-conversion-label={`${event.name} hero`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">
+              <Link href={visitHref} data-conversion="visit_cta_click" data-conversion-label={`${event.name} hero`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-white hover:text-white focus-visible:text-white">
                 Schedule a Visit <ArrowRight className="h-4 w-4" />
               </Link>
               <Link href="/#brochure-form" className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#caa24c]/40 bg-black/35 px-6 py-3 text-sm font-semibold uppercase tracking-[.14em] text-[#f7efe3] hover:border-[#caa24c]">Get Venue Brochure</Link>
@@ -83,7 +83,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
         </div>
       </section>
 
-      <section className="bg-[#050505] px-5 py-16 sm:px-6 sm:py-24 lg:px-8"><Reveal><div className="luxor-panel mx-auto flex max-w-7xl flex-col gap-7 p-7 sm:p-10 lg:flex-row lg:items-center lg:justify-between"><div><p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Next step</p><h2 className="mt-3 max-w-3xl font-serif text-4xl leading-none sm:text-5xl">Walk through Luxor with your {event.singular.toLowerCase()} in mind.</h2></div><Link href={visitHref} data-conversion="visit_cta_click" data-conversion-label={`${event.name} footer`} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Schedule a Visit <ArrowRight className="h-4 w-4" /></Link></div></Reveal></section>
+      <section className="bg-[#050505] px-5 py-16 sm:px-6 sm:py-24 lg:px-8"><Reveal><div className="luxor-panel mx-auto flex max-w-7xl flex-col gap-7 p-7 sm:p-10 lg:flex-row lg:items-center lg:justify-between"><div><p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">Next step</p><h2 className="mt-3 max-w-3xl font-serif text-4xl leading-none sm:text-5xl">Walk through Luxor with your {event.singular.toLowerCase()} in mind.</h2></div><Link href={visitHref} data-conversion="visit_cta_click" data-conversion-label={`${event.name} footer`} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-white hover:text-white focus-visible:text-white">Schedule a Visit <ArrowRight className="h-4 w-4" /></Link></div></Reveal></section>
     </main>
   )
 }

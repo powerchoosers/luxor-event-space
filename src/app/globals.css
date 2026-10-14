@@ -1180,6 +1180,33 @@ body[data-luxor-site] main [class*="text-[#d7b964]"] {
   color: #805b1f !important;
 }
 
+/* Keep text and icons white on solid-gold public controls after the light-site
+   text remapping above. Exact class tokens leave translucent gold surfaces alone. */
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#caa24c]"],
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#dfbd68]"],
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#f1d27a]"],
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#caa24c]"]:hover,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#dfbd68]"]:hover,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#f1d27a]"]:hover,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="group-hover:bg-[#caa24c]"]:is(:hover, :focus-visible),
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="focus-visible:bg-[#caa24c]"]:focus-visible {
+  color: #ffffff !important;
+}
+
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#caa24c]"] *,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#dfbd68]"] *,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#f1d27a]"] *,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#caa24c]"]:hover *,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#dfbd68]"]:hover *,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#f1d27a]"]:hover *,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="group-hover:bg-[#caa24c]"]:is(:hover, :focus-visible) *,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="focus-visible:bg-[#caa24c]"]:focus-visible *,
+body[data-luxor-site] :is(main, footer.site-footer--light) .group:is(:hover, :focus-within) [class~="group-hover:bg-[#caa24c]"],
+body[data-luxor-site] :is(main, footer.site-footer--light) .group:is(:hover, :focus-within) [class~="group-hover:bg-[#caa24c]"] * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 body[data-luxor-site] main [class*="border-white/"],
 body[data-luxor-site] main [class*="border-[#caa24c]"] {
   border-color: rgba(155, 111, 36, 0.24) !important;
@@ -1514,6 +1541,19 @@ body[data-luxor-site] footer.site-footer--light [class*="text-[#f8f3ed]"],
 body[data-luxor-site] footer.site-footer--light [class*="text-[#f7efe3]"],
 body[data-luxor-site] footer.site-footer--light [class*="text-white"] {
   color: #241d17 !important;
+}
+
+body[data-luxor-site] footer.site-footer--light :is(a, button, [role="button"])[class~="bg-[#caa24c]"],
+body[data-luxor-site] footer.site-footer--light :is(a, button, [role="button"])[class~="hover:bg-[#caa24c]"]:hover,
+body[data-luxor-site] footer.site-footer--light :is(a, button, [role="button"])[class~="hover:bg-[#dfbd68]"]:hover {
+  color: #ffffff !important;
+}
+
+body[data-luxor-site] footer.site-footer--light :is(a, button, [role="button"])[class~="bg-[#caa24c]"] *,
+body[data-luxor-site] footer.site-footer--light :is(a, button, [role="button"])[class~="hover:bg-[#caa24c]"]:hover *,
+body[data-luxor-site] footer.site-footer--light :is(a, button, [role="button"])[class~="hover:bg-[#dfbd68]"]:hover * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 body[data-luxor-site] footer.site-footer--light [class*="text-[#d7c29a]"] {

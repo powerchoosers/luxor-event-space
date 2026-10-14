@@ -59,7 +59,7 @@ export default function EventsPage() {
               Luxor is built for celebrations that need a strong backdrop, simple guest flow, and enough polish before the decor even arrives.
             </p>
             <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
-              <Link href="/visit" data-conversion="visit_cta_click" data-conversion-label="Events hero" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505] shadow-[0_22px_44px_-26px_rgba(202,162,76,0.8)]">
+              <Link href="/visit" data-conversion="visit_cta_click" data-conversion-label="Events hero" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-white hover:text-white focus-visible:text-white shadow-[0_22px_44px_-26px_rgba(202,162,76,0.8)]">
                 Schedule a Visit <ArrowRight className="h-4 w-4" />
               </Link>
               <Link href="/#brochure-form" className="inline-flex min-h-12 items-center justify-center rounded-md border border-[#9b6f24]/35 bg-white/70 px-5 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-[#241d17] transition hover:border-[#9b6f24]/60 hover:bg-white">
@@ -158,7 +158,7 @@ export default function EventsPage() {
                   A visit is where you check the practical details: guest count, table shape, entrance, photos, DJ placement, and the exact feeling you want guests to have.
                 </p>
               </div>
-              <Link href="/visit" data-conversion="visit_cta_click" data-conversion-label="Events footer" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+              <Link href="/visit" data-conversion="visit_cta_click" data-conversion-label="Events footer" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-white hover:text-white focus-visible:text-white">
                 Schedule a Visit <ArrowRight className="h-4 w-4" />
               </Link>
             </div>

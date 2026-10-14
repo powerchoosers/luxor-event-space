@@ -38,7 +38,7 @@ export default function PaymentSuccessPage() {
         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/"
-            className="group inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-[#caa24c] px-7 py-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[#050505] shadow-[0_18px_44px_-22px_rgba(202,162,76,0.8)] transition-colors hover:bg-[#dfbd68] sm:w-auto"
+            className="group inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-[#caa24c] px-7 py-3 text-[11px] font-bold uppercase tracking-[0.2em] text-white hover:text-white focus-visible:text-white shadow-[0_18px_44px_-22px_rgba(202,162,76,0.8)] transition-colors hover:bg-[#dfbd68] sm:w-auto"
           >
             Return home
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />

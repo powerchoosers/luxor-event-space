@@ -358,7 +358,7 @@ export function LuxorInquiryForm({
               ) : null}
 
               {error ? <ErrorMessage message={error} /> : null}
-              <button type="button" onClick={goToContactStep} className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-[#050505] transition hover:bg-[#dfbd68] sm:w-auto">
+              <button type="button" onClick={goToContactStep} className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-white hover:text-white focus-visible:text-white transition hover:bg-[#dfbd68] sm:w-auto">
                 Continue <ArrowRight className="h-4 w-4" />
               </button>
             </motion.div>
@@ -402,7 +402,7 @@ export function LuxorInquiryForm({
                 <button type="button" onClick={() => { setError(null); setStep(1) }} className="inline-flex items-center justify-center gap-2 rounded-md border border-[#caa24c]/28 px-5 py-3 text-sm font-semibold text-[#eadcc8] hover:border-[#f1d27a]/50">
                   <ArrowLeft className="h-4 w-4" /> Back
                 </button>
-                <motion.button whileHover={{ scale: 1.015 }} whileTap={{ scale: 0.985 }} type="submit" disabled={submitting} className="inline-flex items-center justify-center gap-3 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-[#050505] disabled:cursor-not-allowed disabled:opacity-70">
+                <motion.button whileHover={{ scale: 1.015 }} whileTap={{ scale: 0.985 }} type="submit" disabled={submitting} className="inline-flex items-center justify-center gap-3 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-white hover:text-white focus-visible:text-white disabled:cursor-not-allowed disabled:opacity-70">
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : reservedTour ? <CalendarDays className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
                   {submitting ? 'Sending…' : reservedTour ? 'Reserve this tour' : submitLabel}
                 </motion.button>

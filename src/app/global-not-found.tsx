@@ -20,7 +20,7 @@ export default function GlobalNotFound() {
               The address may have changed. You can return home or schedule a private visit to the venue.
             </p>
             <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/visit" className="rounded-full bg-[#caa24c] px-7 py-3 text-sm font-bold text-[#050505] transition hover:bg-[#f1d27a]">
+              <Link href="/visit" className="rounded-full bg-[#caa24c] px-7 py-3 text-sm font-bold text-white hover:text-white focus-visible:text-white transition hover:bg-[#f1d27a]">
                 Schedule a Visit
               </Link>
               <Link href="/" className="rounded-full border border-white/20 px-7 py-3 text-sm font-bold text-[#f6efe8] transition hover:border-[#caa24c] hover:text-[#f1d27a]">

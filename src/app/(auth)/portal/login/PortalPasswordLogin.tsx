@@ -38,7 +38,7 @@ export function PortalPasswordLogin() {
         className="mt-2 w-full rounded-lg border border-zinc-700 bg-black/45 px-3 py-3 text-sm text-white outline-none transition focus:border-[#caa24c]" />
     </label>
     {error ? <p role="alert" className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-left text-xs leading-5 text-red-200">{error}</p> : null}
-    <button type="submit" disabled={submitting} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-3 text-sm font-bold text-[#17120a] transition hover:bg-[#e0bd63] disabled:cursor-not-allowed disabled:opacity-65">
+    <button type="submit" disabled={submitting} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-3 text-sm font-bold text-white hover:text-white focus-visible:text-white transition hover:bg-[#e0bd63] disabled:cursor-not-allowed disabled:opacity-65">
       {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
       {submitting ? 'Signing in…' : 'Sign in securely'}
     </button>

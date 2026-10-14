@@ -177,7 +177,7 @@ function GalleryCard({ item, onOpen, priority = false, mobile = false, className
           <h2 className="mt-2 font-serif text-3xl leading-[0.92] !text-white drop-shadow-[0_3px_14px_rgba(0,0,0,1)] sm:text-4xl">{item.title}</h2>
           <p className="mt-2 max-w-lg text-sm leading-5 !text-white/85 drop-shadow-[0_2px_8px_rgba(0,0,0,1)] sm:text-[15px] sm:leading-6">{item.caption}</p>
         </div>
-        <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/30 bg-black/20 text-white/90 backdrop-blur-sm transition group-hover:border-[#f1d27a]/70 group-hover:bg-[#caa24c] group-hover:text-[#050505] sm:flex">
+        <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/30 bg-black/20 text-white/90 backdrop-blur-sm transition group-hover:border-[#f1d27a]/70 group-hover:bg-[#caa24c] group-hover:text-white sm:flex">
           <Maximize2 className="h-4 w-4" />
         </span>
       </div>
@@ -320,7 +320,7 @@ export default function GalleryPage() {
             <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-[#f1d27a]">Inside Luxor</p>
             <h1 className="mt-5 font-serif text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">See the room before you visit.</h1>
             <p className="mt-7 max-w-xl text-base leading-7 text-[#d7c29a]/78 sm:text-lg">Watch our venue film, captured inside Luxor. Then explore the collection and visit to picture your celebration here.</p>
-            <Link href="/visit#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Gallery hero" className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-[#050505]">Schedule a Visit <ArrowRight className="h-4 w-4" /></Link>
+            <Link href="/visit#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Gallery hero" className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#caa24c] px-6 py-3 text-sm font-bold uppercase tracking-[.14em] text-white hover:text-white focus-visible:text-white">Schedule a Visit <ArrowRight className="h-4 w-4" /></Link>
           </div>
           <VenueFilm autoPlay />
         </div>
@@ -351,7 +351,7 @@ export default function GalleryPage() {
                   }}
                   className={`inline-flex min-h-10 items-center justify-center rounded-md border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] transition ${
                     activeFilter === filter
-                      ? 'border-[#f1d27a]/50 bg-[#caa24c] text-[#050505]'
+                      ? 'border-[#f1d27a]/50 bg-[#caa24c] text-white'
                       : 'border-[#caa24c]/24 bg-black/25 text-[#d7c29a]/78 hover:border-[#f1d27a]/50 hover:text-[#f7efe3]'
                   }`}
                 >
@@ -431,7 +431,7 @@ export default function GalleryPage() {
                 onClick={() => setDesktopPage((page) => Math.max(0, page - 1))}
                 disabled={desktopPage === 0}
                 aria-label="Previous gallery page"
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-[#caa24c]/28 text-[#f7efe3] transition hover:border-[#f1d27a]/55 hover:bg-[#caa24c] hover:text-[#050505] disabled:cursor-default disabled:opacity-30"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-[#caa24c]/28 text-[#f7efe3] transition hover:border-[#f1d27a]/55 hover:bg-[#caa24c] hover:text-white disabled:cursor-default disabled:opacity-30"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
@@ -450,7 +450,7 @@ export default function GalleryPage() {
                 onClick={() => setDesktopPage((page) => Math.min(desktopPageCount - 1, page + 1))}
                 disabled={desktopPage === desktopPageCount - 1}
                 aria-label="Next gallery page"
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-[#caa24c]/28 text-[#f7efe3] transition hover:border-[#f1d27a]/55 hover:bg-[#caa24c] hover:text-[#050505] disabled:cursor-default disabled:opacity-30"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-[#caa24c]/28 text-[#f7efe3] transition hover:border-[#f1d27a]/55 hover:bg-[#caa24c] hover:text-white disabled:cursor-default disabled:opacity-30"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
@@ -462,7 +462,7 @@ export default function GalleryPage() {
               <p className="max-w-xl text-sm leading-6 text-[#d7c29a]/70 sm:text-base">
                 The next step is seeing how your guest count, tables, photos, and dance floor would fit inside the room.
               </p>
-              <Link href="/visit#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Gallery collection" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#050505]">
+              <Link href="/visit#visit-booking" data-conversion="visit_cta_click" data-conversion-label="Gallery collection" className="inline-flex items-center justify-center gap-2 rounded-md border border-[#f1d27a]/45 bg-[#caa24c] px-5 py-3 text-sm font-bold uppercase tracking-[0.14em] text-white hover:text-white focus-visible:text-white">
                 Schedule a Visit <ArrowRight className="h-4 w-4" />
               </Link>
             </div>

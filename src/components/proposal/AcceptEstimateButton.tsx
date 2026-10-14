@@ -28,7 +28,7 @@ export function AcceptProposalButton({ token, continueToSigning = false, already
       setState('error'); setError(cause instanceof Error ? cause.message : 'We could not prepare your agreement.')
     }
   }
-  return <div className="space-y-2"><button type="button" onClick={() => { void accept() }} disabled={state === 'working'} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 text-xs font-black uppercase tracking-wider text-[#130e08] transition hover:bg-[#dfbd68] disabled:cursor-wait disabled:opacity-60"><Check size={16} /> {state === 'working' ? 'Preparing agreement…' : alreadyAccepted ? 'Continue to agreement' : continueToSigning ? 'Accept & continue to agreement' : 'Accept final proposal'}</button>{state === 'error' ? <p role="alert" className="max-w-md text-xs leading-5 text-red-300">{error}</p> : null}</div>
+  return <div className="space-y-2"><button type="button" onClick={() => { void accept() }} disabled={state === 'working'} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-6 text-xs font-black uppercase tracking-wider text-white hover:text-white focus-visible:text-white transition hover:bg-[#dfbd68] disabled:cursor-wait disabled:opacity-60"><Check size={16} /> {state === 'working' ? 'Preparing agreement…' : alreadyAccepted ? 'Continue to agreement' : continueToSigning ? 'Accept & continue to agreement' : 'Accept final proposal'}</button>{state === 'error' ? <p role="alert" className="max-w-md text-xs leading-5 text-red-300">{error}</p> : null}</div>
 }
 
 /** @deprecated Use AcceptProposalButton. Kept only for older portal imports. */

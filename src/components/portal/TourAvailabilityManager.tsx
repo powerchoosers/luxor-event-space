@@ -557,7 +557,7 @@ export function TourAvailabilityManager({
                       <span
                         className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${
                           day.is_open
-                            ? 'border-[#caa24c] bg-[#caa24c] text-[#241b0d]'
+                            ? 'border-[#caa24c] bg-[#caa24c] text-white'
                             : 'border-[color:var(--portal-faint)]'
                         }`}
                       >
