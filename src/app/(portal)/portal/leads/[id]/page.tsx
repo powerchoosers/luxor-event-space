@@ -104,7 +104,6 @@ import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPre
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import { SameDayReceiptDialog, type SameDayReceiptEvidence } from '@/components/portal/SameDayReceiptDialog'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
-import { hasMatchingProposalBooking } from '@/lib/luxorProposalEvidence'
 import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext } from '@/lib/luxorProposalDuplicateContext'
 import { findProposalLeadEvent, getLeadClientProposals, getProposalCardState, getProposalWorkflowDisplayState, getSavedProposalPricingSummary } from '@/lib/luxorProposalCard'
 import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
@@ -852,6 +851,22 @@ export default function LeadDetailPage({
       : null,
     [bookings, currentProposalInvoice],
   )
+  const proposalInvoice = currentProposalInvoice
+  const proposalBooking = currentProposalBooking
+  const currentProposalAcceptanceActivity = Boolean(currentProposalInvoice && proposalHistory[currentProposalInvoice.id]?.activities.some(
+    (activity) => activity.invoice_id === currentProposalInvoice.id && activity.event_type === 'accepted',
+  ))
+  const currentProposalEvent = currentProposalInvoice ? findProposalLeadEvent(currentProposalInvoice, leadEvents, bookings) : null
+  const proposalWorkflowDisplay = getProposalWorkflowDisplayState({
+    currentStatus: lead?.status === 'closed_lost' ? 'closed_lost' : currentProposalEvent?.status || lead?.status || 'new',
+    currentPipelineStage: lead?.pipeline_stage === 'closed_lost' ? 'closed_lost' : currentProposalEvent?.pipeline_stage || lead?.pipeline_stage || 'inquiry',
+    proposalAcceptedAt: currentProposalInvoice?.proposal_accepted_at,
+    proposalAcceptanceActivity: currentProposalAcceptanceActivity,
+    proposalInvoiceId: currentProposalInvoice?.id,
+    bookingInvoiceId: currentProposalBooking?.invoice_id,
+    contractStatus: currentProposalBooking?.contract_status,
+    contractSignedAt: currentProposalBooking?.contract_signed_at,
+  })
   useEffect(() => {
     let cancelled = false
     const bookingId = currentProposalBooking?.id
@@ -875,24 +890,34 @@ export default function LeadDetailPage({
       currentStatus: selectedLeadEvent.status,
       currentPipelineStage: selectedLeadEvent.pipeline_stage,
       proposalAcceptedAt: proposalAppliesToEvent ? currentProposalInvoice?.proposal_accepted_at : null,
+      proposalAcceptanceActivity: Boolean(proposalAppliesToEvent && currentProposalInvoice && proposalHistory[currentProposalInvoice.id]?.activities.some(
+        (activity) => activity.invoice_id === currentProposalInvoice.id && activity.event_type === 'accepted',
+      )),
       proposalInvoiceId: proposalAppliesToEvent ? currentProposalInvoice?.id : null,
       bookingInvoiceId: proposalAppliesToEvent ? currentProposalBooking?.invoice_id : null,
       contractStatus: proposalAppliesToEvent ? currentProposalBooking?.contract_status : null,
+      contractSignedAt: proposalAppliesToEvent ? currentProposalBooking?.contract_signed_at : null,
     })
     const sharedTourReached = ['tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status)
     const sharedTourCompleted = lead.tour_attendance_status === 'attended'
+    const leadIsClosedLost = lead.status === 'closed_lost' || lead.pipeline_stage === 'closed_lost'
+    const eventIsClosedLost = selectedLeadEvent.status === 'closed_lost' || selectedLeadEvent.pipeline_stage === 'closed_lost'
     return {
       ...selectedLeadEvent,
-      status: proposalWorkflow.proposalAccepted
+      status: leadIsClosedLost || eventIsClosedLost
+        ? 'closed_lost' as const
+        : proposalWorkflow.workflowStageAdvanced
         ? 'booked' as const
         : selectedLeadEvent.status === 'new' && sharedTourReached ? 'tour_confirmed' as const : selectedLeadEvent.status,
-      pipeline_stage: proposalWorkflow.pipelineStage === 'contract'
+      pipeline_stage: leadIsClosedLost || eventIsClosedLost
+        ? 'closed_lost' as const
+        : proposalWorkflow.pipelineStage === 'contract'
         ? 'contract' as const
         : ['inquiry', 'tour'].includes(selectedLeadEvent.pipeline_stage) && sharedTourCompleted
         ? 'proposal' as const
         : selectedLeadEvent.pipeline_stage === 'inquiry' && sharedTourReached ? 'tour' as const : selectedLeadEvent.pipeline_stage,
     }
-  }, [bookings, currentProposalBooking, currentProposalInvoice, lead, leadEvents, selectedLeadEvent])
+  }, [bookings, currentProposalBooking, currentProposalInvoice, lead, leadEvents, proposalHistory, selectedLeadEvent])
   const lifecycleLead = useMemo(() => {
     if (!lead) return null
     if (!activeEventForDisplay) return lead
@@ -1042,8 +1067,7 @@ export default function LeadDetailPage({
 
   const activeStage = useMemo(() => {
     if (!lead) return 'inquiry'
-    const hasAcceptedProposalEvidence = Boolean(currentProposalInvoice?.proposal_accepted_at || hasMatchingProposalBooking(currentProposalInvoice?.id, currentProposalBooking?.invoice_id))
-    const steps = getLeadLifecycleSteps(lifecycleLead || lead, lifecycleBooking, currentProposalInvoice, hasAcceptedProposalEvidence)
+    const steps = getLeadLifecycleSteps(lifecycleLead || lead, lifecycleBooking, currentProposalInvoice, proposalWorkflowDisplay.proposalAccepted)
 
     const activeIndex = steps.findIndex(s => s.isActive)
     if (activeIndex !== -1) {
@@ -3436,18 +3460,6 @@ export default function LeadDetailPage({
     sortedPayments,
   } = leadDerivedData
   const activeEventMetadata = activeEventForDisplay?.metadata || lead.metadata || {}
-  const proposalInvoice = currentProposalInvoice
-  const proposalBooking = proposalInvoice
-    ? bookings.find((booking) => booking.invoice_id === proposalInvoice.id) || null
-    : null
-  const proposalWorkflowDisplay = getProposalWorkflowDisplayState({
-    currentStatus: lead.status,
-    currentPipelineStage: lead.pipeline_stage || 'inquiry',
-    proposalAcceptedAt: proposalInvoice?.proposal_accepted_at,
-    proposalInvoiceId: proposalInvoice?.id,
-    bookingInvoiceId: proposalBooking?.invoice_id,
-    contractStatus: proposalBooking?.contract_status,
-  })
   const agreementBooking = proposalInvoice ? proposalBooking : latestBooking
   const bookingContractAmount = Number(agreementBooking?.contract_total || 0)
   const bookingDepositAmount = Number(agreementBooking?.deposit_required || 0)
@@ -3704,7 +3716,12 @@ export default function LeadDetailPage({
   const pushRecommendedAction = (action: (typeof recommendedActions)[number]) => {
     recommendedActions.push(action)
   }
-  const derivedLeadStatus = proposalWorkflowDisplay.proposalAccepted ? 'booked' : lead.status
+  const derivedLeadStatus = lead.status === 'closed_lost'
+    || lead.pipeline_stage === 'closed_lost'
+    || activeEventForDisplay?.status === 'closed_lost'
+    || activeEventForDisplay?.pipeline_stage === 'closed_lost'
+    ? 'closed_lost'
+    : proposalWorkflowDisplay.workflowStageAdvanced ? 'booked' : lead.status
 
   if (derivedLeadStatus === 'closed_lost') {
     pushRecommendedAction({
@@ -4422,7 +4439,7 @@ export default function LeadDetailPage({
             bookings={eventBookings}
             latestBooking={agreementBooking}
             latestInvoice={proposalInvoice}
-            hasAcceptedProposalEvidence={Boolean(proposalInvoice?.proposal_accepted_at || hasMatchingProposalBooking(proposalInvoice?.id, proposalBooking?.invoice_id))}
+            hasAcceptedProposalEvidence={proposalWorkflowDisplay.proposalAccepted}
             agreementDeliveryConfirmed={agreementDeliveryConfirmed}
             agreementDeliveryPending={agreementDeliveryPending}
             isSaving={updatingStatus}
@@ -7569,7 +7586,11 @@ export default function LeadDetailPage({
                   const proposalActivityTypes = new Set(proposalActivities.map((activity) => activity.event_type))
                   const proposalBooking = bookings.find((booking) => booking.invoice_id === proposal.id || booking.id === proposal.booking_id) || null
                   const acceptedActivity = proposalActivities.find((activity) => activity.event_type === 'accepted') || null
-                  const hasSignedAgreement = Boolean(proposalBooking && signatureRequests.some((signature) => signature.booking_id === proposalBooking.id && (signature.status === 'signed' || Boolean(signature.signed_at))))
+                  const hasSignedAgreement = Boolean(proposalBooking && (
+                    proposalBooking.contract_status === 'signed'
+                    || Boolean(proposalBooking.contract_signed_at)
+                    || signatureRequests.some((signature) => signature.booking_id === proposalBooking.id && (signature.status === 'signed' || Boolean(signature.signed_at)))
+                  ))
                   const latestView = proposal.proposal_latest_viewed_at || proposal.proposal_viewed_at || null
                   const latestSentAt = proposal.proposal_latest_sent_at || proposal.proposal_sent_at || (proposal.status === 'sent' ? proposal.updated_at : null)
                   const proposalHasBeenPublished = Boolean(proposal.proposal_sent_at || proposal.status === 'sent' || proposal.price_locked_at)
@@ -7577,7 +7598,6 @@ export default function LeadDetailPage({
                   const proposalCardState = getProposalCardState({
                     invoice: proposal,
                     activities: proposalActivities,
-                    hasLinkedBooking: Boolean(proposalBooking),
                     hasSignedAgreement,
                     hasSupersedingProposal: clientProposals.some((candidate) => candidate.supersedes_invoice_id === proposal.id),
                     hasActiveSend,
@@ -7626,7 +7646,7 @@ export default function LeadDetailPage({
                   const proposalMilestones: Array<[string, string, string | null, string]> = [
                     ['sent', 'Proposal sent', latestSentAt, 'Not sent yet'],
                     ['viewed', 'Proposal viewed', latestView, 'Not yet viewed'],
-                    ['accepted', 'Proposal accepted', proposal.proposal_accepted_at || acceptedActivity?.occurred_at || null, hasAcceptanceEvidence && !proposal.proposal_accepted_at && !acceptedActivity ? 'Booking linked; acceptance timestamp unavailable' : hasAcceptanceEvidence && !proposal.proposal_accepted_at ? 'Acceptance recorded in proposal history' : 'Not yet accepted'],
+                    ['accepted', 'Proposal accepted', proposal.proposal_accepted_at || acceptedActivity?.occurred_at || null, hasAcceptanceEvidence && !proposal.proposal_accepted_at && !acceptedActivity ? 'Signed agreement recorded; acceptance timestamp unavailable' : hasAcceptanceEvidence && !proposal.proposal_accepted_at ? 'Acceptance recorded in proposal history' : 'Not yet accepted'],
                     ['agreement', 'Agreement signed', proposalBooking?.contract_status === 'signed' ? proposalBooking.contract_signed_at || proposalBooking.updated_at : null, proposalBooking?.contract_status === 'viewed' ? 'Opened; awaiting signature' : 'Not yet signed'],
                     ['invoice', 'Payment invoice created', paymentInvoices[0]?.created_at || null, 'Not yet created'],
                     ['payment', 'Payment received', latestProposalPayment?.paid_at || paidPaymentInvoice?.paid_at || null, 'Not yet received'],
@@ -7661,7 +7681,7 @@ export default function LeadDetailPage({
                     <dl className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[10px] sm:grid-cols-3 xl:grid-cols-5">
                       <div><dt className="text-[color:var(--portal-muted)]">Created</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.created_at)}</dd></div>
                       <div><dt className="text-[color:var(--portal-muted)]">Last sent</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestSentAt ? formatVenueDateTime(latestSentAt) : 'Not sent yet'}</dd></div>
-                      <div><dt className="text-[color:var(--portal-muted)]">Last viewed</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestView || 'Not viewed'}</dd></div>
+                      <div><dt className="text-[color:var(--portal-muted)]">Last viewed</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestView ? formatVenueDateTime(latestView) : 'Not viewed'}</dd></div>
                       <div><dt className="text-[color:var(--portal-muted)]">Expires</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{proposal.offer_expires_at ? formatVenueDateTime(proposal.offer_expires_at) : 'No expiry set'}</dd></div>
                       <div><dt className="text-[color:var(--portal-muted)]">Last modified</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.updated_at || proposal.created_at)}</dd></div>
                     </dl>
@@ -9136,7 +9156,7 @@ function LeadLifecycleRail({
       ? new Date(lead.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : ''
 
-  const proposalAccepted = Boolean(latestInvoice?.proposal_accepted_at || hasAcceptedProposalEvidence || hasMatchingProposalBooking(latestInvoice?.id, latestBooking?.invoice_id))
+  const proposalAccepted = Boolean(latestInvoice?.proposal_accepted_at || hasAcceptedProposalEvidence)
   const steps = getLeadLifecycleSteps(lead, latestBooking, latestInvoice, proposalAccepted).map((step) => {
     if (step.id === 'newsletter') {
       return { ...step, label: 'Newsletter', subtext: formattedInquiryDate }

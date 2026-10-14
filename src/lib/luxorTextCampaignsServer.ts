@@ -21,7 +21,11 @@ import type {
   LuxorTextJobStatus,
 } from './luxorTextCampaignTypes'
 import { buildTwilioCallbackUrl, getLuxorTwilioMessagingConfig } from './luxorTwilioServer'
-import { getLuxorPaymentReminderDueDate } from './luxorPaymentReminderDueDate'
+import {
+  getLuxorInvoiceReminderTextSkipReason,
+  getLuxorPaymentReminderBookingLookup,
+  getLuxorPaymentReminderDueDate,
+} from './luxorPaymentReminderDueDate'
 
 const MAX_CAMPAIGN_RECIPIENTS = 1000
 const MAX_CAMPAIGN_BODY_LENGTH = 480
@@ -625,11 +629,31 @@ async function getTextJobSkipReason(job: LuxorTextJob) {
     }
   }
   if (job.invoice_id && (job.job_type === 'invoice_due_reminder' || job.job_type === 'invoice_overdue_reminder')) {
-    const [invoice] = await supabaseRest<Array<{ status: string; due_date: string | null }>>(
-      `luxor_invoices?select=status,due_date&id=eq.${encodeURIComponent(job.invoice_id)}&limit=1`,
+    const [invoice] = await supabaseRest<Array<{
+      id: string
+      status: string
+      invoice_kind?: string
+      due_date: string | null
+      booking_id?: string | null
+      parent_invoice_id?: string | null
+    }>>(
+      `luxor_invoices?select=id,status,invoice_kind,due_date,booking_id,parent_invoice_id&id=eq.${encodeURIComponent(job.invoice_id)}&limit=1`,
     )
-    if (!invoice || ['paid', 'void', 'cancelled'].includes(invoice.status)) return 'Invoice is already paid, cancelled, or unavailable.'
-    if (job.metadata?.due_date && invoice.due_date !== job.metadata.due_date) return 'Invoice due date changed; the old reminder was skipped.'
+    const bookingLookup = invoice ? getLuxorPaymentReminderBookingLookup(invoice) : null
+    const bookingRows = bookingLookup && 'bookingId' in bookingLookup
+      ? await supabaseRest<Array<{ contract_status: string | null; final_payment_due_date: string | null }>>(
+        `luxor_bookings?select=contract_status,final_payment_due_date&id=eq.${encodeURIComponent(bookingLookup.bookingId)}&limit=1`,
+      )
+      : bookingLookup && 'invoiceId' in bookingLookup
+        ? await supabaseRest<Array<{ contract_status: string | null; final_payment_due_date: string | null }>>(
+          `luxor_bookings?select=contract_status,final_payment_due_date&invoice_id=eq.${encodeURIComponent(bookingLookup.invoiceId)}&limit=1`,
+        )
+        : []
+    return getLuxorInvoiceReminderTextSkipReason({
+      invoice: invoice || null,
+      booking: bookingRows[0] || null,
+      queuedDueDate: typeof job.metadata?.due_date === 'string' ? job.metadata.due_date : null,
+    })
   }
   if (job.booking_id && job.job_type === 'event_reminder') {
     const [booking] = await supabaseRest<Array<{ status: string; event_date: string | null }>>(

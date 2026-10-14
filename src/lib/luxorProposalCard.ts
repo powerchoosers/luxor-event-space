@@ -1,4 +1,5 @@
 import type { LuxorBooking, LuxorInvoice, LuxorLeadEvent } from '@/lib/luxorInquiryTypes'
+import { hasProposalAcceptanceEvidence } from '@/lib/luxorProposalEvidence'
 
 export type ProposalCardActivity = {
   event_type: string
@@ -30,6 +31,7 @@ export type ProposalWorkflowDisplayState = {
   status: string
   pipelineStage: string
   proposalAccepted: boolean
+  workflowStageAdvanced: boolean
 }
 
 /** Derives display state from proposal acceptance and its exact linked booking without writing source records. */
@@ -37,25 +39,37 @@ export function getProposalWorkflowDisplayState(input: {
   currentStatus: string
   currentPipelineStage: string
   proposalAcceptedAt?: string | null
+  proposalAcceptanceActivity?: boolean
   proposalInvoiceId?: string | null
   bookingInvoiceId?: string | null
   contractStatus?: string | null
+  contractSignedAt?: string | null
 }): ProposalWorkflowDisplayState {
-  const proposalId = typeof input.proposalInvoiceId === 'string' ? input.proposalInvoiceId.trim() : ''
-  const linkedInvoiceId = typeof input.bookingInvoiceId === 'string' ? input.bookingInvoiceId.trim() : ''
-  const hasMatchingBooking = Boolean(proposalId && linkedInvoiceId && proposalId === linkedInvoiceId)
-  const proposalAccepted = Boolean(input.proposalAcceptedAt || hasMatchingBooking)
-  const status = input.contractStatus === 'signed'
-    ? 'contract_signed'
-    : input.contractStatus === 'viewed'
-      ? 'contract_opened'
-      : proposalAccepted
-        ? 'proposal_accepted'
-        : input.currentStatus
+  const proposalAccepted = hasProposalAcceptanceEvidence({
+    proposalInvoiceId: input.proposalInvoiceId,
+    bookingInvoiceId: input.bookingInvoiceId,
+    proposalAcceptedAt: input.proposalAcceptedAt,
+    acceptedActivity: input.proposalAcceptanceActivity,
+    bookingContractStatus: input.contractStatus,
+    bookingContractSignedAt: input.contractSignedAt,
+  })
+  const earlierProposalStages = ['inquiry', 'tour', 'proposal']
+  const staleProposalStatuses = ['new', 'contacted', 'tour_requested', 'tour_confirmed', 'proposal_sent']
+  const terminalLost = input.currentStatus === 'closed_lost' || input.currentPipelineStage === 'closed_lost'
+  const workflowStageAdvanced = Boolean(proposalAccepted && earlierProposalStages.includes(input.currentPipelineStage) && !terminalLost)
+  const canRepairStaleStatus = workflowStageAdvanced && staleProposalStatuses.includes(input.currentStatus)
+  const status = canRepairStaleStatus
+    ? input.contractStatus === 'signed'
+      ? 'contract_signed'
+      : input.contractStatus === 'viewed'
+        ? 'contract_opened'
+        : 'proposal_accepted'
+    : input.currentStatus
   return {
     status,
-    pipelineStage: proposalAccepted ? 'contract' : input.currentPipelineStage,
+    pipelineStage: workflowStageAdvanced ? 'contract' : input.currentPipelineStage,
     proposalAccepted,
+    workflowStageAdvanced,
   }
 }
 
@@ -124,7 +138,6 @@ export function findProposalLeadEvent(
 export function getProposalCardState(input: {
   invoice: LuxorInvoice
   activities: ProposalCardActivity[]
-  hasLinkedBooking?: boolean
   hasSignedAgreement?: boolean
   hasSupersedingProposal?: boolean
   hasActiveSend?: boolean
@@ -133,9 +146,8 @@ export function getProposalCardState(input: {
 }): ProposalCardState {
   const { invoice, activities } = input
   const eventTypes = new Set(activities.map((activity) => activity.event_type))
-  const hasLinkedBooking = Boolean(input.hasLinkedBooking || invoice.booking_id)
   const isSigned = Boolean(input.hasSignedAgreement)
-  const isAccepted = Boolean(invoice.proposal_accepted_at || eventTypes.has('accepted') || hasLinkedBooking)
+  const isAccepted = Boolean(invoice.proposal_accepted_at || eventTypes.has('accepted') || isSigned)
   const hasSupersedingActivity = activities.some((activity) =>
     activity.event_type === 'superseded' && Boolean(String(activity.details?.replaced_by_invoice_id || '').trim()),
   )

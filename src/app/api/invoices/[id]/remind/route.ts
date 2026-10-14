@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getInvoice, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
+import { getLuxorBooking, getLuxorBookingByInvoice } from '@/lib/luxorBookingsServer'
 import { listNotesByInquiry, createNote } from '@/lib/luxorNotesServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { createLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildAiTailoredInvoiceReminderEmail } from '@/lib/luxorLifecycleEmailsServer'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
-import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
+import { getLuxorPaymentReminderBookingLookup, getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -38,10 +38,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const body = await request.json().catch(() => ({})) as { kind?: 'unpaid_invoice' | 'final_payment' }
-    const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
-    const booking = invoice.booking_id
-      ? await getLuxorBooking(invoice.booking_id)
-      : bookings.find((b) => b.invoice_id === invoice.id) || null
+    const bookingLookup = getLuxorPaymentReminderBookingLookup(invoice)
+    const booking = bookingLookup && 'bookingId' in bookingLookup
+      ? await getLuxorBooking(bookingLookup.bookingId)
+      : bookingLookup && 'invoiceId' in bookingLookup
+        ? await getLuxorBookingByInvoice(bookingLookup.invoiceId)
+        : null
     const isPaymentInvoice = invoice.invoice_kind === 'deposit' || invoice.invoice_kind === 'final_balance' || invoice.invoice_kind === 'security_deposit'
 
     if (!isPaymentInvoice) {
