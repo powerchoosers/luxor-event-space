@@ -189,7 +189,7 @@ export function ElenaLeadUpdateCard({
               type="button"
               onClick={handleApply}
               disabled={isUpdating}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-zinc-950 px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-white hover:text-white focus-visible:text-white disabled:text-white px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
             >
               {isUpdating ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
               <span>Apply CRM Updates</span>
@@ -339,7 +339,7 @@ export function ElenaContractCard({
               type="button"
               onClick={handleSendContract}
               disabled={isSending}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-zinc-950 px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-white hover:text-white focus-visible:text-white disabled:text-white px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
             >
               {isSending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
               <span>Resend Event Agreement</span>
@@ -493,7 +493,7 @@ export function ElenaInvoiceCard({
               type="button"
               onClick={handleSendInvoice}
               disabled={isSending}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-zinc-950 px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-white hover:text-white focus-visible:text-white disabled:text-white px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
             >
               {isSending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
               <span>Send Invoice Link</span>
@@ -649,7 +649,7 @@ export function ElenaTaskCard({
               type="button"
               onClick={handleSaveTask}
               disabled={isSaving || !title.trim()}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-zinc-950 px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-white hover:text-white focus-visible:text-white disabled:text-white px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
             >
               {isSaving ? <Loader2 size={13} className="animate-spin" /> : <CheckSquare size={13} />}
               <span>Save Task to CRM</span>

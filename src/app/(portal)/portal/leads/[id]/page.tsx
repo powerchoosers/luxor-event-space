@@ -7649,7 +7649,7 @@ export default function LeadDetailPage({
                           ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
                           : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
                   const proposalLabel = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
-                    ? `Proposal #${proposal.proposal_number}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
+                    ? `Proposal${proposal.proposal_number === 1 ? '' : ` #${proposal.proposal_number}`}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
                     : proposalHasBeenPublished ? 'Existing proposal' : 'Draft proposal'
                   const proposalIdentifier = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
                     ? `#${proposal.proposal_number}`

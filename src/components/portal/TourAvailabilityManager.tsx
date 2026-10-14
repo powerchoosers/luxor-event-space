@@ -1098,7 +1098,7 @@ export function TourAvailabilityManager({
                           }}
                           className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${
                             isSelected
-                              ? 'border-[#caa24c] bg-[#caa24c] text-[#241b0d] shadow'
+                              ? 'border-[#caa24c] bg-[#caa24c] text-white shadow'
                               : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/40'
                           }`}
                         >
@@ -1131,7 +1131,7 @@ export function TourAvailabilityManager({
                             onClick={() => setPreviewSelectedTime(slot.id)}
                             className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-xs font-bold transition-all ${
                               isSelected
-                                ? 'border-[#caa24c] bg-[#caa24c] text-[#241b0d] shadow'
+                                ? 'border-[#caa24c] bg-[#caa24c] text-white shadow'
                                 : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/40'
                             }`}
                           >
