@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Check, Loader2, MessageCircle } from 'lucide-react'
 import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 
 export default function SmsSignupPage() {
   const [name, setName] = useState('')
@@ -40,11 +41,7 @@ export default function SmsSignupPage() {
     }
 
     try {
-      const response = await fetch('/api/inquiries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      const response = await submitLuxorIdempotentForm('sms-signup', '/api/inquiries', payload)
       const result = await response.json().catch(() => ({})) as { error?: string }
       if (!response.ok) throw new Error(result.error || 'We could not save your text-message preference.')
       setSubmitted(true)

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { BarChart3, Calendar, Download, RefreshCw, TrendingUp } from 'lucide-react'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
-import { isLuxorTestInquiry, type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice } from '@/lib/luxorInquiryTypes'
+import { isLuxorNonRevenueTestInquiry, type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice } from '@/lib/luxorInquiryTypes'
 
 type ReportData = {
   inquiries: LuxorInquiry[]
@@ -103,9 +103,9 @@ export default function ReportsPage() {
 }
 
 function buildMetrics(data: ReportData) {
-  const testInquiryIds = new Set(data.inquiries.filter(isLuxorTestInquiry).map((inquiry) => inquiry.id))
+  const testInquiryIds = new Set(data.inquiries.filter(isLuxorNonRevenueTestInquiry).map((inquiry) => inquiry.id))
   const testBookingIds = new Set(data.bookings.filter((booking) => booking.inquiry_id && testInquiryIds.has(booking.inquiry_id)).map((booking) => booking.id))
-  const businessInquiries = data.inquiries.filter((inquiry) => !isLuxorTestInquiry(inquiry))
+  const businessInquiries = data.inquiries.filter((inquiry) => !isLuxorNonRevenueTestInquiry(inquiry))
   const businessBookings = data.bookings.filter((booking) => !booking.inquiry_id || !testInquiryIds.has(booking.inquiry_id))
   const businessInvoices = data.invoices.filter((invoice) =>
     (!invoice.inquiry_id || !testInquiryIds.has(invoice.inquiry_id)) && (!invoice.booking_id || !testBookingIds.has(invoice.booking_id)))

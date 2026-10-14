@@ -190,6 +190,33 @@ async function processDelivery(event: ResendEvent, eventId: string) {
   // that cannot belong to a local portal message. Current Luxor sends carry
   // both a provider id and a Luxor message tag, so they continue below.
   if (!row) return
+  const emailJobId = typeof row.metadata?.emailJobId === 'string' ? row.metadata.emailJobId : ''
+  if (emailJobId && ['email.delivered', 'email.bounced', 'email.complained', 'email.delivery_delayed'].includes(event.type)) {
+    const [job] = await supabaseRest<Array<{ test_run_id: string | null }>>(
+      `luxor_email_jobs?select=test_run_id&id=eq.${encodeURIComponent(emailJobId)}&limit=1`,
+    )
+    if (job?.test_run_id) {
+      const deliveryStatus = event.type === 'email.delivered' ? 'delivered'
+        : event.type === 'email.bounced' ? 'bounced'
+          : event.type === 'email.complained' ? 'complained' : 'deferred'
+      await supabaseRest('luxor_test_run_activity', {
+        method: 'POST',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          test_run_id: job.test_run_id,
+          event_type: 'test_email_delivery_update',
+          status: deliveryStatus,
+          recipient_email: row.to_addresses[0] || null,
+          provider: 'resend',
+          provider_message_id: providerId,
+          provider_status: 'accepted',
+          delivery_status: deliveryStatus,
+          delivered_at: deliveryStatus === 'delivered' ? event.created_at : null,
+          details: { event_type: event.type, provider_event_id: eventId },
+        }),
+      })
+    }
+  }
   if (event.type === 'email.delivered' || event.type === 'email.bounced') {
     await recordLuxorProposalDeliveryEvent({
       providerMessageId: providerId,

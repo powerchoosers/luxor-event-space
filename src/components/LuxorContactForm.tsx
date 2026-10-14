@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react'
 import { Check, Loader2, Send } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -70,11 +71,7 @@ export function LuxorContactForm({
         },
       }
 
-      const response = await fetch('/api/inquiries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      const response = await submitLuxorIdempotentForm('contact', '/api/inquiries', payload)
 
       const data = (await response.json().catch(() => ({}))) as { error?: string }
 

@@ -9,6 +9,7 @@ import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { isGuestCountOverCapacity, LUXOR_EVENT_TYPES, LUXOR_GUEST_CAPACITY_MESSAGE } from '@/lib/luxorInquiryTypes'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import { LUXOR_LEGACY_PACKAGE_NAMES, LUXOR_PACKAGE_INTEREST_OPTIONS } from '@/lib/luxorServiceCatalog'
+import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 
 type LuxorInquiryFormProps = {
   source: string
@@ -256,11 +257,7 @@ export function LuxorInquiryForm({
     }
 
     try {
-      const response = await fetch('/api/inquiries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      const response = await submitLuxorIdempotentForm('inquiry', '/api/inquiries', payload)
       const result = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) throw new Error(result.error ?? 'The request could not be submitted.')
 

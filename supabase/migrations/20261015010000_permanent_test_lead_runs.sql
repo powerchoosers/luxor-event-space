@@ -1,0 +1,440 @@
+alter table public.luxor_inquiries
+  add column if not exists is_test boolean not null default false;
+
+-- Backfill only the exact pre-verified test record. Names and contact details
+-- are deliberately insufficient to promote any other inquiry to test data.
+update public.luxor_inquiries
+set is_test = true
+where id = '00b264d6-a3fb-4ea3-9142-415f76385c39'::uuid
+  and is_test = false
+  and metadata ->> 'is_test_record' = 'true'
+  and source = 'portal_test'
+  and lower(trim(coalesce(email, ''))) = 'luxor-flow-test@example.invalid'
+  and regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') = '';
+
+create unique index if not exists luxor_inquiries_single_permanent_test_lead_idx
+  on public.luxor_inquiries ((true))
+  where is_test;
+
+create table if not exists public.luxor_test_settings (
+  id smallint primary key default 1 check (id = 1),
+  enabled boolean not null default false,
+  identification_email text not null default 'luxoratlaspalmas@gmail.com',
+  identification_phone text not null default '2149600276',
+  email_recipient text,
+  email_recipient_confirmed_at timestamptz,
+  updated_by text,
+  updated_at timestamptz not null default now(),
+  constraint luxor_test_settings_email_format check (identification_email = lower(trim(identification_email))),
+  constraint luxor_test_settings_phone_format check (identification_phone ~ '^[0-9]{10}$'),
+  constraint luxor_test_settings_recipient_normalized check (email_recipient is null or email_recipient = lower(trim(email_recipient)))
+);
+
+insert into public.luxor_test_settings (
+  id, enabled, identification_email, identification_phone,
+  email_recipient, email_recipient_confirmed_at, updated_by
+)
+values (
+  1, true, 'luxoratlaspalmas@gmail.com', '2149600276',
+  'luxoratlaspalmas@gmail.com', now(), 'owner-confirmed-by-verified-email-2026-10-14'
+)
+on conflict (id) do nothing;
+
+-- Exact legacy records confirmed by the owner as tests are exempted by ID
+-- only. Populate this list from the verified collision review before enabling
+-- the workflow; new matching records continue to block configuration.
+create table if not exists public.luxor_test_identifier_collision_exemptions (
+  inquiry_id uuid primary key references public.luxor_inquiries(id) on delete restrict,
+  reason text not null check (reason = 'owner_confirmed_legacy_test'),
+  reviewed_at timestamptz not null default now()
+);
+
+create or replace function public.luxor_test_identifier_exemption_append_only()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  raise exception 'Reviewed test identifier exemptions are append-only.' using errcode = '55000';
+end;
+$$;
+
+drop trigger if exists luxor_test_identifier_exemption_append_only on public.luxor_test_identifier_collision_exemptions;
+create trigger luxor_test_identifier_exemption_append_only
+before update or delete on public.luxor_test_identifier_collision_exemptions
+for each row execute function public.luxor_test_identifier_exemption_append_only();
+
+insert into public.luxor_test_identifier_collision_exemptions (inquiry_id, reason) values
+  ('ce4a7a94-abd7-402f-bac4-156af405ffb1', 'owner_confirmed_legacy_test'),
+  ('450c26e7-7f8e-4bba-af82-fe4a73b6cb9a', 'owner_confirmed_legacy_test'),
+  ('74f02e2a-6142-41f5-a5a6-4580207379f4', 'owner_confirmed_legacy_test'),
+  ('6ea7d1c2-75b9-4d1a-a56f-4439c7b672c7', 'owner_confirmed_legacy_test'),
+  ('b3b0d161-d75e-4333-bfa6-651e971d967a', 'owner_confirmed_legacy_test'),
+  ('3b2853a1-61ee-450f-950a-b368be146ac7', 'owner_confirmed_legacy_test'),
+  ('974ec2b3-73e8-42c9-b871-c3ba000853bf', 'owner_confirmed_legacy_test'),
+  ('b8f02c54-fc29-4016-aeef-9805330a76c8', 'owner_confirmed_legacy_test'),
+  ('3256392c-3121-40d3-bc41-11e7c79a9ff3', 'owner_confirmed_legacy_test'),
+  ('be741147-f87a-4d8c-8815-2809139be29e', 'owner_confirmed_legacy_test')
+on conflict (inquiry_id) do nothing;
+
+create table if not exists public.luxor_test_runs (
+  id uuid primary key default gen_random_uuid(),
+  test_lead_id uuid not null references public.luxor_inquiries(id) on delete restrict,
+  idempotency_key text not null,
+  source text not null,
+  submitted_email text,
+  submitted_phone text,
+  submitted_details jsonb not null default '{}'::jsonb,
+  status text not null default 'in_progress' check (status in ('in_progress', 'completed', 'reset', 'failed', 'cancelled')),
+  started_at timestamptz not null default now(),
+  completed_at timestamptz,
+  reset_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (test_lead_id, idempotency_key)
+);
+
+create unique index if not exists luxor_test_runs_one_active_per_lead_idx
+  on public.luxor_test_runs (test_lead_id)
+  where status = 'in_progress';
+
+create index if not exists luxor_test_runs_lead_history_idx
+  on public.luxor_test_runs (test_lead_id, started_at desc);
+
+create table if not exists public.luxor_test_run_activity (
+  id bigint generated by default as identity primary key,
+  test_run_id uuid not null references public.luxor_test_runs(id) on delete restrict,
+  event_type text not null,
+  status text,
+  source text,
+  details jsonb not null default '{}'::jsonb,
+  recipient_email text,
+  provider text,
+  provider_message_id text,
+  provider_status text,
+  delivery_status text not null default 'unknown' check (delivery_status in ('unknown', 'delivered', 'bounced', 'complained', 'deferred')),
+  delivered_at timestamptz,
+  error_message text,
+  attempt integer,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists luxor_test_run_activity_history_idx
+  on public.luxor_test_run_activity (test_run_id, created_at, id);
+
+create or replace function public.luxor_test_run_activity_append_only()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  raise exception 'Test run activity is append-only.' using errcode = '55000';
+end;
+$$;
+
+drop trigger if exists luxor_test_run_activity_append_only on public.luxor_test_run_activity;
+create trigger luxor_test_run_activity_append_only
+before update or delete on public.luxor_test_run_activity
+for each row execute function public.luxor_test_run_activity_append_only();
+
+alter table public.luxor_email_jobs
+  add column if not exists test_run_id uuid references public.luxor_test_runs(id) on delete restrict;
+
+create index if not exists luxor_email_jobs_test_run_status_idx
+  on public.luxor_email_jobs (test_run_id, status, scheduled_for)
+  where test_run_id is not null;
+
+create or replace function public.luxor_save_test_settings(
+  p_identification_email text,
+  p_identification_phone text,
+  p_email_recipient text,
+  p_email_recipient_confirmed boolean,
+  p_enabled boolean,
+  p_updated_by text
+)
+returns public.luxor_test_settings
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_identification_email, '')));
+  v_phone text := regexp_replace(coalesce(p_identification_phone, ''), '[^0-9]', '', 'g');
+  v_recipient text := lower(trim(coalesce(p_email_recipient, '')));
+  v_conflicts integer := 0;
+  v_settings public.luxor_test_settings;
+begin
+  select * into v_settings from public.luxor_test_settings where id = 1 for update;
+  if exists (select 1 from public.luxor_email_jobs where test_run_id is not null and status = 'sending') then
+    raise exception 'Test email delivery is in flight; retry settings changes after its provider outcome is recorded.' using errcode = '55000';
+  end if;
+  if v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
+    raise exception 'Enter a valid test identification email.' using errcode = '22023';
+  end if;
+  if v_phone !~ '^[0-9]{10}$' then
+    raise exception 'Test phone must normalize to exactly 10 digits.' using errcode = '22023';
+  end if;
+  if v_recipient <> '' and v_recipient !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
+    raise exception 'Enter a valid test email recipient.' using errcode = '22023';
+  end if;
+  if p_enabled and (v_recipient = '' or p_email_recipient_confirmed is not true) then
+    raise exception 'Test workflow cannot be enabled until the exact email recipient is confirmed.' using errcode = '22023';
+  end if;
+
+  if p_enabled then
+    select count(*) into v_conflicts
+    from public.luxor_inquiries inquiry
+    where inquiry.is_test is not true
+      and (lower(trim(coalesce(inquiry.email, ''))) = v_email
+        or regexp_replace(coalesce(inquiry.phone, ''), '[^0-9]', '', 'g') = v_phone)
+      and not exists (
+        select 1 from public.luxor_test_identifier_collision_exemptions exemption
+        where exemption.inquiry_id = inquiry.id and exemption.reason = 'owner_confirmed_legacy_test'
+      );
+    if v_conflicts > 0 then
+      raise exception 'Test identifiers conflict with % unflagged customer records; choose identifiers with no real-customer matches.' , v_conflicts using errcode = '23505';
+    end if;
+  end if;
+
+  insert into public.luxor_test_settings (
+    id, enabled, identification_email, identification_phone,
+    email_recipient, email_recipient_confirmed_at, updated_by, updated_at
+  ) values (
+    1, p_enabled, v_email, v_phone,
+    nullif(v_recipient, ''),
+    case when p_email_recipient_confirmed is true and v_recipient <> '' then now() else null end,
+    nullif(trim(coalesce(p_updated_by, '')), ''), now()
+  )
+  on conflict (id) do update set
+    enabled = excluded.enabled,
+    identification_email = excluded.identification_email,
+    identification_phone = excluded.identification_phone,
+    email_recipient = excluded.email_recipient,
+    email_recipient_confirmed_at = excluded.email_recipient_confirmed_at,
+    updated_by = excluded.updated_by,
+    updated_at = excluded.updated_at
+  returning * into v_settings;
+
+  return v_settings;
+end;
+$$;
+
+create or replace function public.luxor_start_test_run(
+  p_idempotency_key text,
+  p_source text,
+  p_submitted_email text,
+  p_submitted_phone text,
+  p_submitted_details jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_settings public.luxor_test_settings;
+  v_lead public.luxor_inquiries;
+  v_previous public.luxor_test_runs;
+  v_existing public.luxor_test_runs;
+  v_run public.luxor_test_runs;
+  v_email text := lower(trim(coalesce(p_submitted_email, '')));
+  v_phone text := regexp_replace(coalesce(p_submitted_phone, ''), '[^0-9]', '', 'g');
+  v_conflicts integer := 0;
+begin
+  if length(trim(coalesce(p_idempotency_key, ''))) < 8 or length(p_idempotency_key) > 160 then
+    raise exception 'A valid test submission idempotency key is required.' using errcode = '22023';
+  end if;
+  select * into v_lead from public.luxor_inquiries where is_test = true;
+  if found then
+    select * into v_existing from public.luxor_test_runs
+    where test_lead_id = v_lead.id and idempotency_key = p_idempotency_key;
+    if found then
+      return jsonb_build_object(
+        'lead', jsonb_build_object('id', v_lead.id),
+        'run', jsonb_build_object('id', v_existing.id, 'status', v_existing.status, 'source', v_existing.source, 'started_at', v_existing.started_at),
+        'replayed', true
+      );
+    end if;
+  end if;
+  select * into v_settings from public.luxor_test_settings where id = 1 for update;
+  if not found or not v_settings.enabled then
+    raise exception 'Test workflow is disabled pending identifier and recipient validation.' using errcode = '55000';
+  end if;
+  if not ((v_email <> '' and v_email = v_settings.identification_email)
+      or (v_phone <> '' and v_phone = v_settings.identification_phone)) then
+    raise exception 'Submission does not match a configured test identifier.' using errcode = '22023';
+  end if;
+  if v_settings.email_recipient is null or v_settings.email_recipient_confirmed_at is null then
+    raise exception 'Test email recipient is not confirmed; test workflow is blocked.' using errcode = '55000';
+  end if;
+  select count(*) into v_conflicts
+  from public.luxor_inquiries inquiry
+  where inquiry.is_test is not true
+    and (lower(trim(coalesce(inquiry.email, ''))) = v_settings.identification_email
+      or regexp_replace(coalesce(inquiry.phone, ''), '[^0-9]', '', 'g') = v_settings.identification_phone)
+    and not exists (
+      select 1 from public.luxor_test_identifier_collision_exemptions exemption
+      where exemption.inquiry_id = inquiry.id and exemption.reason = 'owner_confirmed_legacy_test'
+    );
+  if v_conflicts > 0 then
+    raise exception 'Test identifiers now conflict with unflagged customer records.' using errcode = '23505';
+  end if;
+  select * into v_lead from public.luxor_inquiries where is_test = true for update;
+  if not found then
+    raise exception 'The permanent explicitly flagged test lead is not provisioned.' using errcode = '55000';
+  end if;
+  select * into v_existing from public.luxor_test_runs
+  where test_lead_id = v_lead.id and idempotency_key = p_idempotency_key;
+  if found then
+    return jsonb_build_object(
+      'lead', jsonb_build_object('id', v_lead.id),
+      'run', jsonb_build_object('id', v_existing.id, 'status', v_existing.status, 'source', v_existing.source, 'started_at', v_existing.started_at),
+      'replayed', true
+    );
+  end if;
+
+  select * into v_previous from public.luxor_test_runs
+  where test_lead_id = v_lead.id and status = 'in_progress'
+  order by started_at desc limit 1 for update;
+  if found then
+    if exists (select 1 from public.luxor_email_jobs where test_run_id = v_previous.id and status = 'sending') then
+      raise exception 'A test email is in flight. Retry starting this run after its provider outcome is recorded.' using errcode = '55000';
+    end if;
+    update public.luxor_email_jobs set status = 'cancelled', last_error = 'Superseded by a newer test run.', updated_at = now()
+    where test_run_id = v_previous.id and status = 'queued';
+    update public.luxor_test_runs set status = 'cancelled', completed_at = now(), updated_at = now()
+    where id = v_previous.id returning * into v_previous;
+    insert into public.luxor_test_run_activity (test_run_id, event_type, status, details)
+    values (v_previous.id, 'run_cancelled', 'cancelled', jsonb_build_object('reason', 'superseded_by_new_run'));
+  end if;
+
+  update public.luxor_inquiries set status = 'new', pipeline_stage = 'inquiry', updated_at = now()
+  where id = v_lead.id and is_test = true returning * into v_lead;
+  insert into public.luxor_test_runs (
+    test_lead_id, idempotency_key, source, submitted_email, submitted_phone,
+    submitted_details, status
+  ) values (
+    v_lead.id, trim(p_idempotency_key), left(trim(coalesce(p_source, 'unknown')), 120),
+    nullif(v_email, ''), nullif(v_phone, ''), coalesce(p_submitted_details, '{}'::jsonb), 'in_progress'
+  ) returning * into v_run;
+  insert into public.luxor_test_run_activity (test_run_id, event_type, status, source, details)
+  values (v_run.id, 'run_started', 'in_progress', v_run.source, jsonb_build_object('lead_stage', 'inquiry'));
+  insert into public.luxor_test_run_activity (test_run_id, event_type, status, source, details)
+  values (v_run.id, 'external_effects_simulated', 'simulated', v_run.source,
+    jsonb_build_object('effects', jsonb_build_array('booking', 'payment', 'sms', 'marketing', 'calendar', 'lead_notification'), 'email', 'not_queued'));
+  return jsonb_build_object(
+    'lead', jsonb_build_object('id', v_lead.id),
+    'run', jsonb_build_object('id', v_run.id, 'status', v_run.status, 'source', v_run.source, 'started_at', v_run.started_at),
+    'replayed', false
+  );
+end;
+$$;
+
+create or replace function public.luxor_reset_test_run(p_test_run_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_run public.luxor_test_runs;
+  v_lead public.luxor_inquiries;
+begin
+  select * into v_run from public.luxor_test_runs where id = p_test_run_id for update;
+  if not found then raise exception 'Test run not found.' using errcode = 'P0002'; end if;
+  if v_run.status = 'reset' then
+    return jsonb_build_object('run', jsonb_build_object('id', v_run.id, 'status', v_run.status), 'replayed', true);
+  end if;
+  if v_run.status <> 'in_progress' then
+    raise exception 'Only the active test run can be reset.' using errcode = '55000';
+  end if;
+  if exists (select 1 from public.luxor_email_jobs where test_run_id = v_run.id and status = 'sending') then
+    raise exception 'A test email is in flight. Retry reset after its provider outcome is recorded.' using errcode = '55000';
+  end if;
+  update public.luxor_email_jobs set status = 'cancelled', last_error = 'Cancelled by test pipeline reset.', updated_at = now()
+  where test_run_id = v_run.id and status = 'queued';
+  update public.luxor_test_runs set status = 'reset', completed_at = now(), reset_at = now(), updated_at = now()
+  where id = v_run.id returning * into v_run;
+  update public.luxor_inquiries set status = 'new', pipeline_stage = 'inquiry', updated_at = now()
+  where id = v_run.test_lead_id and is_test = true returning * into v_lead;
+  insert into public.luxor_test_run_activity (test_run_id, event_type, status, details)
+  values (v_run.id, 'pipeline_reset', 'reset', jsonb_build_object('lead_stage', 'inquiry'));
+  return jsonb_build_object('run', jsonb_build_object('id', v_run.id, 'status', v_run.status), 'replayed', false);
+end;
+$$;
+
+create or replace function public.luxor_authorize_test_email_job(p_job_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_job public.luxor_email_jobs;
+  v_run public.luxor_test_runs;
+  v_settings public.luxor_test_settings;
+begin
+  select * into v_settings from public.luxor_test_settings where id = 1 for update;
+  if not found then return jsonb_build_object('eligible', false, 'reason', 'test_settings_missing'); end if;
+  select * into v_job from public.luxor_email_jobs where id = p_job_id for update;
+  if not found or v_job.test_run_id is null then return jsonb_build_object('eligible', false, 'reason', 'not_test_run'); end if;
+  if v_job.status <> 'queued' or v_job.job_type <> 'test_notification' or coalesce(v_job.metadata ->> 'test_email', 'false') <> 'true' then
+    return jsonb_build_object('eligible', false, 'reason', 'unsafe_or_already_claimed_test_job');
+  end if;
+  select * into v_run from public.luxor_test_runs where id = v_job.test_run_id for update;
+  if not found then return jsonb_build_object('eligible', false, 'reason', 'missing_test_run'); end if;
+  if v_run.status <> 'in_progress' or v_run.test_lead_id <> v_job.inquiry_id then
+    return jsonb_build_object('eligible', false, 'reason', 'stale_test_run');
+  end if;
+  if not v_settings.enabled or v_settings.email_recipient is null or v_settings.email_recipient_confirmed_at is null then
+    return jsonb_build_object('eligible', false, 'reason', 'recipient_unconfirmed');
+  end if;
+  update public.luxor_email_jobs set status = 'sending', attempts = coalesce(attempts, 0) + 1, updated_at = now()
+  where id = v_job.id and status = 'queued';
+  if not found then return jsonb_build_object('eligible', false, 'reason', 'job_already_claimed'); end if;
+  return jsonb_build_object('eligible', true, 'recipient', v_settings.email_recipient);
+end;
+$$;
+
+create or replace function public.luxor_prevent_permanent_test_lead_delete()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' and old.is_test is true then
+    raise exception 'The permanent test lead cannot be deleted or demoted.' using errcode = '55000';
+  end if;
+  if tg_op = 'UPDATE' and old.is_test is true and new.is_test is not true then
+    raise exception 'The permanent test lead cannot be deleted or demoted.' using errcode = '55000';
+  end if;
+  if tg_op = 'UPDATE' and old.is_test is true and new.id <> old.id then
+    raise exception 'The permanent test lead ID is stable and cannot be changed.' using errcode = '55000';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists luxor_prevent_permanent_test_lead_delete on public.luxor_inquiries;
+create trigger luxor_prevent_permanent_test_lead_delete
+before delete or update on public.luxor_inquiries
+for each row execute function public.luxor_prevent_permanent_test_lead_delete();
+
+alter table public.luxor_test_settings enable row level security;
+alter table public.luxor_test_identifier_collision_exemptions enable row level security;
+alter table public.luxor_test_runs enable row level security;
+alter table public.luxor_test_run_activity enable row level security;
+revoke all on public.luxor_test_settings, public.luxor_test_identifier_collision_exemptions, public.luxor_test_runs, public.luxor_test_run_activity from anon, authenticated;
+grant select, insert, update, delete on public.luxor_test_settings, public.luxor_test_runs to service_role;
+grant select, insert on public.luxor_test_identifier_collision_exemptions to service_role;
+grant select, insert on public.luxor_test_run_activity to service_role;
+grant usage, select on sequence public.luxor_test_run_activity_id_seq to service_role;
+revoke all on function public.luxor_save_test_settings(text, text, text, boolean, boolean, text) from public, anon, authenticated;
+revoke all on function public.luxor_start_test_run(text, text, text, text, jsonb) from public, anon, authenticated;
+revoke all on function public.luxor_reset_test_run(uuid) from public, anon, authenticated;
+revoke all on function public.luxor_authorize_test_email_job(uuid) from public, anon, authenticated;
+grant execute on function public.luxor_save_test_settings(text, text, text, boolean, boolean, text) to service_role;
+grant execute on function public.luxor_start_test_run(text, text, text, text, jsonb) to service_role;
+grant execute on function public.luxor_reset_test_run(uuid) to service_role;
+grant execute on function public.luxor_authorize_test_email_job(uuid) to service_role;

@@ -4,6 +4,7 @@ import { FormEvent, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, CheckCircle2 } from 'lucide-react'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
+import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 
 export function NewsletterSignup({ spanish = false }: { spanish?: boolean }) {
   const [email, setEmail] = useState('')
@@ -36,10 +37,7 @@ export function NewsletterSignup({ spanish = false }: { spanish?: boolean }) {
     setStatus('submitting')
     setMessage('')
     try {
-      const response = await fetch('/api/newsletter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const response = await submitLuxorIdempotentForm('newsletter', '/api/newsletter', {
           email,
           fullName: name,
           phone: phone.trim() || undefined,
@@ -53,7 +51,6 @@ export function NewsletterSignup({ spanish = false }: { spanish?: boolean }) {
             language: spanish ? 'Spanish' : 'English',
             tourLanguagePreference: spanish ? 'es' : 'en',
           },
-        }),
       })
       const payload = (await response.json().catch(() => ({}))) as { error?: string; alreadySubscribed?: boolean }
       if (!response.ok) throw new Error(payload.error || 'Unable to join the newsletter right now.')

@@ -14,6 +14,7 @@ import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 import { releaseLuxorTourSlot } from '@/lib/luxorTourSlotsServer'
 import { cancelQueuedTourTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { isConfiguredTestSubmission, startLuxorTestRun } from '@/lib/luxorTestLeadServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
 const TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -195,6 +196,29 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         return NextResponse.json({ error: error instanceof Error ? error.message : 'Choose a valid tour time.' }, { status: 400 })
       }
+    }
+
+    // Exact configured test identifiers are diverted before public analytics,
+    // duplicate lookup, slot reservation, CRM creation, marketing, SMS, push,
+    // or email work. The RPC independently rechecks enablement and collisions.
+    const testClassification = await isConfiguredTestSubmission(payload)
+    if (testClassification.matches) {
+      const fullName = typeof payload.fullName === 'string' ? payload.fullName.trim() : ''
+      const email = typeof payload.email === 'string' ? payload.email.trim() : ''
+      const phone = typeof payload.phone === 'string' ? payload.phone.trim() : ''
+      if (!fullName || fullName.length > 120 || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        || (phone && phone.replace(/\D/g, '').length < 10) || (!email && !phone)) {
+        return NextResponse.json({ error: 'Enter a name and a valid complete email or phone number.' }, { status: 400 })
+      }
+      const idempotencyKey = request.headers.get('idempotency-key')?.trim() || ''
+      if (idempotencyKey.length < 8) {
+        return NextResponse.json({ error: 'Test submission is missing its idempotency key.' }, { status: 400 })
+      }
+      const result = await startLuxorTestRun(payload, {
+        idempotencyKey,
+        userAgent: request.headers.get('user-agent') ?? undefined,
+      })
+      return NextResponse.json({ ...result, test: true, simulated: true }, { status: 201 })
     }
 
     try {

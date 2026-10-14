@@ -25,7 +25,7 @@ import { listAllLuxorInquiries } from "@/lib/luxorInquiriesServer";
 import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { listAllTasks } from "@/lib/luxorTasksServer";
 import { listAllBills } from "@/lib/luxorInvoicesServer";
-import { isLuxorTestInquiry, LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, LuxorBill } from "@/lib/luxorInquiryTypes";
+import { isLuxorNonRevenueTestInquiry, LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, LuxorBill } from "@/lib/luxorInquiryTypes";
 import { PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from "@/components/portal/PortalUI";
 import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
@@ -114,7 +114,7 @@ export default async function PortalOverview() {
     loadError = error instanceof Error ? error.message : "Unable to retrieve database metrics.";
   }
 
-  const testInquiryIds = new Set(leads.filter(isLuxorTestInquiry).map((lead) => lead.id));
+  const testInquiryIds = new Set(leads.filter(isLuxorNonRevenueTestInquiry).map((lead) => lead.id));
   const businessBookings = bookings.filter((booking) => !booking.inquiry_id || !testInquiryIds.has(booking.inquiry_id));
   const testBookingIds = new Set(bookings.filter((booking) => booking.inquiry_id && testInquiryIds.has(booking.inquiry_id)).map((booking) => booking.id));
   const businessPayments = payments.filter((payment) =>
@@ -254,7 +254,7 @@ export default async function PortalOverview() {
   }
 
   // Card 4: Needs Attention
-  const businessLeads = leads.filter((lead) => !isLuxorTestInquiry(lead));
+  const businessLeads = leads.filter((lead) => !isLuxorNonRevenueTestInquiry(lead));
   const newLeadsCount = businessLeads.filter(l => l.status === 'new' || l.status === 'tour_requested').length;
   const overdueTasksCount = tasks.filter(t => t.status === 'pending' && t.due_date && t.due_date <= todayDateStr).length;
   const needsAttentionCount = newLeadsCount + overdueTasksCount;

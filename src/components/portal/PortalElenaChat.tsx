@@ -26,6 +26,7 @@ import {
   CalendarDays,
   ExternalLink,
 } from 'lucide-react'
+import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -1332,10 +1333,7 @@ function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPa
     setError(null)
 
     try {
-      const response = await fetch('/api/portal/elena-chat/actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const response = await submitLuxorIdempotentForm('elena-contact', '/api/portal/elena-chat/actions', {
           action: 'CREATE_CONTACT',
           contact: {
             fullName,
@@ -1347,7 +1345,6 @@ function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPa
             guestCount: guestCount ? Number(guestCount) : null,
             notes,
           },
-        }),
       })
       const result = await response.json().catch(() => ({})) as { error?: string; inquiry?: { id?: string; full_name?: string } }
       if (!response.ok) throw new Error(result.error || 'The contact could not be added.')

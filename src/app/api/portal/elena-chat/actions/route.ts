@@ -6,6 +6,7 @@ import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookings
 import { getActiveLuxorSignatureRequestByBooking } from '@/lib/luxorSignaturesServer'
 import { getInvoice } from '@/lib/luxorInvoicesServer'
 import { createLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { isConfiguredTestSubmission, startLuxorTestRun } from '@/lib/luxorTestLeadServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,6 +43,29 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Guest count must be between 1 and 200.' }, { status: 400 })
       }
 
+      const inquiryInput = {
+        fullName,
+        email: email || undefined,
+        phone: phone || undefined,
+        eventType,
+        targetDate: targetDate || undefined,
+        guestCount: parsedGuestCount === null ? undefined : String(parsedGuestCount),
+        message: notes || 'Added from Elena internal chat.',
+        source,
+        flow: 'elena_contact',
+        marketingOptIn: false,
+        smsOptIn: false,
+        smsMarketingOptIn: false,
+        metadata: { createdFrom: 'portal_elena_chat', createdBy: session.email },
+      }
+      const testClassification = await isConfiguredTestSubmission(inquiryInput)
+      if (testClassification.matches) {
+        const idempotencyKey = String(body.idempotencyKey || request.headers.get('idempotency-key') || '').trim()
+        if (idempotencyKey.length < 8) return NextResponse.json({ error: 'Test submission is missing its idempotency key.' }, { status: 400 })
+        const result = await startLuxorTestRun(inquiryInput, { idempotencyKey, userAgent: request.headers.get('user-agent') ?? undefined })
+        return NextResponse.json({ success: true, ...result, test: true, simulated: true }, { status: 201 })
+      }
+
       const [emailMatches, phoneMatches] = await Promise.all([
         email
           ? supabaseRest<Array<{ id: string; full_name: string }>>(`luxor_inquiries?select=id,full_name&email=eq.${encodeURIComponent(email)}&limit=1`)
@@ -55,24 +79,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `${existing.full_name || 'This person'} is already in Luxor’s CRM. Open the existing contact instead of creating a duplicate.`, inquiryId: existing.id }, { status: 409 })
       }
 
-      const inquiry = await createLuxorInquiry({
-        fullName,
-        email: email || undefined,
-        phone: phone || undefined,
-        eventType,
-        targetDate: targetDate || undefined,
-        guestCount: parsedGuestCount === null ? undefined : String(parsedGuestCount),
-        message: notes || 'Added from Elena internal chat.',
-        source,
-        flow: 'elena_contact',
-        marketingOptIn: false,
-        smsOptIn: false,
-        smsMarketingOptIn: false,
-        metadata: {
-          createdFrom: 'portal_elena_chat',
-          createdBy: session.email,
-        },
-      })
+      const inquiry = await createLuxorInquiry(inquiryInput)
 
       if (!inquiry) return NextResponse.json({ error: 'The contact could not be created.' }, { status: 500 })
       return NextResponse.json({ success: true, inquiry: { id: inquiry.id, full_name: inquiry.full_name } })

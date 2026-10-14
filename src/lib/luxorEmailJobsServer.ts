@@ -888,7 +888,34 @@ export async function processLuxorEmailJobs(
 
   for (let job of jobs) {
     try {
-      const preparedJob = await preparePostContractPaymentReminder(job)
+      if (job.test_run_id) {
+        // Test mail is never sent by preview/manual processing paths. A queued
+        // test notification has its own atomic claim and recipient guard below.
+        if (!markSending) {
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
+        const authorization = await supabaseRest<{ eligible: boolean; reason?: string; recipient?: string }>(
+          'rpc/luxor_authorize_test_email_job',
+          { method: 'POST', body: JSON.stringify({ p_job_id: job.id }) },
+        )
+        if (!authorization.eligible || !authorization.recipient) {
+          await updateLuxorEmailJob(job.id, {
+            status: 'cancelled',
+            last_error: `Test email blocked: ${authorization.reason || 'run is not eligible'}.`,
+          })
+          await supabaseRest('luxor_test_run_activity', {
+            method: 'POST',
+            headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ test_run_id: job.test_run_id, event_type: 'email_blocked', status: 'cancelled', details: { reason: authorization.reason || 'not_eligible' } }),
+          }).catch(() => undefined)
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
+        // Configured test messages can only reach the owner-confirmed recipient.
+        job = { ...job, recipient_email: authorization.recipient }
+      }
+      const preparedJob = job.test_run_id ? job : await preparePostContractPaymentReminder(job)
       if (!preparedJob) {
         results.push({ id: job.id, status: 'skipped' })
         continue
@@ -1057,7 +1084,7 @@ export async function processLuxorEmailJobs(
         }
       }
       assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
-      await sendLuxorZohoEmail({
+      const providerResult = await sendLuxorZohoEmail({
         to: job.recipient_email,
         subject: job.subject,
         content: job.body,
@@ -1066,6 +1093,24 @@ export async function processLuxorEmailJobs(
         idempotencyKey: `email-job/${job.id}`,
       })
       await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
+      if (job.test_run_id) {
+        await supabaseRest('luxor_test_run_activity', {
+          method: 'POST',
+          headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            test_run_id: job.test_run_id,
+            event_type: 'test_email_provider_accepted',
+            status: 'provider_accepted',
+            recipient_email: job.recipient_email,
+            provider: luxorMailProvider(),
+            provider_message_id: providerResult.messageId || null,
+            provider_status: 'accepted',
+            delivery_status: 'unknown',
+            attempt: Number(job.attempts || 0) + 1,
+            details: { delivery_is_confirmed_separately: true },
+          }),
+        }).catch(() => undefined)
+      }
       if (job.job_type === 'marketing_campaign') {
         await markMarketingJobResult(job, 'sent')
       }
@@ -1086,6 +1131,23 @@ export async function processLuxorEmailJobs(
       const retry = retryCalendar || retryAlert || retryNotice
       await updateLuxorEmailJob(job.id, { status: retry ? 'queued' : 'failed', last_error: message,
         ...(retry ? { scheduled_for: new Date(Date.now() + 60_000 * 2 ** Number(job.attempts || 0)).toISOString() } : {}) })
+      if (job.test_run_id) {
+        await supabaseRest('luxor_test_run_activity', {
+          method: 'POST',
+          headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            test_run_id: job.test_run_id,
+            event_type: 'test_email_provider_failed',
+            status: 'provider_failed',
+            recipient_email: job.recipient_email,
+            provider: luxorMailProvider(),
+            provider_status: 'failed',
+            delivery_status: 'unknown',
+            error_message: message.slice(0, 1000),
+            attempt: Number(job.attempts || 0) + 1,
+          }),
+        }).catch(() => undefined)
+      }
       if (job.job_type === 'contract_signature' && job.metadata?.agreement_delivery === true) {
         const { markLuxorAgreementEmailJobFailed } = await import('./luxorAgreementDeliveryServer')
         await markLuxorAgreementEmailJobFailed(job, message)

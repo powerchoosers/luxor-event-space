@@ -3,7 +3,7 @@ import 'server-only'
 import { supabaseRest } from './supabaseRestServer'
 import { listAllLuxorInquiries } from './luxorInquiriesServer'
 import { listLuxorBookingsWithPayments } from './luxorBookingsServer'
-import { isLuxorTestInquiry } from './luxorInquiryTypes'
+import { isLuxorNonRevenueTestInquiry } from './luxorInquiryTypes'
 import { getLuxorTourAnalytics, getLuxorTourDateRange } from './luxorTourMetrics'
 
 export type AnalyticsDatePreset = '7d' | '30d' | '90d' | 'this_month' | 'previous_month' | 'custom'
@@ -315,8 +315,8 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   const prevStartTimeMs = range.previousStart.getTime()
   const prevEndTimeMs = range.previousEnd.getTime()
 
-  const businessInquiries = inquiries.filter((inq) => !isLuxorTestInquiry(inq))
-  const testInquiryIds = new Set(inquiries.filter(isLuxorTestInquiry).map((inq) => inq.id))
+  const businessInquiries = inquiries.filter((inq) => !isLuxorNonRevenueTestInquiry(inq))
+  const testInquiryIds = new Set(inquiries.filter(isLuxorNonRevenueTestInquiry).map((inq) => inq.id))
 
   // Current period inquiries
   const currentInquiries = businessInquiries.filter((inq) => {

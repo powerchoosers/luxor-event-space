@@ -16,6 +16,7 @@ import {
 } from '@/lib/luxorInquiryTypes'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
+import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 
 type Locale = 'en' | 'es'
 
@@ -304,11 +305,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     }
 
     try {
-      const response = await fetch('/api/inquiries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      const response = await submitLuxorIdempotentForm('tour-request', '/api/inquiries', payload)
       const result = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) {
         throw new Error(result.error || (spanish ? 'No se pudo enviar la solicitud de visita.' : 'The visit request could not be submitted.'))

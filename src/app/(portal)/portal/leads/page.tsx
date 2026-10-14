@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { isLuxorTestInquiry, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
+import { isLuxorNonRevenueTestInquiry, isLuxorTestInquiry, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
@@ -82,6 +82,7 @@ import {
 import { useToast } from '@/components/portal/ToastProvider'
 import FollowUpsTab from '@/components/portal/FollowUpsTab'
 import { LuxorCrmRecordCard, LuxorCrmSecondaryAction, luxorCrmStatusTone } from '@/components/portal/LuxorCrmRecordCard'
+import { LuxorTestLeadPanel } from '@/components/portal/LuxorTestLeadPanel'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -421,6 +422,7 @@ export default function LeadsPage() {
   const filteredLeads = useMemo(() => {
     const term = deferredSearchTerm.toLowerCase().trim()
     return leads.filter((lead) => {
+      if (isLuxorTestInquiry(lead)) return false
       const matchesSearch =
         !term ||
         lead.full_name.toLowerCase().includes(term) ||
@@ -689,6 +691,8 @@ export default function LeadsPage() {
         {activeTab === 'followups' && <FollowUpsTab leads={leads} onLeadsRefresh={async () => { await fetchLeads() }} />}
         {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} busyTourOutcomeIds={busyTourOutcomeIds} />}
         {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
+
+        {activeTab === 'pipeline' && leads.filter(isLuxorTestInquiry).map((lead) => <LuxorTestLeadPanel key={lead.id} leadId={lead.id} />)}
 
         {activeTab === 'pipeline' && (
           viewMode === 'list' || isMobileViewport ? (
@@ -1419,7 +1423,7 @@ function formatTourDate(value: string) {
 
 function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: boolean }) {
   const router = useRouter()
-  const businessLeads = leads.filter((lead) => !isLuxorTestInquiry(lead))
+  const businessLeads = leads.filter((lead) => !isLuxorNonRevenueTestInquiry(lead))
   const newInquiries = businessLeads.filter(l => l.status === 'new').length
   const toursScheduled = businessLeads.filter((lead) => ['tour_requested', 'tour_confirmed'].includes(lead.status) && lead.tour_attendance_status !== 'cancelled').length
   const toursCompleted = businessLeads.filter((lead) => lead.tour_attendance_status === 'attended').length
@@ -1429,7 +1433,7 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
   const conversionRate = totalLeads > 0 ? ((depositsReceived / totalLeads) * 100).toFixed(1) : '0.0'
 
   // Upcoming tours
-  const upcomingTours = leads
+  const upcomingTours = businessLeads
     .filter((lead) => (
       (lead.status === 'tour_requested' || lead.status === 'tour_confirmed')
       && lead.preferred_tour_date
@@ -1438,7 +1442,7 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
     .slice(0, 5)
 
   // Recent leads
-  const recentLeads = [...leads].slice(0, 5)
+  const recentLeads = [...businessLeads].slice(0, 5)
 
   // Funnel calculations
   const total = businessLeads.length || 1

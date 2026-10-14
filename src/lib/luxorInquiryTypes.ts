@@ -106,6 +106,7 @@ export type LuxorInquiry = {
   referrer: string | null
   user_agent: string | null
   metadata: Record<string, unknown>
+  is_test?: boolean
   pipeline_stage?: LuxorPipelineStage | null
   tour_attendance_status?: LuxorTourAttendanceStatus | null
   tour_confirmed_at?: string | null
@@ -117,8 +118,28 @@ export type LuxorInquiry = {
 }
 
 /** Test inquiries remain visible in the CRM for end-to-end checks, but never count as business KPI records. */
-export function isLuxorTestInquiry(inquiry: Pick<LuxorInquiry, 'metadata'> | null | undefined): boolean {
-  return inquiry?.metadata?.is_test_record === true
+export function isLuxorTestInquiry(inquiry: Pick<LuxorInquiry, 'is_test'> | null | undefined): boolean {
+  return inquiry?.is_test === true
+}
+
+// Owner-confirmed historical test submissions remain intact in the CRM. Keep
+// them out of business analytics by exact reviewed IDs until historical
+// cleanup is separately approved; never infer from a matching email or phone.
+export const LUXOR_OWNER_CONFIRMED_LEGACY_TEST_INQUIRY_IDS = new Set([
+  'ce4a7a94-abd7-402f-bac4-156af405ffb1',
+  '450c26e7-7f8e-4bba-af82-fe4a73b6cb9a',
+  '74f02e2a-6142-41f5-a5a6-4580207379f4',
+  '6ea7d1c2-75b9-4d1a-a56f-4439c7b672c7',
+  'b3b0d161-d75e-4333-bfa6-651e971d967a',
+  '3b2853a1-61ee-450f-950a-b368be146ac7',
+  '974ec2b3-73e8-42c9-b871-c3ba000853bf',
+  'b8f02c54-fc29-4016-aeef-9805330a76c8',
+  '3256392c-3121-40d3-bc41-11e7c79a9ff3',
+  'be741147-f87a-4d8c-8815-2809139be29e',
+])
+
+export function isLuxorNonRevenueTestInquiry(inquiry: Pick<LuxorInquiry, 'id' | 'is_test'> | null | undefined): boolean {
+  return isLuxorTestInquiry(inquiry) || LUXOR_OWNER_CONFIRMED_LEGACY_TEST_INQUIRY_IDS.has(inquiry?.id || '')
 }
 
 export type LuxorLeadEvent = {
@@ -640,6 +661,7 @@ export type LuxorEmailJobKind =
   | 'event_details_reminder'
   | 'event_day_reminder'
   | 'post_event_follow_up'
+  | 'test_notification'
   | 'marketing_campaign'
   | 'grand_opening_rsvp_confirmation'
   | 'layout_review'
@@ -668,6 +690,7 @@ export type LuxorEmailJob = {
   tour_notice?: 'confirmation' | 'reminder_24' | 'reminder_2' | null
   automation_enrollment_id?: string | null
   automation_step_key?: string | null
+  test_run_id?: string | null
 }
 
 export type LuxorSignatureStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'void'

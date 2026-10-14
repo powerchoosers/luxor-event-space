@@ -5,6 +5,7 @@ import { Check, Download, FileText, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import Link from 'next/link'
+import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 
 const EVENT_TYPE_OPTIONS = [
   { value: 'Wedding', label: 'Wedding' },
@@ -102,11 +103,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
         },
       }
 
-      const response = await fetch('/api/inquiries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      const response = await submitLuxorIdempotentForm('brochure', '/api/inquiries', payload)
 
       const data = (await response.json().catch(() => ({}))) as { error?: string }
 

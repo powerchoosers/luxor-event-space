@@ -12,7 +12,7 @@ import {
   Users,
 } from 'lucide-react'
 import { PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
-import { isLuxorTestInquiry, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { isLuxorNonRevenueTestInquiry, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import type { Campaign, MarketingActivityEvent, MarketingList, MarketingTab } from '../page'
 
@@ -71,7 +71,7 @@ export function MarketingOverviewTab({
   )
   const attendingRsvps = grandOpeningRsvps.filter((inquiry) => inquiry.rsvp_status === 'attending').length
   const recordedGuests = grandOpeningRsvps.reduce((sum, inquiry) => sum + Number(inquiry.attendee_count || 0), 0)
-  const businessInquiries = inquiries.filter((inquiry) => !isLuxorTestInquiry(inquiry))
+  const businessInquiries = inquiries.filter((inquiry) => !isLuxorNonRevenueTestInquiry(inquiry))
   const newInquiriesThisWeek = businessInquiries.filter((inquiry) => new Date(inquiry.created_at).getTime() >= oneWeekAgo).length
   const followUpQueue = businessInquiries.filter((inquiry) => ['new', 'contacted', 'tour_requested'].includes(inquiry.status)).length
 

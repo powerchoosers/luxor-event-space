@@ -22,8 +22,8 @@ function sectionAfter(source, marker, nextMarker) {
 
 test('client records open their dossier, where Proposals is a primary mobile tab with a create action', () => {
   assert.match(clientList, /href=\{'\/portal\/leads\/' \+ client\.id\}/)
-  assert.match(dossier, /primaryLeadTabIds: LeadDetailTab\[\] = \['overview', 'proposals'/)
-  assert.match(dossier, /role="tablist" aria-label="Lead detail sections" className="grid grid-cols-5/)
+  assert.match(dossier, /primaryLeadTabIds: LeadDetailTab\[\] = \[[^\]]*'proposals'/)
+  assert.match(dossier, /role="tablist" aria-label="Client sections" className="grid grid-cols-4/)
   const proposalPanel = sectionAfter(dossier, "activeLeadTab === 'proposals'", "activeLeadTab === 'documents'")
   assert.match(proposalPanel, /Create New Proposal/)
   assert.match(proposalPanel, /onClick=\{\(\) => openProposalBuilder\(\)\}/)
@@ -55,7 +55,7 @@ test('duplicate copies the selected proposal and its event association but gets 
   assert.match(duplicate, /pricing_selection: duplicateSelection/)
   assert.match(duplicate, /setSelectedProposalPromotionId\(savedPromotionId\)/)
   assert.match(duplicate, /setInvoiceItems\(lineItems\)/)
-  assert.match(duplicate, /leadEvents\.find\(\(event\) => event\.id === invoice\.lead_event_id\)/)
+  assert.match(duplicate, /findProposalLeadEvent\(invoice, leadEvents, bookings\)/)
   assert.match(duplicate, /setProposalLeadEventId\(invoice\.lead_event_id \|\| sourceEvent\?\.id \|\| null\)/)
   assert.match(dossier, /creation_request_id: invoiceCreationRequest\.current/)
   assert.match(invoiceRoute, /calculateServerProposal\(selection, revision\.prior\)/)
@@ -79,10 +79,11 @@ test('published proposals are revised instead of edited, preserving the prior ve
 })
 
 test('accepted history uses exact proposal evidence; legacy timestamp gaps do not erase acceptance', () => {
-  assert.match(dossier, /proposal\.proposal_accepted_at \|\| acceptedActivity \|\| proposalBooking/)
-  assert.match(dossier, /hasMatchingProposalBooking\(latestInvoice\?\.id, latestBooking\?\.invoice_id\)/)
-  assert.match(dossier, /proposalAccepted = Boolean\(latestInvoice\?\.proposal_accepted_at \|\| hasAcceptedProposalEvidence/)
-  assert.match(dossier, /Booking linked; acceptance timestamp unavailable/)
+  assert.match(dossier, /currentProposalAcceptanceActivity = Boolean\(currentProposalInvoice && proposalHistory\[currentProposalInvoice\.id\]/)
+  assert.match(dossier, /proposalInvoiceId: currentProposalInvoice\?\.id/)
+  assert.match(dossier, /bookingInvoiceId: currentProposalBooking\?\.invoice_id/)
+  assert.match(proposalEvidenceSource, /if \(!hasMatchingProposalBooking\(input\.proposalInvoiceId, input\.bookingInvoiceId\)\) return false/)
+  assert.match(proposalEvidenceSource, /if \(acceptedAt \|\| input\.acceptedActivity\) return true/)
   assert.doesNotMatch(dossier, /latestInvoice\?\.proposal_accepted_at[\s\S]{0,80}lead\.status === 'booked'/)
 })
 
@@ -90,16 +91,18 @@ test('a booking proves proposal acceptance only when both invoice IDs are presen
   const helperJavaScript = ts.transpileModule(proposalEvidenceSource, {
     compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
   }).outputText
-  const { hasMatchingProposalBooking } = await import(`data:text/javascript;base64,${Buffer.from(helperJavaScript).toString('base64')}`)
+  const { hasMatchingProposalBooking, hasProposalAcceptanceEvidence } = await import(`data:text/javascript;base64,${Buffer.from(helperJavaScript).toString('base64')}`)
 
   assert.equal(hasMatchingProposalBooking(undefined, undefined), false)
   assert.equal(hasMatchingProposalBooking('', ''), false)
   assert.equal(hasMatchingProposalBooking('proposal-a', undefined), false)
   assert.equal(hasMatchingProposalBooking('proposal-a', 'proposal-b'), false)
   assert.equal(hasMatchingProposalBooking('proposal-a', 'proposal-a'), true)
-  assert.match(dossier, /hasMatchingProposalBooking\(currentProposalInvoice\?\.id, currentProposalBooking\?\.invoice_id\)/)
-  assert.match(dossier, /hasMatchingProposalBooking\(proposalInvoice\?\.id, proposalBooking\?\.invoice_id\)/)
-  assert.match(dossier, /hasMatchingProposalBooking\(latestInvoice\?\.id, latestBooking\?\.invoice_id\)/)
+  assert.equal(hasProposalAcceptanceEvidence({ bookingContractStatus: 'signed' }), false)
+  assert.equal(hasProposalAcceptanceEvidence({ proposalInvoiceId: 'proposal-a', bookingInvoiceId: 'proposal-b', bookingContractStatus: 'signed' }), false)
+  assert.equal(hasProposalAcceptanceEvidence({ proposalInvoiceId: 'proposal-a', bookingInvoiceId: 'proposal-a', bookingContractStatus: 'signed' }), true)
+  assert.match(dossier, /bookings\.find\(\(booking\) => booking\.invoice_id === currentProposalInvoice\.id\)/)
+  assert.match(dossier, /getProposalWorkflowDisplayState\(\{[\s\S]*proposalInvoiceId: currentProposalInvoice\?\.id,[\s\S]*bookingInvoiceId: currentProposalBooking\?\.invoice_id/)
 })
 
 test('duplicated proposals preserve rental access independently from guest hours', async () => {

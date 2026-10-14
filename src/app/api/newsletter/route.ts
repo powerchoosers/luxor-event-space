@@ -4,6 +4,7 @@ import { createLuxorInquiry, findRecentDuplicateLuxorInquiry } from '@/lib/luxor
 import { countRecentPublicAttempts, getPublicRequestIp, hashPublicRequestIp, recordLuxorPublicEvent } from '@/lib/luxorPublicEventsServer'
 import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { isConfiguredTestSubmission, startLuxorTestRun } from '@/lib/luxorTestLeadServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,6 +38,13 @@ export async function POST(request: NextRequest) {
         newsletter_name: fullName || null,
         ...(body.metadata && typeof body.metadata === 'object' ? body.metadata : {}),
       },
+    }
+    const testClassification = await isConfiguredTestSubmission(input)
+    if (testClassification.matches) {
+      const idempotencyKey = request.headers.get('idempotency-key')?.trim() || ''
+      if (idempotencyKey.length < 8) return NextResponse.json({ error: 'Test submission is missing its idempotency key.' }, { status: 400 })
+      const result = await startLuxorTestRun(input, { idempotencyKey, userAgent: request.headers.get('user-agent') ?? undefined })
+      return NextResponse.json({ subscribed: true, ...result, test: true, simulated: true }, { status: 201 })
     }
     await recordLuxorPublicEvent({ eventName: 'newsletter_signup_attempt', sessionId: input.sessionId, pagePath: input.pagePath, source: input.source, ipHash, metadata: { flow: input.flow } }).catch(() => undefined)
     const duplicate = await findRecentDuplicateLuxorInquiry(input)
