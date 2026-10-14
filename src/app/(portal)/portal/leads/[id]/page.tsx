@@ -536,6 +536,7 @@ export default function LeadDetailPage({
 
   // Timeline tab filtering
   const [activeLeadTab, setActiveLeadTab] = useState<LeadDetailTab>('overview')
+  const [proposalCardMenuId, setProposalCardMenuId] = useState<string | null>(null)
   const [selectedStageOverride, setSelectedStageOverride] = useState<string | null>(null)
   const [planningSubTab, setPlanningSubTab] = useState<'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files'>('details')
   const [planningEditSection, setPlanningEditSection] = useState<PlanningEditSection>(null)
@@ -3326,7 +3327,7 @@ export default function LeadDetailPage({
     const requestedPlanningTab = searchParams?.get('planningTab')
     let timeoutId: number | null = null
 
-    if (requestedTab && ['overview', 'activity', 'tasks', 'vendors', 'timeline', 'documents', 'messages', 'notes'].includes(requestedTab)) {
+    if (requestedTab && ['overview', 'activity', 'tasks', 'vendors', 'timeline', 'proposals', 'documents', 'messages', 'notes'].includes(requestedTab)) {
       setActiveLeadTab(requestedTab as LeadDetailTab)
       if (requestedTab === 'tasks') {
         setShowTaskTools(true)
@@ -7486,7 +7487,7 @@ export default function LeadDetailPage({
                 <button type="button" onClick={() => openProposalBuilder()} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><Plus size={13} /> Build proposal</button>
               </div>
             ) : (
-              <div className="mt-5 grid gap-3 xl:grid-cols-2">
+              <div className="mt-5 space-y-3">
                 {sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').map((proposal, proposalIndex) => {
                   const context = asProposalRecord(proposal.proposal_context) || {}
                   const selection = asProposalRecord(context.pricing_selection) || {}
@@ -7532,8 +7533,11 @@ export default function LeadDetailPage({
                             ? 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300'
                             : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
                   const proposalLabel = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
-                    ? `${Number(proposal.proposal_number) === 1 ? 'Proposal' : `Proposal #${proposal.proposal_number}`}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
+                    ? `Proposal #${proposal.proposal_number}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
                     : proposal.status === 'sent' ? 'Existing proposal' : 'Draft proposal'
+                  const proposalIdentifier = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
+                    ? `#${proposal.proposal_number}`
+                    : proposal.id
                   const taxRate = Number(proposal.tax_rate || 0)
                   const shownTaxRate = taxRate > 1 ? taxRate : taxRate * 100
                   const invoiceSubtotal = Number(proposal.original_subtotal ?? proposal.subtotal ?? proposal.total ?? 0)
@@ -7555,19 +7559,28 @@ export default function LeadDetailPage({
                     ['invoice', 'Payment invoice created', paymentInvoices[0]?.created_at || null, 'Not yet created'],
                     ['payment', 'Payment received', latestProposalPayment?.paid_at || paidPaymentInvoice?.paid_at || null, 'Not yet received'],
                   ]
+                  const showProposalHistory = () => {
+                    const history = document.getElementById(`proposal-history-${proposal.id}`) as HTMLDetailsElement | null
+                    if (history) history.open = true
+                    window.requestAnimationFrame(() => {
+                      (history || document.getElementById(`proposal-activity-${proposal.id}`))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    })
+                  }
                   return <article key={proposal.id} className="min-w-0 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
                     <details open={proposalIndex === 0} className="group">
                       <summary className="flex min-h-20 cursor-pointer list-none items-center justify-between gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/50 sm:px-5 [&::-webkit-details-marker]:hidden">
                         <span className="min-w-0">
                           <span className="flex flex-wrap items-center gap-2">
                             <span className="text-[9px] font-black uppercase tracking-[0.16em] text-[#8c6529] dark:text-[#f1d27a]">{proposalLabel}</span>
+                            <span className="rounded border border-[color:var(--portal-border)] px-2 py-0.5 font-mono text-[9px] text-[color:var(--portal-muted)]" title={`Proposal ID ${proposal.id}`}>ID {proposalIdentifier}</span>
                             <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${statusClass}`}>{lifecycleStatus}</span>
                           </span>
                           <span className="mt-1 block truncate text-sm font-bold text-[color:var(--portal-text)]">{proposal.description || `${proposal.event_type || 'Event'} proposal`}</span>
                           <span className="mt-1 block truncate text-[10px] text-[color:var(--portal-muted)]">{date ? formatDisplayDate(date) : 'Event date not set'}{guestCount ? ` · ${guestCount} guests` : ''}</span>
+                          <span className="mt-1 block text-[9px] text-[color:var(--portal-muted)]">Created {formatVenueDateTime(proposal.created_at)} · Expires {proposal.offer_expires_at ? formatVenueDateTime(proposal.offer_expires_at) : 'No expiry set'}</span>
                         </span>
                         <span className="flex shrink-0 items-center gap-3">
-                          <span className="text-right"><span className="block font-mono text-sm font-bold text-[color:var(--portal-text)]">{formatMoney(proposal.total)}</span><span className="mt-1 block text-[9px] text-[color:var(--portal-muted)]">{latestSentAt ? `Sent ${formatVenueDateTime(latestSentAt)}` : 'Not sent yet'}</span></span>
+                          <span className="text-right"><span className="block font-mono text-sm font-bold text-[color:var(--portal-text)]">{formatMoney(proposal.total)}</span><span className="mt-1 block text-[9px] text-[color:var(--portal-muted)]">{latestSentAt ? `Sent ${formatVenueDateTime(latestSentAt)}` : 'Created draft'}</span></span>
                           <ChevronDown size={14} aria-hidden="true" className="text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" />
                         </span>
                       </summary>
@@ -7592,8 +7605,8 @@ export default function LeadDetailPage({
                           <div className="flex justify-between gap-3 border-t border-[color:var(--portal-border)] pt-2 font-bold"><dt className="text-[color:var(--portal-text)]">Total proposal amount</dt><dd className="text-[color:var(--portal-text)]">{formatMoney(proposal.total)}</dd></div>
                         </dl>
                       </section>
-                      <section className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3" aria-label="Proposal activity">
-                        <div className="flex items-center justify-between gap-2"><h4 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Delivery & activity</h4><span className="text-[9px] text-[color:var(--portal-muted)]">{proposalActivityTypes.size} events</span></div>
+                      <section id={`proposal-activity-${proposal.id}`} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 scroll-mt-24" aria-label="Proposal activity">
+                        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Delivery & activity</h4><div className="flex items-center gap-2"><span className="text-[9px] text-[color:var(--portal-muted)]">{proposalActivityTypes.size} events</span><button type="button" onClick={showProposalHistory} className="min-h-9 rounded-md border border-[color:var(--portal-border)] px-2.5 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/50">View activity</button></div></div>
                         <ol className="mt-2 space-y-2 border-l border-[color:var(--portal-border)] pl-3 text-[10px]">
                           {proposalMilestones.map(([key, label, occurredAt, emptyText]) => <li key={key} className="relative"><span className="absolute -left-[17px] top-1 h-2 w-2 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"/><p className="font-semibold text-[color:var(--portal-text)]">{label}</p><p className="mt-0.5 text-[color:var(--portal-muted)]">{occurredAt ? formatVenueDateTime(occurredAt) : emptyText}</p></li>)}
                         </ol>
@@ -7604,8 +7617,16 @@ export default function LeadDetailPage({
                       {proposal.status === 'sent' && proposalHistory[proposal.id]?.enabled === true ? <button type="button" onClick={() => void handleSendFinalProposal(proposal, false, true)} disabled={!lead.email || sendingInvoiceId === proposal.id} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === proposal.id ? 'Sending…' : 'Resend proposal'}</button> : null}
                       <button type="button" onClick={() => duplicateProposalDraft(proposal)} aria-label={`Duplicate ${proposalLabel} to a new draft`} title="Starts a new draft from these event selections. Review the current price and discount before saving." className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Copy size={12} /> Duplicate</button>
                       <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> {proposalHasBeenPublished ? 'Revise proposal' : 'Edit draft'}</button>
+                      <div className="relative">
+                        <button type="button" aria-haspopup="menu" aria-expanded={proposalCardMenuId === proposal.id} onClick={() => setProposalCardMenuId((openId) => openId === proposal.id ? null : proposal.id)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><MoreVertical size={12} /> More</button>
+                        {proposalCardMenuId === proposal.id ? <div role="menu" aria-label={`${proposalLabel} actions`} className="absolute right-0 z-20 mt-1 min-w-48 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-xl">
+                          <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); showProposalHistory() }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View activity</button>
+                          <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); duplicateProposalDraft(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Duplicate proposal</button>
+                          <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); openProposalBuilder(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">{proposalHasBeenPublished ? 'Revise proposal' : 'Edit draft'}</button>
+                        </div> : null}
+                      </div>
                     </div>
-                    {proposalHistory[proposal.id]?.enabled ? <details className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+                    {proposalHistory[proposal.id]?.enabled ? <details id={`proposal-history-${proposal.id}`} className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
                       <summary className="min-h-11 cursor-pointer px-3 py-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Proposal activity and send history</summary>
                       <div className="space-y-3 border-t border-[color:var(--portal-border)] px-3 py-3">
                         {proposalHistory[proposal.id].sendAttempts.map((attempt) => <div key={attempt.id} className="rounded-md bg-[color:var(--portal-soft)] px-3 py-2 text-[10px]">
