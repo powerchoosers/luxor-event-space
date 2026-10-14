@@ -104,6 +104,8 @@ import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPre
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import { SameDayReceiptDialog, type SameDayReceiptEvidence } from '@/components/portal/SameDayReceiptDialog'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
+import { hasMatchingProposalBooking } from '@/lib/luxorProposalEvidence'
+import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext } from '@/lib/luxorProposalDuplicateContext'
 import {
   hasCancellableTour,
   LeadLifecycleActionSheet,
@@ -1009,7 +1011,7 @@ export default function LeadDetailPage({
 
   const activeStage = useMemo(() => {
     if (!lead) return 'inquiry'
-    const hasAcceptedProposalEvidence = Boolean(currentProposalInvoice?.proposal_accepted_at || currentProposalBooking?.invoice_id === currentProposalInvoice?.id)
+    const hasAcceptedProposalEvidence = Boolean(currentProposalInvoice?.proposal_accepted_at || hasMatchingProposalBooking(currentProposalInvoice?.id, currentProposalBooking?.invoice_id))
     const steps = getLeadLifecycleSteps(lifecycleLead || lead, lifecycleBooking, currentProposalInvoice, hasAcceptedProposalEvidence)
 
     const activeIndex = steps.findIndex(s => s.isActive)
@@ -2262,9 +2264,7 @@ export default function LeadDetailPage({
     const sourceRentalPeriodFallback = sourceRentalPeriod === 'morning' || sourceRentalPeriod === 'full_day' || sourceRentalPeriod === 'custom' || sourceRentalPeriod === 'evening'
       ? sourceRentalPeriod
       : 'evening'
-    const duplicateSelection = { ...savedSelection }
-    delete duplicateSelection.promotionId
-    delete duplicateSelection.promotion_id
+    const duplicateSelection = getDuplicatedProposalSelection(savedSelection)
     const discountType = invoice.discount_type === 'fixed' ? 'fixed' : 'percent'
     const discountValue = asProposalNumber(invoice.discount_value, invoice.discount_percent, 0) || 0
     const nextContext: ProposalBuilderContext = {
@@ -2274,8 +2274,7 @@ export default function LeadDetailPage({
       ...(asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count) ? { expected_guest_count: asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count)! } : {}),
       rental_period: rentalPeriod === 'morning' || rentalPeriod === 'full_day' || rentalPeriod === 'custom' || rentalPeriod === 'evening' ? rentalPeriod : sourceRentalPeriodFallback,
       ...(savedContext.event_access ? { event_access: String(savedContext.event_access) } : {}),
-      ...(savedContext.guest_arrival_time || savedContext.guestArrivalTime ? { guest_arrival_time: String(savedContext.guest_arrival_time || savedContext.guestArrivalTime) } : {}),
-      ...(savedContext.event_end_time || savedContext.eventEndTime ? { event_end_time: String(savedContext.event_end_time || savedContext.eventEndTime) } : {}),
+      ...getDuplicatedProposalTimingContext(savedContext),
       package_id: packageId,
       package_name: String(savedContext.package_name || packageId.replace('_', ' ')),
       pricing_selection: duplicateSelection,
@@ -4378,7 +4377,7 @@ export default function LeadDetailPage({
             bookings={eventBookings}
             latestBooking={agreementBooking}
             latestInvoice={proposalInvoice}
-            hasAcceptedProposalEvidence={Boolean(proposalInvoice?.proposal_accepted_at || proposalBooking?.invoice_id === proposalInvoice?.id)}
+            hasAcceptedProposalEvidence={Boolean(proposalInvoice?.proposal_accepted_at || hasMatchingProposalBooking(proposalInvoice?.id, proposalBooking?.invoice_id))}
             agreementDeliveryConfirmed={agreementDeliveryConfirmed}
             agreementDeliveryPending={agreementDeliveryPending}
             isSaving={updatingStatus}
@@ -9036,7 +9035,7 @@ function LeadLifecycleRail({
       ? new Date(lead.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : ''
 
-  const proposalAccepted = Boolean(latestInvoice?.proposal_accepted_at || hasAcceptedProposalEvidence || latestBooking?.invoice_id === latestInvoice?.id)
+  const proposalAccepted = Boolean(latestInvoice?.proposal_accepted_at || hasAcceptedProposalEvidence || hasMatchingProposalBooking(latestInvoice?.id, latestBooking?.invoice_id))
   const steps = getLeadLifecycleSteps(lead, latestBooking, latestInvoice, proposalAccepted).map((step) => {
     if (step.id === 'newsletter') {
       return { ...step, label: 'Newsletter', subtext: formattedInquiryDate }

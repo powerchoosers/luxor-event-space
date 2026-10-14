@@ -6,6 +6,7 @@ type InvoicePaymentNoticeFacts = {
   paid_at?: unknown
   payment_requested_at?: unknown
   payment_requested_amount?: unknown
+  total?: unknown
 }
 
 /** Only an issued payment invoice with a remaining request can create a due notice. */
@@ -13,6 +14,7 @@ export function getLuxorOutstandingPaymentRequestAmount(invoice: InvoicePaymentN
   const kind = String(invoice.invoice_kind || '')
   const status = String(invoice.status || '')
   const requestedAmount = Number(invoice.payment_requested_amount)
+  const invoiceTotal = Number(invoice.total)
 
   if (!(PAYMENT_INVOICE_KINDS.has(kind)
     && status !== 'draft'
@@ -21,8 +23,11 @@ export function getLuxorOutstandingPaymentRequestAmount(invoice: InvoicePaymentN
     && !invoice.paid_at
     && Boolean(invoice.payment_requested_at)
     && Number.isFinite(requestedAmount)
-    && requestedAmount > 0)) return null
+    && requestedAmount > 0
+    && Number.isFinite(invoiceTotal)
+    && invoiceTotal > 0)) return null
 
-  const outstandingAmount = Math.round((requestedAmount - Math.max(0, Number(paidAmount) || 0)) * 100) / 100
+  const verifiedPaidAmount = Number.isFinite(Number(paidAmount)) ? Math.max(0, Number(paidAmount)) : 0
+  const outstandingAmount = Math.round((invoiceTotal - verifiedPaidAmount) * 100) / 100
   return outstandingAmount > 0 ? outstandingAmount : null
 }

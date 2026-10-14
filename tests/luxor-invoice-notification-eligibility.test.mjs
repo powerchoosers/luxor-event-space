@@ -13,6 +13,7 @@ const request = (overrides = {}) => ({
   status: 'sent',
   payment_requested_at: '2026-10-01T12:00:00.000Z',
   payment_requested_amount: 1200,
+  total: 1200,
   ...overrides,
 })
 
@@ -66,7 +67,20 @@ test('zero, negative, and non-finite requests are excluded', () => {
   }
 })
 
-test('paid partials reduce the request to cents and a fully paid request disappears', () => {
-  assert.equal(getLuxorOutstandingPaymentRequestAmount(request({ payment_requested_amount: 1200.01 }), 400.005), 800.01)
-  assert.equal(getLuxorOutstandingPaymentRequestAmount(request({ payment_requested_amount: 1200.01 }), 1200.01), null)
+test('an original request uses the invoice total less verified payments', () => {
+  assert.equal(getLuxorOutstandingPaymentRequestAmount(request({ payment_requested_amount: 1200, total: 1200 }), 0), 1200)
+  assert.equal(getLuxorOutstandingPaymentRequestAmount(request({ payment_requested_amount: 1200, total: 1200 }), 400), 800)
+})
+
+test('a reissued partial-payment request does not subtract its historic payment twice', () => {
+  assert.equal(getLuxorOutstandingPaymentRequestAmount(request({ payment_requested_amount: 800, total: 1200 }), 400), 800)
+})
+
+test('a fully paid invoice has no outstanding due amount', () => {
+  assert.equal(getLuxorOutstandingPaymentRequestAmount(request({ payment_requested_amount: 800, total: 1200 }), 1200), null)
+})
+
+test('payment request evidence is required even when the invoice has an unpaid balance', () => {
+  assert.equal(getLuxorOutstandingPaymentRequestAmount(request({ payment_requested_at: null, total: 1200 }), 0), null)
+  assert.equal(getLuxorOutstandingPaymentRequestAmount(request({ payment_requested_amount: null, total: 1200 }), 0), null)
 })

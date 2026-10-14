@@ -3,11 +3,14 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dossier = fs.readFileSync(path.join(root, 'src/app/(portal)/portal/leads/[id]/page.tsx'), 'utf8')
 const clientList = fs.readFileSync(path.join(root, 'src/app/(portal)/portal/leads/page.tsx'), 'utf8')
 const invoiceRoute = fs.readFileSync(path.join(root, 'src/app/api/invoices/route.ts'), 'utf8')
+const proposalEvidenceSource = fs.readFileSync(path.join(root, 'src/lib/luxorProposalEvidence.ts'), 'utf8')
+const duplicateContextSource = fs.readFileSync(path.join(root, 'src/lib/luxorProposalDuplicateContext.ts'), 'utf8')
 
 function sectionAfter(source, marker, nextMarker) {
   const start = source.indexOf(marker)
@@ -77,8 +80,69 @@ test('published proposals are revised instead of edited, preserving the prior ve
 
 test('accepted history uses exact proposal evidence; legacy timestamp gaps do not erase acceptance', () => {
   assert.match(dossier, /proposal\.proposal_accepted_at \|\| acceptedActivity \|\| proposalBooking/)
-  assert.match(dossier, /latestBooking\?\.invoice_id === latestInvoice\?\.id/)
+  assert.match(dossier, /hasMatchingProposalBooking\(latestInvoice\?\.id, latestBooking\?\.invoice_id\)/)
   assert.match(dossier, /proposalAccepted = Boolean\(latestInvoice\?\.proposal_accepted_at \|\| hasAcceptedProposalEvidence/)
   assert.match(dossier, /Booking linked; acceptance timestamp unavailable/)
   assert.doesNotMatch(dossier, /latestInvoice\?\.proposal_accepted_at[\s\S]{0,80}lead\.status === 'booked'/)
+})
+
+test('a booking proves proposal acceptance only when both invoice IDs are present and match', async () => {
+  const helperJavaScript = ts.transpileModule(proposalEvidenceSource, {
+    compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const { hasMatchingProposalBooking } = await import(`data:text/javascript;base64,${Buffer.from(helperJavaScript).toString('base64')}`)
+
+  assert.equal(hasMatchingProposalBooking(undefined, undefined), false)
+  assert.equal(hasMatchingProposalBooking('', ''), false)
+  assert.equal(hasMatchingProposalBooking('proposal-a', undefined), false)
+  assert.equal(hasMatchingProposalBooking('proposal-a', 'proposal-b'), false)
+  assert.equal(hasMatchingProposalBooking('proposal-a', 'proposal-a'), true)
+  assert.match(dossier, /hasMatchingProposalBooking\(currentProposalInvoice\?\.id, currentProposalBooking\?\.invoice_id\)/)
+  assert.match(dossier, /hasMatchingProposalBooking\(proposalInvoice\?\.id, proposalBooking\?\.invoice_id\)/)
+  assert.match(dossier, /hasMatchingProposalBooking\(latestInvoice\?\.id, latestBooking\?\.invoice_id\)/)
+})
+
+test('duplicated proposals preserve rental access independently from guest hours', async () => {
+  const helperJavaScript = ts.transpileModule(duplicateContextSource, {
+    compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext } = await import(`data:text/javascript;base64,${Buffer.from(helperJavaScript).toString('base64')}`)
+  const context = {
+    rental_start_time: '16:00',
+    rental_end_time: '02:00',
+    start_time: '16:00',
+    end_time: '02:00',
+    guest_arrival_time: '18:00',
+    event_end_time: '00:00',
+    pricing_selection: {
+      rentalStartTime: '16:00',
+      rentalEndTime: '02:00',
+      guestArrivalTime: '18:00',
+      eventEndTime: '00:00',
+      additionalRentalHours: 2,
+      fixedExtensionAmount: 450,
+      quoteBreakdown: { additional_hours: 2, additional_hour_rate: 225 },
+      promotionId: 'source-proposal-promotion',
+    },
+  }
+
+  assert.deepEqual(getDuplicatedProposalTimingContext(context), {
+    rental_start_time: '16:00',
+    rental_end_time: '02:00',
+    start_time: '16:00',
+    end_time: '02:00',
+    guest_arrival_time: '18:00',
+    event_end_time: '00:00',
+  })
+  const duplicatedSelection = getDuplicatedProposalSelection(context.pricing_selection)
+  assert.equal(duplicatedSelection.rentalStartTime, '16:00')
+  assert.equal(duplicatedSelection.rentalEndTime, '02:00')
+  assert.equal(duplicatedSelection.guestArrivalTime, '18:00')
+  assert.equal(duplicatedSelection.eventEndTime, '00:00')
+  assert.equal(duplicatedSelection.additionalRentalHours, 2)
+  assert.equal(duplicatedSelection.fixedExtensionAmount, 450)
+  assert.deepEqual(duplicatedSelection.quoteBreakdown, { additional_hours: 2, additional_hour_rate: 225 })
+  assert.equal('promotionId' in duplicatedSelection, false)
+  assert.match(dossier, /getDuplicatedProposalSelection\(savedSelection\)/)
+  assert.match(dossier, /\.\.\.getDuplicatedProposalTimingContext\(savedContext\)/)
 })
