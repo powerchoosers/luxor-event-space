@@ -192,6 +192,10 @@ async function processDelivery(event: ResendEvent, eventId: string) {
   if (!row) return
   const emailJobId = typeof row.metadata?.emailJobId === 'string' ? row.metadata.emailJobId : ''
   if (emailJobId && ['email.delivered', 'email.bounced', 'email.complained', 'email.delivery_delayed'].includes(event.type)) {
+    // test_run_id is added by the optional permanent test-lead migration.
+    // Select the row shape so production webhooks remain compatible before
+    // that migration is installed; missing fields are undefined and normal
+    // delivery handling continues unchanged.
     const [job] = await supabaseRest<Array<{ test_run_id?: string | null }>>(
       `luxor_email_jobs?select=*&id=eq.${encodeURIComponent(emailJobId)}&limit=1`,
     )

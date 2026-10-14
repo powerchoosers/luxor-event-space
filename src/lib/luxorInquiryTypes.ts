@@ -118,8 +118,8 @@ export type LuxorInquiry = {
 }
 
 /** Test inquiries remain visible in the CRM for end-to-end checks, but never count as business KPI records. */
-export function isLuxorTestInquiry(inquiry: Pick<LuxorInquiry, 'is_test'> | null | undefined): boolean {
-  return inquiry?.is_test === true
+export function isLuxorTestInquiry(inquiry: Pick<LuxorInquiry, 'is_test' | 'metadata'> | null | undefined): boolean {
+  return inquiry?.is_test === true || inquiry?.metadata?.is_test_record === true
 }
 
 // Owner-confirmed historical test submissions remain intact in the CRM. Keep
@@ -138,8 +138,9 @@ export const LUXOR_OWNER_CONFIRMED_LEGACY_TEST_INQUIRY_IDS = new Set([
   'be741147-f87a-4d8c-8815-2809139be29e',
 ])
 
-export function isLuxorNonRevenueTestInquiry(inquiry: Pick<LuxorInquiry, 'id' | 'is_test'> | null | undefined): boolean {
-  return isLuxorTestInquiry(inquiry) || LUXOR_OWNER_CONFIRMED_LEGACY_TEST_INQUIRY_IDS.has(inquiry?.id || '')
+export function isLuxorNonRevenueTestInquiry(inquiry: Pick<LuxorInquiry, 'id' | 'is_test' | 'metadata'> | null | undefined): boolean {
+  return isLuxorTestInquiry(inquiry)
+    || LUXOR_OWNER_CONFIRMED_LEGACY_TEST_INQUIRY_IDS.has(inquiry?.id || '')
 }
 
 export type LuxorLeadEvent = {

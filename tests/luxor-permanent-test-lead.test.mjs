@@ -46,12 +46,14 @@ test('exact configured email and normalized complete phone classify independentl
   assert.equal(policy.matchesTestLeadIdentifiers({ phone: '12149600276' }, settings), false)
 })
 
-test('only exact owner-confirmed historical IDs are excluded from revenue analytics while remaining unflagged', () => {
+test('legacy metadata and exact owner-confirmed historical IDs remain excluded from revenue analytics', () => {
   const knownId = 'ce4a7a94-abd7-402f-bac4-156af405ffb1'
-  assert.equal(inquiryTypesModule.isLuxorTestInquiry({ id: knownId, is_test: false }), false)
+  assert.equal(inquiryTypesModule.isLuxorTestInquiry({ id: knownId, is_test: false, metadata: {} }), false)
+  assert.equal(inquiryTypesModule.isLuxorTestInquiry({ id: 'legacy-test', is_test: false, metadata: { is_test_record: true } }), true)
   assert.equal(inquiryTypesModule.isLuxorNonRevenueTestInquiry({ id: knownId, is_test: false }), true)
   assert.equal(inquiryTypesModule.isLuxorNonRevenueTestInquiry({ id: 'new-customer', is_test: false }), false)
   assert.equal(inquiryTypesModule.isLuxorNonRevenueTestInquiry({ id: 'permanent-test', is_test: true }), true)
+  assert.equal(inquiryTypesModule.isLuxorNonRevenueTestInquiry({ id: 'legacy-test', is_test: false, metadata: { is_test_record: true } }), true)
 })
 
 test('same payload reuses an idempotency key after uncertain failure and clears it after success', async () => {
@@ -142,10 +144,12 @@ test('test email jobs are run-fenced, recipient-overridden, and track provider a
   assert.match(emailWorker, /recipient_email: authorization\.recipient/)
   assert.match(emailWorker, /provider_status: 'accepted',[\s\S]*delivery_status: 'unknown'/)
   assert.match(resendWebhook, /delivery_status: deliveryStatus/)
+  assert.match(resendWebhook, /luxor_email_jobs\?select=\*\&id=/)
 })
 
 test('missing test schema is treated as unavailable while normal mail status and test failures remain observable', () => {
-  assert.match(supabaseRestServer, /method === 'GET' && response\.status === 404 && \['PGRST202', 'PGRST205'\]/)
+  assert.match(supabaseRestServer, /method === 'GET' && response\.status === 404 && payload\.code === 'PGRST205'/)
+  assert.doesNotMatch(supabaseRestServer, /PGRST202/)
   assert.match(testLeadRoute, /if \(!settings\) return NextResponse\.json\(\{ available: false/)
   assert.match(testLeadRoute, /select=\*&limit=1000/)
   assert.match(testLeadRoute, /row\.is_test === true/)
@@ -157,8 +161,8 @@ test('missing test schema is treated as unavailable while normal mail status and
 
 test('ordinary inquiry creation does not implicitly promote a record based on contact data', () => {
   assert.doesNotMatch(inquiriesServer, /is_test\s*:\s*true/)
-  assert.match(inquiryTypes, /return inquiry\?\.is_test === true/)
-  assert.doesNotMatch(inquiryTypes, /metadata\?\.is_test_record/)
+  assert.match(inquiryTypes, /return inquiry\?\.is_test === true \|\| inquiry\?\.metadata\?\.is_test_record === true/)
+  assert.match(inquiryTypes, /metadata\?\.is_test_record === true/)
   assert.match(migration, /and metadata ->> 'is_test_record' = 'true'/)
   assert.match(migration, /The permanent test lead cannot be deleted or demoted/)
 })
