@@ -18,6 +18,8 @@ const inquiryTypes = fs.readFileSync(path.join(root, 'src/lib/luxorInquiryTypes.
 const testPanel = fs.readFileSync(path.join(root, 'src/components/portal/LuxorTestLeadPanel.tsx'), 'utf8')
 const emailWorker = fs.readFileSync(path.join(root, 'src/lib/luxorEmailJobsServer.ts'), 'utf8')
 const resendWebhook = fs.readFileSync(path.join(root, 'src/lib/luxorResendWebhookServer.ts'), 'utf8')
+const supabaseRestServer = fs.readFileSync(path.join(root, 'src/lib/supabaseRestServer.ts'), 'utf8')
+const testLeadRoute = fs.readFileSync(path.join(root, 'src/app/api/portal/test-lead/route.ts'), 'utf8')
 
 const policyJs = ts.transpileModule(policySource, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText
 const policy = await import(`data:text/javascript;base64,${Buffer.from(policyJs).toString('base64')}`)
@@ -140,6 +142,17 @@ test('test email jobs are run-fenced, recipient-overridden, and track provider a
   assert.match(emailWorker, /recipient_email: authorization\.recipient/)
   assert.match(emailWorker, /provider_status: 'accepted',[\s\S]*delivery_status: 'unknown'/)
   assert.match(resendWebhook, /delivery_status: deliveryStatus/)
+})
+
+test('missing test schema is treated as unavailable while normal mail status and test failures remain observable', () => {
+  assert.match(supabaseRestServer, /method === 'GET' && response\.status === 404 && \['PGRST202', 'PGRST205'\]/)
+  assert.match(testLeadRoute, /if \(!settings\) return NextResponse\.json\(\{ available: false/)
+  assert.match(testLeadRoute, /select=\*&limit=1000/)
+  assert.match(testLeadRoute, /row\.is_test === true/)
+  assert.match(resendWebhook, /select=\*&id=eq\.\$\{encodeURIComponent\(emailJobId\)\}/)
+  assert.match(resendWebhook, /if \(job\?\.test_run_id\) \{[\s\S]*luxor_test_run_activity/)
+  assert.doesNotMatch(resendWebhook.slice(resendWebhook.indexOf('if (job?.test_run_id)'), resendWebhook.indexOf("if (event.type === 'email.delivered'")), /catch\(/)
+  assert.match(resendWebhook, /const updated = await supabaseRest<LuxorMailRow\[]>[\s\S]*status: \(rank\[next\]/)
 })
 
 test('ordinary inquiry creation does not implicitly promote a record based on contact data', () => {

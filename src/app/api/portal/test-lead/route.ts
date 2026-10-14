@@ -15,14 +15,13 @@ async function authorizedMember() {
 export async function GET() {
   try {
     if (!await authorizedMember()) return NextResponse.json({ error: 'Owner or admin access required.' }, { status: 403 })
-    const [settings, leads] = await Promise.all([
-      getLuxorTestSettings(),
-      supabaseRest<Record<string, unknown>[]>('luxor_inquiries?select=*&is_test=eq.true&limit=1'),
-    ])
-    const lead = leads[0] ?? null
+    const settings = await getLuxorTestSettings()
+    if (!settings) return NextResponse.json({ available: false, settings: null, lead: null, runs: [], activity: [] })
+    const leads = await supabaseRest<Record<string, unknown>[]>('luxor_inquiries?select=*&limit=1000')
+    const lead = leads.find((row) => row.is_test === true) ?? null
     const runs = lead ? await supabaseRest<Record<string, unknown>[]>(`luxor_test_runs?select=id,test_lead_id,source,status,started_at,completed_at,reset_at&test_lead_id=eq.${encodeURIComponent(String(lead.id))}&order=started_at.desc&limit=100`) : []
     const activity = runs.length ? await supabaseRest<Record<string, unknown>[]>(`luxor_test_run_activity?select=*&test_run_id=in.(${runs.map((run) => encodeURIComponent(String(run.id))).join(',')})&order=created_at.desc&limit=500`) : []
-    return NextResponse.json({ settings, lead, runs, activity })
+    return NextResponse.json({ available: Boolean(settings), settings, lead, runs, activity })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to load test lead.' }, { status: 500 })
   }

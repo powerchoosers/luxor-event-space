@@ -36,7 +36,7 @@ export async function supabaseRest<T>(path: string, init: RequestInit = {}) {
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as SupabaseError
 
-    if (method === 'GET' && response.status === 404 && payload.code === 'PGRST205') {
+    if (method === 'GET' && response.status === 404 && ['PGRST202', 'PGRST205'].includes(payload.code ?? '')) {
       return [] as T
     }
 

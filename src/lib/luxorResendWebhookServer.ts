@@ -192,8 +192,8 @@ async function processDelivery(event: ResendEvent, eventId: string) {
   if (!row) return
   const emailJobId = typeof row.metadata?.emailJobId === 'string' ? row.metadata.emailJobId : ''
   if (emailJobId && ['email.delivered', 'email.bounced', 'email.complained', 'email.delivery_delayed'].includes(event.type)) {
-    const [job] = await supabaseRest<Array<{ test_run_id: string | null }>>(
-      `luxor_email_jobs?select=test_run_id&id=eq.${encodeURIComponent(emailJobId)}&limit=1`,
+    const [job] = await supabaseRest<Array<{ test_run_id?: string | null }>>(
+      `luxor_email_jobs?select=*&id=eq.${encodeURIComponent(emailJobId)}&limit=1`,
     )
     if (job?.test_run_id) {
       const deliveryStatus = event.type === 'email.delivered' ? 'delivered'
