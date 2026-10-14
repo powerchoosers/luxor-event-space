@@ -551,6 +551,8 @@ export default function LeadDetailPage({
   // Timeline tab filtering
   const [activeLeadTab, setActiveLeadTab] = useState<LeadDetailTab>('overview')
   const [proposalCardMenuId, setProposalCardMenuId] = useState<string | null>(null)
+  const proposalCardMenuTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const proposalCardMenuRef = useRef<HTMLDivElement | null>(null)
   const [selectedStageOverride, setSelectedStageOverride] = useState<string | null>(null)
   const [planningSubTab, setPlanningSubTab] = useState<'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files'>('details')
   const [planningEditSection, setPlanningEditSection] = useState<PlanningEditSection>(null)
@@ -619,6 +621,36 @@ export default function LeadDetailPage({
       fetchVendors()
     }
   }, [activeLeadTab])
+
+  useEffect(() => {
+    if (!proposalCardMenuId) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (proposalCardMenuRef.current?.contains(target) || proposalCardMenuTriggerRef.current?.contains(target)) return
+      setProposalCardMenuId(null)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setProposalCardMenuId(null)
+      proposalCardMenuTriggerRef.current?.focus()
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [proposalCardMenuId])
+
+  useEffect(() => {
+    if (proposalCardMenuId) {
+      proposalCardMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+    }
+  }, [proposalCardMenuId])
 
   useEffect(() => {
     if (activeLeadTab !== 'proposals' || process.env.NEXT_PUBLIC_LUXOR_PROPOSAL_HISTORY_READY !== 'true') return
@@ -7262,7 +7294,7 @@ export default function LeadDetailPage({
           ) : null}
 
           {/* Sidebar Panel Column */}
-          <div className={`space-y-6 ${
+          <div className={`space-y-6 ${activeLeadTab === 'proposals' ? 'min-w-0' : ''} ${
             activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
               ? 'lg:sticky lg:top-20 lg:self-start'
               : ''
@@ -7658,7 +7690,7 @@ export default function LeadDetailPage({
                       (history || document.getElementById(`proposal-activity-${proposal.id}`))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                     })
                   }
-                  return <article key={proposal.id} className="min-w-0 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                  return <article key={proposal.id} className="min-w-0 overflow-visible rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
                     <details open={proposalIndex === 0} className="group">
                       <summary className="flex min-h-20 cursor-pointer list-none items-center justify-between gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/50 sm:px-5 [&::-webkit-details-marker]:hidden">
                         <span className="min-w-0">
@@ -7716,11 +7748,23 @@ export default function LeadDetailPage({
                       {proposalCardState.canDuplicate ? <button type="button" onClick={() => duplicateProposalDraft(proposal)} aria-label={`Duplicate ${proposalLabel} to a new draft`} title="Starts a new draft from these saved event selections. Review the current price and discount before saving." className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Copy size={12} /> Duplicate</button> : null}
                       {proposalCardState.canEditDraft || proposalCardState.canRevise ? <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> {proposalCardState.canRevise ? 'Revise proposal' : 'Edit draft'}</button> : null}
                       <div className="relative">
-                        <button type="button" aria-haspopup="menu" aria-expanded={proposalCardMenuId === proposal.id} onClick={() => setProposalCardMenuId((openId) => openId === proposal.id ? null : proposal.id)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><MoreVertical size={12} /> More</button>
-                        {proposalCardMenuId === proposal.id ? <div role="menu" aria-label={`${proposalLabel} actions`} className="absolute right-0 z-20 mt-1 min-w-48 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-xl">
-                          <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); showProposalHistory() }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View activity</button>
-                          {proposalCardState.canDuplicate ? <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); duplicateProposalDraft(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Duplicate proposal</button> : null}
-                          {proposalCardState.canEditDraft || proposalCardState.canRevise ? <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); openProposalBuilder(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">{proposalCardState.canRevise ? 'Revise proposal' : 'Edit draft'}</button> : null}
+                        <button type="button" aria-haspopup="menu" aria-controls={`proposal-menu-${proposal.id}`} aria-expanded={proposalCardMenuId === proposal.id} onClick={(event) => { proposalCardMenuTriggerRef.current = event.currentTarget; setProposalCardMenuId((openId) => openId === proposal.id ? null : proposal.id) }} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><MoreVertical size={12} /> More</button>
+                        {proposalCardMenuId === proposal.id ? <div id={`proposal-menu-${proposal.id}`} ref={proposalCardMenuRef} role="menu" aria-label={`${proposalLabel} actions`} onKeyDown={(event) => {
+                          if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+                            const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                            const currentIndex = items.indexOf(document.activeElement as HTMLElement)
+                            const nextIndex = event.key === 'Home' ? 0
+                              : event.key === 'End' ? items.length - 1
+                                : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+                            event.preventDefault()
+                            items[nextIndex]?.focus()
+                          } else if (event.key === 'Tab') {
+                            window.setTimeout(() => setProposalCardMenuId(null), 0)
+                          }
+                        }} className="absolute right-0 z-20 mt-1 min-w-48 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-xl">
+                          <button type="button" tabIndex={-1} role="menuitem" onClick={() => { setProposalCardMenuId(null); showProposalHistory() }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View activity</button>
+                          {proposalCardState.canDuplicate ? <button type="button" tabIndex={-1} role="menuitem" onClick={() => { setProposalCardMenuId(null); duplicateProposalDraft(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Duplicate proposal</button> : null}
+                          {proposalCardState.canEditDraft || proposalCardState.canRevise ? <button type="button" tabIndex={-1} role="menuitem" onClick={() => { setProposalCardMenuId(null); openProposalBuilder(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">{proposalCardState.canRevise ? 'Revise proposal' : 'Edit draft'}</button> : null}
                         </div> : null}
                       </div>
                     </div>
