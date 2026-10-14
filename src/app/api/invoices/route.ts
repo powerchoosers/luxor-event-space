@@ -741,7 +741,14 @@ export async function PATCH(request: NextRequest) {
       try {
         const inquiry = await getLuxorInquiry(updatedInvoice.inquiry_id)
         if (inquiry) {
-          await queueInvoiceReminderTexts(updatedInvoice, { phone: inquiry.phone, name: inquiry.full_name })
+          const linkedBooking = updatedInvoice.booking_id
+            ? await getLuxorBooking(updatedInvoice.booking_id)
+            : updatedInvoice.parent_invoice_id
+              ? await getLuxorBookingByInvoice(updatedInvoice.parent_invoice_id)
+              : await getLuxorBookingByInvoice(updatedInvoice.id)
+          await queueInvoiceReminderTexts(updatedInvoice, { phone: inquiry.phone, name: inquiry.full_name }, {
+            final_payment_due_date: linkedBooking?.final_payment_due_date,
+          })
         }
       } catch (automationError) {
         console.error('Invoice updated, but its text reminders could not be queued:', automationError)

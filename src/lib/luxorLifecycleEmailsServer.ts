@@ -201,11 +201,12 @@ export async function generateAiInvoiceReminderCopy(input: {
   invoice: LuxorInvoice
   booking?: LuxorBooking | null
   balanceDue: number
+  dueDate?: string | null
   notes?: LuxorNote[]
   kind?: 'unpaid_invoice' | 'final_payment'
 }): Promise<{ copy: string; aiGenerated: boolean }> {
   const fallback = input.kind === 'final_payment'
-    ? `This is a reminder that your remaining Final Event Price balance is due on the date set out in your Event Agreement. The separate refundable security deposit is billed independently from your initial booking payment and remains held under the Event Agreement.`
+    ? `This is a reminder that your remaining Final Event Price balance is due${input.dueDate ? ` on ${input.dueDate}` : ' on the date set out in your Event Agreement'}. The separate refundable security deposit is billed independently from your initial booking payment and remains held under the Event Agreement.`
     : `We are reaching out to provide a quick update regarding your invoice for ${input.inquiry.event_type || 'your upcoming event'}. Please review the payment details below and let us know if you have any questions.`
 
   const apiKey = process.env.OPEN_ROUTER_API_KEY
@@ -227,7 +228,7 @@ export async function generateAiInvoiceReminderCopy(input: {
           {
             role: 'system',
             content:
-              'Write 2 warm, elegant, concise sentences for a Luxor Event Space payment reminder email. Tailor the text using client details, event type, guest count, the configured payment due date, deposit mode, and recent notes. Do not invent facts, amenities, or promises. Return only the two sentences (maximum 60 words total).',
+              'Write 2 warm, elegant, concise sentences for a Luxor Event Space payment reminder email. Tailor the text using client details, event type, guest count, the configured payment due date, deposit mode, and recent notes. If a due date is provided, state that exact date; never imply the payment is due soon or overdue unless the date supports that. Do not invent facts, amenities, or promises. Return only the two sentences (maximum 60 words total).',
           },
           {
             role: 'user',
@@ -238,6 +239,7 @@ export async function generateAiInvoiceReminderCopy(input: {
               guestCount: input.booking?.guest_count || input.inquiry.guest_count,
               packageName: input.booking?.package_name || input.inquiry.package_interest,
               balanceDue: input.balanceDue,
+              dueDate: input.dueDate || null,
               invoiceTotal: input.invoice.total,
               reminderKind: input.kind || 'unpaid_invoice',
               inquiryMessage: input.inquiry.message,
@@ -274,9 +276,9 @@ export async function buildAiTailoredInvoiceReminderEmail(input: {
 
   const finalPayment = input.kind === 'final_payment'
   const eyebrow = finalPayment ? 'Final Payment Reminder' : 'Invoice Payment Reminder'
-  const title = finalPayment ? 'Your Final Event Price balance is due soon' : 'Reminder: payment pending'
+  const title = finalPayment ? 'Final Event Price payment reminder' : 'Reminder: payment pending'
   const subject = finalPayment
-    ? `Upcoming final payment for your Luxor event (${money(input.balanceDue)})`
+    ? `Final payment reminder for your Luxor event (${money(input.balanceDue)})`
     : `Payment reminder: ${money(input.balanceDue)} remaining for your Luxor event`
 
   const securityDepositAmount = input.invoice.line_items

@@ -894,7 +894,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (inquiry.phone && updated) {
       try {
-        await queueInvoiceReminderTexts(updated, { phone: inquiry.phone, name: inquiry.full_name })
+        await queueInvoiceReminderTexts(updated, { phone: inquiry.phone, name: inquiry.full_name }, {
+          final_payment_due_date: booking?.final_payment_due_date,
+        })
         await createUniqueTextJob({
           jobType: 'invoice_due_reminder',
           phone: inquiry.phone,

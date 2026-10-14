@@ -21,6 +21,7 @@ import type {
   LuxorTextJobStatus,
 } from './luxorTextCampaignTypes'
 import { buildTwilioCallbackUrl, getLuxorTwilioMessagingConfig } from './luxorTwilioServer'
+import { getLuxorPaymentReminderDueDate } from './luxorPaymentReminderDueDate'
 
 const MAX_CAMPAIGN_RECIPIENTS = 1000
 const MAX_CAMPAIGN_BODY_LENGTH = 480
@@ -462,9 +463,14 @@ export async function queuePaymentConfirmationText(
 export async function queueInvoiceReminderTexts(
   invoice: LuxorInvoice,
   contact: { phone?: string | null; name: string },
+  paymentSchedule?: { final_payment_due_date?: string | null },
 ) {
-  if (!contact.phone || !invoice.due_date || invoice.status === 'paid' || invoice.status === 'cancelled') return []
-  const dueDate = new Date(`${invoice.due_date}T15:00:00Z`)
+  const invoiceDueDate = getLuxorPaymentReminderDueDate({
+    ...invoice,
+    final_payment_due_date: paymentSchedule?.final_payment_due_date,
+  })
+  if (!contact.phone || !invoiceDueDate || invoice.status === 'paid' || invoice.status === 'cancelled') return []
+  const dueDate = new Date(`${invoiceDueDate}T15:00:00Z`)
   const beforeDue = new Date(dueDate)
   beforeDue.setUTCDate(beforeDue.getUTCDate() - 3)
   const overdue = new Date(dueDate)
@@ -480,10 +486,10 @@ export async function queueInvoiceReminderTexts(
       inquiryId: invoice.inquiry_id,
       invoiceId: invoice.id,
       scheduledFor: beforeDue.toISOString(),
-      automationKey: `invoice_due:${invoice.id}:${invoice.due_date}`,
-      body: `Luxor Event Space: Hi ${firstName(contact.name)}, a friendly reminder that your ${amount} invoice is due ${formatDate(invoice.due_date)}. Please use your secure invoice link or contact us with questions. Reply STOP to opt out.`,
+      automationKey: `invoice_due:${invoice.id}:${invoiceDueDate}`,
+      body: `Luxor Event Space: Hi ${firstName(contact.name)}, a friendly reminder that your ${amount} invoice is due ${formatDate(invoiceDueDate)}. Please use your secure invoice link or contact us with questions. Reply STOP to opt out.`,
       requiredScope: 'invoice',
-      metadata: { due_date: invoice.due_date },
+      metadata: { due_date: invoiceDueDate },
     }))
   }
   jobs.push(await createUniqueTextJob({
@@ -493,10 +499,10 @@ export async function queueInvoiceReminderTexts(
     inquiryId: invoice.inquiry_id,
     invoiceId: invoice.id,
     scheduledFor: overdue.toISOString(),
-    automationKey: `invoice_overdue:${invoice.id}:${invoice.due_date}`,
-    body: `Luxor Event Space: Hi ${firstName(contact.name)}, our records show your ${amount} invoice due ${formatDate(invoice.due_date)} is still unpaid. Please use your secure invoice link or contact us for help. Reply STOP to opt out.`,
+    automationKey: `invoice_overdue:${invoice.id}:${invoiceDueDate}`,
+    body: `Luxor Event Space: Hi ${firstName(contact.name)}, our records show your ${amount} invoice due ${formatDate(invoiceDueDate)} is still unpaid. Please use your secure invoice link or contact us for help. Reply STOP to opt out.`,
     requiredScope: 'invoice',
-    metadata: { due_date: invoice.due_date },
+    metadata: { due_date: invoiceDueDate },
   }))
   return jobs.filter((job): job is LuxorTextJob => Boolean(job))
 }

@@ -106,6 +106,8 @@ import { SameDayReceiptDialog, type SameDayReceiptEvidence } from '@/components/
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { hasMatchingProposalBooking } from '@/lib/luxorProposalEvidence'
 import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext } from '@/lib/luxorProposalDuplicateContext'
+import { findProposalLeadEvent, getLeadClientProposals, getProposalCardState, getProposalWorkflowDisplayState, getSavedProposalPricingSummary } from '@/lib/luxorProposalCard'
+import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import {
   hasCancellableTour,
   LeadLifecycleActionSheet,
@@ -340,7 +342,7 @@ type EditableLeadField =
   | 'address'
 
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select'
-type LeadDetailTab = 'overview' | 'activity' | 'tasks' | 'vendors' | 'timeline' | 'proposals' | 'documents' | 'messages' | 'notes'
+type LeadDetailTab = 'overview' | 'activity' | 'proposals' | 'contract' | 'payments' | 'planning' | 'messages' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'notes'
 
 const LEAD_BUDGET_OPTIONS = [
   { value: 'Under $5,000', label: 'Under $5,000' },
@@ -382,6 +384,19 @@ type ProposalHistoryPayload = {
   sendAttempts: Array<{ id: string; channel: string; state: string; recipient_email?: string | null; provider?: string | null; started_at: string; sent_at?: string | null; delivery_confirmed_at?: string | null; failed_at?: string | null; failure_reason?: string | null }>
   hasMoreActivities?: boolean
   hasMoreSendAttempts?: boolean
+}
+
+function formatProposalLineBasis(item: LuxorInvoiceLineItem) {
+  const basis = item.quoteBreakdown
+  if (!basis) return `${item.quantity} × ${formatMoney(item.unitPrice)}`
+  const details = [`${basis.quantity} × ${formatMoney(basis.unit_price)}`]
+  if (basis.per_guest_rate !== undefined) details.push(`${formatMoney(basis.per_guest_rate)} per guest`)
+  if (basis.included_hours !== undefined) details.push(`${basis.included_hours} included hours`)
+  if (basis.additional_hours !== undefined) details.push(`${basis.additional_hours} additional hours`)
+  if (basis.additional_hour_rate !== undefined) details.push(`${formatMoney(basis.additional_hour_rate)} per additional hour`)
+  if (basis.minimum_price !== undefined) details.push(`${formatMoney(basis.minimum_price)} minimum price`)
+  if (basis.minimum !== undefined) details.push(`${formatMoney(basis.minimum)} minimum${basis.applied_minimum ? ' applied' : ''}`)
+  return details.join(' · ')
 }
 
 export default function LeadDetailPage({
@@ -813,6 +828,7 @@ export default function LeadDetailPage({
     [eventBookingIds, invoices, selectedLeadEvent],
   )
   const eventInvoiceIds = useMemo(() => new Set(eventInvoices.map((invoice) => invoice.id)), [eventInvoices])
+  const clientProposals = useMemo(() => getLeadClientProposals(invoices), [invoices])
   const eventPayments = useMemo(
     () => selectedLeadEvent
       ? payments.filter((payment) => Boolean((payment.booking_id && eventBookingIds.has(payment.booking_id)) || (payment.invoice_id && eventInvoiceIds.has(payment.invoice_id))))
@@ -853,16 +869,30 @@ export default function LeadDetailPage({
   const activeEventForDisplay = useMemo(() => {
     if (!lead) return null
     if (!selectedLeadEvent) return null
+    const proposalEvent = currentProposalInvoice ? findProposalLeadEvent(currentProposalInvoice, leadEvents, bookings) : null
+    const proposalAppliesToEvent = proposalEvent?.id === selectedLeadEvent.id
+    const proposalWorkflow = getProposalWorkflowDisplayState({
+      currentStatus: selectedLeadEvent.status,
+      currentPipelineStage: selectedLeadEvent.pipeline_stage,
+      proposalAcceptedAt: proposalAppliesToEvent ? currentProposalInvoice?.proposal_accepted_at : null,
+      proposalInvoiceId: proposalAppliesToEvent ? currentProposalInvoice?.id : null,
+      bookingInvoiceId: proposalAppliesToEvent ? currentProposalBooking?.invoice_id : null,
+      contractStatus: proposalAppliesToEvent ? currentProposalBooking?.contract_status : null,
+    })
     const sharedTourReached = ['tour_confirmed', 'proposal_sent', 'booked'].includes(lead.status)
     const sharedTourCompleted = lead.tour_attendance_status === 'attended'
     return {
       ...selectedLeadEvent,
-      status: selectedLeadEvent.status === 'new' && sharedTourReached ? 'tour_confirmed' as const : selectedLeadEvent.status,
-      pipeline_stage: ['inquiry', 'tour'].includes(selectedLeadEvent.pipeline_stage) && sharedTourCompleted
+      status: proposalWorkflow.proposalAccepted
+        ? 'booked' as const
+        : selectedLeadEvent.status === 'new' && sharedTourReached ? 'tour_confirmed' as const : selectedLeadEvent.status,
+      pipeline_stage: proposalWorkflow.pipelineStage === 'contract'
+        ? 'contract' as const
+        : ['inquiry', 'tour'].includes(selectedLeadEvent.pipeline_stage) && sharedTourCompleted
         ? 'proposal' as const
         : selectedLeadEvent.pipeline_stage === 'inquiry' && sharedTourReached ? 'tour' as const : selectedLeadEvent.pipeline_stage,
     }
-  }, [lead, selectedLeadEvent])
+  }, [bookings, currentProposalBooking, currentProposalInvoice, lead, leadEvents, selectedLeadEvent])
   const lifecycleLead = useMemo(() => {
     if (!lead) return null
     if (!activeEventForDisplay) return lead
@@ -2168,13 +2198,13 @@ export default function LeadDetailPage({
     setPublicationPending(false)
     proposalEditorOpenRef.current = true
     setEditingInvoiceId(invoice?.id || null)
-    const sourceEvent = (invoice?.lead_event_id ? leadEvents.find((event) => event.id === invoice.lead_event_id) : null) || selectedLeadEvent
-    setProposalLeadEventId(invoice?.lead_event_id || sourceEvent?.id || null)
+    const sourceEvent = invoice ? findProposalLeadEvent(invoice, leadEvents, bookings) : selectedLeadEvent
+    setProposalLeadEventId(invoice ? invoice.lead_event_id || sourceEvent?.id || null : sourceEvent?.id || null)
     setProposalCalculation(null)
 
     const savedContext = invoice?.proposal_context || null
-    const eventDate = String(savedContext?.event_date || sourceEvent?.target_date || lead?.target_date || '')
-    const guestCount = asProposalNumber(savedContext?.expected_guest_count, sourceEvent?.guest_count, lead?.guest_count)
+    const eventDate = String(savedContext?.event_date || sourceEvent?.target_date || (invoice ? '' : lead?.target_date) || '')
+    const guestCount = asProposalNumber(savedContext?.expected_guest_count, sourceEvent?.guest_count, invoice ? undefined : lead?.guest_count)
     const requestedRentalPeriod = String(savedContext?.rental_period || sourceEvent?.metadata?.rental_period || 'evening')
     const rentalPeriod = requestedRentalPeriod === 'morning' || requestedRentalPeriod === 'full_day'
       ? requestedRentalPeriod
@@ -2183,13 +2213,13 @@ export default function LeadDetailPage({
       savedContext?.package_id
       || invoice?.proposal_context?.package_name
       || sourceEvent?.package_interest
-      || lead?.package_interest,
+      || (invoice ? null : lead?.package_interest),
     ) || 'rent_only'
     const savedSelection = asProposalRecord(savedContext?.pricing_selection) || {}
     const savedPromotionId = String(savedSelection.promotionId || savedSelection.promotion_id || savedContext?.promotionId || savedContext?.promotion_id || '').trim() || null
     const nextContext: ProposalBuilderContext = {
       version: asProposalNumber(savedContext?.version, 1) || 1,
-      event_type: String(savedContext?.event_type || sourceEvent?.event_type || lead?.event_type || 'Event Booking'),
+      event_type: String(savedContext?.event_type || invoice?.event_type || sourceEvent?.event_type || (invoice ? 'Event' : lead?.event_type) || 'Event Booking'),
       ...(eventDate ? { event_date: eventDate } : {}),
       ...(guestCount ? { expected_guest_count: guestCount } : {}),
       rental_period: rentalPeriod,
@@ -2221,7 +2251,7 @@ export default function LeadDetailPage({
       // the same as a new proposal so the owner starts with a real editable
       // value (not only a placeholder), while never replacing an existing
       // custom title.
-      setInvoiceDesc(invoice.description?.trim() || defaultProposalTitle(lead?.full_name, activeEventForDisplay?.event_type || lead?.event_type || 'Event'))
+      setInvoiceDesc(invoice.description?.trim() || defaultProposalTitle(lead?.full_name, invoice.event_type || sourceEvent?.event_type || lead?.event_type || 'Event'))
       setInvoiceDueDate(invoice.due_date || expiry?.toISOString().slice(0, 10) || '')
       setInvoiceOfferExpiryTime(normalizeOfferExpiryTime(expiryTime))
       const discountType = invoice.discount_type === 'fixed' ? 'fixed' : 'percent'
@@ -2254,13 +2284,13 @@ export default function LeadDetailPage({
 
   const duplicateProposalDraft = (invoice: LuxorInvoice) => {
     openProposalBuilder()
-    const sourceEvent = (invoice.lead_event_id ? leadEvents.find((event) => event.id === invoice.lead_event_id) : null) || selectedLeadEvent
+    const sourceEvent = findProposalLeadEvent(invoice, leadEvents, bookings)
     const savedContext = asProposalRecord(invoice.proposal_context) || {}
     const savedSelection = asProposalRecord(savedContext.pricing_selection) || {}
     const promotionSnapshot = asProposalRecord(invoice.promotion_snapshot) || {}
     const savedPromotionId = String(savedSelection.promotionId || savedSelection.promotion_id || savedContext.promotionId || savedContext.promotion_id || invoice.promotion_id || promotionSnapshot.id || '').trim() || null
     const packageId = normalizeProposalPackageId(savedContext.package_id || savedContext.package_name) || 'rent_only'
-    const rentalPeriod = String(savedContext.rental_period || 'evening')
+    const rentalPeriod = String(savedContext.rental_period || sourceEvent?.metadata?.rental_period || 'evening')
     const sourceRentalPeriod = sourceEvent?.metadata?.rental_period
     const sourceRentalPeriodFallback = sourceRentalPeriod === 'morning' || sourceRentalPeriod === 'full_day' || sourceRentalPeriod === 'custom' || sourceRentalPeriod === 'evening'
       ? sourceRentalPeriod
@@ -2270,7 +2300,7 @@ export default function LeadDetailPage({
     const discountValue = asProposalNumber(invoice.discount_value, invoice.discount_percent, 0) || 0
     const nextContext: ProposalBuilderContext = {
       version: 1,
-      event_type: String(savedContext.event_type || invoice.event_type || sourceEvent?.event_type || lead?.event_type || 'Event Booking'),
+      event_type: String(savedContext.event_type || invoice.event_type || sourceEvent?.event_type || 'Event Booking'),
       ...(savedContext.event_date || savedContext.eventDate || sourceEvent?.target_date ? { event_date: String(savedContext.event_date || savedContext.eventDate || sourceEvent?.target_date) } : {}),
       ...(asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count) ? { expected_guest_count: asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count)! } : {}),
       rental_period: rentalPeriod === 'morning' || rentalPeriod === 'full_day' || rentalPeriod === 'custom' || rentalPeriod === 'evening' ? rentalPeriod : sourceRentalPeriodFallback,
@@ -2292,7 +2322,7 @@ export default function LeadDetailPage({
     setProposalLeadEventId(invoice.lead_event_id || sourceEvent?.id || null)
     setSelectedProposalPackageId(packageId)
     setSelectedProposalPromotionId(savedPromotionId)
-    setProposalGuestCount(asProposalNumber(savedContext.expected_guest_count) ? String(asProposalNumber(savedContext.expected_guest_count)) : '')
+    setProposalGuestCount(asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count) ? String(asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count)) : '')
     setInvoiceDesc(`${invoice.description?.trim() || defaultProposalTitle(lead?.full_name, invoice.event_type || lead?.event_type || 'Event')} copy`)
     setInvoiceDueDate('')
     setInvoiceOfferExpiryTime(DEFAULT_OFFER_EXPIRY_TIME)
@@ -3327,11 +3357,12 @@ export default function LeadDetailPage({
     const requestedPlanningTab = searchParams?.get('planningTab')
     let timeoutId: number | null = null
 
-    if (requestedTab && ['overview', 'activity', 'tasks', 'vendors', 'timeline', 'proposals', 'documents', 'messages', 'notes'].includes(requestedTab)) {
+    if (requestedTab && ['overview', 'activity', 'tasks', 'vendors', 'timeline', 'proposals', 'contract', 'payments', 'planning', 'documents', 'messages', 'notes'].includes(requestedTab)) {
       setActiveLeadTab(requestedTab as LeadDetailTab)
       if (requestedTab === 'tasks') {
         setShowTaskTools(true)
       }
+      if (requestedTab === 'planning') setSelectedStageOverride('planning')
     }
 
     if (requestedStage) {
@@ -3409,6 +3440,14 @@ export default function LeadDetailPage({
   const proposalBooking = proposalInvoice
     ? bookings.find((booking) => booking.invoice_id === proposalInvoice.id) || null
     : null
+  const proposalWorkflowDisplay = getProposalWorkflowDisplayState({
+    currentStatus: lead.status,
+    currentPipelineStage: lead.pipeline_stage || 'inquiry',
+    proposalAcceptedAt: proposalInvoice?.proposal_accepted_at,
+    proposalInvoiceId: proposalInvoice?.id,
+    bookingInvoiceId: proposalBooking?.invoice_id,
+    contractStatus: proposalBooking?.contract_status,
+  })
   const agreementBooking = proposalInvoice ? proposalBooking : latestBooking
   const bookingContractAmount = Number(agreementBooking?.contract_total || 0)
   const bookingDepositAmount = Number(agreementBooking?.deposit_required || 0)
@@ -3665,8 +3704,9 @@ export default function LeadDetailPage({
   const pushRecommendedAction = (action: (typeof recommendedActions)[number]) => {
     recommendedActions.push(action)
   }
+  const derivedLeadStatus = proposalWorkflowDisplay.proposalAccepted ? 'booked' : lead.status
 
-  if (lead.status === 'closed_lost') {
+  if (derivedLeadStatus === 'closed_lost') {
     pushRecommendedAction({
       icon: <ArrowLeft size={15} />,
       label: 'Re-open lead',
@@ -3675,7 +3715,7 @@ export default function LeadDetailPage({
       disabled: updatingStatus,
       loading: updatingStatus,
     })
-  } else if (lead.status === 'new') {
+  } else if (derivedLeadStatus === 'new') {
     pushRecommendedAction({
       icon: <Phone size={15} />,
       label: 'Mark contacted',
@@ -3684,7 +3724,7 @@ export default function LeadDetailPage({
       disabled: updatingStatus,
       loading: updatingStatus,
     })
-  } else if (lead.status === 'contacted' || lead.status === 'tour_requested') {
+  } else if (derivedLeadStatus === 'contacted' || derivedLeadStatus === 'tour_requested') {
     pushRecommendedAction({
       icon: <Calendar size={15} />,
       label: 'Schedule tour & send invite',
@@ -3692,7 +3732,7 @@ export default function LeadDetailPage({
       onClick: openTourScheduleModal,
       disabled: !lead.email,
     })
-  } else if (lead.status === 'tour_confirmed') {
+  } else if (derivedLeadStatus === 'tour_confirmed') {
     pushRecommendedAction({
       icon: <FileSignature size={15} />,
       label: 'Mark proposal sent',
@@ -3701,7 +3741,7 @@ export default function LeadDetailPage({
       disabled: updatingStatus,
       loading: updatingStatus,
     })
-  } else if (lead.status === 'proposal_sent') {
+  } else if (derivedLeadStatus === 'proposal_sent') {
     pushRecommendedAction({
       icon: <MessageSquare size={15} />,
       label: 'Follow up on proposal',
@@ -3711,7 +3751,7 @@ export default function LeadDetailPage({
         scrollToSection('lead-activity')
       },
     })
-  } else if (lead.status === 'booked') {
+  } else if (derivedLeadStatus === 'booked') {
     pushRecommendedAction({
       icon: <FileSignature size={15} />,
       label: !proposalInvoice
@@ -3865,21 +3905,25 @@ export default function LeadDetailPage({
   const tabItems: Array<{ id: LeadDetailTab; label: string; count?: number }> = [
     { id: 'overview', label: 'Overview' },
     { id: 'activity', label: 'Activity', count: activityCounts.all },
+    { id: 'proposals', label: 'Proposals', count: clientProposals.length },
+    { id: 'contract', label: 'Contract' },
+    { id: 'payments', label: 'Payments' },
+    { id: 'planning', label: 'Planning' },
+    { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'tasks', label: 'Tasks', count: pendingTaskCount },
     { id: 'vendors', label: 'Vendors', count: (lead?.metadata?.vendors as unknown[])?.length || 0 },
     { id: 'timeline', label: 'Timeline', count: (lead?.metadata?.timeline as unknown[])?.length || 0 },
-    { id: 'proposals', label: 'Proposals', count: sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').length },
     { id: 'documents', label: 'Documents', count: documents.length + signatureRequests.length },
-    { id: 'messages', label: 'Messages', count: activityCounts.comms },
     { id: 'notes', label: 'Notes', count: activityCounts.notes },
   ]
-  const primaryLeadTabIds: LeadDetailTab[] = ['overview', 'proposals', 'activity', 'tasks', 'messages']
+  const primaryLeadTabIds: LeadDetailTab[] = ['overview', 'activity', 'proposals', 'contract', 'payments', 'planning', 'messages', 'tasks']
   const isPrimaryLeadTab = (tabId: LeadDetailTab) => primaryLeadTabIds.includes(tabId)
   const primaryLeadTabs = tabItems.filter((item) => isPrimaryLeadTab(item.id))
   const secondaryLeadTabs = tabItems.filter((item) => !isPrimaryLeadTab(item.id))
   const selectLeadTab = (item: { id: LeadDetailTab }) => {
     setActiveLeadTab(item.id)
     if (!isPrimaryLeadTab(item.id)) setShowLeadTabOverflow(true)
+    if (item.id === 'planning') setSelectedStageOverride('planning')
     if (item.id === 'messages') setActiveFeedTab('comms')
     if (item.id === 'notes') setActiveFeedTab('notes')
     if (item.id === 'activity') setActiveFeedTab('all')
@@ -4055,7 +4099,7 @@ export default function LeadDetailPage({
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
             <Calendar size={12} /> Tour scheduled
           </span>
-        ) : <PortalStatusBadge status={lead.status} />}
+        ) : <PortalStatusBadge status={proposalWorkflowDisplay.status} />}
       </div>
 
       <section className="overflow-visible rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
@@ -4385,7 +4429,7 @@ export default function LeadDetailPage({
             activeStageId={selectedStageOverride || activeStage}
             onStepClick={(stageId) => {
               setSelectedStageOverride(stageId)
-              setActiveLeadTab('overview')
+              setActiveLeadTab(stageId === 'proposal' ? 'proposals' : stageId === 'contract' ? 'contract' : ['deposit', 'final_payment'].includes(stageId) ? 'payments' : stageId === 'planning' ? 'planning' : 'overview')
             }}
           />
         </div>
@@ -4400,7 +4444,7 @@ export default function LeadDetailPage({
         }}
       >
         <div className="lg:hidden px-3 py-2.5">
-          <div role="tablist" aria-label="Lead detail sections" className="grid grid-cols-5 gap-1 rounded-xl bg-[color:var(--portal-soft)] p-1">
+          <div role="tablist" aria-label="Client sections" className="grid grid-cols-4 gap-1 rounded-xl bg-[color:var(--portal-soft)] p-1">
             {primaryLeadTabs.map((item) => {
               const isActive = activeLeadTab === item.id
               return (
@@ -4451,13 +4495,14 @@ export default function LeadDetailPage({
             </div>
           ) : null}
         </div>
-        <div className="hidden lg:block portal-scrollbar overflow-x-auto bg-transparent px-4">
-          <div className="relative flex min-w-max gap-5">
+        <div className="hidden lg:block bg-transparent px-4">
+          <div className="flex items-center justify-between gap-4">
+          <div role="tablist" aria-label="Client sections" className="relative flex min-w-0 flex-1 gap-5 overflow-x-auto portal-scrollbar">
             <span
               className="absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
               style={{ left: tabIndicator.left, width: tabIndicator.width }}
             />
-            {tabItems.map((item) => {
+            {primaryLeadTabs.map((item) => {
               const isActive = activeLeadTab === item.id
               return (
                 <button
@@ -4466,6 +4511,8 @@ export default function LeadDetailPage({
                     tabButtonRefs.current[item.id] = node
                   }}
                   type="button"
+                  role="tab"
+                  aria-selected={isActive}
                   onClick={() => selectLeadTab(item)}
                   className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${isActive ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
                 >
@@ -4475,17 +4522,31 @@ export default function LeadDetailPage({
               )
             })}
           </div>
+          <button type="button" onClick={() => setShowLeadTabOverflow((current) => !current)} aria-expanded={showLeadTabOverflow} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">
+            {showLeadTabOverflow ? 'Hide sections' : 'More sections'} <ChevronDown size={12} className={showLeadTabOverflow ? 'rotate-180 transition-transform' : 'transition-transform'} />
+          </button>
+          </div>
+          {showLeadTabOverflow ? (
+            <div role="tablist" aria-label="Additional client sections" className="mt-1 flex flex-wrap gap-1 border-t border-[color:var(--portal-border)] py-1">
+              {secondaryLeadTabs.map((item) => {
+                const isActive = activeLeadTab === item.id
+                return <button key={item.id} ref={(node) => { tabButtonRefs.current[item.id] = node }} type="button" role="tab" aria-selected={isActive} onClick={() => selectLeadTab(item)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
+                  {item.label}{typeof item.count === 'number' ? <span className="font-mono text-[8px] opacity-70">{item.count}</span> : null}
+                </button>
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {activeLeadTab === 'overview' ? (
+      {activeLeadTab === 'overview' || activeLeadTab === 'planning' ? (
         <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:sticky lg:top-[3.25rem] lg:h-[calc(100dvh-7.25rem)] lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:pb-0">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
           <div className="space-y-6 px-2.5 pt-2 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-3 lg:pt-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
             
             {/* Stage-specific Content Router */}
             {(() => {
-              const currentStage = selectedStageOverride || activeStage
+              const currentStage = activeLeadTab === 'planning' ? 'planning' : selectedStageOverride || activeStage
               
               if (currentStage === 'newsletter') {
                 return (
@@ -7480,7 +7541,7 @@ export default function LeadDetailPage({
               </div>
               <button type="button" onClick={() => openProposalBuilder()} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition hover:bg-[#dfbd68]"><Plus size={14} /> Create New Proposal</button>
             </div>
-            {sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').length === 0 ? (
+            {clientProposals.length === 0 ? (
               <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">
                 <p className="font-semibold text-[color:var(--portal-text)]">No proposals saved for this lead yet.</p>
                 <p className="mt-1">Start a draft. It will appear here after it is saved.</p>
@@ -7488,11 +7549,13 @@ export default function LeadDetailPage({
               </div>
             ) : (
               <div className="mt-5 space-y-3">
-                {sortedInvoices.filter((invoice) => !invoice.invoice_kind || invoice.invoice_kind === 'event').map((proposal, proposalIndex) => {
+                {clientProposals.map((proposal, proposalIndex) => {
                   const context = asProposalRecord(proposal.proposal_context) || {}
                   const selection = asProposalRecord(context.pricing_selection) || {}
-                  const date = String(context.event_date || context.eventDate || '')
-                  const guestCount = asProposalNumber(context.expected_guest_count, context.expectedGuestCount)
+                  const proposalEvent = findProposalLeadEvent(proposal, leadEvents, bookings)
+                  const eventType = String(context.event_type || proposal.event_type || proposalEvent?.event_type || 'Event')
+                  const date = String(context.event_date || context.eventDate || proposalEvent?.target_date || '')
+                  const guestCount = asProposalNumber(context.expected_guest_count, context.expectedGuestCount, proposalEvent?.guest_count)
                   const period = String(context.rental_period || selection.rentalPeriod || 'Rental')
                   const custom = period === 'custom'
                   const rentalStart = String(context.rental_start_time || context.start_time || selection.rentalStartTime || selection.rental_start_time || '')
@@ -7504,58 +7567,67 @@ export default function LeadDetailPage({
                     : `${period.replaceAll('_', ' ')} rental${fixedWindow ? ` · ${fixedWindow}` : ''}`
                   const proposalActivities = (proposalHistory[proposal.id]?.activities || []).filter((activity) => activity.invoice_id === proposal.id)
                   const proposalActivityTypes = new Set(proposalActivities.map((activity) => activity.event_type))
-                  const proposalBooking = eventBookings.find((booking) => booking.invoice_id === proposal.id) || null
+                  const proposalBooking = bookings.find((booking) => booking.invoice_id === proposal.id || booking.id === proposal.booking_id) || null
                   const acceptedActivity = proposalActivities.find((activity) => activity.event_type === 'accepted') || null
-                  const hasAcceptanceEvidence = Boolean(proposal.proposal_accepted_at || acceptedActivity || proposalBooking)
-                  const firstView = proposal.proposal_viewed_at ? formatVenueDateTime(proposal.proposal_viewed_at) : null
-                  const latestView = proposal.proposal_latest_viewed_at ? formatVenueDateTime(proposal.proposal_latest_viewed_at) : firstView
-                  const acceptedAt = proposal.proposal_accepted_at ? formatVenueDateTime(proposal.proposal_accepted_at) : null
+                  const hasSignedAgreement = Boolean(proposalBooking && signatureRequests.some((signature) => signature.booking_id === proposalBooking.id && (signature.status === 'signed' || Boolean(signature.signed_at))))
+                  const latestView = proposal.proposal_latest_viewed_at || proposal.proposal_viewed_at || null
                   const latestSentAt = proposal.proposal_latest_sent_at || proposal.proposal_sent_at || (proposal.status === 'sent' ? proposal.updated_at : null)
                   const proposalHasBeenPublished = Boolean(proposal.proposal_sent_at || proposal.status === 'sent' || proposal.price_locked_at)
                   const hasActiveSend = (proposalHistory[proposal.id]?.sendAttempts || []).some((attempt) => ['preparing', 'sending', 'delivery_unconfirmed'].includes(attempt.state))
-                  const offerExpired = proposal.offer_status === 'expired' || proposalActivityTypes.has('expired') || Boolean(proposal.offer_expires_at && Date.parse(proposal.offer_expires_at) <= Date.now())
-                  const lifecycleStatus = hasAcceptanceEvidence ? 'Accepted'
-                    : proposalActivityTypes.has('superseded') ? 'Superseded'
-                       : offerExpired ? 'Expired'
-                         : hasActiveSend ? 'Sending'
-                           : latestView ? 'Viewed'
-                             : proposalActivityTypes.has('delivered') ? 'Delivered'
-                             : proposal.proposal_sent_at || proposal.status === 'sent' ? 'Sent' : 'Draft'
+                  const proposalCardState = getProposalCardState({
+                    invoice: proposal,
+                    activities: proposalActivities,
+                    hasLinkedBooking: Boolean(proposalBooking),
+                    hasSignedAgreement,
+                    hasSupersedingProposal: clientProposals.some((candidate) => candidate.supersedes_invoice_id === proposal.id),
+                    hasActiveSend,
+                    proposalHistoryEnabled: proposalHistory[proposal.id]?.enabled === true,
+                  })
+                  const hasAcceptanceEvidence = proposalCardState.isAccepted
+                  const lifecycleStatus = proposalCardState.label
                   const statusClass = lifecycleStatus === 'Accepted'
                     ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : lifecycleStatus === 'Declined' || lifecycleStatus === 'Cancelled'
+                      ? 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300'
                     : lifecycleStatus === 'Viewed'
                       ? 'border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300'
                       : lifecycleStatus === 'Sent' || lifecycleStatus === 'Delivered'
                         ? 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300'
                         : lifecycleStatus === 'Sending'
                           ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                          : lifecycleStatus === 'Expired'
-                            ? 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300'
-                            : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
+                          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
                   const proposalLabel = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
                     ? `Proposal #${proposal.proposal_number}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
-                    : proposal.status === 'sent' ? 'Existing proposal' : 'Draft proposal'
+                    : proposalHasBeenPublished ? 'Existing proposal' : 'Draft proposal'
                   const proposalIdentifier = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
                     ? `#${proposal.proposal_number}`
                     : proposal.id
-                  const taxRate = Number(proposal.tax_rate || 0)
-                  const shownTaxRate = taxRate > 1 ? taxRate : taxRate * 100
-                  const invoiceSubtotal = Number(proposal.original_subtotal ?? proposal.subtotal ?? proposal.total ?? 0)
-                  const proposalDiscount = Number(proposal.discount_amount || 0)
-                  const lineItems = Array.isArray(proposal.line_items) ? proposal.line_items : []
+                  const savedPricing = getSavedProposalPricingSummary(proposal)
+                  const shownTaxRate = savedPricing.taxRate * 100
+                  const lineItems = savedPricing.lineItems
+                  const invoiceSubtotal = savedPricing.subtotal
+                  const proposalDiscount = savedPricing.discountAmount
+                  const savedTaxAmount = savedPricing.taxAmount
+                  const savedPackageName = savedPricing.packageName
+                  const paymentPlan = savedPricing.paymentPlan
+                  const paymentPlanLabel = paymentPlan?.mode === 'pay_in_full'
+                    ? 'Pay in full'
+                    : paymentPlan?.mode === 'deposit_and_balance'
+                      ? `Deposit and balance${paymentPlan.final_payment_due_days_before_event !== undefined ? ` · final payment ${paymentPlan.final_payment_due_days_before_event} days before event` : ''}`
+                      : 'Payment terms not recorded'
                   const paymentInvoices = proposalBooking
-                    ? sortedInvoices.filter((invoice) => invoice.booking_id === proposalBooking.id && invoice.invoice_kind !== 'event')
-                    : []
+                    ? invoices.filter((invoice) => (invoice.booking_id === proposalBooking.id || invoice.parent_invoice_id === proposal.id) && invoice.invoice_kind !== 'event')
+                    : invoices.filter((invoice) => invoice.parent_invoice_id === proposal.id && invoice.invoice_kind !== 'event')
                   const paidProposalPayments = proposalBooking
-                    ? payments.filter((payment) => payment.booking_id === proposalBooking.id && payment.status === 'paid')
+                    ? payments.filter((payment) => payment.status === 'paid' && (payment.booking_id === proposalBooking.id || paymentInvoices.some((invoice) => invoice.id === payment.invoice_id) || payment.invoice_id === proposal.id))
                     : []
                   const latestProposalPayment = [...paidProposalPayments].sort((a, b) => Date.parse(b.paid_at || b.updated_at) - Date.parse(a.paid_at || a.updated_at))[0]
                   const paidPaymentInvoice = paymentInvoices.find((invoice) => invoice.status === 'paid')
                   const proposalMilestones: Array<[string, string, string | null, string]> = [
                     ['sent', 'Proposal sent', latestSentAt, 'Not sent yet'],
-                    ['viewed', 'Proposal viewed', proposal.proposal_viewed_at || null, 'Not yet viewed'],
+                    ['viewed', 'Proposal viewed', latestView, 'Not yet viewed'],
                     ['accepted', 'Proposal accepted', proposal.proposal_accepted_at || acceptedActivity?.occurred_at || null, hasAcceptanceEvidence && !proposal.proposal_accepted_at && !acceptedActivity ? 'Booking linked; acceptance timestamp unavailable' : hasAcceptanceEvidence && !proposal.proposal_accepted_at ? 'Acceptance recorded in proposal history' : 'Not yet accepted'],
-                    ['agreement', 'Agreement signed', proposalBooking?.contract_status === 'signed' ? proposalBooking.contract_signed_at || proposalBooking.updated_at : null, 'Not yet signed'],
+                    ['agreement', 'Agreement signed', proposalBooking?.contract_status === 'signed' ? proposalBooking.contract_signed_at || proposalBooking.updated_at : null, proposalBooking?.contract_status === 'viewed' ? 'Opened; awaiting signature' : 'Not yet signed'],
                     ['invoice', 'Payment invoice created', paymentInvoices[0]?.created_at || null, 'Not yet created'],
                     ['payment', 'Payment received', latestProposalPayment?.paid_at || paidPaymentInvoice?.paid_at || null, 'Not yet received'],
                   ]
@@ -7576,7 +7648,7 @@ export default function LeadDetailPage({
                             <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${statusClass}`}>{lifecycleStatus}</span>
                           </span>
                           <span className="mt-1 block truncate text-sm font-bold text-[color:var(--portal-text)]">{proposal.description || `${proposal.event_type || 'Event'} proposal`}</span>
-                          <span className="mt-1 block truncate text-[10px] text-[color:var(--portal-muted)]">{date ? formatDisplayDate(date) : 'Event date not set'}{guestCount ? ` · ${guestCount} guests` : ''}</span>
+                          <span className="mt-1 block truncate text-[10px] text-[color:var(--portal-muted)]">{eventType}{date ? ` · ${formatDisplayDate(date)}` : ' · Event date not set'}{guestCount ? ` · ${guestCount} guests` : ''}</span>
                           <span className="mt-1 block text-[9px] text-[color:var(--portal-muted)]">Created {formatVenueDateTime(proposal.created_at)} · Expires {proposal.offer_expires_at ? formatVenueDateTime(proposal.offer_expires_at) : 'No expiry set'}</span>
                         </span>
                         <span className="flex shrink-0 items-center gap-3">
@@ -7586,22 +7658,28 @@ export default function LeadDetailPage({
                       </summary>
                       <div className="border-t border-[color:var(--portal-border)] p-4 sm:p-5">
                     <p className="text-[11px] capitalize text-[color:var(--portal-muted)]">{shownPeriod}</p>
-                    <dl className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[10px] sm:grid-cols-4">
+                    <dl className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[10px] sm:grid-cols-3 xl:grid-cols-5">
                       <div><dt className="text-[color:var(--portal-muted)]">Created</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.created_at)}</dd></div>
                       <div><dt className="text-[color:var(--portal-muted)]">Last sent</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestSentAt ? formatVenueDateTime(latestSentAt) : 'Not sent yet'}</dd></div>
                       <div><dt className="text-[color:var(--portal-muted)]">Last viewed</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{latestView || 'Not viewed'}</dd></div>
                       <div><dt className="text-[color:var(--portal-muted)]">Expires</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{proposal.offer_expires_at ? formatVenueDateTime(proposal.offer_expires_at) : 'No expiry set'}</dd></div>
+                      <div><dt className="text-[color:var(--portal-muted)]">Last modified</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatVenueDateTime(proposal.updated_at || proposal.created_at)}</dd></div>
+                    </dl>
+                    <dl className="mt-3 grid gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[10px] sm:grid-cols-2">
+                      <div><dt className="text-[color:var(--portal-muted)]">Saved package</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{savedPackageName}</dd></div>
+                      <div><dt className="text-[color:var(--portal-muted)]">Saved payment plan</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{paymentPlanLabel}</dd></div>
+                      {savedPricing.amountDueToBook !== null ? <div><dt className="text-[color:var(--portal-muted)]">Due to book</dt><dd className="mt-0.5 text-[color:var(--portal-text)]">{formatMoney(savedPricing.amountDueToBook)}</dd></div> : null}
                     </dl>
                     <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                       <section className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3" aria-label="Proposal details">
                         <h4 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Proposal details</h4>
                         {lineItems.length ? <ul className="mt-2 divide-y divide-[color:var(--portal-border)] text-[10px]">
-                          {lineItems.map((item, index) => <li key={`${proposal.id}-line-${index}`} className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0"><span className="min-w-0 text-[color:var(--portal-muted)]">{item.description || 'Service'}{Number(item.quantity) > 1 ? ` × ${item.quantity}` : ''}</span><span className="shrink-0 font-medium text-[color:var(--portal-text)]">{formatMoney(item.total)}</span></li>)}
+                          {lineItems.map((item, index) => <li key={`${proposal.id}-line-${index}`} className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0"><span className="min-w-0 text-[color:var(--portal-muted)]"><span className="block">{item.description || 'Service'}{Number(item.quantity) > 1 ? ` × ${item.quantity}` : ''}</span>{item.quoteBreakdown ? <span className="mt-0.5 block text-[9px]">{formatProposalLineBasis(item)}</span> : null}{item.detail ? <span className="mt-0.5 block text-[9px] leading-4">{item.detail}</span> : null}</span><span className="shrink-0 font-medium text-[color:var(--portal-text)]">{formatMoney(item.total)}</span></li>)}
                         </ul> : <p className="mt-2 text-[10px] text-[color:var(--portal-muted)]">No itemized services are saved on this proposal.</p>}
                         <dl className="mt-3 space-y-1.5 border-t border-[color:var(--portal-border)] pt-3 text-[10px]">
                           <div className="flex justify-between gap-3"><dt className="text-[color:var(--portal-muted)]">Subtotal</dt><dd className="text-[color:var(--portal-text)]">{formatMoney(invoiceSubtotal)}</dd></div>
                           {proposalDiscount > 0 ? <div className="flex justify-between gap-3"><dt className="text-[color:var(--portal-muted)]">Discount</dt><dd className="text-[color:var(--portal-text)]">−{formatMoney(proposalDiscount)}</dd></div> : null}
-                          {shownTaxRate > 0 ? <div className="flex justify-between gap-3"><dt className="text-[color:var(--portal-muted)]">Sales tax ({shownTaxRate.toFixed(2)}%)</dt><dd className="text-[color:var(--portal-text)]">{formatMoney(Math.max(0, Number(proposal.total || 0) - (invoiceSubtotal - proposalDiscount)))}</dd></div> : null}
+                          {shownTaxRate > 0 || savedTaxAmount !== null ? <div className="flex justify-between gap-3"><dt className="text-[color:var(--portal-muted)]">Sales tax{shownTaxRate > 0 ? ` (${shownTaxRate.toFixed(2)}%)` : ''}</dt><dd className="text-[color:var(--portal-text)]">{savedTaxAmount === null ? 'Saved amount unavailable' : formatMoney(savedTaxAmount)}</dd></div> : null}
                           <div className="flex justify-between gap-3 border-t border-[color:var(--portal-border)] pt-2 font-bold"><dt className="text-[color:var(--portal-text)]">Total proposal amount</dt><dd className="text-[color:var(--portal-text)]">{formatMoney(proposal.total)}</dd></div>
                         </dl>
                       </section>
@@ -7614,15 +7692,15 @@ export default function LeadDetailPage({
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button type="button" onClick={() => openProposalDeliveryPreview(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Eye size={12} /> View proposal</button>
-                      {proposal.status === 'sent' && proposalHistory[proposal.id]?.enabled === true ? <button type="button" onClick={() => void handleSendFinalProposal(proposal, false, true)} disabled={!lead.email || sendingInvoiceId === proposal.id} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === proposal.id ? 'Sending…' : 'Resend proposal'}</button> : null}
-                      <button type="button" onClick={() => duplicateProposalDraft(proposal)} aria-label={`Duplicate ${proposalLabel} to a new draft`} title="Starts a new draft from these event selections. Review the current price and discount before saving." className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Copy size={12} /> Duplicate</button>
-                      <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> {proposalHasBeenPublished ? 'Revise proposal' : 'Edit draft'}</button>
+                      {proposalCardState.canResend ? <button type="button" onClick={() => void handleSendFinalProposal(proposal, false, true)} disabled={!lead.email || sendingInvoiceId === proposal.id} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === proposal.id ? 'Sending…' : 'Resend proposal'}</button> : null}
+                      {proposalCardState.canDuplicate ? <button type="button" onClick={() => duplicateProposalDraft(proposal)} aria-label={`Duplicate ${proposalLabel} to a new draft`} title="Starts a new draft from these saved event selections. Review the current price and discount before saving." className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Copy size={12} /> Duplicate</button> : null}
+                      {proposalCardState.canEditDraft || proposalCardState.canRevise ? <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> {proposalCardState.canRevise ? 'Revise proposal' : 'Edit draft'}</button> : null}
                       <div className="relative">
                         <button type="button" aria-haspopup="menu" aria-expanded={proposalCardMenuId === proposal.id} onClick={() => setProposalCardMenuId((openId) => openId === proposal.id ? null : proposal.id)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><MoreVertical size={12} /> More</button>
                         {proposalCardMenuId === proposal.id ? <div role="menu" aria-label={`${proposalLabel} actions`} className="absolute right-0 z-20 mt-1 min-w-48 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-xl">
                           <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); showProposalHistory() }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View activity</button>
-                          <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); duplicateProposalDraft(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Duplicate proposal</button>
-                          <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); openProposalBuilder(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">{proposalHasBeenPublished ? 'Revise proposal' : 'Edit draft'}</button>
+                          {proposalCardState.canDuplicate ? <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); duplicateProposalDraft(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Duplicate proposal</button> : null}
+                          {proposalCardState.canEditDraft || proposalCardState.canRevise ? <button type="button" role="menuitem" onClick={() => { setProposalCardMenuId(null); openProposalBuilder(proposal) }} className="block min-h-10 w-full rounded-md px-3 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">{proposalCardState.canRevise ? 'Revise proposal' : 'Edit draft'}</button> : null}
                         </div> : null}
                       </div>
                     </div>
@@ -7649,11 +7727,11 @@ export default function LeadDetailPage({
               </div>
             )}
             {process.env.NEXT_PUBLIC_LUXOR_PROPOSAL_HISTORY_READY !== 'true' ? <p className="mt-4 text-[10px] leading-4 text-[color:var(--portal-muted)]">Proposal sequence numbers and complete send history remain disabled until the reviewed database migration is applied.</p> : null}
-            {process.env.NEXT_PUBLIC_LUXOR_PROPOSAL_HISTORY_READY === 'true' && sortedInvoices.some((proposal) => (!proposal.invoice_kind || proposal.invoice_kind === 'event') && proposalHistory[proposal.id]?.enabled === false) ? <p role="status" className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Proposal history is unavailable until its database migration is applied. Existing proposals remain available.</p> : null}
+            {process.env.NEXT_PUBLIC_LUXOR_PROPOSAL_HISTORY_READY === 'true' && clientProposals.some((proposal) => proposalHistory[proposal.id]?.enabled === false) ? <p role="status" className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Proposal history is unavailable until its database migration is applied. Existing proposals remain available.</p> : null}
           </section>
           ) : null}
 
-          {activeLeadTab === 'documents' ? (
+          {activeLeadTab === 'documents' || activeLeadTab === 'contract' ? (
           <div id="lead-documents" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -7688,7 +7766,7 @@ export default function LeadDetailPage({
           </div>
           ) : null}
 
-          {activeLeadTab === 'documents' ? (
+          {activeLeadTab === 'documents' || activeLeadTab === 'contract' ? (
           <div id="lead-booking" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <h3 className="mb-6 flex items-center justify-between font-semibold text-[color:var(--portal-text)]">
               <span className="flex items-center gap-2.5">
@@ -7827,7 +7905,7 @@ export default function LeadDetailPage({
           </div>
           ) : null}
 
-          {activeLeadTab === 'documents' ? (
+          {activeLeadTab === 'documents' || activeLeadTab === 'payments' ? (
           <div id="lead-billing" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
@@ -7856,8 +7934,10 @@ export default function LeadDetailPage({
               </div>
             ) : (
               <div className="space-y-3">
-                {sortedInvoices.map((inv, index) => (
-                  <div key={inv.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
+                {sortedInvoices.map((inv, index) => {
+                  const reminderBooking = bookings.find((booking) => booking.id === inv.booking_id || booking.invoice_id === inv.parent_invoice_id || booking.invoice_id === inv.id) || null
+                  const reminderDueDate = getLuxorPaymentReminderDueDate({ invoice_kind: inv.invoice_kind, due_date: inv.due_date, final_payment_due_date: reminderBooking?.final_payment_due_date })
+                  return <div key={inv.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-[11px] font-bold text-[color:var(--portal-text)]">{inv.description || `${inv.event_type || 'Event'} proposal`}</p>
@@ -7890,18 +7970,18 @@ export default function LeadDetailPage({
                       <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
                         <FileText size={12} /> Download PDF
                       </a>
-                      <button type="button" onClick={() => openPaymentRequest(inv)} disabled={sendingInvoiceId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0 || (inv.invoice_kind !== 'deposit' && inv.invoice_kind !== 'final_balance') || latestBooking?.contract_status !== 'signed'} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
+                      <button type="button" onClick={() => openPaymentRequest(inv)} disabled={sendingInvoiceId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0 || (inv.invoice_kind !== 'deposit' && inv.invoice_kind !== 'final_balance') || reminderBooking?.contract_status !== 'signed'} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
                         <Send size={12} /> {sendingInvoiceId === inv.id ? 'Sending...' : getInvoiceBalance(inv) <= 0 ? 'Paid in full' : 'Send payment request'}
                       </button>
-                      <button type="button" onClick={() => handleSendAiInvoiceReminder(inv)} disabled={sendingReminderId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0} className="inline-flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-40 cursor-pointer">
-                        <Sparkles size={12} /> {sendingReminderId === inv.id ? 'Sending AI Email...' : 'Send AI Reminder'}
-                      </button>
+                      {['deposit', 'final_balance', 'security_deposit'].includes(inv.invoice_kind || '') ? <button type="button" onClick={() => handleSendAiInvoiceReminder(inv)} disabled={sendingReminderId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0 || !reminderDueDate} title={!reminderDueDate ? 'A saved payment due date is required before a reminder can be sent.' : `Payment due ${formatDisplayDate(reminderDueDate)}`} className="inline-flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-40 cursor-pointer">
+                        <Sparkles size={12} /> {sendingReminderId === inv.id ? 'Sending AI Email...' : reminderDueDate ? `Send reminder · Due ${formatDisplayDate(reminderDueDate)}` : 'Set due date to remind'}
+                      </button> : null}
                       <button type="button" onClick={() => setInvoiceToDelete(inv)} disabled={getInvoicePaidTotal(inv.id) > 0 || inv.status === 'paid'} className="inline-flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-35 dark:text-red-300">
                         <Trash2 size={12} /> Delete
                       </button>
                     </div>
                   </div>
-                ))}
+                })}
               </div>
             )}
           </div>
@@ -9808,6 +9888,13 @@ function getLeadNextStep(lead: LuxorInquiry, latestBooking: LuxorBooking | null,
       return {
         title: 'Prepare the agreement',
         detail: 'The proposal is accepted, but its matching agreement record is not confirmed yet',
+      }
+    }
+
+    if (latestBooking.contract_status === 'viewed') {
+      return {
+        title: 'Contract viewed by client',
+        detail: 'The Event Agreement was opened. Track the client signature here.',
       }
     }
 

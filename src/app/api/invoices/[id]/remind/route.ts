@@ -8,6 +8,7 @@ import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { createLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
 import { buildAiTailoredInvoiceReminderEmail } from '@/lib/luxorLifecycleEmailsServer'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
+import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -40,8 +41,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const bookings = invoice.inquiry_id ? await listLuxorBookingsByInquiry(invoice.inquiry_id) : []
     const booking = invoice.booking_id
       ? await getLuxorBooking(invoice.booking_id)
-      : bookings.find((b) => b.invoice_id === invoice.id) || bookings[0] || null
+      : bookings.find((b) => b.invoice_id === invoice.id) || null
     const isPaymentInvoice = invoice.invoice_kind === 'deposit' || invoice.invoice_kind === 'final_balance' || invoice.invoice_kind === 'security_deposit'
+
+    if (!isPaymentInvoice) {
+      return NextResponse.json({ error: 'Payment reminders can only be sent for deposit, final-balance, or security-deposit invoices.' }, { status: 409 })
+    }
 
     // A payment reminder is never a way around the signed-agreement gate.
     // In particular, do not forward an old stored Stripe URL for a booking
@@ -49,8 +54,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (isPaymentInvoice && booking?.contract_status !== 'signed') {
       return NextResponse.json({ error: 'The Event Agreement must be signed before a payment reminder or Stripe link can be sent.' }, { status: 409 })
     }
-    if (invoice.invoice_kind === 'final_balance' && !booking?.final_payment_due_date) {
-      return NextResponse.json({ error: 'Configure the final payment due date in the approved payment plan before sending a final-balance reminder.' }, { status: 409 })
+    const dueDate = getLuxorPaymentReminderDueDate({
+      invoice_kind: invoice.invoice_kind,
+      due_date: invoice.due_date,
+      final_payment_due_date: booking?.final_payment_due_date,
+    })
+    if (!dueDate) {
+      return NextResponse.json({ error: invoice.invoice_kind === 'final_balance'
+        ? 'Configure a valid final payment due date in the approved payment plan before sending a final-balance reminder.'
+        : 'Configure a valid payment due date before sending an invoice reminder.' }, { status: 409 })
     }
 
     const notes = await listNotesByInquiry(inquiry.id).catch(() => [])
@@ -80,10 +92,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       : body.kind === 'unpaid_invoice'
         ? 'unpaid_invoice'
         : 'unpaid_invoice'
-    const dueDate = invoice.invoice_kind === 'final_balance'
-      ? booking?.final_payment_due_date || null
-      : invoice.due_date || null
-
     const email = await buildAiTailoredInvoiceReminderEmail({
       inquiry,
       invoice,
