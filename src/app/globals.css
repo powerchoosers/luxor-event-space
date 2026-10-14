@@ -1159,6 +1159,11 @@ body[data-luxor-site] main [class*="bg-black/"] {
   background-color: rgba(255, 255, 255, 0.78) !important;
 }
 
+/* Preserve the gallery expand affordance's gold hover and keyboard-focus state. */
+body[data-luxor-site] main button[data-conversion="gallery_open"]:is(:hover, :focus-visible) [class~="group-hover:bg-[#caa24c]"] {
+  background-color: #caa24c !important;
+}
+
 body[data-luxor-site] main [class*="text-[#f7efe3]"],
 body[data-luxor-site] main [class*="text-[#f6efe8]"],
 body[data-luxor-site] main [class*="text-[#f8f3ed]"],
