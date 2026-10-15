@@ -52,7 +52,7 @@ import {
   Languages,
   X,
 } from 'lucide-react'
-import { LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { isLuxorTestInquiry, LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
@@ -406,6 +406,7 @@ export default function LeadDetailPage({
 }) {
   const { id } = use(params)
   const searchParams = useSearchParams()
+  const requestedTestRunId = searchParams?.get('testRunId')?.trim() || null
   const router = useRouter()
   const pathname = usePathname()
   const { notify } = useToast()
@@ -477,6 +478,7 @@ export default function LeadDetailPage({
 
   // Invoice creation state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
+  const testProposalOpenRequestRef = useRef<string | null>(null)
   const proposalEditorOpenRef = useRef(false)
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
   const [invoiceDesc, setInvoiceDesc] = useState('')
@@ -2339,6 +2341,29 @@ export default function LeadDetailPage({
     setIsInvoiceModalOpen(true)
   }
 
+  useEffect(() => {
+    if (!lead || !isLuxorTestInquiry(lead) || !requestedTestRunId || searchParams?.get('createTestProposal') !== '1') return
+    const requestKey = `${lead.id}:${requestedTestRunId}`
+    if (testProposalOpenRequestRef.current === requestKey) return
+    testProposalOpenRequestRef.current = requestKey
+    void (async () => {
+      try {
+        const response = await fetch(`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(requestedTestRunId)}`, { cache: 'no-store' })
+        const payload = await response.json().catch(() => ({})) as { artifact?: { status?: string; details?: { invoice?: unknown } | null }; error?: string }
+        if (!response.ok) throw new Error(payload.error || 'The test proposal could not be loaded.')
+        if (payload.artifact?.status === 'sent') {
+          notify({ title: 'Test proposal already published', description: 'The proposal and prepared email are preserved in this run’s history. No signing, booking, or payment action is available.', variant: 'success' })
+          return
+        }
+        const savedInvoice = payload.artifact?.details?.invoice
+        if (savedInvoice && typeof savedInvoice === 'object') openProposalBuilder(savedInvoice as LuxorInvoice)
+        else openProposalBuilder()
+      } catch (error) {
+        notify({ title: 'Test proposal unavailable', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+      }
+    })()
+  }, [lead, notify, openProposalBuilder, requestedTestRunId, searchParams])
+
   const duplicateProposalDraft = (invoice: LuxorInvoice) => {
     openProposalBuilder()
     const sourceEvent = findProposalLeadEvent(invoice, leadEvents, bookings)
@@ -2545,6 +2570,33 @@ export default function LeadDetailPage({
     setInvoiceSubmissionError(null)
     let handoffWindow: Window | null = null
     try {
+      if (isLuxorTestInquiry(lead)) {
+        if (!requestedTestRunId) throw new Error('Open the proposal builder from the active Test Lead run so this proposal stays isolated.')
+        if (action === 'in_person') throw new Error('In-person handoff and signing are blocked for the permanent test lead.')
+        if (!invoiceDueDate) throw new Error('Choose when this proposal offer expires before saving it.')
+        const response = await fetch('/api/portal/test-lead/proposal', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            testRunId: requestedTestRunId,
+            action: action === 'save' ? 'save' : 'publish',
+            description: invoiceDesc,
+            notes: invoiceNotes || null,
+            selection: buildProposalSelection(),
+          }),
+        })
+        const payload = await response.json().catch(() => ({})) as { error?: string; recipient?: string }
+        if (!response.ok) throw new Error(payload.error || 'The isolated test proposal could not be saved or published.')
+        notify({
+          title: action === 'save' ? 'Test proposal draft saved' : 'Test proposal published',
+          description: action === 'save'
+            ? 'The calculated proposal and production-rendered PDF are stored in this test run only.'
+            : `The production-rendered proposal email and PDF are queued only for ${payload.recipient || 'luxoratlaspalmas@gmail.com'}. No customer or financial workflow was started.`,
+          variant: 'success',
+        })
+        setIsInvoiceModalOpen(false)
+        setEditingInvoiceId(null)
+        return
+      }
       if (action === 'in_person') handoffWindow = window.open('about:blank', 'luxor-client-handoff')
       if (savedPublicationInvoice.current) {
         if (action === 'in_person') await prepareClientProposalHandoff(savedPublicationInvoice.current, handoffWindow)
@@ -8444,7 +8496,7 @@ export default function LeadDetailPage({
       <ProposalDeliveryPreview
         invoice={proposalDeliveryPreview?.invoice || null}
         initialTab={proposalDeliveryPreview?.initialTab || 'email'}
-        clientEmail={lead.email}
+        clientEmail={isLuxorTestInquiry(lead) && requestedTestRunId ? 'luxoratlaspalmas@gmail.com' : lead.email}
         onClose={() => setProposalDeliveryPreview(null)}
       />
 
@@ -8653,6 +8705,7 @@ export default function LeadDetailPage({
         legacyDiscount={legacyProposalDiscount}
         onCalculationChange={handleProposalCalculationChange}
         pricingEndpoint="/api/proposal-pricing"
+        testRunId={isLuxorTestInquiry(lead) ? requestedTestRunId : null}
         notes={invoiceNotes}
         onNotesChange={setInvoiceNotes}
         taxRate={invoiceTaxRate}

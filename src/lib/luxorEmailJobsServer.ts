@@ -1136,8 +1136,15 @@ export async function processLuxorEmailJobs(
             body: job.body,
             from: senderFrom,
             fromName: senderName,
-            sendProvider: ({ to, subject, body, from, fromName }) => sendLuxorZohoEmail({
-              to, subject, content: body, from, fromName, idempotencyKey: `email-job/${job.id}`,
+            attachments: typeof metadata.test_attachment_base64 === 'string' && metadata.test_attachment_base64
+              ? [{
+                  filename: typeof metadata.test_attachment_filename === 'string' ? metadata.test_attachment_filename : 'Luxor-Test-Document.pdf',
+                  content: Buffer.from(metadata.test_attachment_base64, 'base64'),
+                  contentType: 'application/pdf',
+                }]
+              : undefined,
+            sendProvider: ({ to, subject, body, from, fromName, attachments }) => sendLuxorZohoEmail({
+              to, subject, content: body, from, fromName, attachments, idempotencyKey: `email-job/${job.id}`,
             }),
           }).then((result) => ({ messageId: result.providerMessageId }))
         : await sendLuxorZohoEmail({

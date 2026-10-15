@@ -13,7 +13,8 @@ export async function sendLuxorTestEmail(input: {
   body: string
   from?: string
   fromName?: string
-  sendProvider: (message: { to: string; subject: string; body: string; from?: string; fromName?: string }) => Promise<{ messageId?: string | null }>
+  attachments?: Array<{ filename: string; content: Uint8Array; contentType?: string }>
+  sendProvider: (message: { to: string; subject: string; body: string; from?: string; fromName?: string; attachments?: Array<{ filename: string; content: Uint8Array; contentType?: string }> }) => Promise<{ messageId?: string | null }>
 }) {
   const providerResult = await input.sendProvider({
     to: LUXOR_TEST_EMAIL_RECIPIENT,
@@ -21,6 +22,7 @@ export async function sendLuxorTestEmail(input: {
     body: input.body,
     from: input.from,
     fromName: input.fromName,
+    attachments: input.attachments,
   })
   return {
     recipient: LUXOR_TEST_EMAIL_RECIPIENT,

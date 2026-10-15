@@ -2,7 +2,9 @@ import { getInvoice } from '@/lib/luxorInvoicesServer'
 import { luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
+import { supabaseRest } from '@/lib/supabaseRestServer'
+import type { LuxorInvoice } from '@/lib/luxorInquiryTypes'
 import {
   getDefaultLuxorProposalPricing,
   getLuxorProposalPricingForInvoice,
@@ -50,13 +52,37 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    const session = await getLuxorPortalSession()
+    if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     const body = await request.json().catch(() => ({}))
     const selection = object(body)?.selection
     if (!object(selection)) return NextResponse.json({ error: 'Proposal selection is required.' }, { status: 400 })
-    const invoiceId = typeof body.invoiceId === 'string' ? body.invoiceId : ''
-    const revisionId = typeof body.supersedesInvoiceId === 'string' ? body.supersedesInvoiceId : ''
-    const existing = invoiceId || revisionId ? await getInvoice(invoiceId || revisionId) : null
+    const testRunId = typeof body.testRunId === 'string' ? body.testRunId : ''
+    let existingTestInvoice: LuxorInvoice | null = null
+    if (testRunId) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(testRunId)) {
+        return NextResponse.json({ error: 'A valid test run ID is required.' }, { status: 400 })
+      }
+      const member = await getLuxorPortalMember(session.email)
+      if (!member || !['owner', 'admin'].includes(member.role) || !memberCan(member, 'settings')) {
+        return NextResponse.json({ error: 'Owner or admin access required for test proposals.' }, { status: 403 })
+      }
+      const [run] = await supabaseRest<Array<{ id: string }>>(
+        `luxor_test_runs?select=id&id=eq.${encodeURIComponent(testRunId)}&test_lead_id=eq.00b264d6-a3fb-4ea3-9142-415f76385c39&status=eq.in_progress&limit=1`,
+      )
+      if (!run) return NextResponse.json({ error: 'Choose an active permanent test lead run.' }, { status: 404 })
+      const [artifact] = await supabaseRest<Array<{ status: string; details: Record<string, unknown> }>>(
+        `luxor_test_run_artifacts?select=status,details&test_run_id=eq.${encodeURIComponent(testRunId)}&artifact_type=eq.proposal&limit=1`,
+      )
+      if (artifact && !['simulated', 'drafted'].includes(artifact.status)) {
+        return NextResponse.json({ error: 'This test proposal is already published.' }, { status: 409 })
+      }
+      const invoice = object(artifact?.details?.invoice)
+      if (invoice) existingTestInvoice = invoice as unknown as LuxorInvoice
+    }
+    const invoiceId = testRunId ? '' : typeof body.invoiceId === 'string' ? body.invoiceId : ''
+    const revisionId = testRunId ? '' : typeof body.supersedesInvoiceId === 'string' ? body.supersedesInvoiceId : ''
+    const existing = testRunId ? existingTestInvoice : invoiceId || revisionId ? await getInvoice(invoiceId || revisionId) : null
     if ((invoiceId || revisionId) && !existing) return NextResponse.json({ error: 'Proposal not found.' }, {status: 404})
     if (revisionId && existing?.invoice_kind !== 'event') return NextResponse.json({ error: 'Only an event proposal can be revised.' }, {status: 409})
     if (invoiceId && existing && (existing.invoice_kind !== 'event' || existing.status !== 'draft' || existing.price_locked_at || existing.proposal_accepted_at || existing.proposal_sent_at)) return NextResponse.json({error: 'This proposal is locked. Create a revision.'}, {status: 409})

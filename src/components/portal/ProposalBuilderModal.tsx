@@ -197,6 +197,8 @@ type ProposalBuilderModalProps = {
   availableServices?: ProposalServiceOption[]
   onCalculationChange?: (calculation: ProposalPricingCalculation | null) => void
   pricingEndpoint?: string
+  /** Active permanent test run; keeps this production builder on an isolated save/publish path. */
+  testRunId?: string | null
   notes: string
   onNotesChange: (value: string) => void
   /** An owner must explicitly configure the tax treatment for each final proposal. */
@@ -669,6 +671,7 @@ export function ProposalBuilderModal({
   availableServices = DEFAULT_SERVICE_LIBRARY,
   onCalculationChange,
   pricingEndpoint = '/api/proposal-pricing',
+  testRunId = null,
   notes,
   onNotesChange,
   taxRate,
@@ -1168,8 +1171,8 @@ export function ProposalBuilderModal({
   }
 
   const pricingRequest = useMemo(() => ({
-    invoiceId,
-    supersedesInvoiceId,
+    ...(!testRunId ? { invoiceId, supersedesInvoiceId } : {}),
+    ...(testRunId ? { testRunId } : {}),
     selection: {
       packageId: 'rental_only',
       eventDate: eventDateValue || null,
@@ -1224,7 +1227,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [invoiceId, supersedesInvoiceId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, isCustomRental, items, removedServiceIds, rentalEndTime, rentalPeriod, rentalStartTime, securityHoursValue, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate, weekdayPolicy?.security_hours_policy])
+  }), [invoiceId, supersedesInvoiceId, testRunId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, isCustomRental, items, removedServiceIds, rentalEndTime, rentalPeriod, rentalStartTime, securityHoursValue, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate, weekdayPolicy?.security_hours_policy])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1375,7 +1378,7 @@ export function ProposalBuilderModal({
   const isCalculating = pricingStatus === 'loading'
   const hasFinalPrice = pricingStatus === 'ready' && typeof finalEventPrice === 'number' && finalEventPrice >= 0
   const canPublish = Boolean(eventDateValue && guestCount > 0 && timeValidation.valid && hasFinalPrice && pricingErrors.length === 0 && publicationErrors.length === 0 && !paymentPlanRequired)
-  const reviewTogether = presentationMode === 'in_person'
+  const reviewTogether = !testRunId && presentationMode === 'in_person'
   const publishDisabled = submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount
   const publishTitle = hasUnmigratedLegacyDiscount
     ? 'Save the legacy adjustment as a promotion first.'
@@ -1964,16 +1967,16 @@ export function ProposalBuilderModal({
 
               <section aria-labelledby="proposal-presentation-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
                 <p id="proposal-presentation-title" className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Finish the proposal</p>
-                <p className="mt-1 text-sm leading-6 text-[color:var(--portal-muted)]">Choose how the client will see this final version.</p>
-                <div role="radiogroup" aria-label="How the client will review this proposal" className="mt-4 grid gap-3 sm:grid-cols-2">
+                <p className="mt-1 text-sm leading-6 text-[color:var(--portal-muted)]">{testRunId ? 'The production proposal will be prepared for the verified test inbox.' : 'Choose how the client will see this final version.'}</p>
+                <div role="radiogroup" aria-label="How the client will review this proposal" className={`mt-4 grid gap-3 ${testRunId ? '' : 'sm:grid-cols-2'}`}>
                   <button type="button" role="radio" aria-checked={presentationMode === 'email'} onClick={() => setPresentationMode('email')} className={`rounded-xl border p-4 text-left transition ${presentationMode === 'email' ? 'border-[#caa24c]/65 bg-[#caa24c]/[0.08] shadow-sm' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35'}`}>
-                    <span className="flex items-center gap-2 text-sm font-bold text-[color:var(--portal-text)]"><Mail size={16} className="text-[#8c6529] dark:text-[#f1d27a]" /> Send for later</span>
-                    <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">Email the final proposal so the client can review it on their own time.</span>
+                    <span className="flex items-center gap-2 text-sm font-bold text-[color:var(--portal-text)]"><Mail size={16} className="text-[#8c6529] dark:text-[#f1d27a]" /> {testRunId ? 'Send test proposal' : 'Send for later'}</span>
+                    <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">{testRunId ? 'Queue the rendered proposal and PDF only to luxoratlaspalmas@gmail.com.' : 'Email the final proposal so the client can review it on their own time.'}</span>
                   </button>
-                  <button type="button" role="radio" aria-checked={presentationMode === 'in_person'} onClick={() => setPresentationMode('in_person')} className={`rounded-xl border p-4 text-left transition ${presentationMode === 'in_person' ? 'border-[#caa24c]/65 bg-[#caa24c]/[0.08] shadow-sm' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35'}`}>
+                  {!testRunId ? <button type="button" role="radio" aria-checked={presentationMode === 'in_person'} onClick={() => setPresentationMode('in_person')} className={`rounded-xl border p-4 text-left transition ${presentationMode === 'in_person' ? 'border-[#caa24c]/65 bg-[#caa24c]/[0.08] shadow-sm' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/35'}`}>
                     <span className="flex items-center gap-2 text-sm font-bold text-[color:var(--portal-text)]"><Users size={16} className="text-[#8c6529] dark:text-[#f1d27a]" /> Review together</span>
                     <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">Open a clean client handoff on the iPad for review, acceptance, signing, and payment choice.</span>
-                  </button>
+                  </button> : null}
                 </div>
                 {reviewTogether ? <p className="mt-4 rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.055] px-4 py-3 text-xs leading-5 text-[color:var(--portal-text)]">No proposal email is sent now. After the client accepts, they sign the agreement and can choose Card, Zelle, or Cash. Luxor records Cash or Zelle only after it is actually received.</p> : null}
               </section>
@@ -2153,7 +2156,7 @@ export function ProposalBuilderModal({
                   </details>
 
                   {/* Delivery Mode Choice */}
-                  <section aria-labelledby="agreement-presentation-title" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+                  {testRunId ? <p role="note" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-xs leading-5 text-[color:var(--portal-muted)]">The agreement terms above remain the production terms for review. This test flow does not create or send an agreement, signature request, booking, or payment request.</p> : <section aria-labelledby="agreement-presentation-title" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
                     <p id="agreement-presentation-title" className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Delivery &amp; Signing Method</p>
                     <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Choose how the client will execute the agreement.</p>
                     <div role="radiogroup" aria-label="How the client will sign" className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -2166,7 +2169,7 @@ export function ProposalBuilderModal({
                         <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">Open a clean iPad handoff for immediate on-site review, electronic signature, and payment selection.</span>
                       </button>
                     </div>
-                  </section>
+                  </section>}
                 </div>
               </div>
             </section>
