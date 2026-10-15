@@ -11,6 +11,7 @@ import { enqueueLuxorInvoiceAttachments } from './luxorBillIntakeServer'
 import { sendLuxorWebPush } from './luxorWebPushServer'
 import { handleLuxorResendBounce } from './luxorResendBounceHandler'
 import { recordLuxorProposalDeliveryEvent } from './luxorInvoicesServer'
+import { luxorTestEmailDeliveryPatch } from './luxorTestEmailDelivery'
 
 export type ResendEvent = {
   type: string; created_at: string
@@ -200,9 +201,20 @@ async function processDelivery(event: ResendEvent, eventId: string) {
       `luxor_email_jobs?select=*&id=eq.${encodeURIComponent(emailJobId)}&limit=1`,
     )
     if (job?.test_run_id) {
-      const deliveryStatus = event.type === 'email.delivered' ? 'delivered'
-        : event.type === 'email.bounced' ? 'bounced'
-          : event.type === 'email.complained' ? 'complained' : 'deferred'
+      const deliveryPatch = luxorTestEmailDeliveryPatch({
+        event: event.type as 'email.delivered' | 'email.bounced' | 'email.complained' | 'email.delivery_delayed',
+        providerMessageId: providerId,
+        bounceMessage: event.data.bounce?.message || event.data.bounce?.subType,
+      })
+      const deliveryStatus = deliveryPatch.delivery_status
+      await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(emailJobId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(deliveryPatch),
+      })
+      await supabaseRest(`luxor_email_jobs?id=eq.${encodeURIComponent(emailJobId)}&test_run_id=eq.${encodeURIComponent(job.test_run_id || '')}&status=eq.sending`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'sent', sent_at: event.created_at, updated_at: new Date().toISOString() }),
+      })
       await supabaseRest('luxor_test_run_activity', {
         method: 'POST',
         headers: { Prefer: 'return=minimal' },

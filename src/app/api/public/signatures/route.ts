@@ -45,7 +45,7 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
   if (!booking || booking.contract_status !== 'signed' || !invoice) return {}
   if (benefit && masterInvoice?.same_day_booking_status === 'eligible' && invoice.status === 'paid') return { same_day_booking: benefit, same_day_completed: true, payment_blocked: true, payment_message: 'Your initial booking payment is complete.' }
   const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
-  if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost') return {}
+  if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost' || inquiry?.is_test) return {}
   const preference = booking.metadata?.client_payment_preference as { method?: unknown } | undefined
   const initialMethod = ['card', 'cash', 'zelle', 'check'].includes(String(preference?.method || '').toLowerCase())
     ? String(preference?.method).toLowerCase()
@@ -183,6 +183,8 @@ export async function POST(request: NextRequest) {
 
     const pendingBooking = pendingSignature ? await getLuxorBooking(pendingSignature.booking_id) : null
     const pendingInvoice = pendingBooking?.invoice_id ? await getInvoice(pendingBooking.invoice_id) : null
+    const pendingInquiry = pendingInvoice?.inquiry_id ? await getLuxorInquiry(pendingInvoice.inquiry_id) : null
+    if (pendingInquiry?.is_test) return NextResponse.json({ error: 'Agreement signature is simulated for the permanent test lead.' }, { status: 409 })
     if (!recoveryOnly && pendingInvoice && isLuxorOfferExpired(pendingInvoice)) {
       await updateLuxorSignatureRequest(pendingSignature.id, { status: 'void', metadata: { ...pendingSignature.metadata, voidReason: 'proposal_offer_expired', voidedAt: new Date().toISOString() } })
       return NextResponse.json({ error: 'This proposal offer has expired. Luxor will need to send an updated agreement before it can be signed.' }, { status: 410 })

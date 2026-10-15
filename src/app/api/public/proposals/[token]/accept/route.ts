@@ -49,6 +49,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     if (inquiry.status === 'closed_lost') {
       return NextResponse.json({ error: 'This proposal is no longer available. Please contact Luxor at Las Palmas Events.' }, { status: 410 })
     }
+    if (inquiry.is_test) {
+      return NextResponse.json({ error: 'Agreement workflow is simulated for the permanent test lead.' }, { status: 409 })
+    }
 
     const now = new Date().toISOString()
     const acceptanceClaim = isWeekdayCustomRentalContext(invoice.proposal_context)

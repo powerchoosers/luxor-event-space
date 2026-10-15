@@ -1,6 +1,7 @@
 import 'server-only'
 
 import twilio from 'twilio'
+import { LUXOR_TEST_PHONE_E164_DIGITS } from './luxorTestLeadPolicy'
 import { normalizePhoneNumber } from './luxorCallsServer'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment } from './luxorInquiryTypes'
 import { createOrUpdateLuxorMessage } from './luxorMessagesServer'
@@ -26,6 +27,8 @@ import {
   getLuxorPaymentReminderBookingLookup,
   getLuxorPaymentReminderDueDate,
 } from './luxorPaymentReminderDueDate'
+import { getLuxorInquiry } from './luxorInquiriesServer'
+import { recordLuxorTestSmsSimulation } from './luxorTestLeadServer'
 
 const MAX_CAMPAIGN_RECIPIENTS = 1000
 const MAX_CAMPAIGN_BODY_LENGTH = 480
@@ -545,6 +548,16 @@ async function claimDueTextJobs(limit: number) {
 
 async function processTextJob(job: LuxorTextJob) {
   try {
+    const inquiry = job.inquiry_id ? await getLuxorInquiry(job.inquiry_id) : null
+    if (inquiry?.is_test) {
+      if (normalizePhoneNumber(job.recipient_phone)?.replace(/\D/g, '') !== LUXOR_TEST_PHONE_E164_DIGITS) {
+        await finishTextJob(job, 'cancelled', 'Test lead text was blocked because its destination did not match the verified test number.')
+        return { id: job.id, status: 'skipped' as const, error: 'unsafe_test_destination' }
+      }
+      const simulation = await recordLuxorTestSmsSimulation({ inquiryId: inquiry.id, body: job.body, source: `text_job:${job.job_type}` })
+      await finishTextJob(job, 'cancelled', simulation ? 'Test text was recorded in the isolated run simulation; Twilio was not called.' : 'Test text simulation was unavailable; Twilio was not called.')
+      return { id: job.id, status: 'skipped' as const, error: simulation ? 'simulated' : 'simulation_unavailable' }
+    }
     const skipReason = await getTextJobSkipReason(job)
     if (skipReason) {
       await finishTextJob(job, 'skipped', skipReason)

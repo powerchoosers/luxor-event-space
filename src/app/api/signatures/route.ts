@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
     if (!inquiry || booking.status === 'cancelled' || inquiry.status === 'closed_lost') {
       return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled. A new Event Agreement cannot be created.' }, { status: 409 })
     }
+    if (inquiry.is_test) return NextResponse.json({ error: 'Agreement workflow is simulated for the permanent test lead.' }, { status: 409 })
     const proposal = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
     if (!isAcceptedFinalProposal(proposal)) {
       return NextResponse.json({ error: 'A sent, price-locked final proposal must be accepted before an Event Agreement can be created.' }, { status: 409 })
@@ -134,6 +135,7 @@ export async function PATCH(request: NextRequest) {
     if (!inquiry || booking.status === 'cancelled' || inquiry.status === 'closed_lost') {
       return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled.' }, { status: 409 })
     }
+    if (inquiry.is_test) return NextResponse.json({ error: 'Agreement workflow is simulated for the permanent test lead.' }, { status: 409 })
     const signature = await getLatestLuxorSignatureRequestByBooking(bookingId)
     if (!signature) return NextResponse.json({ error: 'No contract was found for this booking.' }, { status: 404 })
 

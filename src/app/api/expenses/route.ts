@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 export type LuxorBookingExpense = {
   id: string
@@ -49,6 +50,11 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { booking_id, category, description, vendor_name, amount, incurred_on, status, notes } = body
+
+    if (booking_id) {
+      const [booking] = await supabaseRest<Array<{ inquiry_id: string | null }>>(`luxor_bookings?select=inquiry_id&id=eq.${encodeURIComponent(String(booking_id))}&limit=1`)
+      if (booking?.inquiry_id) await assertLuxorProductionSideEffectsAllowed(booking.inquiry_id)
+    }
 
     if (!category || !amount) {
       return NextResponse.json({ error: 'Category and Amount are required.' }, { status: 400 })

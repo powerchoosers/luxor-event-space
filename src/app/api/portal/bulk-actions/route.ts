@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { getTestInquiriesById } from '@/lib/luxorTestLeadServer'
 
 type BulkResource = 'inquiries' | 'calls' | 'bookings' | 'marketing_campaigns' | 'text_campaigns' | 'invoices'
 type BulkBody = {
@@ -41,7 +42,34 @@ export async function POST(request: NextRequest) {
     if (!ids.length) return NextResponse.json({ error: 'Select at least one record.' }, { status: 400 })
     if (ids.length > 1000) return NextResponse.json({ error: 'Bulk actions are limited to 1,000 records at a time.' }, { status: 400 })
 
-    if (action === 'delete') return deleteRecords(resource, ids)
+    if (resource === 'inquiries' && action !== 'delete') {
+      const testRows = await getTestInquiriesById(ids)
+      if (testRows.length) return NextResponse.json({ error: 'The permanent test lead can only be changed through its run lifecycle controls.' }, { status: 409 })
+    }
+    if (resource === 'invoices') {
+      const linked = await supabaseRest<Array<{ id: string; inquiry_id: string | null }>>(`luxor_invoices?select=id,inquiry_id&${idFilter(ids)}`)
+      const linkedTestIds = linked.map((invoice) => invoice.inquiry_id).filter((id): id is string => Boolean(id))
+      if (linkedTestIds.length) {
+        const testRows = await getTestInquiriesById(linkedTestIds)
+        if (testRows.length) return NextResponse.json({ error: 'Invoices linked to the permanent test lead cannot be changed through bulk actions.' }, { status: 409 })
+      }
+    }
+    if (resource === 'bookings') {
+      const linked = await supabaseRest<Array<{ id: string; inquiry_id: string | null }>>(`luxor_bookings?select=id,inquiry_id&${idFilter(ids)}`)
+      const linkedTestIds = linked.map((booking) => booking.inquiry_id).filter((id): id is string => Boolean(id))
+      if (linkedTestIds.length) {
+        const testRows = await getTestInquiriesById(linkedTestIds)
+        if (testRows.length) return NextResponse.json({ error: 'Bookings linked to the permanent test lead cannot be changed through bulk actions.' }, { status: 409 })
+      }
+    }
+
+    if (action === 'delete') {
+      if (resource === 'inquiries') {
+        const testRows = await getTestInquiriesById(ids)
+        if (testRows.length) return NextResponse.json({ error: 'The permanent test lead cannot be deleted.' }, { status: 409 })
+      }
+      return deleteRecords(resource, ids)
+    }
 
     // A loss close-out has to withdraw documents, reminders, and any payable
     // Checkout Session.  A bulk PATCH cannot safely perform that record-by-

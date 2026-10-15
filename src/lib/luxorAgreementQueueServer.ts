@@ -22,6 +22,7 @@ import { luxorCollectionAmounts } from './luxorPaymentOwnership'
 import { sameDayBookingRequiresRevision } from './luxorSameDayBooking'
 import { proposalBookingTiming } from './luxorProposalBookingTiming'
 import { isWeekdayCustomRentalContext } from './luxorWeekdayRental'
+import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
 
 export type LuxorAgreementQueueDelivery = 'queued' | 'already_sent' | 'already_signed' | 'preparing'
 
@@ -263,6 +264,7 @@ export async function queueLuxorAcceptedProposalAgreement(input: {
   forceResend?: boolean
 }): Promise<LuxorAgreementQueueResult> {
   const { invoice, inquiry, requestedBy, forceResend = false } = input
+  await assertLuxorProductionSideEffectsAllowed(inquiry.id)
   if (!hasAcceptedLockedProposal(invoice)) {
     throw new Error('A client-accepted, price-locked final proposal is required before an Event Agreement can be sent.')
   }

@@ -23,6 +23,7 @@ import { assertLuxorSameDayRevisionSafe, SAME_DAY_REVISION_MESSAGE } from '@/lib
 import { assertLuxorWeekdayRentalPublication } from '@/lib/luxorProposalPricingServer'
 import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 import { LuxorProposalBookingTimingError } from '@/lib/luxorProposalBookingTiming'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
 
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'This proposal offer has expired. Create a new offer before sending or collecting payment.' }, { status: 410 })
     }
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
+    if (inquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     if (inquiry?.status === 'closed_lost') {
       return NextResponse.json({ error: 'This lead is marked Deal Lost. The proposal, contract, and payment links have been withdrawn.' }, { status: 409 })
     }

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { getLuxorTestSettings, resetLuxorTestRun } from '@/lib/luxorTestLeadServer'
+import { enqueueLuxorTestEmail, getLuxorTestSettings, resetLuxorTestRun } from '@/lib/luxorTestLeadServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { luxorMailProvider } from '@/lib/luxorMailConfig'
 
 async function authorizedMember() {
   const session = await getLuxorPortalSession()
@@ -12,16 +13,30 @@ async function authorizedMember() {
   return member
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     if (!await authorizedMember()) return NextResponse.json({ error: 'Owner or admin access required.' }, { status: 403 })
     const settings = await getLuxorTestSettings()
-    if (!settings) return NextResponse.json({ available: false, settings: null, lead: null, runs: [], activity: [] })
-    const leads = await supabaseRest<Record<string, unknown>[]>('luxor_inquiries?select=*&limit=1000')
-    const lead = leads.find((row) => row.is_test === true) ?? null
-    const runs = lead ? await supabaseRest<Record<string, unknown>[]>(`luxor_test_runs?select=id,test_lead_id,source,status,started_at,completed_at,reset_at&test_lead_id=eq.${encodeURIComponent(String(lead.id))}&order=started_at.desc&limit=100`) : []
-    const activity = runs.length ? await supabaseRest<Record<string, unknown>[]>(`luxor_test_run_activity?select=*&test_run_id=in.(${runs.map((run) => encodeURIComponent(String(run.id))).join(',')})&order=created_at.desc&limit=500`) : []
-    return NextResponse.json({ available: Boolean(settings), settings, lead, runs, activity })
+    const [lead] = await supabaseRest<Record<string, unknown>[]>(`luxor_inquiries?select=*&id=eq.${encodeURIComponent('00b264d6-a3fb-4ea3-9142-415f76385c39')}&is_test=eq.true&limit=1`)
+    if (!settings) return NextResponse.json({ available: false, settings: null, lead: lead?.is_test === true ? lead : null, runs: [], activity: [] })
+    const { searchParams } = new URL(request.url)
+    const page = Math.max(1, Math.min(10000, Number(searchParams.get('page') || 1)))
+    const pageSize = 25
+    const runs = lead ? await supabaseRest<Record<string, unknown>[]>(`luxor_test_runs?select=id,test_lead_id,source,submitted_email,submitted_phone,submitted_details,status,started_at,completed_at,reset_at&test_lead_id=eq.${encodeURIComponent(String(lead.id))}&order=started_at.desc&limit=${pageSize}&offset=${(page - 1) * pageSize}`) : []
+    const [pinRun] = lead ? await supabaseRest<Record<string, unknown>[]>(`luxor_test_runs?select=id,test_lead_id,source,submitted_email,submitted_phone,submitted_details,status,started_at,completed_at,reset_at&test_lead_id=eq.${encodeURIComponent(String(lead.id))}&status=eq.in_progress&order=started_at.desc&limit=1`) : []
+    const visibleRuns = pinRun && !runs.some((run) => run.id === pinRun.id) ? [pinRun, ...runs.slice(0, pageSize - 1)] : runs
+    const activity = visibleRuns.length ? await supabaseRest<Record<string, unknown>[]>(`luxor_test_run_activity?select=*&test_run_id=in.(${visibleRuns.map((run) => encodeURIComponent(String(run.id))).join(',')})&order=created_at.desc&limit=250`) : []
+    const artifacts = visibleRuns.length ? await supabaseRest<Record<string, unknown>[]>(`luxor_test_run_artifacts?select=*&test_run_id=in.(${visibleRuns.map((run) => encodeURIComponent(String(run.id))).join(',')})&order=created_at.asc`) : []
+    const emails = visibleRuns.length ? await supabaseRest<Record<string, unknown>[]>(`luxor_test_run_emails?select=*&test_run_id=in.(${visibleRuns.map((run) => encodeURIComponent(String(run.id))).join(',')})&order=created_at.asc`) : []
+    return NextResponse.json({
+      available: Boolean(settings), settings,
+      system: {
+        formIntegrations: { inquiry: true, newsletter: true, elenaCreateContact: true },
+        emailProvider: `${luxorMailProvider()} (active)`,
+        normalizedPhone: settings.identification_phone,
+      },
+      lead: lead?.is_test === true ? lead : null, runs: visibleRuns, activity, artifacts, emails, page, pageSize, hasMore: runs.length === pageSize,
+    })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to load test lead.' }, { status: 500 })
   }
@@ -56,6 +71,34 @@ export async function POST(request: NextRequest) {
   try {
     if (!await authorizedMember()) return NextResponse.json({ error: 'Owner or admin access required.' }, { status: 403 })
     const body = await request.json()
+    if (body.action === 'send_test_email') {
+      if (typeof body.testRunId !== 'string' || typeof body.category !== 'string') {
+        return NextResponse.json({ error: 'A test run and email category are required.' }, { status: 400 })
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.testRunId)) {
+        return NextResponse.json({ error: 'A valid test run ID is required.' }, { status: 400 })
+      }
+      const category = body.category.replace(/[^a-z_]/g, '').slice(0, 80)
+      const categoryLabel = category.replaceAll('_', ' ')
+      const result = await enqueueLuxorTestEmail({
+        testRunId: body.testRunId,
+        category,
+        subject: `Luxor test workflow: ${categoryLabel}`,
+        body: `<p>This is a test email for the <strong>${categoryLabel}</strong> workflow.</p><p>Run ID: ${body.testRunId}</p><p>No customer booking, contract, invoice, payment, or calendar event was created.</p>`,
+        source: 'portal_test_lead',
+      })
+      return NextResponse.json({ result, queued: true, recipient: 'luxoratlaspalmas@gmail.com' }, { status: 201 })
+    }
+    if (body.action === 'advance') {
+      if (typeof body.testRunId !== 'string' || typeof body.artifactType !== 'string' || typeof body.status !== 'string') {
+        return NextResponse.json({ error: 'A run, simulated workflow type, and status are required.' }, { status: 400 })
+      }
+      const artifact = await supabaseRest('rpc/luxor_advance_test_artifact', {
+        method: 'POST',
+        body: JSON.stringify({ p_test_run_id: body.testRunId, p_artifact_type: body.artifactType, p_status: body.status, p_details: body.details && typeof body.details === 'object' ? body.details : {} }),
+      })
+      return NextResponse.json({ artifact, simulated: true })
+    }
     if (body.action !== 'reset' || typeof body.testRunId !== 'string' || body.confirm !== true) {
       return NextResponse.json({ error: 'Confirm reset for the selected test run.' }, { status: 400 })
     }

@@ -10,6 +10,7 @@ import {
   revealLuxorLayoutReviewToken,
 } from '@/lib/luxorLayoutReviewsServer'
 import { normalizeEmailAddress } from '@/lib/zohoMailServer'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const inquiry = await getLuxorInquiry(inquiryId)
     if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
+    if (inquiry.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     if (inquiry.status === 'closed_lost') {
       return NextResponse.json({ error: 'This lead is closed lost, so the review email cannot be sent.' }, { status: 409 })
     }

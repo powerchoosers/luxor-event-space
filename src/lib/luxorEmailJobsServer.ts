@@ -15,6 +15,7 @@ import { getLuxorInquiry } from './luxorInquiriesServer'
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 import { isLuxorMarketingDeliveryBlocked, recordLuxorMarketingJobResult } from './luxorMarketingDeliveryServer'
 import { luxorMailProvider } from './luxorMailConfig'
+import { luxorTestEmailAcceptedPatch, sendLuxorTestEmail } from './luxorTestEmailDelivery'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -771,6 +772,13 @@ export async function claimDueLuxorEmailJobs(limit = 25) {
   })
 }
 
+export async function claimDueLuxorTestEmailJobs(limit = 3) {
+  return supabaseRest<LuxorEmailJob[]>('rpc/luxor_claim_due_test_email_jobs', {
+    method: 'POST',
+    body: JSON.stringify({ job_limit: Math.min(Math.max(limit, 1), 25) }),
+  })
+}
+
 export async function claimDueLuxorFollowUpEmailJobs() {
   return supabaseRest<LuxorEmailJob[]>('rpc/luxor_claim_due_follow_up_email_jobs', {
     method: 'POST', body: JSON.stringify({ job_limit: 1 }),
@@ -887,15 +895,16 @@ export async function processLuxorEmailJobs(
   const results: { id: string; status: 'sent' | 'failed' | 'skipped'; error?: string }[] = []
 
   for (let job of jobs) {
+    let testProviderAccepted = false
     try {
       if (job.test_run_id) {
         // Test mail is never sent by preview/manual processing paths. A queued
         // test notification has its own atomic claim and recipient guard below.
-        if (!markSending) {
+        if (!markSending && !(job.job_type === 'test_notification' && job.status === 'sending')) {
           results.push({ id: job.id, status: 'skipped' })
           continue
         }
-        const authorization = await supabaseRest<{ eligible: boolean; reason?: string; recipient?: string }>(
+        const authorization = await supabaseRest<{ eligible: boolean; reason?: string; recipient?: string; test_run_id?: string }>(
           'rpc/luxor_authorize_test_email_job',
           { method: 'POST', body: JSON.stringify({ p_job_id: job.id }) },
         )
@@ -913,7 +922,14 @@ export async function processLuxorEmailJobs(
           continue
         }
         // Configured test messages can only reach the owner-confirmed recipient.
-        job = { ...job, recipient_email: authorization.recipient }
+        job = { ...job, test_run_id: authorization.test_run_id || job.test_run_id, recipient_email: authorization.recipient }
+      } else if (job.inquiry_id) {
+        const inquiry = await getLuxorInquiry(job.inquiry_id)
+        if (inquiry?.is_test === true) {
+          await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Test email blocked: no dedicated simulated test notification workflow is enabled.' })
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
       }
       const preparedJob = job.test_run_id ? job : await preparePostContractPaymentReminder(job)
       if (!preparedJob) {
@@ -927,6 +943,11 @@ export async function processLuxorEmailJobs(
       // is never touched by this guard.
       if (job.inquiry_id) {
         const inquiry = await getLuxorInquiry(job.inquiry_id)
+        if (inquiry?.is_test && !job.test_run_id) {
+          await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Test lead email blocked: this job is not linked to an active test run.' })
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
         if (!inquiry || (inquiry.status === 'closed_lost' && job.calendar_method !== 'CANCEL' && job.job_type !== 'inquiry_notification')) {
           await updateLuxorEmailJob(job.id, {
             status: 'cancelled',
@@ -1084,16 +1105,31 @@ export async function processLuxorEmailJobs(
         }
       }
       assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
-      const providerResult = await sendLuxorZohoEmail({
-        to: job.recipient_email,
-        subject: job.subject,
-        content: job.body,
-        from: senderFrom,
-        fromName: senderName,
-        idempotencyKey: `email-job/${job.id}`,
-      })
+      const providerResult = job.test_run_id
+        ? await sendLuxorTestEmail({
+            subject: job.subject,
+            body: job.body,
+            from: senderFrom,
+            fromName: senderName,
+            sendProvider: ({ to, subject, body, from, fromName }) => sendLuxorZohoEmail({
+              to, subject, content: body, from, fromName, idempotencyKey: `email-job/${job.id}`,
+            }),
+          }).then((result) => ({ messageId: result.providerMessageId }))
+        : await sendLuxorZohoEmail({
+            to: job.recipient_email,
+            subject: job.subject,
+            content: job.body,
+            from: senderFrom,
+            fromName: senderName,
+            idempotencyKey: `email-job/${job.id}`,
+          })
+      testProviderAccepted = Boolean(job.test_run_id)
       await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
       if (job.test_run_id) {
+        await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(job.id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ ...luxorTestEmailAcceptedPatch({ provider: luxorMailProvider(), providerMessageId: providerResult.messageId }), details: { ...(job.metadata || {}), provider_called: true } }),
+        }).catch((error) => console.error('Test email was provider-accepted but its run record update failed:', error))
         await supabaseRest('luxor_test_run_activity', {
           method: 'POST',
           headers: { Prefer: 'return=minimal' },
@@ -1109,7 +1145,7 @@ export async function processLuxorEmailJobs(
             attempt: Number(job.attempts || 0) + 1,
             details: { delivery_is_confirmed_separately: true },
           }),
-        }).catch(() => undefined)
+        })
       }
       if (job.job_type === 'marketing_campaign') {
         await markMarketingJobResult(job, 'sent')
@@ -1123,6 +1159,11 @@ export async function processLuxorEmailJobs(
       results.push({ id: job.id, status: 'sent' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Email send failed.'
+      if (job.test_run_id && testProviderAccepted) {
+        await updateLuxorEmailJob(job.id, { status: 'sent', last_error: null }).catch((recordError) => console.error('Provider accepted test email; could not finalize its queue status:', recordError))
+        results.push({ id: job.id, status: 'sent', error: 'Provider accepted; a run activity update needs reconciliation.' })
+        continue
+      }
       const retryCalendar = (job.job_type === 'calendar_invitation' || Boolean(job.tour_revision_id)) && Number(job.attempts || 0) < 3
       const retryAlert = job.job_type === 'inquiry_notification' && Number(job.attempts || 0) < 3
         && (job.metadata.notificationProvider || luxorMailProvider()) === 'resend'
@@ -1132,6 +1173,18 @@ export async function processLuxorEmailJobs(
       await updateLuxorEmailJob(job.id, { status: retry ? 'queued' : 'failed', last_error: message,
         ...(retry ? { scheduled_for: new Date(Date.now() + 60_000 * 2 ** Number(job.attempts || 0)).toISOString() } : {}) })
       if (job.test_run_id) {
+        await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(job.id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: retry ? 'queued' : 'failed',
+            provider: luxorMailProvider(),
+            provider_status: 'failed',
+            delivery_status: 'unknown',
+            error_message: message.slice(0, 1000),
+            details: { ...(job.metadata || {}), provider_called: true },
+            updated_at: new Date().toISOString(),
+          }),
+        }).catch((recordError) => console.error('Could not persist test email failure status:', recordError))
         await supabaseRest('luxor_test_run_activity', {
           method: 'POST',
           headers: { Prefer: 'return=minimal' },
@@ -1146,7 +1199,7 @@ export async function processLuxorEmailJobs(
             error_message: message.slice(0, 1000),
             attempt: Number(job.attempts || 0) + 1,
           }),
-        }).catch(() => undefined)
+        })
       }
       if (job.job_type === 'contract_signature' && job.metadata?.agreement_delivery === true) {
         const { markLuxorAgreementEmailJobFailed } = await import('./luxorAgreementDeliveryServer')
@@ -1273,16 +1326,23 @@ export async function queueUpcoming60DayInvoiceReminders() {
 // makes a due-time collision harmless: one scheduled minute equals one send.
 export async function processDueLuxorEmailJobs(limit = 1) {
   await queueUpcoming60DayInvoiceReminders().catch((err) => console.warn('final-payment reminder scan skipped:', err))
+  let testJobs: LuxorEmailJob[] = []
+  try {
+    testJobs = await claimDueLuxorTestEmailJobs(Math.max(1, Math.min(limit, 3)))
+  } catch (error) {
+    console.warn('Dedicated test-email queue is unavailable; ordinary mail processing continues:', error instanceof Error ? error.message : error)
+  }
+  const testResults = testJobs.length ? await processLuxorEmailJobs(testJobs, { markSending: false }) : []
   try {
     const jobs = await claimDueLuxorEmailJobs(limit)
-    return processLuxorEmailJobs(jobs, { markSending: false })
+    return [...testResults, ...await processLuxorEmailJobs(jobs, { markSending: false })]
   } catch (error) {
     console.warn(
       'luxor_claim_due_email_jobs RPC unavailable, falling back to direct due-job processing:',
       error instanceof Error ? error.message : error,
     )
     const jobs = await listDueLuxorEmailJobs(limit)
-    return processLuxorEmailJobs(jobs, { markSending: true })
+    return [...testResults, ...await processLuxorEmailJobs(jobs, { markSending: true })]
   }
 }
 

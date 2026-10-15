@@ -3,6 +3,7 @@ import 'server-only'
 import { LuxorBooking, LuxorBookingStatus, LuxorContractStatus, LuxorPayment, LuxorBookingExpense } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
 import { isWeekdayCustomRentalContext } from './luxorWeekdayRental'
+import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
 
 export type LuxorBookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -109,6 +110,7 @@ export function luxorBookingInsertPayload(data: LuxorBookingCreateInput) {
 }
 
 export async function createLuxorBooking(data: LuxorBookingCreateInput) {
+  if (data.inquiry_id) await assertLuxorProductionSideEffectsAllowed(data.inquiry_id)
   if (isWeekdayCustomRentalContext(data.metadata?.final_proposal_context)) {
     // A plain REST insert cannot prove that the scheduling migration exists.
     // Custom rentals must claim acceptance and the booking in the guarded RPC.
@@ -130,6 +132,7 @@ export async function createLuxorBooking(data: LuxorBookingCreateInput) {
  * the original booking instead of inserting another reservation.
  */
 export async function createOrGetLuxorBookingForInvoice(data: LuxorBookingCreateInput & { invoice_id: string }) {
+  if (data.inquiry_id) await assertLuxorProductionSideEffectsAllowed(data.inquiry_id)
   if (isWeekdayCustomRentalContext(data.metadata?.final_proposal_context)) {
     const existing = await getLuxorBookingByInvoice(data.invoice_id)
     if (existing) return { booking: existing, created: false }

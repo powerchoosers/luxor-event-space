@@ -18,7 +18,6 @@ export async function POST(request: NextRequest) {
     if (phone && phone.replace(/\D/g, '').length < 10) return NextResponse.json({ error: 'Please enter a complete phone number.' }, { status: 400 })
     if (body.formStartedAt && Date.now() - body.formStartedAt < 800) return NextResponse.json({ error: 'Please wait a moment and try again.' }, { status: 429 })
     const ipHash = hashPublicRequestIp(getPublicRequestIp(request.headers))
-    if (await countRecentPublicAttempts(ipHash, 'newsletter_signup_attempt') >= 6) return NextResponse.json({ error: 'Too many requests were submitted. Please wait ten minutes and try again.' }, { status: 429 })
     const input: LuxorInquiryInput = {
       fullName: fullName || 'Newsletter subscriber',
       email,
@@ -46,6 +45,7 @@ export async function POST(request: NextRequest) {
       const result = await startLuxorTestRun(input, { idempotencyKey, userAgent: request.headers.get('user-agent') ?? undefined })
       return NextResponse.json({ subscribed: true, ...result, test: true, simulated: true }, { status: 201 })
     }
+    if (await countRecentPublicAttempts(ipHash, 'newsletter_signup_attempt') >= 6) return NextResponse.json({ error: 'Too many requests were submitted. Please wait ten minutes and try again.' }, { status: 429 })
     await recordLuxorPublicEvent({ eventName: 'newsletter_signup_attempt', sessionId: input.sessionId, pagePath: input.pagePath, source: input.source, ipHash, metadata: { flow: input.flow } }).catch(() => undefined)
     const duplicate = await findRecentDuplicateLuxorInquiry(input)
     if (duplicate) return NextResponse.json({ subscribed: true, alreadySubscribed: true, inquiry: duplicate })

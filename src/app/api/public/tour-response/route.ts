@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorInquiryByTourToken, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,6 +11,7 @@ export async function POST(request: NextRequest) {
     if (!inquiry) {
       return NextResponse.json({ error: 'Tour response link not found.' }, { status: 404 })
     }
+    if (inquiry.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
 
     // A cancelled tour (or a closed-lost opportunity) must not be revived by
     // an old confirmation/reschedule link in the client’s inbox.

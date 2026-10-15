@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
-import { updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { getActiveLuxorSignatureRequestByBooking } from '@/lib/luxorSignaturesServer'
 import { getInvoice } from '@/lib/luxorInvoicesServer'
@@ -107,6 +107,8 @@ export async function POST(request: NextRequest) {
       let updatedRecord: unknown = null
 
       if (inquiryId) {
+        const existingInquiry = await getLuxorInquiry(inquiryId)
+        if (existingInquiry?.is_test) return NextResponse.json({ error: 'The permanent test lead can only be changed through its run lifecycle controls.' }, { status: 409 })
         updatedRecord = await updateLuxorInquiry(inquiryId, updates)
       } else if (bookingId) {
         // Reuse the protected booking endpoint so Elena cannot sidestep the

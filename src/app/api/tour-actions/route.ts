@@ -22,6 +22,7 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorCalendarEvent, getLuxorCalendarStatus } from '@/lib/luxorCalendarServer'
 import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
 import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 const TOUR_TIMEZONE = 'America/Chicago'
 const TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
 
     const inquiry = await getLuxorInquiry(inquiryId)
     if (!inquiry) return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
+    if (inquiry.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     if (inquiry.status === 'closed_lost') {
       return NextResponse.json({ error: 'This opportunity is closed lost. Reopen it before scheduling or changing a tour.' }, { status: 409 })
     }

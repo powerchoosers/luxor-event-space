@@ -13,6 +13,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params
     const inquiry = await getLuxorInquiry(id)
     if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
+    if (inquiry.is_test) return NextResponse.json({ error: 'The permanent test lead can only be reset through its run lifecycle controls.' }, { status: 409 })
 
     const body = await request.json().catch(() => ({})) as { reason?: unknown; cancelTour?: unknown }
     const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : ''

@@ -78,6 +78,7 @@ import { getLuxorTourSection, luxorTodayKey } from '@/lib/luxorTourMetrics'
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
 import { TourEmailResendDialog } from '@/components/portal/TourEmailResendDialog'
 import { WeekdayRentalSummary } from '@/components/portal/WeekdayRentalSummary'
+import { LuxorTestLeadPanel } from '@/components/portal/LuxorTestLeadPanel'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -4138,6 +4139,7 @@ export default function LeadDetailPage({
 
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0">
+      {lead.is_test ? <LuxorTestLeadPanel leadId={lead.id} /> : null}
 {invoices.some(invoice => invoice.same_day_booking_status === 'review') || payments.some(payment => payment.metadata?.receipt_received && payment.status !== 'paid') ? <div role="alert" className="mb-4 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-text)]"><p className="font-semibold">Payment received — owner review required</p><p className="text-[color:var(--portal-muted)]">Funds are recorded in the ledger but have not qualified the same-day booking. Do not collect again or revise a received-payment proposal. Verify receipt evidence or reconcile the exception with the client.</p></div> : null}
 
       <div className="mb-4 flex shrink-0 items-center justify-between">

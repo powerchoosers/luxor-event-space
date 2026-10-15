@@ -4,6 +4,7 @@ import { ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice } from
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,6 +15,7 @@ export async function POST(request: NextRequest) {
     if (!booking || booking.contract_status !== 'signed' || booking.status === 'cancelled') return NextResponse.json({ error: 'A signed active booking is required before opening card payment.' }, { status: 409 })
     const [masterInvoice, inquiry] = await Promise.all([booking.invoice_id ? getInvoice(booking.invoice_id) : null, booking.inquiry_id ? getLuxorInquiry(booking.inquiry_id) : null])
     if (!masterInvoice || !inquiry || inquiry.status === 'closed_lost') return NextResponse.json({ error: 'This booking no longer has an active payment record.' }, { status: 409 })
+    if (inquiry.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     const invoice = await ensureLuxorDepositInvoice({ masterInvoice, bookingId: booking.id, reservationDepositAmount: booking.deposit_required })
     const paid = await listPaidPaymentsByInvoice(invoice.id)
     const paidTotal = paid.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)

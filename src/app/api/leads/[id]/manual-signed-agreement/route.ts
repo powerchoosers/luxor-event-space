@@ -11,6 +11,7 @@ import type { LuxorDocument, LuxorBooking } from '@/lib/luxorInquiryTypes'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { sameDayTermsFingerprint, reconcileLuxorSameDayReceipts, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 export const runtime = 'nodejs'
 
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!inquiry || inquiry.status === 'closed_lost' || !booking || booking.inquiry_id !== inquiry.id || booking.status === 'cancelled') {
       return NextResponse.json({ error: 'This signed agreement does not belong to an active booking for this lead.' }, { status: 409 })
     }
+    if (inquiry.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     const invoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
     if (!invoice?.proposal_accepted_at || invoice.status !== 'sent') {
       return NextResponse.json({ error: 'Record acceptance of the locked final proposal before uploading a signed agreement.' }, { status: 409 })

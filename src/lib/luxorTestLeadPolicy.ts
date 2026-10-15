@@ -1,5 +1,10 @@
 export type TestLeadIdentifiers = { identification_email: string; identification_phone: string; enabled: boolean }
 
+export const LUXOR_PERMANENT_TEST_LEAD_ID = '00b264d6-a3fb-4ea3-9142-415f76385c39'
+export const LUXOR_TEST_IDENTIFICATION_EMAIL = 'luxoratlaspalmas@gmail.com'
+export const LUXOR_TEST_IDENTIFICATION_PHONE = '2149600276'
+export const LUXOR_TEST_PHONE_E164_DIGITS = '12149600276'
+
 export function normalizeTestEmail(value: unknown) {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
 }

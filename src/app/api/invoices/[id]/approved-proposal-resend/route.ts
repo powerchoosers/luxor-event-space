@@ -48,6 +48,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     if (!invoice || !invoice.inquiry_id) return NextResponse.json({ error: 'The proposal could not be found.' }, { status: 404 })
     const inquiry = await getLuxorInquiry(invoice.inquiry_id)
     if (!inquiry) return NextResponse.json({ error: 'The inquiry could not be found.' }, { status: 404 })
+    if (inquiry.is_test) return NextResponse.json({ error: 'Proposal email is simulated for the permanent test lead.' }, { status: 409 })
 
     const approvalRows = await supabaseRest<Array<{ approval_data: unknown }>>(
       `luxor_approved_proposal_resends?select=approval_data&invoice_id=eq.${encodeURIComponent(invoice.id)}&inquiry_id=eq.${encodeURIComponent(inquiry.id)}&limit=2`,

@@ -8,6 +8,7 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 const MONEY_EPSILON = 0.005
 
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
     if (!booking) {
       return NextResponse.json({ error: 'Booking record not found.' }, { status: 404 })
     }
+    if (booking.inquiry_id) await assertLuxorProductionSideEffectsAllowed(booking.inquiry_id)
     if (booking.security_deposit_status === 'refunded') {
       return NextResponse.json({ error: 'This security deposit has already been refunded.' }, { status: 409 })
     }

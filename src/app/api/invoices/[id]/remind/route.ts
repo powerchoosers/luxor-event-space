@@ -9,6 +9,7 @@ import { createLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsSe
 import { buildAiTailoredInvoiceReminderEmail } from '@/lib/luxorLifecycleEmailsServer'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
 import { getLuxorPaymentReminderBookingLookup, getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
 
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
+    if (inquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     if (inquiry?.status === 'closed_lost') {
       return NextResponse.json({ error: 'This lead is marked Deal Lost. Payment reminders and payment links cannot be sent.' }, { status: 409 })
     }

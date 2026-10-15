@@ -6,6 +6,9 @@ import { createOrUpdateLuxorMessage } from './luxorMessagesServer'
 import { getActiveLuxorPhoneNumber } from './luxorPhoneNumbersServer'
 import { supabaseRest } from './supabaseRestServer'
 import { buildTwilioCallbackUrl, getLuxorTwilioMessagingConfig } from './luxorTwilioServer'
+import { getLuxorInquiry } from './luxorInquiriesServer'
+import { recordLuxorTestSmsSimulation } from './luxorTestLeadServer'
+import { LUXOR_PERMANENT_TEST_LEAD_ID, LUXOR_TEST_PHONE_E164_DIGITS } from './luxorTestLeadPolicy'
 
 type ConsentStatus = 'unknown' | 'opted_in' | 'opted_out'
 type AutomationType = 'missed_call' | 'inbound_acknowledgment'
@@ -104,6 +107,20 @@ export async function sendLuxorAutomatedText(input: {
   contactName?: string | null
   cooldownHours?: number
 }) {
+  const inquiry = input.inquiryId ? await getLuxorInquiry(input.inquiryId) : null
+  const normalizedTestDestination = normalizePhoneNumber(input.to)?.replace(/\D/g, '')
+  if (inquiry?.is_test || normalizedTestDestination === LUXOR_TEST_PHONE_E164_DIGITS) {
+    if (normalizedTestDestination !== LUXOR_TEST_PHONE_E164_DIGITS || (inquiry && inquiry.id !== LUXOR_PERMANENT_TEST_LEAD_ID)) {
+      throw new Error('Automated texts to the permanent test lead are limited to its verified test number.')
+    }
+    const simulation = await recordLuxorTestSmsSimulation({
+      inquiryId: inquiry?.id || LUXOR_PERMANENT_TEST_LEAD_ID,
+      body: input.body,
+      source: `automated_text:${input.type}`,
+    })
+    if (!simulation) throw new Error('No active enabled test run is available for SMS simulation.')
+    return `SIMULATED-${String((simulation.artifact as { id?: string }).id || 'sms')}`
+  }
   const destination = await assertLuxorSmsAllowed(input.to)
   if (input.type === 'inbound_acknowledgment' && await hasRecentAutomation(destination, input.type, input.cooldownHours ?? 12)) return null
 

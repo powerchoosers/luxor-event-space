@@ -6,6 +6,7 @@ import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
 import { luxorCollectionAmounts } from './luxorPaymentOwnership'
 import { getLuxorProposalDeliveryReceipt } from './luxorProposalDeliveryReceipt'
 import { finishLuxorProposalPublicationAndFetchFreshInvoice } from './luxorProposalPublicationReconciliation'
+import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
 
 type SupabaseError = {
   message?: string
@@ -132,6 +133,7 @@ export async function createInvoice(data: {
   original_proposal_created_at?: string | null
   same_day_booking_status?: LuxorInvoice['same_day_booking_status']
 }) {
+  if (data.inquiry_id) await assertLuxorProductionSideEffectsAllowed(data.inquiry_id)
   const [created] = await supabaseRest<LuxorInvoice[]>(data.id ? 'luxor_invoices?on_conflict=id&select=*' : 'luxor_invoices?select=*', {
     method: 'POST',
     headers: { Prefer: data.id ? 'resolution=ignore-duplicates,return=representation' : 'return=representation' },

@@ -4,6 +4,7 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 import { LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { getLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getInvoice } from '@/lib/luxorInvoicesServer'
 import { queuePaymentConfirmationText } from '@/lib/luxorTextCampaignsServer'
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
       ? inquiry_id
       : requestedInvoice?.inquiry_id || null
     const requestedInquiry = requestedInquiryId ? await getLuxorInquiry(requestedInquiryId) : null
+    if (requestedInquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(requestedInquiry.id)
     if (requestedInquiry?.status === 'closed_lost') {
       return NextResponse.json({ error: 'This lead is marked Deal Lost. Do not add a new payment record.' }, { status: 409 })
     }

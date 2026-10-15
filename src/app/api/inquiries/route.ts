@@ -439,6 +439,7 @@ export async function PATCH(request: NextRequest) {
     if (!existing) {
       return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
     }
+    if (existing.is_test) return NextResponse.json({ error: 'The permanent test lead can only be changed through its run lifecycle controls.' }, { status: 409 })
 
     if (typeof updates.email === 'string') {
       const email = updates.email.trim().toLowerCase()

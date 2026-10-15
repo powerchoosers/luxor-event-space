@@ -10,6 +10,7 @@ import { supabaseRest } from './supabaseRestServer'
 import { isLuxorOfferExpired, luxorOfferSnapshot } from './luxorOffer'
 import { assertLuxorSameDayPaymentAllowed, sameDayTermsFingerprint } from './luxorSameDayBookingServer'
 import { sameDayBookingPromotion } from './luxorSameDayBooking'
+import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
 
 /**
  * A checkout URL remains usable even after its reference is removed from our
@@ -50,6 +51,7 @@ export async function createLuxorPostContractCheckout(input: {
   masterInvoiceId?: string
 }) {
   const { invoice, inquiry, booking } = input
+  await assertLuxorProductionSideEffectsAllowed(inquiry.id)
   const master = await assertLuxorSameDayPaymentAllowed(invoice, booking)
   const sameDay = master?.same_day_booking_status !== 'eligible' ? sameDayBookingPromotion(master) : null
   const fingerprint = sameDay?.coverage_amount && master ? sameDayTermsFingerprint(master, booking) : ''

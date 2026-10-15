@@ -18,6 +18,7 @@ import { prepareLuxorAcceptedProposalBooking } from '@/lib/luxorAgreementQueueSe
 import { proposalBookingTiming, LuxorProposalBookingTimingError } from '@/lib/luxorProposalBookingTiming'
 import { claimLuxorWeekdayProposalAcceptance, LuxorWeekdayRentalError, weekdayRentalDatabaseError } from '@/lib/luxorWeekdayRentalServer'
 import { isWeekdayCustomRentalContext } from '@/lib/luxorWeekdayRental'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 function isFinalProposalLocked(proposal: Awaited<ReturnType<typeof getInvoice>> | null) {
   return Boolean(
@@ -93,6 +94,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'The final proposal must belong to the booking lead.' }, { status: 409 })
     }
     const inquiryBeforeBooking = await getLuxorInquiry(proposal.inquiry_id)
+    if (inquiryBeforeBooking?.is_test) await assertLuxorProductionSideEffectsAllowed(proposal.inquiry_id)
     if (inquiryBeforeBooking?.status === 'closed_lost') {
       return NextResponse.json({ error: 'This lead is marked Deal Lost. A new booking cannot be created from a withdrawn proposal.' }, { status: 409 })
     }

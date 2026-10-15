@@ -21,6 +21,7 @@ import type { LuxorInvoice, LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import { recordLuxorSameDayPayment, recordLuxorSameDayScheduledPayment, sameDayTermsFingerprint, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 type ManualPaymentKind = 'deposit' | 'final' | 'security_deposit'
 
@@ -170,6 +171,7 @@ export async function POST(request: NextRequest) {
     if (!requestedBooking) return NextResponse.json({ error: 'Booking record not found.' }, { status: 404 })
     const requestedInquiryId = requestedBooking.inquiry_id || null
     const requestedInquiry = requestedInquiryId ? await getLuxorInquiry(requestedInquiryId) : null
+    if (requestedInquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(requestedInquiry.id)
     if (requestedBooking.status === 'completed' && requestedBooking.invoice_id && sameDayBookingPromotion(await getInvoice(requestedBooking.invoice_id))) return NextResponse.json({ error: 'Completed booking records are immutable. Review any additional received funds separately.' }, { status: 409 })
     if (requestedBooking.status === 'cancelled' || requestedInquiry?.status === 'closed_lost') {
       return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled. Do not record a new payment; review any historic payment in Stripe or the ledger instead.' }, { status: 409 })
@@ -179,6 +181,7 @@ export async function POST(request: NextRequest) {
     const luxorOnlyCollection = luxorCollectionAmounts(masterInvoice).scoped
     const inquiryId = booking.inquiry_id || masterInvoice.inquiry_id || null
     const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
+    if (inquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     if (booking.status === 'cancelled' || masterInvoice.status === 'cancelled' || inquiry?.status === 'closed_lost') {
       return NextResponse.json({ error: 'This deal was closed while the payment was being prepared. No manual payment was recorded.' }, { status: 409 })
     }

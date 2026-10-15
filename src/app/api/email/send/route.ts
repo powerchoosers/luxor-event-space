@@ -8,6 +8,9 @@ import { LuxorMarketingCampaign, LuxorMarketingRecipient } from '@/lib/luxorInqu
 import crypto from 'crypto'
 import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
 import { getPublicLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { recordLuxorTestEmailSimulation } from '@/lib/luxorTestLeadServer'
+import { LUXOR_PERMANENT_TEST_LEAD_ID, LUXOR_TEST_IDENTIFICATION_EMAIL } from '@/lib/luxorTestLeadPolicy'
 
 export async function POST(request: NextRequest) {
   const startedAt = Date.now()
@@ -19,7 +22,20 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { to, subject, content, from, track, campaignName, format, recipientName, contentMode } = body
+    const { to, subject, content, from, track, campaignName, format, recipientName, contentMode, inquiryId } = body
+    const normalizedRecipient = typeof to === 'string' ? to.trim().toLowerCase() : ''
+    const testLeadId = typeof inquiryId === 'string' && inquiryId
+      ? inquiryId
+      : normalizedRecipient === LUXOR_TEST_IDENTIFICATION_EMAIL ? LUXOR_PERMANENT_TEST_LEAD_ID : ''
+    if (testLeadId) {
+      const inquiry = await getLuxorInquiry(testLeadId)
+      if (inquiry?.is_test === true) {
+        const simulation = await recordLuxorTestEmailSimulation({ inquiryId: testLeadId, category: 'direct_message', subject: String(subject || ''), source: '/api/email/send' })
+        if (!simulation) return NextResponse.json({ error: 'The associated inquiry is not the permanent test lead.' }, { status: 409 })
+        return NextResponse.json({ success: true, simulated: true, recipient: LUXOR_TEST_IDENTIFICATION_EMAIL, providerStatus: 'not_attempted', deliveryStatus: 'unknown', simulation })
+      }
+      if (typeof inquiryId === 'string' && inquiryId) return NextResponse.json({ error: 'The selected lead could not be verified as the permanent test lead.' }, { status: 409 })
+    }
     const [senderProfile, senderPhone] = await Promise.all([
       getLuxorUserProfile(session.email),
       getPublicLuxorPhoneNumber(),

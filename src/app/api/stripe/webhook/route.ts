@@ -16,6 +16,7 @@ import { hasLuxorOffer, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/lu
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import { recordLuxorSameDayPayment, recordLuxorSameDayScheduledPayment, stripeSuccessfulPaymentEvidence, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
 function escapeNoticeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
@@ -66,6 +67,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
     console.error(`Stripe payment ${session.id} references an invoice that no longer exists: ${invoiceId}`)
     return
   }
+  if (invoice.inquiry_id) await assertLuxorProductionSideEffectsAllowed(invoice.inquiry_id)
   const collectionMasterInvoice = invoice.invoice_kind === 'event'
     ? invoice
     : invoice.parent_invoice_id ? await getInvoice(invoice.parent_invoice_id) : null
