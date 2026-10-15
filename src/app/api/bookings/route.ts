@@ -253,6 +253,9 @@ export async function PATCH(request: NextRequest) {
     if (!existing) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
     if (existing.inquiry_id) {
       const inquiry = await getLuxorInquiry(existing.inquiry_id)
+      if (inquiry?.is_test) {
+        return NextResponse.json({ error: 'Bookings linked to the permanent test lead can only be changed through run-scoped simulation controls.' }, { status: 409 })
+      }
       if (inquiry?.status === 'closed_lost') {
         return NextResponse.json({ error: 'This lead is marked Deal Lost. Update the close-out record instead of changing this booking.' }, { status: 409 })
       }

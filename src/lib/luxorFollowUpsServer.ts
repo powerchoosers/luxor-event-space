@@ -71,13 +71,7 @@ export async function getLuxorFollowUpSetup() {
 export async function isLuxorBrochureFollowUpSendingEnabled() {
   // The release environment variable is a server-only hard gate. Neither
   // template activation nor ordinary portal edits can override it.
-  if (process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED !== 'true') return false
-  const { automation, templates } = await getLuxorFollowUpSetup()
-  return Boolean(
-    automation?.enabled && automation.send_approved && automation.timing_configured &&
-    automation.timezone === 'America/Chicago' && templates.length === 9 &&
-    templates.every((template) => template.active),
-  )
+  return Boolean(await getLuxorBrochureFollowUpSequence())
 }
 
 const EDITABLE_TEMPLATE_FIELDS = new Set([
@@ -121,15 +115,24 @@ export function scheduleBrochureFollowUpOffsets(startedAt: string, steps: Array<
   return steps.map((step) => ({ step_key: step.step_key, scheduled_at: addElapsedDays(startedAt, step.delay_days) }))
 }
 
+/** Return the same send-approved sequence used for real brochure enrollments. */
+export async function getLuxorBrochureFollowUpSequence() {
+  if (process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED !== 'true') return null
+  const { automation, templates } = await getLuxorFollowUpSetup()
+  if (!automation?.enabled || !automation.send_approved || !automation.timing_configured
+    || automation.timezone !== 'America/Chicago' || templates.length !== 9
+    || !templates.every((template) => template.active)) return null
+  return templates
+}
+
 export async function enrollLuxorBrochureLead(inquiry: LuxorInquiry, existingBrochureJobId?: string | null) {
-  if (!await isLuxorBrochureFollowUpSendingEnabled()) return null
   if (inquiry.flow !== 'brochure_lead' && inquiry.source !== 'homepage_brochure') return null
   if (!inquiry.marketing_opt_in || !inquiry.email) return null
   if (inquiry.status === 'booked' || inquiry.status === 'tour_confirmed' || inquiry.status === 'closed_lost') return null
   if (inquiry.follow_up_disposition) return null
 
-  const { automation, templates } = await getLuxorFollowUpSetup()
-  if (!automation || templates.length !== 9) return null
+  const templates = await getLuxorBrochureFollowUpSequence()
+  if (!templates) return null
   let [enrollment] = await supabaseRest<LuxorFollowUpEnrollment[]>(
     'luxor_follow_up_enrollments?on_conflict=inquiry_id,automation_key&select=*',
     {

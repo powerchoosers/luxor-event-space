@@ -77,13 +77,18 @@ export async function POST(request: NextRequest) {
     const action = String(body.action || '')
     if (!inquiryId) return NextResponse.json({ error: 'inquiryId is required.' }, { status: 400 })
 
+    const targetInquiry = await getLuxorInquiry(inquiryId)
+    if (!targetInquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
+    if (targetInquiry.is_test) {
+      return NextResponse.json({ error: 'Follow-up changes for the permanent test lead must use run-scoped test workflow controls.' }, { status: 409 })
+    }
+
     if (action === 'response') {
       const result = await recordLuxorFollowUpResponse(inquiryId)
       return NextResponse.json({ success: true, ...result })
     }
     if (action === 'nurture') {
-      const inquiry = await getLuxorInquiry(inquiryId)
-      if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
+      const inquiry = targetInquiry
       const sequence = await controlLuxorBrochureFollowUp(inquiryId, 'stop')
       const updated = await updateLuxorInquiry(inquiryId, {
         metadata: { ...inquiry.metadata, followUpStage: 'nurture' },

@@ -3,6 +3,8 @@ import 'server-only'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { matchesTestLeadIdentifiers } from '@/lib/luxorTestLeadPolicy'
+import { getLuxorBrochureFollowUpSequence, scheduleBrochureFollowUpOffsets } from '@/lib/luxorFollowUpsServer'
+import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
 
 export type LuxorTestSettings = {
   id: number
@@ -43,6 +45,7 @@ export async function startLuxorTestRun(input: LuxorInquiryInput, request: { ide
             budget: input.budget ?? null,
             preferredTourDate: input.preferredTourDate ?? null,
             preferredTourTime: input.preferredTourTime ?? null,
+            marketingOptIn: input.marketingOptIn === true,
             packageInterest: input.packageInterest ?? null,
             message: input.message ?? null,
             flow: input.flow ?? null,
@@ -56,7 +59,7 @@ export async function startLuxorTestRun(input: LuxorInquiryInput, request: { ide
     },
   )
   const workflow = result.run.status === 'in_progress'
-    ? await prepareLuxorTestSubmission(input, result.run.id)
+    ? await prepareLuxorTestSubmission(input, result.run.id, result.run.started_at)
     : null
   return {
     leadId: result.lead.id,
@@ -66,7 +69,7 @@ export async function startLuxorTestRun(input: LuxorInquiryInput, request: { ide
   }
 }
 
-async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: string) {
+async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: string, startedAt: string) {
   const flow = String(input.flow || '')
   const source = String(input.source || '').toLowerCase()
   if (flow === 'elena_contact' || source === 'manual entry') return null
@@ -131,10 +134,100 @@ async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: strin
     })
     workflows.push(workflow)
   }
+  await prepareLuxorTestBrochureFollowUps(input, runId, startedAt, brochureSubmission)
   return {
     tour_simulated: isTourIntent,
     ...(isTourIntent ? { tour_status: workflows[0]?.tour_status ?? null } : {}),
     test_emails_queued: workflows.filter((workflow) => workflow.test_email_queued === true).length,
+  }
+}
+
+async function prepareLuxorTestBrochureFollowUps(
+  input: LuxorInquiryInput,
+  runId: string,
+  startedAt: string,
+  isBrochureSubmission: boolean,
+) {
+  if (!isBrochureSubmission) return
+
+  const actions: Record<string, unknown>[] = []
+  if (input.marketingOptIn !== true) {
+    actions.push({ step_key: 'sequence', channel: 'email', status: 'suppressed', scheduled_at: startedAt, details: { reason: 'marketing_consent_not_granted' } })
+  } else if (!input.email?.trim()) {
+    actions.push({ step_key: 'sequence', channel: 'email', status: 'skipped', scheduled_at: startedAt, details: { reason: 'email_required_for_brochure_follow_up' } })
+  } else {
+    const templates = await getLuxorBrochureFollowUpSequence()
+    if (!templates) {
+      actions.push({ step_key: 'sequence', channel: 'email', status: 'skipped', scheduled_at: startedAt, details: { reason: 'brochure_follow_up_not_enabled_or_fully_configured' } })
+    } else {
+      const stepTimes = new Map(scheduleBrochureFollowUpOffsets(startedAt, templates).map((step) => [step.step_key, step.scheduled_at]))
+      const { buildLuxorTestFollowUpEmail } = await import('@/lib/luxorTestEmailTemplates')
+      for (const template of templates) {
+        const scheduledAt = stepTimes.get(template.step_key) || startedAt
+        if (template.step_key === 'email_1') {
+          actions.push(followUpAction(template, scheduledAt, 'existing_delivery', { reason: 'brochure_delivery_is_email_1' }))
+          continue
+        }
+        if (new Date(scheduledAt).getTime() <= Date.now()) {
+          actions.push(followUpAction(template, scheduledAt, 'skipped', { reason: 'scheduled_step_is_in_the_past' }))
+          continue
+        }
+        if (template.channel === 'email' && template.active) {
+          const email = buildLuxorTestFollowUpEmail(runId, template)
+          await supabaseRest('rpc/luxor_prepare_test_submission', {
+            method: 'POST',
+            body: JSON.stringify({
+              p_test_run_id: runId,
+              p_tour_intent: false,
+              p_preferred_tour_date: null,
+              p_preferred_tour_time: null,
+              p_confirmed_slot: false,
+              p_email_category: 'follow_up',
+              p_email_subject: email.subject,
+              p_email_body: email.body,
+              p_automatic_source: `portal_test_email:brochure_follow_up:${template.step_key}`,
+              p_scheduled_for: scheduledAt,
+            }),
+          })
+          actions.push(followUpAction(template, scheduledAt, 'queued', { recipient: 'luxoratlaspalmas@gmail.com', run_scoped: true }))
+        } else if (template.channel === 'phone' && template.active) {
+          actions.push(followUpAction(template, scheduledAt, input.phone?.trim() ? 'task_simulated' : 'skipped', {
+            reason: input.phone?.trim() ? 'phone_task_recorded_in_test_history_only' : 'phone_number_missing',
+            external_task_created: false,
+          }))
+        } else {
+          actions.push(followUpAction(template, scheduledAt, 'skipped', { reason: 'channel_not_scheduled_by_production_brochure_sequence' }))
+        }
+      }
+    }
+  }
+
+  if (actions.length) {
+    await supabaseRest('rpc/luxor_record_test_brochure_follow_up_actions', {
+      method: 'POST',
+      body: JSON.stringify({ p_test_run_id: runId, p_actions: actions }),
+    })
+  }
+}
+
+function followUpAction(
+  template: LuxorFollowUpTemplate,
+  scheduledAt: string,
+  status: string,
+  details: Record<string, unknown>,
+) {
+  return {
+    step_key: template.step_key,
+    channel: template.channel,
+    status,
+    scheduled_at: scheduledAt,
+    details: {
+      name: template.name,
+      template_id: template.id,
+      delay_days: template.delay_days,
+      simulation_only: true,
+      ...details,
+    },
   }
 }
 

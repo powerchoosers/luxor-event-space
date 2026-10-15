@@ -294,6 +294,19 @@ export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCatego
   return markTestOnly(layoutEmail.subject, `<p>${layoutEmail.body.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br />')}</p>`, runId)
 }
 
+export function buildLuxorTestFollowUpEmail(runId: string, template: {
+  name: string
+  subject: string | null
+  body: string | null
+  cta_text: string | null
+  cta_url: string | null
+  secondary_cta_text: string | null
+  secondary_cta_url: string | null
+}) {
+  const rendered = buildLuxorFollowUpEmailHtml(syntheticInquiry(), template, safePortalUrl(runId))
+  return markTestOnly(template.subject || template.name, rendered, runId)
+}
+
 export async function buildLuxorTestTourPlan(runId: string, date: string, time: string, existingInquiry?: LuxorInquiry) {
   const inquiry = existingInquiry || syntheticInquiry()
   inquiry.preferred_tour_date = date
