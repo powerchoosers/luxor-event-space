@@ -57,7 +57,7 @@ begin
   end if;
 
   select * into v_email from public.luxor_test_run_emails
-  where test_run_id=v_run.id and category='follow_up' and details->>'source'=p_source
+  where test_run_id=v_run.id and category='follow_up' and details->>'automatic_source'=p_source
   order by created_at limit 1 for update;
   if found then
     return jsonb_build_object('test_run_id',v_run.id,'job_id',v_email.email_job_id,
@@ -104,7 +104,8 @@ begin
   if exists (
     select 1 from public.luxor_email_jobs j
     where j.inquiry_id=old.id and j.job_type='test_notification'
-      and j.metadata->>'test_category'='follow_up' and j.status='sending'
+      and j.metadata->>'test_category'='follow_up'
+      and j.metadata->>'automatic_source' like 'portal_test_email:brochure_follow_up:%' and j.status='sending'
       and j.test_authorized_at is not null
   ) then
     raise exception 'A test follow-up email is in flight; retry the lead transition after its provider outcome is recorded.' using errcode='55000';
@@ -115,7 +116,8 @@ begin
       update public.luxor_email_jobs j set status='cancelled',test_claim_token=null,test_authorized_at=null,
         last_error='Cancelled because the test lead advanced to a follow-up stop state.',updated_at=now()
       where j.inquiry_id=old.id and j.job_type='test_notification'
-        and j.metadata->>'test_category'='follow_up' and j.status in ('queued','sending')
+        and j.metadata->>'test_category'='follow_up'
+        and j.metadata->>'automatic_source' like 'portal_test_email:brochure_follow_up:%' and j.status in ('queued','sending')
         and j.test_authorized_at is null
       returning j.id,j.test_run_id
     ), email_updates as (
@@ -138,7 +140,8 @@ $$;
 
 create unique index if not exists luxor_test_brochure_follow_up_source_once
   on public.luxor_email_jobs (test_run_id,(metadata->>'automatic_source'))
-  where job_type='test_notification' and metadata->>'test_category'='follow_up';
+  where job_type='test_notification' and metadata->>'test_category'='follow_up'
+    and metadata->>'automatic_source' like 'portal_test_email:brochure_follow_up:%';
 
 create or replace function public.luxor_guard_test_brochure_followup_job()
 returns trigger
@@ -152,6 +155,7 @@ declare
   v_run public.luxor_test_runs;
 begin
   if new.job_type<>'test_notification' or new.metadata->>'test_category'<>'follow_up'
+    or coalesce(new.metadata->>'automatic_source','') not like 'portal_test_email:brochure_follow_up:%'
     or (tg_op='UPDATE' and (new.status<>'queued' or old.status='queued')) then
     return new;
   end if;
@@ -243,7 +247,8 @@ begin
     or v_settings.email_recipient_confirmed_at is null then
     return jsonb_build_object('eligible',false,'reason','recipient_unconfirmed');
   end if;
-  if v_job.metadata->>'test_category'='follow_up' and (
+  if v_job.metadata->>'test_category'='follow_up'
+    and v_job.metadata->>'automatic_source' like 'portal_test_email:brochure_follow_up:%' and (
     v_lead.status in ('tour_confirmed','booked','closed_lost') or v_lead.follow_up_disposition is not null
     or v_run.submitted_details #>> '{form,marketingOptIn}' is distinct from 'true'
     or nullif(trim(coalesce(v_run.submitted_email,'')),'') is null
