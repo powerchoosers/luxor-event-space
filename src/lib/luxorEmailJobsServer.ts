@@ -963,7 +963,24 @@ export async function processLuxorEmailJobs(
       }
       const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
       const isPreparedTourResend = metadata.prepared_tour_email_resend === true
+      const isCorrectedPaymentResend = typeof metadata.corrected_payment_resend_key === 'string'
       const isCorrectedEmailResend = typeof metadata.corrected_email_resend_request_id === 'string'
+      if (isCorrectedPaymentResend) {
+        const validation = await supabaseRest<{
+          job: LuxorEmailJob
+          claimed: boolean
+          eligible: boolean
+          completed?: boolean
+        }>(`rpc/${markSending ? 'luxor_claim_corrected_payment_resend' : 'luxor_check_corrected_payment_resend'}`, {
+          method: 'POST',
+          body: JSON.stringify({ p_inquiry_id: job.inquiry_id, p_job_id: job.id }),
+        })
+        if (!validation.eligible || !validation.job || validation.completed || (markSending && !validation.claimed)) {
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
+        job = validation.job
+      }
       if (isCorrectedEmailResend) {
         const validation = await supabaseRest<{
           job: LuxorEmailJob

@@ -5,11 +5,12 @@ import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, getLuxorBookingByInvoice } from '@/lib/luxorBookingsServer'
 import { listNotesByInquiry, createNote } from '@/lib/luxorNotesServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
-import { createLuxorEmailJob, updateLuxorEmailJob } from '@/lib/luxorEmailJobsServer'
+import { createLuxorEmailJob, updateLuxorEmailJob, processLuxorEmailJobs, listLuxorEmailJobsForInquiry } from '@/lib/luxorEmailJobsServer'
 import { buildAiTailoredInvoiceReminderEmail } from '@/lib/luxorLifecycleEmailsServer'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
 import { getLuxorPaymentReminderBookingLookup, getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { supabaseRest } from '@/lib/supabaseRestServer'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -39,7 +40,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'Invoice is already fully paid.' }, { status: 400 })
     }
 
-    const body = await request.json().catch(() => ({})) as { kind?: 'unpaid_invoice' | 'final_payment' }
+    const body = await request.json().catch(() => ({})) as { kind?: 'unpaid_invoice' | 'final_payment'; correctedEmailResend?: boolean; expectedRecipient?: string; sourceJobId?: string }
+    if (body.correctedEmailResend && body.expectedRecipient?.trim().toLowerCase() !== inquiry.email.trim().toLowerCase()) {
+      return NextResponse.json({ error: 'The lead email changed after review. Refresh and confirm the corrected recipient again.' }, { status: 409 })
+    }
     const bookingLookup = getLuxorPaymentReminderBookingLookup(invoice)
     const booking = bookingLookup && 'bookingId' in bookingLookup
       ? await getLuxorBooking(bookingLookup.bookingId)
@@ -107,6 +111,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       kind: reminderKind,
     })
 
+    if (body.correctedEmailResend) {
+      if (!body.sourceJobId || !/^[0-9a-f-]{36}$/i.test(body.sourceJobId)) return NextResponse.json({ error: 'The original payment reminder could not be verified.' }, { status: 409 })
+      const reservation = await supabaseRest<{ job: import('@/lib/luxorInquiryTypes').LuxorEmailJob; replayed: boolean }>(
+        'rpc/luxor_prepare_corrected_payment_email_resend', {
+          method: 'POST',
+          body: JSON.stringify({ p_inquiry_id: inquiry.id, p_source_job_id: body.sourceJobId, p_invoice_id: invoice.id,
+            p_expected_recipient: inquiry.email.trim().toLowerCase(), p_subject: email.subject, p_body: email.body }),
+        },
+      )
+      if (!reservation.job) return NextResponse.json({ error: 'The payment resend could not be reserved.' }, { status: 409 })
+      await processLuxorEmailJobs([reservation.job]).catch((error) => console.error('Corrected payment email remains in its durable queue:', error))
+      const latest = (await listLuxorEmailJobsForInquiry(inquiry.id, 200)).find((candidate) => candidate.id === reservation.job.id) || reservation.job
+      if (latest.status === 'failed' || latest.status === 'cancelled') {
+        return NextResponse.json({ job: latest, error: latest.last_error || 'Delivery failed or is unresolved; do not create a new payment email.' }, { status: 409 })
+      }
+      return NextResponse.json({ job: latest, delivery: latest.status, replayed: reservation.replayed }, { status: 202 })
+    }
+
     const job = await createLuxorEmailJob({
       inquiryId: inquiry.id,
       bookingId: booking?.id || null,
@@ -118,6 +140,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       metadata: {
         manual: true,
         requestedBy: session.email,
+        invoice_id: invoice.id,
         balance_due: balanceDue,
         ...(checkoutId ? { checkout_session_id: checkoutId, flow_stage: 'post_signature_payment' } : {}),
         ai_generated: email.aiGenerated,

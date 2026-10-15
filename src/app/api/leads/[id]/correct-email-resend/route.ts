@@ -6,13 +6,17 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorEmailJob } from '@/lib/luxorInquiryTypes'
 import { listInvoicesByInquiry } from '@/lib/luxorInvoicesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
-import { rankCorrectEmailResendOptions, type CorrectEmailResendOption } from '@/lib/luxorLeadEmailResend'
+import { rankCorrectEmailResendOptions, getRecipientBounceEvidence, isLeadEmailResendStage, type CorrectEmailResendOption, type EmailDeliveryEvidence } from '@/lib/luxorLeadEmailResend'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
+import { getLuxorBooking, getLuxorBookingByInvoice } from '@/lib/luxorBookingsServer'
+import { listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
+import { getLuxorPaymentReminderBookingLookup, getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 
 const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const RESENDABLE_TYPES = new Set(['booking_package', 'post_event_follow_up', 'layout_review'])
 
-type MailRow = { id: string; status: string; occurred_at: string; accepted_at: string | null; to_addresses?: string[] }
+type MailRow = EmailDeliveryEvidence
 
 function canCorrectAndResend(inquiry: { status: string; pipeline_stage?: string | null; is_test?: boolean }) {
   return !inquiry.is_test && inquiry.status !== 'closed_lost' && inquiry.pipeline_stage !== 'closed_lost'
@@ -20,7 +24,7 @@ function canCorrectAndResend(inquiry: { status: string; pipeline_stage?: string 
 
 function filterForLeadStage(options: CorrectEmailResendOption[], inquiry: { status: string; pipeline_stage?: string | null }) {
   const preProposal = ['new', 'contacted', 'tour_requested', 'tour_confirmed'].includes(inquiry.status)
-    && ['newsletter', 'inquiry', 'tour', ''].includes(inquiry.pipeline_stage || '')
+    && ['newsletter', 'inquiry', 'tour'].includes(inquiry.pipeline_stage ?? 'inquiry')
   if (preProposal) return options.filter((option) => option.sourceKind !== 'Event follow-up'
     && option.resendKind !== 'proposal' && option.resendKind !== 'agreement')
   const postEvent = inquiry.status === 'booked' && ['event', 'closing'].includes(inquiry.pipeline_stage || '')
@@ -53,25 +57,26 @@ async function loadDedicatedFlowOptions(inquiryId: string, email: string, jobs: 
     const context = invoice.proposal_context as Record<string, unknown>
     const snapshot = context.delivery_snapshot as Record<string, unknown>
     const emailSnapshot = snapshot.proposal_email as Record<string, unknown>
-    const approvals = await supabaseRest<Array<{ approval_data: unknown }>>(
-      `luxor_approved_proposal_resends?select=approval_data&invoice_id=eq.${encodeURIComponent(invoice.id)}&inquiry_id=eq.${encodeURIComponent(inquiryId)}&limit=2`,
-    ).catch(() => [])
-    if (approvals.length !== 1) return null
+    const providerMessageId = typeof emailSnapshot.provider_message_id === 'string' ? emailSnapshot.provider_message_id : ''
+    if (!providerMessageId) return null
     const mailRows = await supabaseRest<MailRow[]>(
-      `luxor_mail_messages?select=id,status,occurred_at,accepted_at,to_addresses&provider=resend&direction=eq.outgoing&metadata->>invoiceId=eq.${encodeURIComponent(invoice.id)}&order=occurred_at.desc&limit=10`,
+      `luxor_mail_messages?select=id,status,occurred_at,accepted_at,to_addresses&provider_id=eq.${encodeURIComponent(providerMessageId)}&direction=eq.outgoing&limit=5`,
     ).catch(() => [])
-    const latestMail = mailRows.find((row) => !row.to_addresses?.length || row.to_addresses.some((address) => address.trim().toLowerCase() === String(emailSnapshot.recipient_email).trim().toLowerCase())) || null
-    const successfulCorrection = mailRows.some((row) => row.to_addresses?.some((address) => address.trim().toLowerCase() === email)
-      && (Boolean(row.accepted_at) || ['delivered', 'opened', 'clicked'].includes(row.status)))
-    if (successfulCorrection) return null
+    const originalRecipient = String(emailSnapshot.recipient_email).trim().toLowerCase()
+    const deliveryEvidence = getRecipientBounceEvidence(mailRows, originalRecipient)
+    const successfulCorrection = await supabaseRest<MailRow[]>(
+      `luxor_mail_messages?select=id,status,occurred_at,accepted_at,to_addresses&provider=resend&direction=eq.outgoing&metadata->>invoiceId=eq.${encodeURIComponent(invoice.id)}&order=occurred_at.desc&limit=50`,
+    ).catch(() => [])
+    if (successfulCorrection.some((row) => row.to_addresses?.some((address) => address.trim().toLowerCase() === email)
+      && (Boolean(row.accepted_at) || ['delivered', 'opened', 'clicked'].includes(row.status)))) return null
     return {
       id: invoice.id,
       recipientEmail: String(emailSnapshot.recipient_email),
       subject: String(emailSnapshot.subject),
       body: String(emailSnapshot.html),
       sentAt: invoice.proposal_latest_sent_at || invoice.proposal_sent_at || invoice.created_at,
-      bounced: latestMail?.status === 'bounced',
-      bounceAt: latestMail?.status === 'bounced' ? latestMail.occurred_at : null,
+      bounced: deliveryEvidence.bounced,
+      bounceAt: deliveryEvidence.bounceAt,
       sourceKind: `Proposal v${invoice.proposal_version || 1} (frozen PDF attached)`,
       resendKind: 'proposal' as const,
       canSend: true,
@@ -106,7 +111,41 @@ async function loadDedicatedFlowOptions(inquiryId: string, email: string, jobs: 
       }
     }))
   return [...sentProposalOptions.filter((option): option is NonNullable<typeof option> => Boolean(option)),
-    ...agreementOptions.filter((option): option is NonNullable<typeof option> => Boolean(option))]
+    ...agreementOptions.filter((option): option is NonNullable<typeof option> => Boolean(option)),
+    ...await loadPaymentOptions(inquiryId, email, jobs)]
+}
+
+async function loadPaymentOptions(inquiryId: string, email: string, jobs: LuxorEmailJob[]): Promise<CorrectEmailResendOption[]> {
+  const paymentJobs = jobs.filter((job) => ['unpaid_invoice_reminder', 'final_payment_reminder', 'final_payment_request'].includes(job.job_type)
+    && job.status === 'sent' && job.sent_at && job.booking_id && job.recipient_email.trim().toLowerCase() !== email)
+  const invoices = await listInvoicesByInquiry(inquiryId).catch(() => [])
+  const options = await Promise.all(paymentJobs.map(async (job) => {
+    const booking = await getLuxorBooking(job.booking_id!).catch(() => null)
+    const candidates = invoices.filter((candidate) => candidate.booking_id === job.booking_id
+      && (typeof job.metadata?.invoice_id !== 'string' || job.metadata.invoice_id === candidate.id)
+      && ['deposit', 'final_balance', 'security_deposit'].includes(candidate.invoice_kind || '')
+      && (job.job_type !== 'final_payment_reminder' || candidate.invoice_kind === 'final_balance')
+      && (job.job_type !== 'unpaid_invoice_reminder' || candidate.invoice_kind !== 'final_balance'))
+    const invoice = candidates.length === 1 ? candidates[0] : null
+    if (!invoice || invoice.status === 'cancelled' || !booking || booking.contract_status !== 'signed'
+      || !getLuxorPaymentReminderDueDate({ invoice_kind: invoice.invoice_kind, due_date: invoice.due_date, final_payment_due_date: booking.final_payment_due_date })) return null
+    const paid = await listPaidPaymentsByInvoice(invoice.id).catch(() => [])
+    if (Math.max(0, Math.round((Number(invoice.total) - paid.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)) * 100) / 100) <= 0) return null
+    const deliveryRows = await supabaseRest<MailRow[]>(
+      `luxor_mail_messages?select=id,status,occurred_at,accepted_at,to_addresses&direction=eq.outgoing&metadata->>emailJobId=eq.${encodeURIComponent(job.id)}&order=occurred_at.desc&limit=50`,
+    ).catch(() => [])
+    const bounce = getRecipientBounceEvidence(deliveryRows, job.recipient_email)
+    const alreadySentCorrected = jobs.some((candidate) => candidate.metadata?.corrected_payment_resend_invoice_id === invoice.id
+      && ['queued', 'sending', 'sent'].includes(candidate.status) && candidate.recipient_email.trim().toLowerCase() === email)
+    if (alreadySentCorrected) return null
+    return {
+      id: job.id, invoiceId: invoice.id, recipientEmail: email, subject: job.subject,
+      body: 'A fresh secure payment link will be generated for the current balance and shown to the recipient. The invoice amount and payment history will stay unchanged.',
+      sentAt: job.sent_at, bounced: bounce.bounced, bounceAt: bounce.bounceAt, sourceKind: 'Payment reminder',
+      resendKind: 'payment' as const, canSend: true,
+    }
+  }))
+  return options.filter((option): option is NonNullable<typeof option> => Boolean(option))
 }
 
 async function loadEligibleSnapshots(inquiryId: string, email: string) {
@@ -130,9 +169,9 @@ async function loadEligibleSnapshots(inquiryId: string, email: string) {
       if (!reviews[0] || reviews[0].status !== 'open' || reviews[0].revoked_at || Date.parse(reviews[0].expires_at) <= Date.now()) return null
     }
     const mailRows = await supabaseRest<MailRow[]>(
-      `luxor_mail_messages?select=id,status,occurred_at,accepted_at&provider=resend&direction=eq.outgoing&metadata->>emailJobId=eq.${encodeURIComponent(job.id)}&order=occurred_at.desc&limit=10`,
+      `luxor_mail_messages?select=id,status,occurred_at,accepted_at,to_addresses&direction=eq.outgoing&metadata->>emailJobId=eq.${encodeURIComponent(job.id)}&order=occurred_at.desc&limit=50`,
     ).catch(() => [])
-    const latestMail = mailRows[0] || null
+    const deliveryEvidence = getRecipientBounceEvidence(mailRows, job.recipient_email)
     const correctedCopies = jobs.filter((later) => later.metadata?.corrected_email_resend_source_id === job.id
       && later.status === 'sent' && later.sent_at
       && later.recipient_email.trim().toLowerCase() === email.trim().toLowerCase())
@@ -149,8 +188,8 @@ async function loadEligibleSnapshots(inquiryId: string, email: string) {
       subject: job.subject,
       body: job.body,
       sentAt: job.sent_at,
-      bounced: latestMail?.status === 'bounced',
-      bounceAt: latestMail?.status === 'bounced' ? latestMail.occurred_at : null,
+      bounced: deliveryEvidence.bounced,
+      bounceAt: deliveryEvidence.bounceAt,
       sourceKind: job.job_type === 'booking_package' ? 'Venue brochure' : job.job_type === 'layout_review' ? 'Layout review' : 'Event follow-up',
       resendKind: 'snapshot' as const,
       canSend: true,
@@ -172,16 +211,17 @@ async function loadPreparedTourResends(jobs: LuxorEmailJob[], email: string): Pr
   return Promise.all(eligible.map(async (job) => {
     const sourceJobId = typeof job.metadata?.source_job_id === 'string' ? job.metadata.source_job_id : ''
     const sourceMail = UUID_RE.test(sourceJobId) ? await supabaseRest<MailRow[]>(
-      `luxor_mail_messages?select=id,status,occurred_at,accepted_at&provider=resend&direction=eq.outgoing&metadata->>emailJobId=eq.${encodeURIComponent(sourceJobId)}&order=occurred_at.desc&limit=1`,
+      `luxor_mail_messages?select=id,status,occurred_at,accepted_at,to_addresses&direction=eq.outgoing&metadata->>emailJobId=eq.${encodeURIComponent(sourceJobId)}&order=occurred_at.desc&limit=50`,
     ).catch(() => []) : []
+    const bounce = getRecipientBounceEvidence(sourceMail, job.recipient_email)
     return {
       id: job.id,
       recipientEmail: job.recipient_email,
       subject: job.subject,
       body: job.body,
       sentAt: job.sent_at,
-      bounced: sourceMail[0]?.status === 'bounced',
-      bounceAt: sourceMail[0]?.status === 'bounced' ? sourceMail[0].occurred_at : null,
+      bounced: bounce.bounced,
+      bounceAt: bounce.bounceAt,
       sourceKind: 'Tour confirmation',
       resendKind: 'tour',
       canSend: job.status === 'failed' || (job.status === 'cancelled' && job.metadata?.awaiting_owner_confirmation === true),
@@ -192,19 +232,23 @@ async function loadPreparedTourResends(jobs: LuxorEmailJob[], email: string): Pr
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
+    const session = await getLuxorPortalSession()
+    if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
+    const member = await getLuxorPortalMember(session.email)
+    if (!memberCan(member, 'leads')) return NextResponse.json({ error: 'Lead permission is required.' }, { status: 403 })
     const { id } = await params
     if (!UUID_RE.test(id)) return NextResponse.json({ error: 'Lead ID is invalid.' }, { status: 400 })
     const inquiry = await getLuxorInquiry(id)
     if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
-    if (!canCorrectAndResend(inquiry)) return NextResponse.json({ options: [], unavailableReason: 'This lead has moved beyond the eligible email-resend stage.' })
+    if (!canCorrectAndResend(inquiry) || !isLeadEmailResendStage(inquiry)) return NextResponse.json({ options: [], unavailableReason: 'This lead has moved beyond the eligible email-resend stage.' })
     const email = inquiry.email?.trim().toLowerCase() || ''
     if (!EMAIL_RE.test(email)) return NextResponse.json({ options: [], unavailableReason: 'Save a valid email address before resending.' })
     const jobs = await listLuxorEmailJobsForInquiry(id, 200)
     const [snapshotOptions, tourOptions, dedicatedOptions] = await Promise.all([
       loadEligibleSnapshots(id, email), loadPreparedTourResends(jobs, email), loadDedicatedFlowOptions(id, email, jobs),
     ])
-    const options = rankCorrectEmailResendOptions(filterForLeadStage([...snapshotOptions, ...tourOptions, ...dedicatedOptions], inquiry))
+    const options = rankCorrectEmailResendOptions(filterForLeadStage([...snapshotOptions, ...tourOptions, ...dedicatedOptions]
+      .filter((option) => memberCan(member, 'finances') || option.resendKind !== 'payment'), inquiry))
     return NextResponse.json({ options, suggestedId: options[0]?.id || null, currentEmail: email })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not load email resend options.' }, { status: 500 })
@@ -215,6 +259,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const session = await getLuxorPortalSession()
     if (!session) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
+    const member = await getLuxorPortalMember(session.email)
+    if (!memberCan(member, 'leads')) return NextResponse.json({ error: 'Lead permission is required.' }, { status: 403 })
     const { id } = await params
     if (!UUID_RE.test(id)) return NextResponse.json({ error: 'Lead ID is invalid.' }, { status: 400 })
     const payload = await request.json().catch(() => ({})) as { sourceJobId?: unknown; requestId?: unknown; expectedRecipient?: unknown }
@@ -225,7 +271,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const inquiry = await getLuxorInquiry(id)
     if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
-    if (!canCorrectAndResend(inquiry)) return NextResponse.json({ error: 'This lead has moved beyond the eligible email-resend stage.' }, { status: 409 })
+    if (!canCorrectAndResend(inquiry) || !isLeadEmailResendStage(inquiry)) return NextResponse.json({ error: 'This lead has moved beyond the eligible email-resend stage.' }, { status: 409 })
     const email = inquiry.email?.trim().toLowerCase() || ''
     if (!EMAIL_RE.test(email)) return NextResponse.json({ error: 'Save a valid corrected email before resending.' }, { status: 409 })
     if (typeof payload.expectedRecipient !== 'string' || payload.expectedRecipient.trim().toLowerCase() !== email) {
@@ -236,7 +282,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .find((option) => option.id === sourceJobId)
     if (dedicatedOption?.resendKind === 'proposal') {
       const response = await fetch(`${new URL(request.url).origin}/api/invoices/${encodeURIComponent(sourceJobId)}/approved-proposal-resend`, {
-        method: 'POST', headers: { cookie: request.headers.get('cookie') || '' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', cookie: request.headers.get('cookie') || '' },
+        body: JSON.stringify({ expectedRecipient: email }),
+      })
+      const result = await response.json().catch(() => ({}))
+      return NextResponse.json(result, { status: response.status })
+    }
+    if (dedicatedOption?.resendKind === 'payment') {
+      if (!memberCan(member, 'finances')) return NextResponse.json({ error: 'Finance permission is required to send payment links.' }, { status: 403 })
+      const invoiceId = dedicatedOption.invoiceId
+      if (!invoiceId) return NextResponse.json({ error: 'The payment invoice could not be verified.' }, { status: 409 })
+      const invoice = await listInvoicesByInquiry(id).then((rows) => rows.find((row) => row.id === invoiceId))
+      const bookingLookup = invoice && getLuxorPaymentReminderBookingLookup(invoice)
+      const booking = bookingLookup && 'bookingId' in bookingLookup ? await getLuxorBooking(bookingLookup.bookingId)
+        : bookingLookup && 'invoiceId' in bookingLookup ? await getLuxorBookingByInvoice(bookingLookup.invoiceId) : null
+      if (!invoice || !booking || booking.contract_status !== 'signed'
+        || !getLuxorPaymentReminderDueDate({ invoice_kind: invoice.invoice_kind, due_date: invoice.due_date, final_payment_due_date: booking.final_payment_due_date })) {
+        return NextResponse.json({ error: 'The signed booking or payment schedule changed. Refresh before sending.' }, { status: 409 })
+      }
+      const source = jobs.find((job) => job.id === sourceJobId && job.booking_id === booking.id && job.status === 'sent'
+        && job.recipient_email.trim().toLowerCase() !== email
+        && ['unpaid_invoice_reminder', 'final_payment_reminder', 'final_payment_request'].includes(job.job_type)
+        && (job.job_type !== 'final_payment_reminder' || invoice.invoice_kind === 'final_balance')
+        && (job.job_type !== 'unpaid_invoice_reminder' || invoice.invoice_kind !== 'final_balance'))
+      if (!source) return NextResponse.json({ error: 'The selected payment reminder is no longer eligible.' }, { status: 409 })
+      const response = await fetch(`${new URL(request.url).origin}/api/invoices/${encodeURIComponent(invoiceId)}/remind`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', cookie: request.headers.get('cookie') || '' },
+        body: JSON.stringify({ kind: source.job_type === 'final_payment_reminder' ? 'final_payment' : 'unpaid_invoice', correctedEmailResend: true, expectedRecipient: email, sourceJobId: source.id }),
       })
       const result = await response.json().catch(() => ({}))
       return NextResponse.json(result, { status: response.status })

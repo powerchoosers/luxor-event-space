@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { rankCorrectEmailResendOptions } from '../src/lib/luxorLeadEmailResend.ts'
+import { getRecipientBounceEvidence, isLeadEmailResendStage, rankCorrectEmailResendOptions } from '../src/lib/luxorLeadEmailResend.ts'
 
 const sql = await readFile(new URL('../supabase/migrations/20261015060000_unified_lead_email_resend.sql', import.meta.url), 'utf8')
 const route = await readFile(new URL('../src/app/api/leads/[id]/correct-email-resend/route.ts', import.meta.url), 'utf8')
@@ -16,6 +16,29 @@ test('latest relevant bounce ranks ahead of a newer non-bounced message', () => 
     { id: 'bounce', bounced: true, sentAt: '2026-10-01T09:00:00Z', bounceAt: '2026-10-02T09:00:00Z' },
   ])
   assert.equal(ranked[0].id, 'bounce')
+})
+
+test('bounce evidence follows the exact recipient and message time, not unrelated mail', () => {
+  const rows = [
+    { id: 'bounce', status: 'bounced', occurred_at: '2026-10-15T09:00:00Z', accepted_at: '2026-10-15T08:55:00Z', to_addresses: ['bad@example.com'] },
+    { id: 'other', status: 'delivered', occurred_at: '2026-10-15T10:00:00Z', to_addresses: ['other@example.com'] },
+  ]
+  assert.deepEqual(getRecipientBounceEvidence(rows, 'BAD@example.com'), { bounced: true, bounceAt: '2026-10-15T09:00:00Z' })
+  assert.deepEqual(getRecipientBounceEvidence(rows, 'missing@example.com'), { bounced: false, bounceAt: null })
+})
+
+test('later successful delivery to the same address replaces an earlier bounce', () => {
+  assert.deepEqual(getRecipientBounceEvidence([
+    { id: 'bounce', status: 'bounced', occurred_at: '2026-10-15T09:00:00Z', to_addresses: ['lead@example.com'] },
+    { id: 'success', status: 'delivered', occurred_at: '2026-10-15T10:00:00Z', to_addresses: ['lead@example.com'] },
+  ], 'lead@example.com'), { bounced: false, bounceAt: null })
+})
+
+test('lead-stage eligibility matches the shared pre-proposal and booked gates', () => {
+  assert.equal(isLeadEmailResendStage({ status: 'tour_confirmed', pipeline_stage: 'tour' }), true)
+  assert.equal(isLeadEmailResendStage({ status: 'tour_confirmed', pipeline_stage: '' }), false)
+  assert.equal(isLeadEmailResendStage({ status: 'booked', pipeline_stage: 'deposit' }), true)
+  assert.equal(isLeadEmailResendStage({ status: 'closed_lost', pipeline_stage: 'inquiry' }), false)
 })
 
 test('successful replacement to current recipient suppresses obsolete proposal snapshots', () => {
@@ -35,6 +58,8 @@ test('proposal and agreement resends use their guarded dedicated delivery engine
   assert.match(route, /send-agreement/)
   assert.match(route, /signature\.client_email\.trim\(\)\.toLowerCase\(\) === email/)
   assert.match(route, /This agreement is signed and cannot be resent/)
+  assert.match(route, /correctedEmailResend/)
+  assert.doesNotMatch(route, /approvals.length !== 1\) return null/)
 })
 
 test('corrected resend queue binds recipient and immutable source content with idempotency', () => {
@@ -67,6 +92,17 @@ test('tour resend confirmation is a stable job-level idempotent action across ta
   assert.ok(inquiryLock >= 0 && jobLock > inquiryLock)
   assert.match(tourSql, /if job\.status in \('queued','sending'\)[\s\S]*?return jsonb_build_object\('job',to_jsonb\(job\)/)
   assert.match(worker, /luxor_claim_prepared_tour_email_resend_delivery/)
+  assert.match(sql, /luxor_claim_prepared_tour_email_resend_delivery\(p_inquiry_id uuid,p_job_id uuid\)[\s\S]*?pipeline_stage,'inquiry'\) not in \('newsletter','inquiry','tour'\)/)
+})
+
+test('payment resend reserves one immutable recipient-bound invoice job and revalidates signed balance at claim', () => {
+  assert.match(sql, /luxor_email_jobs_corrected_payment_resend_uidx/)
+  assert.match(sql, /luxor_prepare_corrected_payment_email_resend/)
+  assert.match(sql, /luxor_validate_corrected_payment_resend/)
+  assert.match(sql, /booking\.contract_status='signed'/)
+  assert.match(sql, /sum\(amount\).*status='paid'/)
+  assert.match(worker, /luxor_claim_corrected_payment_resend/)
+  assert.match(route, /correctedEmailResend/)
 })
 
 test('due-worker job claim commits independently before per-lead validation, with the same provider key on recovery', () => {

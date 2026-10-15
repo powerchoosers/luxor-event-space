@@ -118,7 +118,7 @@ export function CorrectEmailResendDialog({
         {error ? <p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p> : null}
         <div className="flex flex-col-reverse gap-2 border-t border-[color:var(--portal-border)] pt-3 sm:flex-row sm:justify-end">
           <button type="button" onClick={onClose} disabled={saving || sending} className="min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">Close</button>
-          <button type="button" onClick={() => void sendSelected()} disabled={!selected || selected.canSend === false || !emailSaved || !emailValid || sending || saving} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white hover:bg-[#b68d3b] disabled:opacity-50"><Send size={14} />{sending ? 'Sending…' : selected?.canSend === false ? selected.unavailableLabel || 'Unavailable' : selected?.resendKind === 'agreement' ? 'Queue agreement resend' : 'Send corrected email'}</button>
+          <button type="button" onClick={() => void sendSelected()} disabled={!selected || selected.canSend === false || !emailSaved || !emailValid || sending || saving} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white hover:bg-[#b68d3b] disabled:opacity-50"><Send size={14} />{sending ? 'Sending…' : selected?.canSend === false ? selected.unavailableLabel || 'Unavailable' : selected?.resendKind === 'agreement' ? 'Queue agreement resend' : selected?.resendKind === 'payment' ? 'Send payment link' : 'Send corrected email'}</button>
         </div>
       </div>
     </PortalModal>
