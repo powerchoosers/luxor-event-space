@@ -198,11 +198,14 @@ test('test proposal calculation, validation, HTML and PDF share the production p
 
 test('test proposal save and publish are run-scoped and do not call production customer workflows', () => {
   assert.match(testProposalRoute, /authorizedMember\(\)/)
-  assert.match(testProposalRoute, /prepareLuxorTestProposal\(\{ testRunId, action, selection, description, notes \}\)/)
+  assert.match(testProposalRoute, /prepareLuxorTestProposal\(\{ testRunId, action, selection, description, notes, expectedRevision \}\)/)
   const proposalPricingRoute = fs.readFileSync(path.join(root, 'src/app/api/proposal-pricing/route.ts'), 'utf8')
   assert.match(proposalPricingRoute, /getLuxorPortalMember\(session\.email\)[\s\S]*memberCan\(member, 'settings'\)/)
   assert.match(proposalPricingRoute, /luxor_test_run_artifacts\?select=status,details[\s\S]*existingTestInvoice = invoice as unknown as LuxorInvoice/)
   assert.match(testProposalRoute, /rpc\/luxor_save_test_proposal/)
+  assert.match(testProposalRoute, /p_expected_revision: expectedRevision/)
+  assert.match(testProposalRoute, /p_request_fingerprint: prepared\.requestFingerprint/)
+  assert.match(testProposalRoute, /if \(result\.conflict\)/)
   assert.match(testProposalRoute, /action === 'publish' \? prepared\.pdfBase64 : null/)
   assert.match(testProposalRoute, /details: \{ invoice: artifact\.details\?\.invoice \?\? null \}/)
   assert.doesNotMatch(testProposalRoute, /artifact: result\.artifact/)
@@ -219,9 +222,141 @@ test('test proposal save and publish are run-scoped and do not call production c
   assert.match(testProposalMigration, /status = 'in_progress'[\s\S]*for update/)
   assert.match(testProposalMigration, /status not in \('simulated', 'drafted'\)/)
   assert.match(testProposalMigration, /published_email_id/)
+  assert.match(testProposalMigration, /for update[\s\S]*proposal_revision[\s\S]*v_current_revision/)
+  assert.match(testProposalMigration, /v_existing\.details ->> 'publish_request_fingerprint'[\s\S]*v_existing\.details ->> 'published_email_id'[\s\S]*'replayed', true/)
+  assert.match(testProposalMigration, /p_expected_revision integer default 0[\s\S]*p_request_fingerprint text default null/)
   assert.doesNotMatch(testProposalMigration, /insert into public\.(luxor_invoices|luxor_bookings|luxor_signature_requests|luxor_payments|luxor_tours)/i)
   assert.match(testProposalMigration, /revoke all on function public\.luxor_save_test_proposal\([\s\S]*from public, anon, authenticated/)
   assert.match(testProposalMigration, /grant execute on function public\.luxor_save_test_proposal\([\s\S]*to service_role/)
+})
+
+test('proposal preparation uses production pricing, checks the completed tour, and has no write side effects', async () => {
+  const { createRequire } = await import('node:module')
+  const Module = createRequire(import.meta.url)('node:module')
+  const originalLoad = Module._load
+  const originalResolve = Module._resolveFilename
+  const requireFn = createRequire(path.join(root, 'tests', 'luxor-test-proposal-runtime.cjs'))
+  const originalTs = requireFn.extensions['.ts']
+  const calls = []
+  requireFn.extensions['.ts'] = (module, filename) => {
+    const source = fs.readFileSync(filename, 'utf8')
+    module._compile(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename)
+  }
+  Module._resolveFilename = function (request, parent, isMain, options) {
+    if (request.startsWith('.') && !path.extname(request)) {
+      const candidate = path.resolve(path.dirname(parent.filename), `${request}.ts`)
+      if (fs.existsSync(candidate)) return originalResolve.call(this, candidate, parent, isMain, options)
+    }
+    return originalResolve.call(this, request, parent, isMain, options)
+  }
+  const config = {
+    ...requireFn('../src/lib/luxorProposalPricing.ts').LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG,
+    payment_plan: { mode: 'pay_in_full', booking_payment_percent: 100, final_payment_due_days_before_event: 30 },
+  }
+  Module._load = function (request, parent, isMain) {
+    if (request === 'server-only') return {}
+    if (request === '@/lib/luxorInquiryTypes') return {}
+    if (request === '@/lib/luxorProposalPricing') return originalLoad.call(this, path.join(root, 'src/lib/luxorProposalPricing.ts'), parent, isMain)
+    if (request === '@/lib/luxorProposalPricingServer') return {
+      getLuxorProposalPricingForInvoice: async () => ({ config, version: 7 }),
+      hasFrozenLegacyCustomTimeProposal: () => false,
+      resolveLuxorOriginalProposalCreatedAt: async (invoice) => invoice?.created_at || '2026-10-01T12:00:00.000Z',
+      resolveLuxorProposalPromotion: async () => null,
+      resolveLuxorSameDayBooking: async () => null,
+      assertLuxorWeekdayRentalSelection: () => {},
+    }
+    if (request === '@/lib/luxorProposalEmailServer') return { buildLuxorProposalEmail: (args) => { calls.push(['email', args]); return { subject: 'Test only', html: '<p>test</p>' } } }
+    if (request === '@/lib/luxorInvoicePdfServer') return { buildLuxorInvoicePdf: async (invoice) => { calls.push(['pdf', invoice]); return Buffer.from('test-pdf') } }
+    if (request === '@/lib/luxorProposalTerms') return originalLoad.call(this, path.join(root, 'src/lib/luxorProposalTerms.ts'), parent, isMain)
+    if (request === '@/lib/luxorInquiriesServer') return { getLuxorInquiry: async () => ({ id: '00b264d6-a3fb-4ea3-9142-415f76385c39', is_test: true, full_name: 'Luxor Test Lead', event_type: 'Wedding', email: 'luxoratlaspalmas@gmail.com' }) }
+    if (request === '@/lib/supabaseRestServer') return { supabaseRest: async (query, options) => {
+      calls.push([options?.method || 'GET', query])
+      if (query.startsWith('luxor_test_runs?')) return [{ id: 'run-1', test_lead_id: '00b264d6-a3fb-4ea3-9142-415f76385c39', status: 'in_progress' }]
+      if (query.includes('artifact_type=eq.tour')) return [{ status: globalThis.__tourStatus || 'completed' }]
+      return globalThis.__proposalArtifacts || []
+    } }
+    return originalLoad.call(this, request, parent, isMain)
+  }
+  const helperPath = path.join(root, 'src/lib/luxorTestProposalServer.ts')
+  try {
+    const helper = requireFn(helperPath)
+    const selection = { packageId: 'rental_only', eventDate: '2027-06-06', guestCount: 80, rentalPeriod: 'evening', addOns: [], paymentPlan: { mode: 'pay_in_full', booking_payment_percent: 100, final_payment_due_days_before_event: 30 } }
+    const draft = await helper.prepareLuxorTestProposal({ testRunId: 'run-1', action: 'save', selection, description: 'User entered event details', notes: null, expectedRevision: 0 })
+    assert.ok(draft.invoice.total > 0)
+    assert.ok(draft.invoice.line_items.length > 0)
+    assert.equal(draft.invoice.description, 'User entered event details')
+    assert.equal(draft.details.invoice.proposal_context.pricing_config_version, 7)
+    assert.equal(draft.email, null)
+    assert.equal(draft.pdfBase64, null)
+    assert.equal(calls.some(([method]) => method !== 'GET'), false)
+    assert.equal(calls.some(([kind]) => kind === 'email' || kind === 'pdf'), false)
+
+    globalThis.__tourStatus = 'confirmed'
+    await assert.rejects(helper.prepareLuxorTestProposal({ testRunId: 'run-1', action: 'save', selection, description: 'x', notes: null, expectedRevision: 0 }), /Complete the simulated tour/)
+    globalThis.__tourStatus = 'completed'
+    calls.length = 0
+    const published = await helper.prepareLuxorTestProposal({ testRunId: 'run-1', action: 'publish', selection, description: 'User entered event details', notes: null, expectedRevision: 0 })
+    assert.equal(published.invoice.status, 'sent')
+    assert.ok(published.email.html.includes('test'))
+    assert.ok(published.pdfBase64)
+    assert.equal(published.details.email.recipient, 'luxoratlaspalmas@gmail.com')
+    assert.equal(calls.filter(([kind]) => kind === 'email').length, 1)
+    assert.equal(calls.filter(([kind]) => kind === 'pdf').length, 1)
+    const reordered = { rentalPeriod: 'evening', addOns: [], guestCount: 80, packageId: 'rental_only', eventDate: '2027-06-06', paymentPlan: selection.paymentPlan }
+    assert.equal(helper.luxorTestProposalRequestFingerprint({ testRunId: 'run-1', selection, description: 'x', notes: null }), helper.luxorTestProposalRequestFingerprint({ testRunId: 'run-1', selection: reordered, description: ' x ', notes: null }))
+    assert.notEqual(helper.luxorTestProposalRequestFingerprint({ testRunId: 'run-1', selection, description: 'x', notes: null }), helper.luxorTestProposalRequestFingerprint({ testRunId: 'run-1', selection: { ...selection, guestCount: 81 }, description: 'x', notes: null }))
+  } finally {
+    delete globalThis.__tourStatus
+    delete globalThis.__proposalArtifacts
+    Module._load = originalLoad
+    Module._resolveFilename = originalResolve
+    if (originalTs) requireFn.extensions['.ts'] = originalTs
+    else delete requireFn.extensions['.ts']
+    delete requireFn.cache[helperPath]
+  }
+})
+
+test('proposal lifecycle contract fences stale drafts and deduplicates concurrent publish retries', async () => {
+  // In-memory adapter for the checked-in RPC contract: it exercises app-level
+  // request behavior without a database connection or production side effects.
+  assert.match(testProposalMigration, /for update/)
+  assert.match(testProposalMigration, /p_expected_revision <> v_current_revision/)
+  assert.match(testProposalMigration, /v_existing\.details ->> 'publish_request_fingerprint'/)
+  assert.match(testProposalMigration, /v_existing\.details ->> 'published_email_id'[\s\S]*'replayed', true/)
+  assert.match(testProposalMigration, /insert into public\.luxor_test_run_emails/)
+  const lock = Promise.resolve()
+  let tail = lock
+  const state = { status: 'drafted', revision: 0, details: null, emailId: null, jobs: 0 }
+  const rpc = async ({ action, expectedRevision, fingerprint, details }) => {
+    let release
+    const prior = tail
+    tail = new Promise((resolve) => { release = resolve })
+    await prior
+    try {
+      if (state.status === 'sent' && action === 'publish' && state.details.publish_request_fingerprint === fingerprint) return { replayed: true, emailId: state.emailId }
+      if (state.status === 'sent') return { conflict: true }
+      if (state.revision !== expectedRevision) return { conflict: true }
+      state.revision += 1
+      if (action === 'save') { state.details = { ...details, proposal_revision: state.revision }; return { revision: state.revision } }
+      state.status = 'sent'
+      state.emailId = `email-${++state.jobs}`
+      state.details = { ...details, proposal_revision: state.revision, publish_request_fingerprint: fingerprint }
+      return { replayed: false, emailId: state.emailId }
+    } finally { release() }
+  }
+  const saved = await rpc({ action: 'save', expectedRevision: 0, details: { content: 'first draft' } })
+  assert.equal(saved.revision, 1)
+  assert.deepEqual(await rpc({ action: 'save', expectedRevision: 0, details: { content: 'stale draft' } }), { conflict: true })
+  assert.equal(state.details.content, 'first draft')
+  const payload = { action: 'publish', expectedRevision: 1, fingerprint: 'sha256-user-payload', details: { content: 'first draft' } }
+  const concurrent = await Promise.all([rpc(payload), rpc(payload)])
+  assert.equal(concurrent.filter((result) => result.replayed === false).length, 1)
+  assert.equal(concurrent[0].emailId, concurrent[1].emailId)
+  const retry = await rpc(payload)
+  assert.equal(retry.replayed, true)
+  assert.equal(retry.emailId, concurrent[0].emailId)
+  assert.equal(state.jobs, 1)
+  assert.deepEqual(await rpc({ ...payload, fingerprint: 'different-content' }), { conflict: true })
 })
 
 test('normal proposal builder uses the test run path and disables handoff/signing actions in test mode', () => {

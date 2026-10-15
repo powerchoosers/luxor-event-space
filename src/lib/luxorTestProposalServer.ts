@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { LuxorInquiry, LuxorInvoice } from '@/lib/luxorInquiryTypes'
 import { calculateLuxorProposal, type LuxorProposalSelection } from '@/lib/luxorProposalPricing'
 import {
@@ -20,11 +20,36 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 export const LUXOR_PERMANENT_TEST_LEAD_ID = '00b264d6-a3fb-4ea3-9142-415f76385c39'
 export const LUXOR_TEST_PROPOSAL_RECIPIENT = 'luxoratlaspalmas@gmail.com'
 
+export class LuxorTestProposalConflictError extends Error {
+  readonly status = 409
+}
+
 type TestRun = { id: string; test_lead_id: string; status: string }
 type Artifact = { id: string; status: string; details: Record<string, unknown> }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  if (isRecord(value)) return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`
+  return JSON.stringify(value) ?? 'null'
+}
+
+export function luxorTestProposalRequestFingerprint(input: {
+  testRunId: string
+  selection: LuxorProposalSelection
+  description: string
+  notes: string | null
+}) {
+  return createHash('sha256').update(stableJson({
+    testRunId: input.testRunId,
+    action: 'publish',
+    selection: input.selection,
+    description: input.description.trim(),
+    notes: input.notes?.trim() || null,
+  })).digest('hex')
 }
 
 /**
@@ -38,20 +63,44 @@ export async function prepareLuxorTestProposal(input: {
   description: string
   notes: string | null
   action: 'save' | 'publish'
+  expectedRevision: number
 }) {
   const [run] = await supabaseRest<TestRun[]>(
     `luxor_test_runs?select=id,test_lead_id,status&id=eq.${encodeURIComponent(input.testRunId)}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
   )
   if (!run) throw new Error('Choose an active permanent test lead run.')
 
-  const [lead, artifacts] = await Promise.all([
+  const [lead, artifacts, tourArtifacts] = await Promise.all([
     getLuxorInquiry(LUXOR_PERMANENT_TEST_LEAD_ID),
     supabaseRest<Artifact[]>(`luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.proposal&limit=1`),
+    supabaseRest<Pick<Artifact, 'status'>[]>(`luxor_test_run_artifacts?select=status&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`),
   ])
   if (!lead || lead.is_test !== true) throw new Error('The permanent test lead is unavailable.')
+  if (tourArtifacts[0]?.status !== 'completed') {
+    throw new Error('Complete the simulated tour before saving or publishing a test proposal.')
+  }
   const existing = artifacts[0] ?? null
+  const requestFingerprint = input.action === 'publish'
+    ? luxorTestProposalRequestFingerprint(input)
+    : null
+  if (existing?.status === 'sent') {
+    if (input.action === 'publish' && existing.details.publish_request_fingerprint === requestFingerprint) {
+      return {
+        run,
+        invoice: isRecord(existing.details.invoice) ? existing.details.invoice as unknown as LuxorInvoice : null,
+        selection: existing.details.selection,
+        email: null,
+        pdfBase64: null,
+        details: existing.details,
+        recipient: LUXOR_TEST_PROPOSAL_RECIPIENT,
+        requestFingerprint,
+        replayed: true,
+      }
+    }
+    throw new LuxorTestProposalConflictError('This test proposal has already been published with different content. Start a new test run to create another.')
+  }
   if (existing && !['simulated', 'drafted'].includes(existing.status)) {
-    throw new Error('This test proposal has already been published. Start a new test run to create another.')
+    throw new LuxorTestProposalConflictError('This test proposal cannot be edited in its current state.')
   }
 
   const storedInvoice = isRecord(existing?.details.invoice) ? existing.details.invoice as unknown as LuxorInvoice : null
@@ -141,6 +190,7 @@ export async function prepareLuxorTestProposal(input: {
     simulation_only: true,
     invoice,
     selection: input.selection,
+    ...(requestFingerprint ? { publish_request_fingerprint: requestFingerprint } : {}),
   }
   if (email && pdf) {
     details.email = { subject: email.subject, html: email.html, recipient: LUXOR_TEST_PROPOSAL_RECIPIENT }
@@ -155,5 +205,7 @@ export async function prepareLuxorTestProposal(input: {
     pdfBase64: pdf ? Buffer.from(pdf).toString('base64') : null,
     details,
     recipient: LUXOR_TEST_PROPOSAL_RECIPIENT,
+    requestFingerprint,
+    replayed: false,
   }
 }

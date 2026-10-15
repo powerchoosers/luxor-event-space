@@ -479,6 +479,7 @@ export default function LeadDetailPage({
   // Invoice creation state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
   const testProposalOpenRequestRef = useRef<string | null>(null)
+  const [testProposalRevision, setTestProposalRevision] = useState(0)
   const proposalEditorOpenRef = useRef(false)
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
   const [invoiceDesc, setInvoiceDesc] = useState('')
@@ -2349,8 +2350,9 @@ export default function LeadDetailPage({
     void (async () => {
       try {
         const response = await fetch(`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(requestedTestRunId)}`, { cache: 'no-store' })
-        const payload = await response.json().catch(() => ({})) as { artifact?: { status?: string; details?: { invoice?: unknown } | null }; error?: string }
+        const payload = await response.json().catch(() => ({})) as { artifact?: { status?: string; revision?: number; details?: { invoice?: unknown } | null }; error?: string }
         if (!response.ok) throw new Error(payload.error || 'The test proposal could not be loaded.')
+        setTestProposalRevision(payload.artifact?.revision ?? 0)
         if (payload.artifact?.status === 'sent') {
           notify({ title: 'Test proposal already published', description: 'The proposal and prepared email are preserved in this run’s history. No signing, booking, or payment action is available.', variant: 'success' })
           return
@@ -2579,13 +2581,15 @@ export default function LeadDetailPage({
           body: JSON.stringify({
             testRunId: requestedTestRunId,
             action: action === 'save' ? 'save' : 'publish',
+            expectedRevision: testProposalRevision,
             description: invoiceDesc,
             notes: invoiceNotes || null,
             selection: buildProposalSelection(),
           }),
         })
-        const payload = await response.json().catch(() => ({})) as { error?: string; recipient?: string }
+        const payload = await response.json().catch(() => ({})) as { error?: string; recipient?: string; revision?: number; replayed?: boolean }
         if (!response.ok) throw new Error(payload.error || 'The isolated test proposal could not be saved or published.')
+        setTestProposalRevision(payload.revision ?? testProposalRevision + 1)
         notify({
           title: action === 'save' ? 'Test proposal draft saved' : 'Test proposal published',
           description: action === 'save'

@@ -95,6 +95,8 @@ Only commit or push when the user explicitly requests it.
 4. Commit with a concise message describing the user-facing result.
 5. Push the deployment branch with `git push origin main` when the user explicitly requests a direct main-branch push.
 
+Lewis's preferred delivery flow is to make scoped edits, run applicable local checks, commit and push `main` without force when the task authorizes release, verify the exact production deployment, and then give Arianna straightforward user acceptance testing steps. A push alone does not prove live behavior. Report failing checks and access or safety blockers honestly. This preference does not bypass explicit task limits, required approvals, or security controls.
+
 Never commit `.env*`, credentials, `node_modules`, `.next`, local Codex state, browser logs, or QA screenshots. The root `.gitignore` covers these files.
 Generated build folders such as `.next-build-qa` are disposable and must stay ignored. If they interfere with local linting or validation, remove the generated folder rather than changing source to accommodate it.
 
