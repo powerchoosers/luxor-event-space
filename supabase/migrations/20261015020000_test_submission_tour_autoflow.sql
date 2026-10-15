@@ -8,10 +8,11 @@ declare
   v_run public.luxor_test_runs;
   v_lead public.luxor_inquiries;
 begin
-  -- Lock the permanent lead before the run, matching start-run lock order.
-  -- This avoids a reset/start deadlock under concurrent submissions.
+  -- Use the same settings -> permanent lead -> run lock order as start/prepare.
   select run.* into v_run from public.luxor_test_runs run where run.id = p_test_run_id;
   if not found then raise exception 'Test run not found.' using errcode = 'P0002'; end if;
+  perform 1 from public.luxor_test_settings where id = 1 for update;
+  if not found then raise exception 'Test settings are not provisioned.' using errcode = '55000'; end if;
   select * into v_lead from public.luxor_inquiries where id = v_run.test_lead_id and is_test is true for update;
   if not found then raise exception 'The permanent test lead is not provisioned.' using errcode = '55000'; end if;
   select * into v_run from public.luxor_test_runs where id = p_test_run_id for update;
@@ -61,7 +62,8 @@ create or replace function public.luxor_prepare_test_submission(
   p_email_category text,
   p_email_subject text,
   p_email_body text,
-  p_automatic_source text
+  p_automatic_source text,
+  p_scheduled_for timestamptz default null
 )
 returns jsonb
 language plpgsql
@@ -71,28 +73,42 @@ as $$
 declare
   v_settings public.luxor_test_settings;
   v_run public.luxor_test_runs;
+  v_lead public.luxor_inquiries;
   v_email public.luxor_test_run_emails;
   v_job public.luxor_email_jobs;
   v_tour_status text;
   v_lead_status text;
   v_email_created boolean := false;
 begin
+  -- Match start/reset lock order: settings -> permanent lead -> run.
+  select * into v_run from public.luxor_test_runs where id=p_test_run_id;
+  if not found then raise exception 'Test run not found.' using errcode='P0002'; end if;
   select * into v_settings from public.luxor_test_settings where id=1 for update;
   if not found or not v_settings.enabled
     or v_settings.email_recipient is distinct from 'luxoratlaspalmas@gmail.com'
     or v_settings.email_recipient_confirmed_at is null then
     raise exception 'Test workflow is disabled or the verified test inbox is not confirmed.' using errcode='55000';
   end if;
-  select * into v_run from public.luxor_test_runs where id=p_test_run_id for update;
-  if not found or v_run.test_lead_id is distinct from '00b264d6-a3fb-4ea3-9142-415f76385c39'::uuid
-    or v_run.status <> 'in_progress' then
+  select * into v_lead from public.luxor_inquiries where id=v_run.test_lead_id and is_test is true for update;
+  if not found or v_lead.id is distinct from '00b264d6-a3fb-4ea3-9142-415f76385c39'::uuid then
+    raise exception 'The permanent test lead is not provisioned.' using errcode='55000';
+  end if;
+  select * into v_run from public.luxor_test_runs where id=p_test_run_id and test_lead_id=v_lead.id for update;
+  if not found or v_run.status <> 'in_progress' then
     raise exception 'Only the active permanent test run can receive automated form effects.' using errcode='55000';
   end if;
-  if p_email_category is not null and p_email_category not in ('tour_confirmation','brochure','form_confirmation') then
+  if p_email_category is not null and p_email_category not in (
+    'tour_confirmation','tour_reminder','tour_cancellation','brochure','form_confirmation','follow_up',
+    'proposal','contract','booking_confirmation','payment_reminder','planning','event_notification',
+    'post_event','review_request','direct_message','other'
+  ) then
     raise exception 'Unsupported automated test email category.' using errcode='22023';
   end if;
   if p_email_category is not null and (
-    coalesce(p_automatic_source,'') not in ('public_tour_submission','public_brochure_submission','public_inquiry_submission','public_newsletter_submission')
+      not (coalesce(p_automatic_source,'') in ('public_tour_submission','public_tour_reminder_24','public_tour_reminder_2','public_brochure_submission','public_inquiry_submission','public_newsletter_submission')
+        or coalesce(p_automatic_source,'') like 'portal_test_email:%'
+        or coalesce(p_automatic_source,'') like 'test_tour_reschedule:%'
+        or coalesce(p_automatic_source,'') like 'test_tour_cancel:%')
     or coalesce(p_email_subject,'') not like '[TEST ONLY] %'
     or coalesce(p_email_body,'') not like '%SIMULATED TEST MESSAGE%'
   ) then
@@ -155,8 +171,8 @@ begin
         inquiry_id,job_type,status,recipient_email,subject,body,scheduled_for,metadata,test_run_id
       ) values (
         v_run.test_lead_id,'test_notification','queued','luxoratlaspalmas@gmail.com',
-        trim(p_email_subject),p_email_body,now(),
-        jsonb_build_object('test_email','true','test_category',p_email_category,'test_source',p_automatic_source,'automatic_test_workflow',true),
+        trim(p_email_subject),p_email_body,coalesce(p_scheduled_for,now()),
+        jsonb_build_object('test_email','true','test_category',p_email_category,'test_source',p_automatic_source,'automatic_source',p_automatic_source,'automatic_test_workflow',true),
         v_run.id
       ) returning * into v_job;
       insert into public.luxor_test_run_emails (
@@ -190,5 +206,195 @@ begin
 end;
 $$;
 
-revoke all on function public.luxor_prepare_test_submission(uuid,boolean,date,text,boolean,text,text,text,text) from public,anon,authenticated;
-grant execute on function public.luxor_prepare_test_submission(uuid,boolean,date,text,boolean,text,text,text,text) to service_role;
+revoke all on function public.luxor_prepare_test_submission(uuid,boolean,date,text,boolean,text,text,text,text,timestamptz) from public,anon,authenticated;
+grant execute on function public.luxor_prepare_test_submission(uuid,boolean,date,text,boolean,text,text,text,text,timestamptz) to service_role;
+
+create or replace function public.luxor_enqueue_test_email(
+  p_test_run_id uuid,
+  p_category text,
+  p_subject text,
+  p_body text,
+  p_source text default 'portal_test_lead'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_result jsonb;
+  v_identity text := 'portal_test_email:' || gen_random_uuid()::text;
+begin
+  if p_category not in (
+    'form_confirmation','brochure','tour_confirmation','tour_reminder','tour_cancellation','follow_up',
+    'proposal','contract','booking_confirmation','payment_reminder','planning','event_notification',
+    'post_event','review_request','direct_message','other'
+  ) then raise exception 'Unsupported test email category.' using errcode='22023'; end if;
+  if length(trim(coalesce(p_subject,''))) not between 1 and 200
+    or length(trim(coalesce(p_body,''))) not between 1 and 50000 then
+    raise exception 'Test email subject or body has an invalid length.' using errcode='22023';
+  end if;
+  v_result := public.luxor_prepare_test_submission(
+    p_test_run_id,false,null,null,false,p_category,trim(p_subject),p_body,v_identity,now()
+  );
+  return jsonb_build_object('email',v_result,'job_id',v_result->'email_job_id',
+    'test_run_id',p_test_run_id,'recipient','luxoratlaspalmas@gmail.com','source',left(coalesce(p_source,''),120));
+end;
+$$;
+
+revoke all on function public.luxor_enqueue_test_email(uuid,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.luxor_enqueue_test_email(uuid,text,text,text,text) to service_role;
+
+alter table public.luxor_test_run_emails drop constraint if exists luxor_test_run_emails_category_check;
+alter table public.luxor_test_run_emails add constraint luxor_test_run_emails_category_check check (category in (
+  'form_confirmation','brochure','tour_confirmation','tour_reminder','tour_cancellation','follow_up',
+  'proposal','contract','booking_confirmation','payment_reminder','planning','event_notification',
+  'post_event','review_request','direct_message','other'
+));
+
+create or replace function public.luxor_simulate_test_tour_change(
+  p_test_run_id uuid,
+  p_action text,
+  p_action_key text,
+  p_payload jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_settings public.luxor_test_settings;
+  v_run public.luxor_test_runs;
+  v_lead public.luxor_inquiries;
+  v_artifact public.luxor_test_run_artifacts;
+  v_subject text;
+  v_body text;
+  v_date date;
+  v_time text;
+  v_start timestamptz;
+  v_action_event text;
+  v_existing_event public.luxor_test_run_activity;
+  v_email jsonb;
+  v_templates jsonb;
+  v_cancelled_count integer := 0;
+  v_source text;
+begin
+  if p_action is null or p_action not in ('reschedule','cancel') or length(trim(coalesce(p_action_key,''))) not between 8 and 160 then
+    raise exception 'Provide a valid simulated tour action and idempotency key.' using errcode='22023';
+  end if;
+  select * into v_run from public.luxor_test_runs where id=p_test_run_id;
+  if not found then raise exception 'Test run not found.' using errcode='P0002'; end if;
+  -- Keep all lifecycle writers in the same settings -> lead -> run lock order.
+  select * into v_settings from public.luxor_test_settings where id=1 for update;
+  if not found or not v_settings.enabled or v_settings.email_recipient is distinct from 'luxoratlaspalmas@gmail.com'
+    or v_settings.email_recipient_confirmed_at is null then
+    raise exception 'Test tour simulation is disabled or the verified inbox is unavailable.' using errcode='55000';
+  end if;
+  select * into v_lead from public.luxor_inquiries where id=v_run.test_lead_id and is_test is true for update;
+  if not found or v_lead.id is distinct from '00b264d6-a3fb-4ea3-9142-415f76385c39'::uuid then
+    raise exception 'The permanent test lead is not provisioned.' using errcode='55000';
+  end if;
+  select * into v_run from public.luxor_test_runs where id=p_test_run_id and test_lead_id=v_lead.id for update;
+  if not found or v_run.status <> 'in_progress' then
+    raise exception 'Only the active permanent test run can change a simulated tour.' using errcode='55000';
+  end if;
+
+  v_action_event := case when p_action='reschedule' then 'test_tour_rescheduled' else 'test_tour_cancelled' end;
+  select * into v_existing_event from public.luxor_test_run_activity
+  where test_run_id=v_run.id and event_type=v_action_event and details->>'action_key'=p_action_key
+  order by id desc limit 1;
+  if found then
+    select * into v_artifact from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='tour';
+    return jsonb_build_object('test_run_id',v_run.id,'tour_status',v_artifact.status,'replayed',true,'cancelled_jobs',0);
+  end if;
+
+  if exists (select 1 from public.luxor_email_jobs where test_run_id=v_run.id
+    and job_type='test_notification' and status in ('sending','claimed')
+    and metadata->>'test_category' in ('tour_confirmation','tour_reminder','tour_cancellation')) then
+    raise exception 'A test tour email is in flight. Retry the simulated tour change after its provider outcome is recorded.' using errcode='55000';
+  end if;
+
+  select count(*) into v_cancelled_count from public.luxor_email_jobs
+  where test_run_id=v_run.id and job_type='test_notification' and status='queued'
+    and metadata->>'test_category' in ('tour_confirmation','tour_reminder','tour_cancellation');
+  update public.luxor_email_jobs set status='cancelled',last_error='Superseded by a simulated tour change.',updated_at=now()
+  where test_run_id=v_run.id and job_type='test_notification' and status='queued'
+    and metadata->>'test_category' in ('tour_confirmation','tour_reminder','tour_cancellation');
+  update public.luxor_test_run_emails set status='blocked',error_message='Superseded by a simulated tour change.',updated_at=now(),
+    details=details || jsonb_build_object('queue_cancelled',true,'action_key',p_action_key)
+  where email_job_id in (select id from public.luxor_email_jobs where test_run_id=v_run.id
+    and last_error='Superseded by a simulated tour change.' and updated_at >= now() - interval '1 minute');
+
+  if p_action='cancel' then
+    update public.luxor_test_run_artifacts set status='cancelled',
+      details=details || jsonb_build_object('simulation_only',true,'calendar_event_cancelled',false,
+        'inventory_released',false,'previous_tour_date',v_lead.preferred_tour_date,
+        'previous_tour_time',v_lead.preferred_tour_time,'action_key',p_action_key),updated_at=now()
+    where test_run_id=v_run.id and artifact_type='tour' returning * into v_artifact;
+    update public.luxor_inquiries set status=case when status in ('tour_requested','tour_confirmed') then 'contacted' else status end,
+      pipeline_stage=case when pipeline_stage='tour' then 'inquiry' else pipeline_stage end,
+      preferred_tour_date=null,preferred_tour_time=null,tour_attendance_status='cancelled',tour_confirmed_at=null,updated_at=now()
+    where id=v_lead.id;
+    v_source := 'test_tour_cancel:' || p_action_key;
+    v_subject := p_payload #>> '{cancellation,subject}';
+    v_body := p_payload #>> '{cancellation,body}';
+    v_email := public.luxor_prepare_test_submission(v_run.id,false,null,null,false,'tour_cancellation',v_subject,v_body,v_source,now());
+  else
+    v_date := nullif(p_payload->>'date','')::date;
+    v_time := nullif(trim(coalesce(p_payload->>'time','')),'');
+    v_start := nullif(p_payload->>'startUtc','')::timestamptz;
+    v_templates := p_payload->'templates';
+    if v_date is null or v_time is null or v_start is null or v_start <= now()
+      or v_templates is null
+      or coalesce(v_templates #>> '{confirmation,subject}','') not like '[TEST ONLY] %'
+      or coalesce(v_templates #>> '{confirmation,body}','') not like '%SIMULATED TEST MESSAGE%'
+      or coalesce(v_templates #>> '{reminder_24,subject}','') not like '[TEST ONLY] %'
+      or coalesce(v_templates #>> '{reminder_24,body}','') not like '%SIMULATED TEST MESSAGE%'
+      or coalesce(v_templates #>> '{reminder_2,subject}','') not like '[TEST ONLY] %'
+      or coalesce(v_templates #>> '{reminder_2,body}','') not like '%SIMULATED TEST MESSAGE%' then
+      raise exception 'Rescheduling requires a future slot and all three marked test templates.' using errcode='22023';
+    end if;
+    update public.luxor_inquiries set status='tour_confirmed',pipeline_stage='tour',preferred_tour_date=v_date,
+      preferred_tour_time=v_time,tour_attendance_status='pending',tour_confirmed_at=now(),updated_at=now()
+    where id=v_lead.id;
+    insert into public.luxor_test_run_artifacts (test_run_id,artifact_type,status,details,updated_at)
+    values (v_run.id,'tour','scheduled',jsonb_build_object('simulation_only',true,'calendar_event_created',false,
+      'inventory_reserved',false,'preferred_tour_date',v_date,'preferred_tour_time',v_time,'start_utc',v_start,
+      'end_utc',p_payload->>'endUtc','location',p_payload->>'location','action_key',p_action_key),now())
+    on conflict (test_run_id,artifact_type) do update set status='scheduled',
+      details=public.luxor_test_run_artifacts.details || excluded.details,updated_at=now()
+    returning * into v_artifact;
+    for v_source in
+      select unnest(array[
+        'test_tour_reschedule:'||p_action_key||':confirmation',
+        'test_tour_reschedule:'||p_action_key||':reminder_24',
+        'test_tour_reschedule:'||p_action_key||':reminder_2'
+      ])
+    loop
+      if v_source like '%:confirmation' then
+        v_subject:=v_templates #>> '{confirmation,subject}'; v_body:=v_templates #>> '{confirmation,body}';
+        v_email:=public.luxor_prepare_test_submission(v_run.id,false,null,null,false,'tour_confirmation',v_subject,v_body,v_source,now());
+      elsif v_source like '%:reminder_24' then
+        v_subject:=v_templates #>> '{reminder_24,subject}'; v_body:=v_templates #>> '{reminder_24,body}';
+        v_email:=public.luxor_prepare_test_submission(v_run.id,false,null,null,false,'tour_reminder',v_subject,v_body,v_source,
+          greatest(now(),v_start-interval '24 hours'));
+      else
+        v_subject:=v_templates #>> '{reminder_2,subject}'; v_body:=v_templates #>> '{reminder_2,body}';
+        v_email:=public.luxor_prepare_test_submission(v_run.id,false,null,null,false,'tour_reminder',v_subject,v_body,v_source,
+          greatest(now(),v_start-interval '2 hours'));
+      end if;
+    end loop;
+  end if;
+
+  insert into public.luxor_test_run_activity (test_run_id,event_type,status,source,details)
+  values (v_run.id,v_action_event,v_artifact.status,'portal_test_lead',jsonb_build_object(
+    'simulation_only',true,'calendar_event_created',false,'calendar_event_cancelled',false,
+    'inventory_reserved',false,'inventory_released',false,'action_key',p_action_key,
+    'date',v_date,'time',v_time,'cancelled_jobs',v_cancelled_count));
+  return jsonb_build_object('test_run_id',v_run.id,'tour_status',v_artifact.status,'replayed',false,'cancelled_jobs',v_cancelled_count);
+end;
+$$;
+
+revoke all on function public.luxor_simulate_test_tour_change(uuid,text,text,jsonb) from public,anon,authenticated;
+grant execute on function public.luxor_simulate_test_tour_change(uuid,text,text,jsonb) to service_role;

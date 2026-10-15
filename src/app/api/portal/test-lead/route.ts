@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { enqueueLuxorTestEmail, getLuxorTestSettings, resetLuxorTestRun } from '@/lib/luxorTestLeadServer'
+import { enqueueLuxorTestEmail, getLuxorTestSettings, resetLuxorTestRun, simulateLuxorTestTourChange } from '@/lib/luxorTestLeadServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { buildLuxorTestEmailTemplate, isLuxorTestEmailCategory } from '@/lib/luxorTestEmailTemplates'
@@ -71,6 +71,42 @@ export async function POST(request: NextRequest) {
   try {
     if (!await authorizedMember()) return NextResponse.json({ error: 'Owner or admin access required.' }, { status: 403 })
     const body = await request.json()
+    if (body.action === 'tour_change') {
+      if (typeof body.testRunId !== 'string' || typeof body.actionKey !== 'string'
+        || !/^[0-9a-f-]{8,160}$/i.test(body.actionKey)
+        || !['reschedule', 'cancel'].includes(body.tourAction)) {
+        return NextResponse.json({ error: 'A valid active test run, action key, and tour action are required.' }, { status: 400 })
+      }
+      const action = body.tourAction as 'reschedule' | 'cancel'
+      let payload: Record<string, unknown>
+      if (action === 'reschedule') {
+        const date = typeof body.date === 'string' ? body.date.trim() : ''
+        const time = typeof body.time === 'string' ? body.time.trim() : ''
+        if (!date || !time) return NextResponse.json({ error: 'Choose a future date and time for the simulated tour.' }, { status: 400 })
+        const { buildLuxorTestTourPlan } = await import('@/lib/luxorTestEmailTemplates')
+        const plan = await buildLuxorTestTourPlan(body.testRunId, date, time)
+        payload = {
+          date, time, startUtc: plan.plan.startUtc.toISOString(), endUtc: plan.plan.endUtc.toISOString(),
+          location: plan.plan.state.location, templates: plan.emails,
+        }
+      } else {
+        const [lead] = await supabaseRest<Array<{ preferred_tour_date: string | null; preferred_tour_time: string | null }>>(
+          `luxor_inquiries?select=preferred_tour_date,preferred_tour_time&id=eq.${encodeURIComponent('00b264d6-a3fb-4ea3-9142-415f76385c39')}&is_test=eq.true&limit=1`,
+        )
+        const cancellation = await buildLuxorTestEmailTemplate('tour_cancellation', body.testRunId, {
+          preferredTourDate: lead?.preferred_tour_date,
+          preferredTourTime: lead?.preferred_tour_time,
+        })
+        payload = { cancellation }
+      }
+      const result = await simulateLuxorTestTourChange({
+        testRunId: body.testRunId,
+        action,
+        actionKey: body.actionKey,
+        payload,
+      })
+      return NextResponse.json({ result, simulated: true })
+    }
     if (body.action === 'send_test_email') {
       if (typeof body.testRunId !== 'string' || typeof body.category !== 'string') {
         return NextResponse.json({ error: 'A test run and email category are required.' }, { status: 400 })

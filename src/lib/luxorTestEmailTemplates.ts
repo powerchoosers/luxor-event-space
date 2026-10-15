@@ -12,6 +12,7 @@ import { buildLuxorProposalEmail, buildLuxorProposalContractEmail, buildLuxorPay
 import { buildEventEmail, buildPaymentReminderEmail } from './luxorLifecycleEmailsServer'
 import { buildTourReminderEmail } from './luxorTourEmailServer'
 import { buildAiTourConfirmationEmail } from './luxorTourEmailServer'
+import { buildLuxorTourPlan } from './luxorTourPlanningServer'
 import { buildLuxorLayoutReviewEmail } from './luxorLayoutReviewsServer'
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 
@@ -20,6 +21,7 @@ const copy = {
   brochure: 'Venue brochure',
   tour_confirmation: 'Tour confirmation',
   tour_reminder: 'Tour reminder',
+  tour_cancellation: 'Tour cancellation',
   follow_up: 'Follow up',
   proposal: 'Proposal',
   contract: 'Contract',
@@ -156,6 +158,7 @@ export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCatego
   preferredTourDate?: string | null
   preferredTourTime?: string | null
   confirmedSlot?: boolean
+  reminderLabel?: 'tomorrow' | 'soon'
 } = {}) {
   const inquiry = syntheticInquiry()
   inquiry.preferred_tour_date = options.preferredTourDate || inquiry.preferred_tour_date
@@ -187,20 +190,32 @@ export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCatego
     if (!options.confirmedSlot && (options.flow || options.preferredTourDate || options.preferredTourTime)) {
       return markTestOnly('Your Luxor tour request is received', buildTourRequestReceivedEmailHtml(inquiry, safeRunId(runId)), runId)
     }
-    const tourDate = options.preferredTourDate ? new Date(`${options.preferredTourDate}T12:00:00Z`) : null
-    const tourDateLabel = tourDate && Number.isFinite(tourDate.getTime())
-      ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(tourDate)
-      : 'November 1, 2026'
-    const personalized = await buildAiTourConfirmationEmail({
-      ...tourContext,
-      tourDateLabel: options.preferredTourDate ? tourDateLabel : tourContext.tourDateLabel,
-      tourTimeLabel: options.preferredTourTime || tourContext.tourTimeLabel,
-    }, options.confirmedSlot ? {} : { skipAi: true })
+    if (options.confirmedSlot && options.preferredTourDate && options.preferredTourTime) {
+      const planned = await buildLuxorTestTourPlan(runId, options.preferredTourDate, options.preferredTourTime, inquiry)
+      return planned.emails.confirmation
+    }
+    const personalized = await buildAiTourConfirmationEmail(tourContext, { skipAi: true })
     return markTestOnly(personalized.subject, personalized.body, runId)
   }
   if (category === 'tour_reminder') {
-    const email = buildTourReminderEmail(tourContext, 'tomorrow')
+    const email = buildTourReminderEmail(tourContext, options.reminderLabel || 'tomorrow')
     return markTestOnly(email.subject, email.body, runId)
+  }
+  if (category === 'tour_cancellation') {
+    const subject = 'Your Luxor tour has been cancelled'
+    const email = renderLuxorSystemEmail({
+      previewText: 'The simulated Luxor tour was cancelled.',
+      eyebrow: 'Tour update', title: 'Your tour was cancelled',
+      greeting: 'Hi Luxor Test Lead,',
+      bodyHtml: '<p style="margin:0">This simulated test run cancelled the tour request. No venue calendar event or inventory was changed.</p>',
+      details: [
+        { label: 'Previous date', value: options.preferredTourDate || 'No date selected' },
+        { label: 'Previous time', value: options.preferredTourTime || 'No time selected' },
+      ],
+      actions: [{ label: 'View simulated test run', url: portalUrl }],
+      note: 'This notice is for the authorized Luxor test inbox only.', theme: 'brand',
+    })
+    return markTestOnly(subject, email, runId)
   }
   if (category === 'follow_up') {
     const email = {
@@ -277,4 +292,31 @@ export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCatego
     reviewUrl: portalUrl,
   })
   return markTestOnly(layoutEmail.subject, `<p>${layoutEmail.body.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br />')}</p>`, runId)
+}
+
+export async function buildLuxorTestTourPlan(runId: string, date: string, time: string, existingInquiry?: LuxorInquiry) {
+  const inquiry = existingInquiry || syntheticInquiry()
+  inquiry.preferred_tour_date = date
+  inquiry.preferred_tour_time = time
+  const plan = await buildLuxorTourPlan({
+    inquiry, date, time, responseToken: `test-${safeRunId(runId)}`, responseUrl: safePortalUrl(runId),
+    attendeeEmails: ['luxoratlaspalmas@gmail.com'], meetingType: 'Private Venue Tour',
+    clientFacingNotes: 'Synthetic test walkthrough; no venue calendar or inventory is reserved.',
+    durationMinutes: 30,
+  })
+  const emails = {
+    confirmation: markTestOnly(plan.templates.confirmation.subject, plan.templates.confirmation.body, runId),
+    reminder_24: markTestOnly(plan.templates.reminder_24.subject, plan.templates.reminder_24.body, runId),
+    reminder_2: markTestOnly(plan.templates.reminder_2.subject, plan.templates.reminder_2.body, runId),
+  }
+  const start = plan.startUtc.getTime()
+  return {
+    plan,
+    emails,
+    scheduledFor: {
+      confirmation: new Date().toISOString(),
+      reminder_24: new Date(Math.max(Date.now(), start - 24 * 60 * 60_000)).toISOString(),
+      reminder_2: new Date(Math.max(Date.now(), start - 2 * 60 * 60_000)).toISOString(),
+    },
+  }
 }

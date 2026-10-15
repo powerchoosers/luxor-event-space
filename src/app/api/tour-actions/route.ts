@@ -15,7 +15,7 @@ import { getLuxorLeadEventForInquiry, listLuxorLeadEventsByInquiry, updateLuxorL
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { LuxorEmailJob, LuxorEmailJobKind, LuxorInquiryStatus, LuxorPipelineStage, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
-import { buildAiTourConfirmationEmail, buildTourReminderEmail, TourEmailContext } from '@/lib/luxorTourEmailServer'
+import { buildLuxorTourPlan } from '@/lib/luxorTourPlanningServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { cancelLuxorTourForInquiry } from '@/lib/luxorTourCancellationServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
@@ -24,8 +24,6 @@ import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
 import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
-const TOUR_TIMEZONE = 'America/Chicago'
-const TOUR_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
 const PRE_PROPOSAL_STATUSES = new Set<LuxorInquiryStatus>(['new', 'contacted', 'tour_requested', 'tour_confirmed'])
 const PRE_PROPOSAL_STAGES = new Set<LuxorPipelineStage | null | undefined>([null, undefined, 'inquiry', 'tour'])
 
@@ -207,59 +205,25 @@ export async function POST(request: NextRequest) {
         ? body.tourAssignees.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 12)
         : []
       const durationMinutes = Math.min(Math.max(Number(body.durationMinutes) || 30, 30), 180)
-      const startUtc = zonedDateTimeToUtc(tourDate, tourTime, TOUR_TIMEZONE)
-      const endUtc = new Date(startUtc.getTime() + durationMinutes * 60_000)
-
-      if (startUtc.getTime() <= Date.now()) {
-        return NextResponse.json({ error: 'Choose a tour time in the future.' }, { status: 400 })
-      }
-
       const token = inquiry.tour_response_token || createPublicToken()
       const links = getTourResponseLinks(token)
-      const tourDateLabel = formatTourDate(startUtc)
-      const tourTimeLabel = formatTourTime(startUtc)
       const contactPhone = await getActiveLuxorPhoneNumber().catch((error) => {
         console.warn('Tour confirmation could not load the active Luxor phone number:', error)
         return null
       })
-      const emailContext: TourEmailContext = {
-        inquiry,
-        meetingType,
-        clientFacingNotes,
-        tourDateLabel,
-        tourTimeLabel,
-        durationMinutes,
-        responseUrl: links.rescheduleUrl,
-        contactPhone,
-      }
-      const confirmation = await buildAiTourConfirmationEmail(emailContext)
-
       const eventContacts = await supabaseRest<Array<{ email: string | null }>>(
         `luxor_event_contacts?select=email&inquiry_id=eq.${encodeURIComponent(inquiryId)}`
       )
       const recipientEmails = Array.from(new Set([inquiry.email, ...eventContacts.map((contact) => contact.email)].filter((email): email is string => Boolean(email && email.trim()))))
-      const eventInput = {
-        attendeeEmails: recipientEmails,
-        title: `${meetingType} · ${inquiry.full_name}`,
-        description: [
-          `Private appointment for ${inquiry.full_name}.`,
-          `Event: ${inquiry.event_type || 'Private event'}`,
-          inquiry.guest_count ? `Expected guests: ${inquiry.guest_count}` : '',
-          clientFacingNotes ? `Details: ${clientFacingNotes}` : '',
-          `Confirm or reschedule: ${links.rescheduleUrl}`,
-        ].filter(Boolean).join('\n'),
-        location: TOUR_LOCATION,
-        startUtc: startUtc.toISOString(),
-        endUtc: endUtc.toISOString(),
-      }
+      const plan = await buildLuxorTourPlan({ inquiry, date: tourDate, time: tourTime, responseToken: token,
+        responseUrl: links.rescheduleUrl, attendeeEmails: recipientEmails, meetingType, clientFacingNotes,
+        durationMinutes, contactPhone, assignees: tourAssignees })
       const existingCalendar = await getLuxorCalendarEvent(inquiryId)
-      const templates = { confirmation, reminder_24: buildTourReminderEmail(emailContext, 'tomorrow'),
-        reminder_2: buildTourReminderEmail(emailContext, 'soon') }
+      const templates = plan.templates
       for (const template of Object.values(templates)) assertEmailHasNoUnresolvedPlaceholders(template.subject, template.body)
       const saved = await saveLuxorTourSchedule({ inquiry, expectedSequence: existingCalendar?.sequence ?? -1,
-        state: { title: eventInput.title, description: eventInput.description, location: eventInput.location,
-          startUtc: eventInput.startUtc, endUtc: eventInput.endUtc, attendeeEmails: recipientEmails },
-        tour: { meetingType, clientFacingNotes, responseToken: token, assignees: tourAssignees },
+        state: plan.state,
+        tour: plan.tour,
         templates, requestedBy: session.email })
       // Supabase commits the event revision and queued Resend notices together.
       // Secondary activity must not make a successful schedule retry its email.
@@ -268,7 +232,7 @@ export async function POST(request: NextRequest) {
         catch (error) { console.error('Tour saved; text confirmations could not be queued:', error) }
         try {
           await createNote(inquiryId,
-            `Tour scheduled for ${tourDateLabel} at ${tourTimeLabel}. One branded calendar invitation and ${saved.reminderJobs.length} reminders queued through Resend.`,
+            `Tour scheduled for ${plan.tourDateLabel} at ${plan.tourTimeLabel}. One branded calendar invitation and ${saved.reminderJobs.length} reminders queued through Resend.`,
             'email_log', session.email)
         } catch (error) { console.error('Tour saved; activity note could not be recorded:', error) }
       }
@@ -304,48 +268,4 @@ export async function POST(request: NextRequest) {
     const scopeError = message.includes('INVALID_OAUTHSCOPE') || message.includes('calendar lookup')
     return NextResponse.json({ error: message, reconnectRequired: scopeError }, { status: scopeError ? 403 : 500 })
   }
-}
-
-function zonedDateTimeToUtc(dateValue: string, timeValue: string, timeZone: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) throw new Error('Choose a valid tour date.')
-  const time = parseTime(timeValue)
-  if (!time) throw new Error('Choose a valid tour time.')
-  const [year, month, day] = dateValue.split('-').map(Number)
-  const wantedUtc = Date.UTC(year, month - 1, day, time.hours, time.minutes)
-  let result = new Date(wantedUtc)
-
-  for (let index = 0; index < 2; index += 1) {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(result)
-    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
-    const representedUtc = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), Number(values.hour), Number(values.minute))
-    result = new Date(result.getTime() + (wantedUtc - representedUtc))
-  }
-  return result
-}
-
-function parseTime(value: string) {
-  const twentyFour = value.match(/^(\d{1,2}):(\d{2})$/)
-  if (twentyFour) {
-    const hours = Number(twentyFour[1])
-    const minutes = Number(twentyFour[2])
-    return hours <= 23 && minutes <= 59 ? { hours, minutes } : null
-  }
-  const twelveHour = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
-  if (!twelveHour) return null
-  let hours = Number(twelveHour[1]) % 12
-  if (twelveHour[3].toUpperCase() === 'PM') hours += 12
-  const minutes = Number(twelveHour[2])
-  return minutes <= 59 ? { hours, minutes } : null
-}
-
-function formatTourDate(date: Date) {
-  return new Intl.DateTimeFormat('en-US', { timeZone: TOUR_TIMEZONE, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(date)
-}
-
-function formatTourTime(date: Date) {
-  return new Intl.DateTimeFormat('en-US', { timeZone: TOUR_TIMEZONE, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(date)
 }

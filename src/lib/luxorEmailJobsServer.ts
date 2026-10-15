@@ -984,7 +984,7 @@ export async function processLuxorEmailJobs(
         || (job.job_type === 'deposit_payment_confirmation' && metadata.includes_paid_invoice === true)) {
         throw new Error('Legacy direct-send receipt needs delivery review; its original PDF cannot be reconstructed by the generic email worker.')
       }
-      if (job.test_run_id && job.metadata?.test_category === 'tour_confirmation') {
+      if (job.test_run_id && ['tour_confirmation', 'tour_reminder', 'tour_cancellation'].includes(String(job.metadata?.test_category || ''))) {
         assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
         const { deliverLuxorTourNotice } = await import('./luxorTourScheduleServer')
         const delivery = await deliverLuxorTourNotice(job, { testRunId: job.test_run_id })
@@ -995,7 +995,7 @@ export async function processLuxorEmailJobs(
         if (delivery.status === 'sent') {
           await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(job.id)}`, {
             method: 'PATCH',
-            body: JSON.stringify({ ...luxorTestEmailAcceptedPatch({ provider: delivery.provider, providerMessageId: delivery.messageId }), details: { ...(job.metadata || {}), provider_called: true } }),
+            body: JSON.stringify({ ...luxorTestEmailAcceptedPatch({ provider: delivery.provider, providerMessageId: delivery.messageId }), details: { ...(job.metadata || {}), automatic_source: job.metadata?.automatic_source || null, provider_called: true } }),
           })
           await supabaseRest('luxor_test_run_activity', {
             method: 'POST',
@@ -1153,7 +1153,7 @@ export async function processLuxorEmailJobs(
       if (job.test_run_id) {
         await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(job.id)}`, {
           method: 'PATCH',
-          body: JSON.stringify({ ...luxorTestEmailAcceptedPatch({ provider: luxorMailProvider(), providerMessageId: providerResult.messageId }), details: { ...(job.metadata || {}), provider_called: true } }),
+          body: JSON.stringify({ ...luxorTestEmailAcceptedPatch({ provider: luxorMailProvider(), providerMessageId: providerResult.messageId }), details: { ...(job.metadata || {}), automatic_source: job.metadata?.automatic_source || null, provider_called: true } }),
         }).catch((error) => console.error('Test email was provider-accepted but its run record update failed:', error))
         await supabaseRest('luxor_test_run_activity', {
           method: 'POST',

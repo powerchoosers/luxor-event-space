@@ -80,8 +80,8 @@ async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: strin
     && input.metadata.selectedTourSlotId.length > 0
 
   const brochureSubmission = flow === 'brochure_lead' || source === 'homepage_brochure'
-  const emailSteps = isTourIntent
-    ? [{ category: 'tour_confirmation' as const, automaticSource: 'public_tour_submission' }]
+  const emailSteps: { category: 'tour_confirmation' | 'tour_reminder' | 'form_confirmation' | 'brochure'; automaticSource: string; scheduledFor?: string; template?: { subject: string; body: string } }[] = isTourIntent
+    ? [{ category: 'tour_confirmation', automaticSource: 'public_tour_submission' }]
     : brochureSubmission
       ? [
         { category: 'form_confirmation' as const, automaticSource: 'public_inquiry_submission' },
@@ -94,10 +94,21 @@ async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: strin
           : []
   if (!isTourIntent && (!emailSteps.length || !input.email)) return null
 
+  let preparedTour: Awaited<ReturnType<typeof import('@/lib/luxorTestEmailTemplates').buildLuxorTestTourPlan>> | null = null
+  if (isConfirmedSlot && input.preferredTourDate && input.preferredTourTime) {
+    const { buildLuxorTestTourPlan } = await import('@/lib/luxorTestEmailTemplates')
+    preparedTour = await buildLuxorTestTourPlan(runId, input.preferredTourDate, input.preferredTourTime)
+    emailSteps[0].template = preparedTour.emails.confirmation
+    emailSteps.push(
+      { category: 'tour_reminder', automaticSource: 'public_tour_reminder_24', scheduledFor: preparedTour.scheduledFor.reminder_24, template: preparedTour.emails.reminder_24 },
+      { category: 'tour_reminder', automaticSource: 'public_tour_reminder_2', scheduledFor: preparedTour.scheduledFor.reminder_2, template: preparedTour.emails.reminder_2 },
+    )
+  }
+
   const { buildLuxorTestEmailTemplate } = await import('@/lib/luxorTestEmailTemplates')
   const workflows: Record<string, unknown>[] = []
   for (const step of emailSteps) {
-    const template = await buildLuxorTestEmailTemplate(step.category, runId, {
+    const template = step.template || await buildLuxorTestEmailTemplate(step.category, runId, {
       flow,
       preferredTourDate: input.preferredTourDate ?? null,
       preferredTourTime: input.preferredTourTime ?? null,
@@ -107,7 +118,7 @@ async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: strin
       method: 'POST',
       body: JSON.stringify({
         p_test_run_id: runId,
-        p_tour_intent: isTourIntent,
+        p_tour_intent: isTourIntent && step.category === 'tour_confirmation',
         p_preferred_tour_date: input.preferredTourDate || null,
         p_preferred_tour_time: input.preferredTourTime || null,
         p_confirmed_slot: isConfirmedSlot,
@@ -115,6 +126,7 @@ async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: strin
         p_email_subject: template.subject,
         p_email_body: template.body,
         p_automatic_source: step.automaticSource,
+        p_scheduled_for: step.scheduledFor || preparedTour?.scheduledFor.confirmation || null,
       }),
     })
     workflows.push(workflow)
@@ -154,6 +166,23 @@ export async function resetLuxorTestRun(testRunId: string) {
     { method: 'POST', body: JSON.stringify({ p_test_run_id: testRunId }) },
   )
   return { run: { id: result.run.id, status: result.run.status }, replayed: result.replayed }
+}
+
+export async function simulateLuxorTestTourChange(input: {
+  testRunId: string
+  action: 'reschedule' | 'cancel'
+  actionKey: string
+  payload: Record<string, unknown>
+}) {
+  return supabaseRest<Record<string, unknown>>('rpc/luxor_simulate_test_tour_change', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_test_run_id: input.testRunId,
+      p_action: input.action,
+      p_action_key: input.actionKey,
+      p_payload: input.payload,
+    }),
+  })
 }
 
 export async function recordLuxorTestEmailSimulation(input: {

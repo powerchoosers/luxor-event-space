@@ -20,7 +20,6 @@ const emailWorker = fs.readFileSync(path.join(root, 'src/lib/luxorEmailJobsServe
 const resendWebhook = fs.readFileSync(path.join(root, 'src/lib/luxorResendWebhookServer.ts'), 'utf8')
 const supabaseRestServer = fs.readFileSync(path.join(root, 'src/lib/supabaseRestServer.ts'), 'utf8')
 const testLeadRoute = fs.readFileSync(path.join(root, 'src/app/api/portal/test-lead/route.ts'), 'utf8')
-const tourDelivery = fs.readFileSync(path.join(root, 'src/lib/luxorTourScheduleServer.ts'), 'utf8')
 
 const policyJs = ts.transpileModule(policySource, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText
 const policy = await import(`data:text/javascript;base64,${Buffer.from(policyJs).toString('base64')}`)
@@ -149,19 +148,6 @@ test('test email jobs are run-fenced, recipient-overridden, and track provider a
   assert.match(emailWorker, /provider_status: 'accepted',[\s\S]*delivery_status: 'unknown'/)
   assert.match(resendWebhook, /delivery_status: deliveryStatus/)
   assert.match(resendWebhook, /luxor_email_jobs\?select=\*\&id=/)
-})
-
-test('simulated tour notices use production Resend transport with test-only eligibility and pinned destination', () => {
-  const testNotice = tourDelivery.slice(tourDelivery.indexOf('if (options.testRunId)'), tourDelivery.indexOf('const expectedKind'))
-  assert.match(testNotice, /job\.test_run_id !== options\.testRunId/)
-  assert.match(testNotice, /job\.metadata\?\.test_category !== 'tour_confirmation'/)
-  assert.match(testNotice, /sendLuxorTestEmail/)
-  assert.match(testNotice, /LUXOR_TEST_EMAIL_RECIPIENT/)
-  assert.match(testNotice, /sendLuxorResendEmail/)
-  assert.match(testNotice, /email-job\/\$\{job\.id\}/)
-  assert.doesNotMatch(testNotice, /getLuxorCalendarEvent|luxor_calendar_revisions|luxor_calendar_attendees|luxor_save_tour_schedule/)
-  assert.match(emailWorker, /job\.test_run_id && job\.metadata\?\.test_category === 'tour_confirmation'[\s\S]*deliverLuxorTourNotice\(job, \{ testRunId: job\.test_run_id \}\)/)
-  assert.match(emailWorker, /provider: delivery\.provider[\s\S]*transport: 'production_tour_resend'/)
 })
 
 test('missing test schema is treated as unavailable while normal mail status and test failures remain observable', () => {

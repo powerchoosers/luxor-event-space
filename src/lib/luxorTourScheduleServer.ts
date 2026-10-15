@@ -35,8 +35,8 @@ export async function deliverLuxorTourNotice(job: LuxorEmailJob, options: { test
     // the production Resend transport while bypassing real calendar/inventory
     // eligibility and revision writes for the explicitly simulated tour.
     if (job.test_run_id !== options.testRunId || job.job_type !== 'test_notification'
-      || job.metadata?.test_category !== 'tour_confirmation'
-      || job.metadata?.automatic_test_workflow !== true) {
+      || !['tour_confirmation', 'tour_reminder', 'tour_cancellation'].includes(String(job.metadata?.test_category || ''))
+      || job.metadata?.test_email !== 'true') {
       throw new Error('Test tour notice is not linked to an authorized simulated tour workflow.')
     }
     const sent = await sendLuxorTestEmail({
@@ -51,7 +51,7 @@ export async function deliverLuxorTourNotice(job: LuxorEmailJob, options: { test
         from,
         fromName,
         idempotencyKey: `email-job/${job.id}`,
-        metadata: { testRunId: options.testRunId, tourNotice: 'confirmation' },
+        metadata: { testRunId: options.testRunId, tourNotice: job.metadata?.test_category || 'tour_confirmation' },
       }),
     })
     return { status: 'sent' as const, messageId: sent.providerMessageId, provider: 'resend' as const }

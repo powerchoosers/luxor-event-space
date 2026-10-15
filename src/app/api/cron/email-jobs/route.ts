@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     const internalResults = testResults.length ? [] : await processDueLuxorInquiryNotifications(1)
     // Preserve the one-message runtime budget: summary rendering plus two
     // sequential provider calls could exceed the function's 60-second limit.
-    const followUpResults = internalResults.length ? [] : await processDueLuxorFollowUpEmailJobs()
+    const followUpResults = testResults.length || internalResults.length ? [] : await processDueLuxorFollowUpEmailJobs()
     const results = testResults.length ? testResults
       : internalResults.length ? internalResults
       : followUpResults.length ? followUpResults
