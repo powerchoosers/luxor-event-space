@@ -28,7 +28,9 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
   const [phone, setPhone] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [eventType, setEventType] = useState('')
-  const [marketingConsent, setMarketingConsent] = useState(false)
+  const [emailMarketingConsent, setEmailMarketingConsent] = useState(false)
+  const [smsCustomerCareConsent, setSmsCustomerCareConsent] = useState(false)
+  const [smsMarketingConsent, setSmsMarketingConsent] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -78,11 +80,6 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
       return
     }
 
-    if (!marketingConsent) {
-      setError('Please agree to receive communications regarding your brochure and inquiry.')
-      return
-    }
-
     setSubmitting(true)
 
     try {
@@ -95,11 +92,13 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
         message: 'Requested venue brochure via homepage',
         source: 'homepage_brochure',
         flow: 'brochure_lead',
-        marketingOptIn: true,
+        marketingOptIn: emailMarketingConsent,
+        smsOptIn: smsCustomerCareConsent,
+        smsMarketingOptIn: smsMarketingConsent,
         pagePath: typeof window === 'undefined' ? '/' : window.location.pathname,
         metadata: {
           leadSource: 'Homepage Brochure Form',
-          marketingConsentAgreed: true,
+          emailMarketingConsentAgreed: emailMarketingConsent,
           brochureRequestedAt: new Date().toISOString(),
         },
       }
@@ -324,20 +323,36 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
                 </div>
               </div>
 
-              {/* Marketing Consent Checkbox (Required) */}
-              <div className="pt-2">
+              <div className="space-y-3 border-t border-[#d8c4a4] pt-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">Optional contact preferences</p>
                 <label className="flex cursor-pointer select-none items-start gap-3 text-xs leading-relaxed text-[#665a4e]">
                   <input
                     type="checkbox"
-                    required
-                    checked={marketingConsent}
-                    onChange={(e) => setMarketingConsent(e.target.checked)}
+                    checked={emailMarketingConsent}
+                    onChange={(e) => setEmailMarketingConsent(e.target.checked)}
                     className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]"
                   />
-                  <span>
-                    I agree to receive email and SMS communications from Luxor at Las Palmas Events regarding my inquiry, venue updates, promotions, and booking information. Message & data rates may apply. Reply STOP to unsubscribe.
-                  </span>
+                  <span>Email me occasional Luxor news and planning ideas.</span>
                 </label>
+                <label className="flex cursor-pointer select-none items-start gap-3 text-xs leading-relaxed text-[#665a4e]">
+                  <input
+                    type="checkbox"
+                    checked={smsCustomerCareConsent}
+                    onChange={(e) => setSmsCustomerCareConsent(e.target.checked)}
+                    className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]"
+                  />
+                  <span>I agree to receive customer-care text messages from Luxor Event Space about my inquiry, tour, booking, payment, or event. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.</span>
+                </label>
+                <label className="flex cursor-pointer select-none items-start gap-3 text-xs leading-relaxed text-[#665a4e]">
+                  <input
+                    type="checkbox"
+                    checked={smsMarketingConsent}
+                    onChange={(e) => setSmsMarketingConsent(e.target.checked)}
+                    className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]"
+                  />
+                  <span>I agree to receive occasional promotional text messages from Luxor Event Space, such as venue open-house invitations and planning offers. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.</span>
+                </label>
+                <p className="ml-7 text-xs leading-5 text-[#827567]">Text choices are separate and optional. Read the <Link href="/privacy" className="text-[#8d672b] underline underline-offset-4">Privacy Policy</Link> and <Link href="/terms" className="text-[#8d672b] underline underline-offset-4">Terms</Link>.</p>
               </div>
 
               {/* Error Alert */}

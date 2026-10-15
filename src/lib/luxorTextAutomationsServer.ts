@@ -43,7 +43,7 @@ export async function recordLuxorSmsConsent(
   const timestamp = new Date().toISOString()
   const status: ConsentStatus = controlType === 'STOP' ? 'opted_out' : 'opted_in'
   const consentScopes = status === 'opted_in'
-    ? options.scopes || ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice', 'marketing']
+    ? options.scopes || ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice']
     : []
   const [saved] = await supabaseRest<ConsentRow[]>('luxor_sms_consents?on_conflict=phone_number&select=*', {
     method: 'POST',
@@ -81,6 +81,9 @@ export async function assertLuxorSmsAllowed(phone: string) {
   if (!phoneNumber) throw new Error('Enter a valid mobile phone number.')
   const consent = await getLuxorSmsConsent(phoneNumber)
   if (consent?.status === 'opted_out') throw new Error('This person opted out of Luxor text messages. They must text START before the CRM can message them again.')
+  if (consent?.status !== 'opted_in') throw new Error('This person has not opted in to Luxor text messages. Record their consent before sending.')
+  const scopes = Array.isArray(consent.consent_scopes) ? consent.consent_scopes : []
+  if (!scopes.includes('customer_care')) throw new Error('This person has not opted in to customer-care texts.')
   return phoneNumber
 }
 
@@ -92,7 +95,7 @@ export async function assertLuxorAutomatedSmsAllowed(phone: string, requiredScop
     throw new Error('Automated texts require a recorded customer opt-in.')
   }
   const scopes = Array.isArray(consent.consent_scopes) ? consent.consent_scopes : []
-  if (scopes.length && !scopes.includes(requiredScope) && !scopes.includes('customer_care')) {
+  if (!scopes.includes(requiredScope)) {
     throw new Error(`This customer has not opted in to ${requiredScope.replace(/_/g, ' ')} texts.`)
   }
   return phoneNumber
@@ -121,7 +124,7 @@ export async function sendLuxorAutomatedText(input: {
     if (!simulation) throw new Error('No active enabled test run is available for SMS simulation.')
     return `SIMULATED-${String((simulation.artifact as { id?: string }).id || 'sms')}`
   }
-  const destination = await assertLuxorSmsAllowed(input.to)
+  const destination = await assertLuxorAutomatedSmsAllowed(input.to, 'customer_care')
   if (input.type === 'inbound_acknowledgment' && await hasRecentAutomation(destination, input.type, input.cooldownHours ?? 12)) return null
 
   const [claim] = await supabaseRest<AutomationEvent[]>('luxor_text_automation_events?on_conflict=automation_type,source_id&select=*', {
