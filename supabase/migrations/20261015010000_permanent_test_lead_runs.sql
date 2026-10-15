@@ -469,6 +469,15 @@ begin
   if v_run.status = 'reset' then
     return jsonb_build_object('run', jsonb_build_object('id', v_run.id, 'status', v_run.status), 'replayed', true);
   end if;
+  -- Start-run takes this same permanent-lead lock before inserting its run.
+  -- Once locked, the newest-run check cannot race a concurrent submission.
+  if v_run.status in ('completed', 'failed') and exists (
+    select 1 from public.luxor_test_runs newer
+    where newer.test_lead_id = v_lead.id
+      and (newer.started_at, newer.id) > (v_run.started_at, v_run.id)
+  ) then
+    raise exception 'A newer test run exists; reset that run before resetting this historical run.' using errcode = '55000';
+  end if;
   if v_run.status not in ('in_progress', 'completed', 'failed') then
     raise exception 'Only an active or finished test run can be reset.' using errcode = '55000';
   end if;
@@ -552,6 +561,11 @@ begin
   if p_details is null or jsonb_typeof(p_details) <> 'object' then
     raise exception 'Simulated workflow details must be a JSON object.' using errcode = '22023';
   end if;
+  if p_status = 'failed' or (p_artifact_type = 'payment' and p_status = 'paid') then
+    if exists (select 1 from public.luxor_email_jobs where test_run_id=v_run.id and status in ('sending','claimed')) then
+      raise exception 'A test email is in flight. Record its provider outcome before failing or completing the run.' using errcode = '55000';
+    end if;
+  end if;
   if p_status <> 'failed' then
     if p_artifact_type = 'proposal' and not exists (
       select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='tour' and status='completed'
@@ -579,6 +593,22 @@ begin
   values (v_run.id, 'simulated_' || p_artifact_type, p_status,
     jsonb_build_object('artifact_id', v_artifact.id, 'simulation_only', true, 'details', p_details));
   if p_status = 'failed' then
+    with cancelled_jobs as (
+      update public.luxor_email_jobs set status='cancelled',
+        last_error='Cancelled because the simulated test run failed before delivery.', updated_at=now()
+      where test_run_id=v_run.id and job_type='test_notification' and status='queued'
+      returning id
+    ), cancelled_emails as (
+      update public.luxor_test_run_emails set status='failed',
+        provider_status='cancelled_before_send', delivery_status='unknown',
+        error_message='Cancelled because the simulated test run failed before delivery.', updated_at=now()
+      where email_job_id in (select id from cancelled_jobs) and status='queued'
+      returning id, email_job_id
+    )
+    insert into public.luxor_test_run_activity (test_run_id,event_type,status,provider_status,delivery_status,error_message,details)
+    select v_run.id,'test_email_cancelled','failed','cancelled_before_send','unknown',
+      'Cancelled because the simulated test run failed before delivery.',jsonb_build_object('email_id',cancelled_emails.id,'email_job_id',cancelled_emails.email_job_id)
+    from cancelled_emails;
     update public.luxor_test_runs set status='failed', completed_at=now(), updated_at=now() where id=v_run.id;
     insert into public.luxor_test_run_activity (test_run_id,event_type,status,details)
     values (v_run.id,'run_failed','failed',jsonb_build_object('artifact_type',p_artifact_type,'simulation_only',true));
@@ -591,6 +621,22 @@ begin
   elsif p_artifact_type = 'contract' and p_status = 'signed' then
     update public.luxor_inquiries set status='booked', pipeline_stage='planning_begins', updated_at=now() where id=v_run.test_lead_id and is_test is true;
   elsif p_artifact_type = 'payment' and p_status = 'paid' then
+    with cancelled_jobs as (
+      update public.luxor_email_jobs set status='cancelled',
+        last_error='Cancelled because the simulated test run completed before delivery.', updated_at=now()
+      where test_run_id=v_run.id and job_type='test_notification' and status='queued'
+      returning id
+    ), cancelled_emails as (
+      update public.luxor_test_run_emails set status='failed',
+        provider_status='cancelled_before_send', delivery_status='unknown',
+        error_message='Cancelled because the simulated test run completed before delivery.', updated_at=now()
+      where email_job_id in (select id from cancelled_jobs) and status='queued'
+      returning id, email_job_id
+    )
+    insert into public.luxor_test_run_activity (test_run_id,event_type,status,provider_status,delivery_status,error_message,details)
+    select v_run.id,'test_email_cancelled','failed','cancelled_before_send','unknown',
+      'Cancelled because the simulated test run completed before delivery.',jsonb_build_object('email_id',cancelled_emails.id,'email_job_id',cancelled_emails.email_job_id)
+    from cancelled_emails;
     update public.luxor_test_run_artifacts set status='paid', details=details || jsonb_build_object('simulation_only',true,'completed_by_payment',true), updated_at=now()
     where test_run_id=v_run.id and artifact_type='invoice' and status='issued';
     update public.luxor_test_runs set status='completed', completed_at=now(), updated_at=now() where id=v_run.id;
