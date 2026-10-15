@@ -6,11 +6,12 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorEmailJob } from '@/lib/luxorInquiryTypes'
 import { listInvoicesByInquiry } from '@/lib/luxorInvoicesServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
-import { rankCorrectEmailResendOptions, getRecipientBounceEvidence, isLeadEmailResendStage, type CorrectEmailResendOption, type EmailDeliveryEvidence } from '@/lib/luxorLeadEmailResend'
+import { rankCorrectEmailResendOptions, getRecipientBounceEvidence, isLeadEmailResendStage, isCorrectedPaymentResendStage, type CorrectEmailResendOption, type EmailDeliveryEvidence } from '@/lib/luxorLeadEmailResend'
 import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getLuxorBooking, getLuxorBookingByInvoice } from '@/lib/luxorBookingsServer'
 import { listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorPaymentReminderBookingLookup, getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
+import { correctedPaymentReminderKind } from '@/lib/luxorCorrectedPaymentResend'
 
 const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -33,7 +34,7 @@ function filterForLeadStage(options: CorrectEmailResendOption[], inquiry: { stat
     && ['proposal_sent', 'booked'].includes(inquiry.status)
   const activeAgreement = ['contract', 'deposit'].includes(inquiry.pipeline_stage || '')
     && ['proposal_sent', 'booked'].includes(inquiry.status)
-  const payment = inquiry.status === 'booked' && ['deposit', 'final_payment', 'planning', 'event', 'closing'].includes(inquiry.pipeline_stage || '')
+  const payment = isCorrectedPaymentResendStage(inquiry)
   return options.filter((option) => (postEvent && option.sourceKind === 'Event follow-up')
     || (planning && option.sourceKind === 'Layout review')
     || (contract && option.resendKind === 'proposal')
@@ -310,7 +311,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (!source) return NextResponse.json({ error: 'The selected payment reminder is no longer eligible.' }, { status: 409 })
       const response = await fetch(`${new URL(request.url).origin}/api/invoices/${encodeURIComponent(invoiceId)}/remind`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', cookie: request.headers.get('cookie') || '' },
-        body: JSON.stringify({ kind: source.job_type === 'final_payment_reminder' ? 'final_payment' : 'unpaid_invoice', correctedEmailResend: true, expectedRecipient: email, sourceJobId: source.id }),
+        body: JSON.stringify({ kind: correctedPaymentReminderKind(source.job_type), correctedEmailResend: true, expectedRecipient: email, sourceJobId: source.id }),
       })
       const result = await response.json().catch(() => ({}))
       return NextResponse.json(result, { status: response.status })

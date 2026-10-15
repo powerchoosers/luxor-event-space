@@ -41,6 +41,11 @@ export function isLeadEmailResendStage(inquiry: { status: string; pipeline_stage
     || (inquiry.status === 'booked' && ['contract', 'deposit', 'planning', 'event', 'closing', 'final_payment'].includes(inquiry.pipeline_stage || ''))
 }
 
+export function isCorrectedPaymentResendStage(inquiry: { status: string; pipeline_stage?: string | null }) {
+  return inquiry.status === 'booked'
+    && ['deposit', 'final_payment', 'planning', 'event', 'closing'].includes(inquiry.pipeline_stage || '')
+}
+
 /** Rank the newest confirmed bounce first, then the newest eligible snapshot. */
 export function rankCorrectEmailResendOptions<T extends CorrectEmailResendOption>(options: T[]): T[] {
   return [...options].sort((a, b) => Number(b.bounced) - Number(a.bounced)

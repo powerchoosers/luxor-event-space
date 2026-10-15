@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import { getInvoice, listPaidPaymentsByInvoice, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, getLuxorBookingByInvoice } from '@/lib/luxorBookingsServer'
@@ -11,6 +12,7 @@ import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer
 import { getLuxorPaymentReminderBookingLookup, getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { canSendCorrectedPaymentReminder, claimAndProcessCorrectedPaymentResend } from '@/lib/luxorCorrectedPaymentResend'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -41,6 +43,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const body = await request.json().catch(() => ({})) as { kind?: 'unpaid_invoice' | 'final_payment'; correctedEmailResend?: boolean; expectedRecipient?: string; sourceJobId?: string }
+    if (body.correctedEmailResend) {
+      const member = await getLuxorPortalMember(session.email)
+      if (!canSendCorrectedPaymentReminder(member)) return NextResponse.json({ error: 'Finance permission is required to send payment links.' }, { status: 403 })
+    }
     if (body.correctedEmailResend && body.expectedRecipient?.trim().toLowerCase() !== inquiry.email.trim().toLowerCase()) {
       return NextResponse.json({ error: 'The lead email changed after review. Refresh and confirm the corrected recipient again.' }, { status: 409 })
     }
@@ -121,7 +127,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         },
       )
       if (!reservation.job) return NextResponse.json({ error: 'The payment resend could not be reserved.' }, { status: 409 })
-      await processLuxorEmailJobs([reservation.job]).catch((error) => console.error('Corrected payment email remains in its durable queue:', error))
+      await claimAndProcessCorrectedPaymentResend(reservation.job, processLuxorEmailJobs)
+        .catch((error) => console.error('Corrected payment email remains in its durable queue:', error))
       const latest = (await listLuxorEmailJobsForInquiry(inquiry.id, 200)).find((candidate) => candidate.id === reservation.job.id) || reservation.job
       if (latest.status === 'failed' || latest.status === 'cancelled') {
         return NextResponse.json({ job: latest, error: latest.last_error || 'Delivery failed or is unresolved; do not create a new payment email.' }, { status: 409 })

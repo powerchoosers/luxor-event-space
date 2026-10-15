@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { getRecipientBounceEvidence, isLeadEmailResendStage, rankCorrectEmailResendOptions } from '../src/lib/luxorLeadEmailResend.ts'
+import { getRecipientBounceEvidence, isCorrectedPaymentResendStage, isLeadEmailResendStage, rankCorrectEmailResendOptions } from '../src/lib/luxorLeadEmailResend.ts'
+import { canSendCorrectedPaymentReminder, claimAndProcessCorrectedPaymentResend, correctedPaymentReminderKind } from '../src/lib/luxorCorrectedPaymentResend.ts'
+import { runProposalResendOperation } from '../src/lib/luxorProposalResendOperation.ts'
 
 const sql = await readFile(new URL('../supabase/migrations/20261015060000_unified_lead_email_resend.sql', import.meta.url), 'utf8')
 const route = await readFile(new URL('../src/app/api/leads/[id]/correct-email-resend/route.ts', import.meta.url), 'utf8')
@@ -97,12 +99,94 @@ test('tour resend confirmation is a stable job-level idempotent action across ta
 
 test('payment resend reserves one immutable recipient-bound invoice job and revalidates signed balance at claim', () => {
   assert.match(sql, /luxor_email_jobs_corrected_payment_resend_uidx/)
+  assert.ok(sql.includes("corrected_payment_resend_key' having count(*)>1"))
+  assert.match(sql, /group by metadata->>'corrected_email_resend_source_id',metadata->>'corrected_email_resend_expected_recipient'/)
   assert.match(sql, /luxor_prepare_corrected_payment_email_resend/)
   assert.match(sql, /luxor_validate_corrected_payment_resend/)
   assert.match(sql, /booking\.contract_status='signed'/)
   assert.match(sql, /sum\(amount\).*status='paid'/)
+  assert.match(sql, /source_job_id_text.*!~\* '\^\[0-9a-f-\]/)
+  assert.match(sql, /luxor_prevent_uncertain_corrected_email_replay/)
   assert.match(worker, /luxor_claim_corrected_payment_resend/)
   assert.match(route, /correctedEmailResend/)
+})
+
+test('payment correction enforces finance permission and atomically claims on immediate send', async () => {
+  assert.equal(canSendCorrectedPaymentReminder({ role: 'agent', permissions: ['leads'] }), false)
+  assert.equal(canSendCorrectedPaymentReminder({ role: 'agent', permissions: ['leads', 'finances'] }), true)
+  assert.equal(canSendCorrectedPaymentReminder({ role: 'owner', permissions: [] }), true)
+  assert.equal(correctedPaymentReminderKind('final_payment_request'), 'final_payment')
+  assert.equal(correctedPaymentReminderKind('unpaid_invoice_reminder'), 'unpaid_invoice')
+  assert.equal(isCorrectedPaymentResendStage({ status: 'booked', pipeline_stage: 'final_payment' }), true)
+  assert.equal(isCorrectedPaymentResendStage({ status: 'booked', pipeline_stage: 'contract' }), false)
+  assert.equal(isCorrectedPaymentResendStage({ status: 'proposal_sent', pipeline_stage: 'final_payment' }), false)
+  let optionsSeen
+  const job = { id: 'job-1' }
+  await claimAndProcessCorrectedPaymentResend(job, async (jobs, options) => {
+    assert.deepEqual(jobs, [job])
+    optionsSeen = options
+    return [{ status: 'sent' }]
+  })
+  assert.deepEqual(optionsSeen, { markSending: true })
+})
+
+test('proposal resend recovers a provider-accepted response loss with the same key and one delivery', async () => {
+  const accepted = new Map()
+  let providerCalls = 0
+  let loseFirstResponse = true
+  const providerMock = async (key) => {
+    providerCalls += 1
+    if (!accepted.has(key)) accepted.set(key, { messageId: 'mail-1', providerMessageId: 'resend-1' })
+    if (loseFirstResponse) {
+      loseFirstResponse = false
+      throw new Error('simulated lost response after provider acceptance')
+    }
+    return accepted.get(key)
+  }
+  const result = await runProposalResendOperation({
+    send: () => providerMock('corrected-proposal/same-key'),
+    recover: async () => accepted.get('corrected-proposal/same-key') || null,
+    audit: async () => undefined,
+  })
+  assert.equal(providerCalls, 1)
+  assert.equal(result.outcome, 'accepted')
+  assert.equal(result.receipt.providerMessageId, 'resend-1')
+})
+
+test('concurrent proposal actions share one provider idempotency key and one send', async () => {
+  const accepted = new Map()
+  const inFlight = new Map()
+  let actualSends = 0
+  const providerMock = async (key) => {
+    if (accepted.has(key)) return accepted.get(key)
+    if (inFlight.has(key)) return inFlight.get(key)
+    const operation = Promise.resolve().then(() => {
+      actualSends += 1
+      const receipt = { messageId: 'mail-shared', providerMessageId: 'provider-shared' }
+      accepted.set(key, receipt)
+      return receipt
+    }).finally(() => inFlight.delete(key))
+    inFlight.set(key, operation)
+    return operation
+  }
+  const makeAttempt = () => runProposalResendOperation({
+    send: () => providerMock('proposal-op-1'),
+    recover: async () => accepted.get('proposal-op-1') || null,
+    audit: async () => undefined,
+  })
+  const results = await Promise.all([makeAttempt(), makeAttempt()])
+  assert.equal(actualSends, 1)
+  assert.deepEqual(results.map((result) => result.outcome), ['accepted', 'accepted'])
+})
+
+test('audit failure after accepted proposal delivery remains accepted and is surfaced for repair', async () => {
+  const result = await runProposalResendOperation({
+    send: async () => ({ messageId: 'mail-2', providerMessageId: 'resend-2' }),
+    recover: async () => null,
+    audit: async () => { throw new Error('simulated note-store outage') },
+  })
+  assert.equal(result.outcome, 'accepted')
+  assert.equal(result.auditPending, true)
 })
 
 test('due-worker job claim commits independently before per-lead validation, with the same provider key on recovery', () => {

@@ -320,6 +320,15 @@ notify pgrst, 'reload schema';
 -- Payment-link corrections are reserved once per invoice and corrected
 -- recipient, then run through the normal durable email worker. The worker
 -- rechecks the signed booking and outstanding balance under row locks.
+do $$
+begin
+  if exists(select 1 from public.luxor_email_jobs
+    where metadata->>'corrected_payment_resend_key' is not null
+    group by metadata->>'corrected_payment_resend_key' having count(*)>1) then
+    raise exception 'Duplicate corrected payment resend keys exist; resolve them before applying this migration';
+  end if;
+end;
+$$;
 create unique index if not exists luxor_email_jobs_corrected_payment_resend_uidx
   on public.luxor_email_jobs ((metadata->>'corrected_payment_resend_key'))
   where metadata->>'corrected_payment_resend_key' is not null;
@@ -382,7 +391,7 @@ declare
   inquiry public.luxor_inquiries%rowtype; job public.luxor_email_jobs%rowtype;
   source_job public.luxor_email_jobs%rowtype; invoice public.luxor_invoices%rowtype;
   booking public.luxor_bookings%rowtype; eligible boolean:=false; claimed boolean:=false;
-  invoice_id_text text;
+  invoice_id_text text; source_job_id_text text;
 begin
   select * into inquiry from public.luxor_inquiries where id=p_inquiry_id for update;
   if not found then raise exception 'Lead not found'; end if;
@@ -392,9 +401,11 @@ begin
     return jsonb_build_object('job',to_jsonb(job),'eligible',true,'claimed',false,'completed',true);
   end if;
   invoice_id_text:=job.metadata->>'corrected_payment_resend_invoice_id';
-  if coalesce(invoice_id_text,'') !~* '^[0-9a-f-]{36}$' then eligible:=false;
+  source_job_id_text:=job.metadata->>'corrected_payment_resend_source_id';
+  if coalesce(invoice_id_text,'') !~* '^[0-9a-f-]{8}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{12}$'
+    or coalesce(source_job_id_text,'') !~* '^[0-9a-f-]{8}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{12}$' then eligible:=false;
   else
-    select * into source_job from public.luxor_email_jobs where id=(job.metadata->>'corrected_payment_resend_source_id')::uuid for update;
+    select * into source_job from public.luxor_email_jobs where id=source_job_id_text::uuid for update;
     select * into invoice from public.luxor_invoices where id=invoice_id_text::uuid and inquiry_id=p_inquiry_id for update;
     if found and invoice.booking_id is not null then
       select * into booking from public.luxor_bookings where id=invoice.booking_id and inquiry_id=p_inquiry_id for update;
@@ -455,6 +466,32 @@ grant execute on function public.luxor_claim_corrected_payment_resend(uuid,uuid)
 grant execute on function public.luxor_check_corrected_payment_resend(uuid,uuid) to service_role;
 
 notify pgrst, 'reload schema';
+
+-- The due-job claimer recovers stale sending rows by requeueing them after 15
+-- minutes. That is safe for ordinary mail but could duplicate a corrected
+-- resend when a provider's outcome is unknown. Make only these resend jobs
+-- terminally failed on that recovery transition; keep the original snapshot
+-- and require delivery-history review before any further action.
+create or replace function public.luxor_prevent_uncertain_corrected_email_replay()
+returns trigger language plpgsql security invoker set search_path = '' as $$
+begin
+  if old.status='sending' and new.status='queued'
+    and old.updated_at<now()-interval '15 minutes'
+    and (old.metadata->>'corrected_email_resend_request_id' is not null
+      or old.metadata->>'corrected_payment_resend_key' is not null) then
+    new.status:='failed';
+    new.scheduled_for:=old.scheduled_for;
+    new.last_error:='Delivery outcome is unknown; automatic retry was blocked to prevent a duplicate. Review provider history.';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists luxor_prevent_uncertain_corrected_email_replay on public.luxor_email_jobs;
+create trigger luxor_prevent_uncertain_corrected_email_replay
+  before update of status on public.luxor_email_jobs
+  for each row execute function public.luxor_prevent_uncertain_corrected_email_replay();
+revoke all on function public.luxor_prevent_uncertain_corrected_email_replay() from public,anon,authenticated;
+grant execute on function public.luxor_prevent_uncertain_corrected_email_replay() to service_role;
 
 -- Keep the calendar delivery worker and portal confirmation on the same live
 -- lead-stage rule as the shared correction dialog. These wrappers lock the

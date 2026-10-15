@@ -7,6 +7,7 @@ import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { downloadLuxorDocument, getLuxorDocumentByInvoice } from '@/lib/luxorDocumentsServer'
 import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
 import { sendLuxorResendEmail } from '@/lib/luxorResendMailServer'
+import { runProposalResendOperation } from '@/lib/luxorProposalResendOperation'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { isLuxorOfferExpired } from '@/lib/luxorOffer'
 import {
@@ -115,6 +116,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!expectedReviewUrl || proposalEmail?.review_url !== expectedReviewUrl || typeof proposalEmail?.subject !== 'string') {
       return NextResponse.json({ error: 'The frozen proposal link or subject could not be verified.' }, { status: 409 })
     }
+    const proposalSubject = proposalEmail.subject
 
     let targetEmail: string
     let idempotencyKey: string
@@ -131,44 +133,76 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       targetEmail = approval!.correctedEmail
       idempotencyKey = approvedProposalResendKey(invoice.id, Number(invoice.proposal_version), approval!.approvalReference)
     }
-    const sent = await sendLuxorResendEmail({
-      to: targetEmail,
-      subject: proposalEmail.subject,
-      content: html,
-      from: 'booking@luxoratlaspalmas.com',
-      fromName: 'Luxor Event Space',
-      idempotencyKey,
-      metadata: {
-        flow_stage: 'approved_corrected_proposal_resend',
-        ...(approval ? { approvalReference: approval.approvalReference } : { correctionResend: true }),
-        inquiryId: inquiry.id,
-        invoiceId: invoice.id,
-        proposalVersion: invoice.proposal_version,
-        frozenPdfSha256: pdfSha256,
+    const auditMarker = approvedProposalResendAuditMarker(idempotencyKey)
+    const operation = await runProposalResendOperation({
+      send: async () => {
+        const sent = await sendLuxorResendEmail({
+          to: targetEmail,
+          subject: proposalSubject,
+          content: html,
+          from: 'booking@luxoratlaspalmas.com',
+          fromName: 'Luxor Event Space',
+          idempotencyKey,
+          metadata: {
+            flow_stage: 'approved_corrected_proposal_resend',
+            ...(approval ? { approvalReference: approval.approvalReference } : { correctionResend: true }),
+            inquiryId: inquiry.id,
+            invoiceId: invoice.id,
+            proposalVersion: invoice.proposal_version,
+            frozenPdfSha256: pdfSha256,
+            proposalResendAuditStatus: 'pending',
+          },
+          attachments: [{
+            filename: typeof proposalEmail.attachment_filename === 'string' ? proposalEmail.attachment_filename : document.file_name,
+            content: pdf,
+            contentType: 'application/pdf',
+          }],
+        })
+        return { messageId: sent.messageId, providerMessageId: sent.providerMessageId }
       },
-      attachments: [{
-        filename: typeof proposalEmail.attachment_filename === 'string' ? proposalEmail.attachment_filename : document.file_name,
-        content: pdf,
-        contentType: 'application/pdf',
-      }],
+      recover: async () => {
+        const rows = await supabaseRest<Array<{ id: string; provider_id: string | null; accepted_at: string | null }>>(
+          `luxor_mail_messages?select=id,provider_id,accepted_at&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=2`,
+        )
+        const accepted = rows.filter((row) => Boolean(row.accepted_at))
+        if (accepted.length !== 1) return null
+        return { messageId: `mail-${accepted[0].id}`, providerMessageId: accepted[0].provider_id }
+      },
+      audit: async (receipt) => {
+        const latestNotes = await listNotesByInquiry(inquiry.id)
+        if (!latestNotes.some(note => note.content.includes(auditMarker))) {
+          await createNote(
+            inquiry.id,
+            `${auditMarker}\n${correctedEmailResend ? 'Corrected' : 'Approved'} frozen proposal resend accepted by Resend. Proposal version ${invoice.proposal_version}; PDF SHA-256 ${pdfSha256}; provider message ${receipt.providerMessageId || 'pending webhook confirmation'}. Delivery is pending provider confirmation.`,
+            'email_log',
+            session.email,
+          )
+        }
+        const outbox = await supabaseRest<Array<{ id: string; metadata: Record<string, unknown> }>>(
+          `luxor_mail_messages?select=id,metadata&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=2`,
+        )
+        if (outbox.length !== 1) throw new Error('Proposal resend audit state could not be saved.')
+        await supabaseRest(`luxor_mail_messages?id=eq.${encodeURIComponent(outbox[0].id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ metadata: { ...outbox[0].metadata, proposalResendAuditStatus: 'complete', proposalResendAuditCompletedAt: new Date().toISOString() } }),
+        })
+      },
     })
 
-    const auditMarker = approvedProposalResendAuditMarker(idempotencyKey)
-    const latestNotes = await listNotesByInquiry(inquiry.id)
-    if (!latestNotes.some(note => note.content.includes(auditMarker))) {
-      await createNote(
-        inquiry.id,
-        `${auditMarker}\nApproved frozen proposal resend accepted by Resend. Proposal version ${invoice.proposal_version}; PDF SHA-256 ${pdfSha256}; provider message ${sent.providerMessageId || 'pending webhook confirmation'}. Delivery is pending provider confirmation.`,
-        'email_log',
-        session.email,
-      )
+    if (operation.outcome === 'unconfirmed') {
+      return NextResponse.json({ accepted: false, delivery: 'outcome_unconfirmed', operationKey: idempotencyKey,
+        message: 'The provider outcome is not confirmed. Retry this same proposal action to recover its result; do not create another proposal.' }, { status: 202 })
     }
 
     return NextResponse.json({
       accepted: true,
       delivery: 'accepted_pending_provider_confirmation',
-      messageId: sent.messageId,
-      providerMessageId: sent.providerMessageId,
+      messageId: operation.receipt.messageId,
+      providerMessageId: operation.receipt.providerMessageId,
+      auditPending: operation.auditPending,
+      message: operation.auditPending
+        ? 'The email was accepted, but its audit note is still pending. Retry this same action to finish the audit without sending another copy.'
+        : undefined,
       proposalVersion: invoice.proposal_version,
       pdfSha256,
     })
