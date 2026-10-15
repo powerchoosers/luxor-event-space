@@ -901,6 +901,7 @@ export async function processLuxorEmailJobs(
 
   for (let job of jobs) {
     let testProviderAccepted = false
+    let providerAccepted = false
     try {
       if (job.test_run_id) {
         // Test mail is never sent by preview/manual processing paths. A queued
@@ -962,6 +963,23 @@ export async function processLuxorEmailJobs(
       }
       const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
       const isPreparedTourResend = metadata.prepared_tour_email_resend === true
+      const isCorrectedEmailResend = typeof metadata.corrected_email_resend_request_id === 'string'
+      if (isCorrectedEmailResend) {
+        const validation = await supabaseRest<{
+          job: LuxorEmailJob
+          claimed: boolean
+          eligible: boolean
+          completed?: boolean
+        }>(`rpc/${markSending ? 'luxor_claim_corrected_email_resend' : 'luxor_check_corrected_email_resend'}`, {
+          method: 'POST',
+          body: JSON.stringify({ p_inquiry_id: job.inquiry_id, p_job_id: job.id }),
+        })
+        if (!validation.eligible || !validation.job || validation.completed || (markSending && !validation.claimed)) {
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
+        job = validation.job
+      }
       if (isPreparedTourResend) {
         const validation = await supabaseRest<{
           job: LuxorEmailJob
@@ -1096,7 +1114,7 @@ export async function processLuxorEmailJobs(
         continue
       }
 
-      if (markSending) {
+      if (markSending && !isCorrectedEmailResend) {
         await updateLuxorEmailJob(job.id, { status: 'sending', attempts: Number(job.attempts || 0) + 1 })
       }
       if (job.job_type === 'marketing_campaign' && await isLuxorMarketingDeliveryBlocked(job.recipient_email,
@@ -1155,6 +1173,7 @@ export async function processLuxorEmailJobs(
             fromName: senderName,
             idempotencyKey: `email-job/${job.id}`,
           })
+      providerAccepted = true
       testProviderAccepted = Boolean(job.test_run_id)
       await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
       if (job.test_run_id) {
@@ -1194,6 +1213,13 @@ export async function processLuxorEmailJobs(
       if (job.test_run_id && testProviderAccepted) {
         await updateLuxorEmailJob(job.id, { status: 'sent', last_error: null }).catch((recordError) => console.error('Provider accepted test email; could not finalize its queue status:', recordError))
         results.push({ id: job.id, status: 'sent', error: 'Provider accepted; a run activity update needs reconciliation.' })
+        continue
+      }
+      if (providerAccepted) {
+        const uncertain = 'The mail provider accepted this delivery, but its queue status could not be confirmed. Retry only this same job so the provider idempotency key can reconcile it.'
+        await updateLuxorEmailJob(job.id, { status: 'sending', last_error: uncertain }).catch((recordError) =>
+          console.error('Provider accepted the existing delivery key; queue state remains unresolved:', recordError))
+        results.push({ id: job.id, status: 'failed', error: uncertain })
         continue
       }
       const retryCalendar = (job.job_type === 'calendar_invitation' || Boolean(job.tour_revision_id)) && Number(job.attempts || 0) < 3
@@ -1428,6 +1454,7 @@ async function isLuxorFollowUpJobEligible(job: LuxorEmailJob) {
   if (!template?.active || !job.inquiry_id) return false
   const inquiry = await getLuxorInquiry(job.inquiry_id)
   return Boolean(inquiry && inquiry.marketing_opt_in && inquiry.status !== 'tour_confirmed' && inquiry.status !== 'booked'
+    && inquiry.email?.trim().toLowerCase() === job.recipient_email.trim().toLowerCase()
     && inquiry.status !== 'closed_lost' && (!inquiry.follow_up_disposition || inquiry.follow_up_disposition === 'no_response'))
 }
 
