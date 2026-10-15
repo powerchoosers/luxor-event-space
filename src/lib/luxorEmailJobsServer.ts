@@ -743,7 +743,7 @@ export async function cancelAllQueuedLuxorEmailJobs(inquiryId: string, reason = 
 
 export async function listDueLuxorEmailJobs(limit = 25) {
   return supabaseRest<LuxorEmailJob[]>(
-    `luxor_email_jobs?select=*&job_type=not.in.(inquiry_notification,transactional_notice)&status=eq.queued&scheduled_for=lte.${encodeURIComponent(new Date().toISOString())}&order=scheduled_for.asc&limit=${encodeURIComponent(limit)}`,
+    `luxor_email_jobs?select=*&job_type=not.in.(inquiry_notification,transactional_notice,test_notification)&status=eq.queued&scheduled_for=lte.${encodeURIComponent(new Date().toISOString())}&order=scheduled_for.asc&limit=${encodeURIComponent(limit)}`,
   )
 }
 
@@ -906,17 +906,15 @@ export async function processLuxorEmailJobs(
         }
         const authorization = await supabaseRest<{ eligible: boolean; reason?: string; recipient?: string; test_run_id?: string }>(
           'rpc/luxor_authorize_test_email_job',
-          { method: 'POST', body: JSON.stringify({ p_job_id: job.id }) },
+          { method: 'POST', body: JSON.stringify({ p_job_id: job.id, p_claim_token: job.test_claim_token || null }) },
         )
         if (!authorization.eligible || !authorization.recipient) {
-          await updateLuxorEmailJob(job.id, {
-            status: 'cancelled',
-            last_error: `Test email blocked: ${authorization.reason || 'run is not eligible'}.`,
-          })
+          // This worker may not own the claim (for example it may have loaded a
+          // stale duplicate). Do not change job state without a valid token.
           await supabaseRest('luxor_test_run_activity', {
             method: 'POST',
             headers: { Prefer: 'return=minimal' },
-            body: JSON.stringify({ test_run_id: job.test_run_id, event_type: 'email_blocked', status: 'cancelled', details: { reason: authorization.reason || 'not_eligible' } }),
+            body: JSON.stringify({ test_run_id: job.test_run_id, event_type: 'email_blocked', status: 'blocked', details: { reason: authorization.reason || 'not_eligible' } }),
           }).catch(() => undefined)
           results.push({ id: job.id, status: 'skipped' })
           continue

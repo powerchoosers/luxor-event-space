@@ -6,6 +6,10 @@ import { getLuxorMailboxMessage, resolveLuxorMailboxRow } from '@/lib/luxorMailb
 import { sendLuxorResendEmail } from '@/lib/luxorResendMailServer'
 import { luxorResendApi } from '@/lib/luxorResendApiServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { enqueueLuxorTestEmail } from '@/lib/luxorTestLeadServer'
+import { buildLuxorTestEmailTemplate } from '@/lib/luxorTestEmailTemplates'
+import { supabaseRest } from '@/lib/supabaseRestServer'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -14,6 +18,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params
     const body = await request.json() as { content?: string; folderId?: string | null; inquiryId?: string | null; deliveryKey?: string }
     const content = String(body.content || '').trim()
+    if (!content) return NextResponse.json({ error: 'Reply content is required.' }, { status: 400 })
+    const linkedInquiry = body.inquiryId ? await getLuxorInquiry(body.inquiryId) : null
+    if (linkedInquiry?.is_test === true) {
+      const [run] = await supabaseRest<Array<{ id: string }>>(
+        `luxor_test_runs?select=id&test_lead_id=eq.${encodeURIComponent(linkedInquiry.id)}&status=eq.in_progress&order=started_at.desc&limit=1`,
+      )
+      if (!run) return NextResponse.json({ error: 'The test lead has no active run; reset or start a run before replying.' }, { status: 409 })
+      const template = buildLuxorTestEmailTemplate('direct_message', run.id)
+      const queued = await enqueueLuxorTestEmail({
+        testRunId: run.id,
+        category: 'direct_message',
+        ...template,
+        source: 'portal_email_reply',
+      })
+      const now = new Date().toISOString()
+      return NextResponse.json({ queued: true, simulated: false, message: {
+        id: `test-reply-${run.id}`, threadId: '', folderId: '', subject: template.subject,
+        from: session.mailboxAddress || session.email, to: 'luxoratlaspalmas@gmail.com', cc: '',
+        receivedAt: now, summary: 'Controlled test reply queued. Original content was not forwarded.',
+        content: 'Controlled test reply queued. Original content was not forwarded.', htmlContent: null,
+        hasAttachment: false, isRead: true, direction: 'outgoing', folder: 'sent',
+      }, result: queued })
+    }
     const mailRow = await resolveLuxorMailboxRow(id)
     if (id.startsWith('mail-') && !mailRow) return NextResponse.json({ error: 'Mailbox message not found.' }, { status: 404 })
     const useResend = mailRow?.provider === 'resend' || luxorMailProvider() === 'resend'

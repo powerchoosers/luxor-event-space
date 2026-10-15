@@ -143,6 +143,18 @@ export function isLuxorNonRevenueTestInquiry(inquiry: Pick<LuxorInquiry, 'id' | 
     || LUXOR_OWNER_CONFIRMED_LEGACY_TEST_INQUIRY_IDS.has(inquiry?.id || '')
 }
 
+export function isLuxorNonRevenuePublicEvent(
+  event: { inquiry_id?: string | null; metadata?: Record<string, unknown> | null },
+  testInquiryIds: ReadonlySet<string>,
+) {
+  return Boolean(
+    (event.inquiry_id && testInquiryIds.has(event.inquiry_id))
+      || event.metadata?.is_test === true
+      || event.metadata?.test === true
+      || event.metadata?.test_inquiry === true,
+  )
+}
+
 export type LuxorLeadEvent = {
   id: string
   created_at: string
@@ -692,6 +704,7 @@ export type LuxorEmailJob = {
   automation_enrollment_id?: string | null
   automation_step_key?: string | null
   test_run_id?: string | null
+  test_claim_token?: string | null
 }
 
 export type LuxorSignatureStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'void'

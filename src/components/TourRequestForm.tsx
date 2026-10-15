@@ -306,14 +306,14 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
 
     try {
       const response = await submitLuxorIdempotentForm('tour-request', '/api/inquiries', payload)
-      const result = (await response.json().catch(() => ({}))) as { error?: string }
+      const result = (await response.json().catch(() => ({}))) as { error?: string; test?: boolean }
       if (!response.ok) {
         throw new Error(result.error || (spanish ? 'No se pudo enviar la solicitud de visita.' : 'The visit request could not be submitted.'))
       }
 
       setStep(4)
 
-      try {
+      if (!result.test) try {
         const { trackLuxorPublicEvent } = await import('@/lib/luxorPublicAttribution')
         trackLuxorPublicEvent('visit_booked', {
           label: 'Visit Request Confirmed',

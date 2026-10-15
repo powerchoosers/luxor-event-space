@@ -3,7 +3,7 @@ import 'server-only'
 import { supabaseRest } from './supabaseRestServer'
 import { listAllLuxorInquiries } from './luxorInquiriesServer'
 import { listLuxorBookingsWithPayments } from './luxorBookingsServer'
-import { isLuxorNonRevenueTestInquiry } from './luxorInquiryTypes'
+import { isLuxorNonRevenuePublicEvent, isLuxorNonRevenueTestInquiry } from './luxorInquiryTypes'
 import { getLuxorTourAnalytics, getLuxorTourDateRange } from './luxorTourMetrics'
 
 export type AnalyticsDatePreset = '7d' | '30d' | '90d' | 'this_month' | 'previous_month' | 'custom'
@@ -253,6 +253,7 @@ type PublicEventRow = {
   source: string | null
   created_at: string
   metadata?: Record<string, unknown>
+  inquiry_id?: string | null
 }
 
 export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<MarketingSalesMetrics> {
@@ -265,49 +266,53 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   let tourAnalyticsAvailable = true
   const [currentEvents, prevEvents, inquiries, bookingsWithPayments] = await Promise.all([
     supabaseRest<PublicEventRow[]>(
-      `luxor_public_events?select=id,event_name,session_id,page_path,source,created_at,metadata&created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}&limit=10000`,
+      `luxor_public_events?select=id,event_name,session_id,page_path,source,created_at,metadata,inquiry_id&created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}&limit=10000`,
     ).catch(() => []),
     supabaseRest<PublicEventRow[]>(
-      `luxor_public_events?select=id,event_name,session_id,page_path,source,created_at,metadata&created_at=gte.${encodeURIComponent(prevStartIso)}&created_at=lte.${encodeURIComponent(prevEndIso)}&limit=10000`,
+      `luxor_public_events?select=id,event_name,session_id,page_path,source,created_at,metadata,inquiry_id&created_at=gte.${encodeURIComponent(prevStartIso)}&created_at=lte.${encodeURIComponent(prevEndIso)}&limit=10000`,
     ).catch(() => []),
     listAllLuxorInquiries().catch(() => { tourAnalyticsAvailable = false; return [] }),
     listLuxorBookingsWithPayments(2000).catch(() => []),
   ])
 
-  // Analytics connected check: if no events have ever been recorded or table is completely empty
-  const hasConnectedAnalytics = (currentEvents.length > 0 || prevEvents.length > 0)
+  const testInquiryIds = new Set(inquiries.filter(isLuxorNonRevenueTestInquiry).map((inq) => inq.id))
+  const businessCurrentEvents = currentEvents.filter((event) => !isLuxorNonRevenuePublicEvent(event, testInquiryIds))
+  const businessPrevEvents = prevEvents.filter((event) => !isLuxorNonRevenuePublicEvent(event, testInquiryIds))
+
+  // Analytics connected check: if no business events have ever been recorded or table is empty
+  const hasConnectedAnalytics = (businessCurrentEvents.length > 0 || businessPrevEvents.length > 0)
 
   // Web events: current period
   const uniqueSessions = new Set(
-    currentEvents
+    businessCurrentEvents
       .filter((e) => e.event_name === 'website_visit' || e.event_name === 'page_view')
       .map((e) => e.session_id || e.id),
   )
   const websiteVisitors = hasConnectedAnalytics ? uniqueSessions.size : null
 
-  const tourPageViewsCount = currentEvents.filter(
+  const tourPageViewsCount = businessCurrentEvents.filter(
     (e) =>
       e.event_name === 'tour_page_view' ||
       (e.event_name === 'page_view' && (e.page_path?.includes('/tour') || e.page_path?.includes('/visit'))),
   ).length
   const tourPageVisits = hasConnectedAnalytics ? tourPageViewsCount : null
 
-  const tourClicksCount = currentEvents.filter((e) => e.event_name === 'tour_cta_click').length
+  const tourClicksCount = businessCurrentEvents.filter((e) => e.event_name === 'tour_cta_click').length
   const tourClicks = hasConnectedAnalytics ? tourClicksCount : null
 
   // Web events: previous period
   const prevUniqueSessions = new Set(
-    prevEvents
+    businessPrevEvents
       .filter((e) => e.event_name === 'website_visit' || e.event_name === 'page_view')
       .map((e) => e.session_id || e.id),
   )
   const prevWebsiteVisitors = prevUniqueSessions.size
-  const prevTourPageVisits = prevEvents.filter(
+  const prevTourPageVisits = businessPrevEvents.filter(
     (e) =>
       e.event_name === 'tour_page_view' ||
       (e.event_name === 'page_view' && (e.page_path?.includes('/tour') || e.page_path?.includes('/visit'))),
   ).length
-  const prevTourClicks = prevEvents.filter((e) => e.event_name === 'tour_cta_click').length
+  const prevTourClicks = businessPrevEvents.filter((e) => e.event_name === 'tour_cta_click').length
 
   // 2. CRM Analytics: Inquiries & Tours
   const startTimeMs = range.start.getTime()
@@ -316,7 +321,6 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   const prevEndTimeMs = range.previousEnd.getTime()
 
   const businessInquiries = inquiries.filter((inq) => !isLuxorNonRevenueTestInquiry(inq))
-  const testInquiryIds = new Set(inquiries.filter(isLuxorNonRevenueTestInquiry).map((inq) => inq.id))
 
   // Current period inquiries
   const currentInquiries = businessInquiries.filter((inq) => {
@@ -370,7 +374,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   const prevRevenue = prevBookings.reduce((sum, b) => sum + Number(b.contract_total || b.paid_total || 0), 0)
 
   // 4. Brochure Lead Generation Tracking
-  const brochureFormViewsCount = currentEvents.filter(
+  const brochureFormViewsCount = businessCurrentEvents.filter(
     (e) => e.event_name === 'brochure_form_view' || (e.event_name === 'page_view' && (e.page_path === '/' || e.page_path === ''))
   ).length
   const brochureFormViews = hasConnectedAnalytics ? brochureFormViewsCount : null
@@ -382,11 +386,11 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   const prevBrochureInquiries = prevInquiries.filter(isBrochureInquiry)
   const brochureSubmissions = Math.max(
     currentBrochureInquiries.length,
-    currentEvents.filter((e) => e.event_name === 'brochure_submitted').length,
+    businessCurrentEvents.filter((e) => e.event_name === 'brochure_submitted').length,
   )
   const prevBrochureSubmissions = Math.max(
     prevBrochureInquiries.length,
-    prevEvents.filter((e) => e.event_name === 'brochure_submitted').length,
+    businessPrevEvents.filter((e) => e.event_name === 'brochure_submitted').length,
   )
 
   const brochureConversionRate = brochureFormViews && brochureFormViews > 0
@@ -398,7 +402,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   const brochureSubmissionsDeltaPercent = calculateDeltaPercent(brochureSubmissions, prevBrochureSubmissions)
 
   // Schedule a Visit Tracking
-  const visitPageViewsCount = currentEvents.filter(
+  const visitPageViewsCount = businessCurrentEvents.filter(
     (e) =>
       e.event_name === 'visit_page_view' ||
       e.event_name === 'tour_page_view' ||
@@ -413,11 +417,11 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
   const prevVisitInquiries = prevInquiries.filter(isVisitInquiry)
   const visitSubmissions = Math.max(
     currentVisitInquiries.length,
-    currentEvents.filter((e) => e.event_name === 'visit_booked' || e.event_name === 'tour_booked').length,
+    businessCurrentEvents.filter((e) => e.event_name === 'visit_booked' || e.event_name === 'tour_booked').length,
   )
   const prevVisitSubmissions = Math.max(
     prevVisitInquiries.length,
-    prevEvents.filter((e) => e.event_name === 'visit_booked' || e.event_name === 'tour_booked').length,
+    businessPrevEvents.filter((e) => e.event_name === 'visit_booked' || e.event_name === 'tour_booked').length,
   )
 
   const visitConversionRate = visitPageViews && visitPageViews > 0
@@ -526,7 +530,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
 
   const trafficSources = SOURCE_CATEGORIES.map((category) => {
     // Filter web events matching this category
-    const catEvents = currentEvents.filter((e) => normalizeChannel(e.source, e.metadata) === category)
+    const catEvents = businessCurrentEvents.filter((e) => normalizeChannel(e.source, e.metadata) === category)
     const catVisitors = hasConnectedAnalytics ? new Set(catEvents.map((e) => e.session_id || e.id)).size : null
     const catTourVisits = hasConnectedAnalytics
       ? catEvents.filter((e) => e.event_name === 'tour_page_view' || (e.event_name === 'page_view' && e.page_path?.includes('/tour'))).length
@@ -584,7 +588,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
       }
     }
 
-    const pageEvents = currentEvents.filter((e) => {
+    const pageEvents = businessCurrentEvents.filter((e) => {
       if (page.path === '/') return e.page_path === '/' || e.page_path === ''
       return e.page_path?.startsWith(page.path)
     })

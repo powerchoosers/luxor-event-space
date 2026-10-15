@@ -89,6 +89,7 @@ export function classifyTrafficSource(attr: LuxorPublicAttribution): string {
 
 export function trackLuxorPublicEvent(eventName: string, metadata: Record<string, unknown> = {}) {
   if (typeof window === 'undefined') return
+  if (metadata.test === true || metadata.test_inquiry === true) return
 
   const attribution = getLuxorPublicAttribution()
   const channel = classifyTrafficSource(attribution)

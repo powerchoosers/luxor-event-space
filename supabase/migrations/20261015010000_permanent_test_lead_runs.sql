@@ -238,6 +238,9 @@ for each row execute function public.luxor_test_run_activity_append_only();
 
 alter table public.luxor_email_jobs
   add column if not exists test_run_id uuid references public.luxor_test_runs(id) on delete restrict;
+alter table public.luxor_email_jobs
+  add column if not exists test_claim_token uuid,
+  add column if not exists test_authorized_at timestamptz;
 
 create index if not exists luxor_email_jobs_test_run_status_idx
   on public.luxor_email_jobs (test_run_id, status, scheduled_for)
@@ -505,6 +508,8 @@ declare
   v_run public.luxor_test_runs;
   v_artifact public.luxor_test_run_artifacts;
   v_allowed text[];
+  v_current_status text;
+  v_next_status text;
 begin
   select * into v_run from public.luxor_test_runs where id = p_test_run_id for update;
   if not found or v_run.status <> 'in_progress' then
@@ -525,6 +530,24 @@ begin
   end;
   if p_status <> all(v_allowed) then
     raise exception 'Status is not valid for this simulated workflow type.' using errcode = '22023';
+  end if;
+  select status into v_current_status from public.luxor_test_run_artifacts
+  where test_run_id=v_run.id and artifact_type=p_artifact_type for update;
+  if not found then v_current_status := 'simulated'; end if;
+  v_next_status := case p_artifact_type
+    when 'tour' then case v_current_status when 'simulated' then 'requested' when 'requested' then 'scheduled' when 'scheduled' then 'confirmed' when 'confirmed' then 'completed' else null end
+    when 'proposal' then case v_current_status when 'simulated' then 'drafted' when 'drafted' then 'sent' when 'sent' then 'accepted' else null end
+    when 'contract' then case v_current_status when 'simulated' then 'prepared' when 'prepared' then 'sent' when 'sent' then 'signed' else null end
+    when 'invoice' then case v_current_status when 'simulated' then 'issued' when 'issued' then 'paid' else null end
+    when 'booking' then case v_current_status when 'simulated' then 'tentative' when 'tentative' then 'confirmed' when 'confirmed' then 'cancelled' else null end
+    when 'payment' then case v_current_status when 'simulated' then 'pending' when 'pending' then 'paid' else null end
+    when 'sms' then case v_current_status when 'simulated' then 'queued' when 'queued' then 'sent' when 'sent' then 'delivered' else null end
+  end;
+  if p_status <> 'failed' and p_status is distinct from v_next_status then
+    raise exception 'Workflow transition is out of sequence; expected next state: %.', coalesce(v_next_status, 'terminal') using errcode = '22023';
+  end if;
+  if p_status = 'failed' and v_current_status in ('completed','accepted','signed','paid','cancelled','delivered','failed','reset') then
+    raise exception 'A completed simulated workflow cannot be marked failed.' using errcode = '22023';
   end if;
   if p_details is null or jsonb_typeof(p_details) <> 'object' then
     raise exception 'Simulated workflow details must be a JSON object.' using errcode = '22023';
@@ -687,7 +710,8 @@ begin
 end;
 $$;
 
-create or replace function public.luxor_authorize_test_email_job(p_job_id uuid)
+drop function if exists public.luxor_authorize_test_email_job(uuid);
+create or replace function public.luxor_authorize_test_email_job(p_job_id uuid, p_claim_token uuid)
 returns jsonb
 language plpgsql
 security definer
@@ -721,7 +745,8 @@ begin
     if not found then return jsonb_build_object('eligible', false, 'reason', 'missing_test_run'); end if;
   end if;
   select * into v_job from public.luxor_email_jobs where id = p_job_id for update;
-  if not found or v_job.status not in ('queued','sending') then
+  if not found or v_job.status <> 'sending' or p_claim_token is null
+    or v_job.test_claim_token is distinct from p_claim_token or v_job.test_authorized_at is not null then
     return jsonb_build_object('eligible', false, 'reason', 'unsafe_or_already_claimed_test_job');
   end if;
   if v_run.status <> 'in_progress' or v_run.test_lead_id <> v_job.inquiry_id then
@@ -730,11 +755,9 @@ begin
   if not v_settings.enabled or v_settings.email_recipient is distinct from 'luxoratlaspalmas@gmail.com' or v_settings.email_recipient_confirmed_at is null then
     return jsonb_build_object('eligible', false, 'reason', 'recipient_unconfirmed');
   end if;
-  if v_job.status = 'queued' then
-    update public.luxor_email_jobs set status = 'sending', attempts = coalesce(attempts, 0) + 1, updated_at = now()
-    where id = v_job.id and status = 'queued';
-    if not found then return jsonb_build_object('eligible', false, 'reason', 'job_already_claimed'); end if;
-  end if;
+  update public.luxor_email_jobs set test_authorized_at=now(), updated_at=now()
+    where id=v_job.id and status='sending' and test_claim_token=p_claim_token and test_authorized_at is null;
+  if not found then return jsonb_build_object('eligible', false, 'reason', 'job_already_authorized'); end if;
   return jsonb_build_object('eligible', true, 'recipient', 'luxoratlaspalmas@gmail.com', 'test_run_id', v_run.id);
 end;
 $$;
@@ -786,7 +809,8 @@ begin
       and status='queued' and scheduled_for<=now()
     order by scheduled_for,created_at,id limit 1 for update skip locked;
     if found then
-      update public.luxor_email_jobs set status='sending',attempts=coalesce(attempts,0)+1,updated_at=now()
+      update public.luxor_email_jobs set status = 'sending', attempts = coalesce(attempts,0)+1,
+        test_claim_token = gen_random_uuid(), test_authorized_at = null, updated_at = now()
       where id=v_job.id returning * into v_job;
       v_count := v_count + 1;
       return next v_job;
@@ -858,16 +882,18 @@ alter table public.luxor_test_run_activity enable row level security;
 alter table public.luxor_test_run_artifacts enable row level security;
 alter table public.luxor_test_run_emails enable row level security;
 revoke all on public.luxor_test_settings, public.luxor_test_identifier_collision_exemptions, public.luxor_test_runs, public.luxor_test_run_activity, public.luxor_test_run_artifacts, public.luxor_test_run_emails from anon, authenticated;
-grant select, insert, update, delete on public.luxor_test_settings, public.luxor_test_runs to service_role;
-grant select, insert on public.luxor_test_identifier_collision_exemptions to service_role;
+-- Managed public-schema default ACLs can be broad; grant only the rights used below.
+revoke all on public.luxor_test_settings, public.luxor_test_identifier_collision_exemptions, public.luxor_test_runs, public.luxor_test_run_activity, public.luxor_test_run_artifacts, public.luxor_test_run_emails from public, anon, authenticated, service_role;
+grant select on public.luxor_test_settings, public.luxor_test_runs to service_role;
 grant select, insert on public.luxor_test_run_activity to service_role;
-grant select, insert, update on public.luxor_test_run_artifacts to service_role;
-grant select, insert, update on public.luxor_test_run_emails to service_role;
+grant select on public.luxor_test_run_artifacts to service_role;
+grant select, update on public.luxor_test_run_emails to service_role;
+revoke all on sequence public.luxor_test_run_activity_id_seq from public, anon, authenticated, service_role;
 grant usage, select on sequence public.luxor_test_run_activity_id_seq to service_role;
 revoke all on function public.luxor_save_test_settings(text, text, text, boolean, boolean, text) from public, anon, authenticated;
 revoke all on function public.luxor_start_test_run(text, text, text, text, jsonb) from public, anon, authenticated;
 revoke all on function public.luxor_reset_test_run(uuid) from public, anon, authenticated;
-revoke all on function public.luxor_authorize_test_email_job(uuid) from public, anon, authenticated;
+revoke all on function public.luxor_authorize_test_email_job(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.luxor_advance_test_artifact(uuid, text, text, jsonb) from public, anon, authenticated;
 revoke all on function public.luxor_record_test_email_simulation(uuid, text, text, text) from public, anon, authenticated;
 revoke all on function public.luxor_enqueue_test_email(uuid, text, text, text, text) from public, anon, authenticated;
@@ -876,7 +902,7 @@ revoke all on function public.luxor_claim_due_test_email_jobs(integer) from publ
 grant execute on function public.luxor_save_test_settings(text, text, text, boolean, boolean, text) to service_role;
 grant execute on function public.luxor_start_test_run(text, text, text, text, jsonb) to service_role;
 grant execute on function public.luxor_reset_test_run(uuid) to service_role;
-grant execute on function public.luxor_authorize_test_email_job(uuid) to service_role;
+grant execute on function public.luxor_authorize_test_email_job(uuid, uuid) to service_role;
 grant execute on function public.luxor_advance_test_artifact(uuid, text, text, jsonb) to service_role;
 grant execute on function public.luxor_record_test_email_simulation(uuid, text, text, text) to service_role;
 grant execute on function public.luxor_enqueue_test_email(uuid, text, text, text, text) to service_role;

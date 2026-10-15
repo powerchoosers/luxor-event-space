@@ -32,6 +32,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
 
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [testSubmission, setTestSubmission] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const formSectionRef = useRef<HTMLDivElement>(null)
   const formViewTrackedRef = useRef(false)
@@ -105,15 +106,16 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
 
       const response = await submitLuxorIdempotentForm('brochure', '/api/inquiries', payload)
 
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
+      const data = (await response.json().catch(() => ({}))) as { error?: string; test?: boolean }
 
       if (!response.ok) {
         throw new Error(data.error || 'Unable to submit your brochure request. Please try again.')
       }
 
       setSubmitted(true)
+      setTestSubmission(Boolean(data.test))
 
-      try {
+      if (!data.test) try {
         const { trackLuxorPublicEvent } = await import('@/lib/luxorPublicAttribution')
         trackLuxorPublicEvent('brochure_submitted', {
           event_type: eventType,
@@ -131,6 +133,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
   }
 
   function handleDownloadClick() {
+    if (testSubmission) return
     try {
       import('@/lib/luxorPublicAttribution').then(({ trackLuxorPublicEvent }) => {
         trackLuxorPublicEvent('brochure_downloaded', {

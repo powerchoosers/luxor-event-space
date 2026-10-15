@@ -73,7 +73,7 @@ export function LuxorContactForm({
 
       const response = await submitLuxorIdempotentForm('contact', '/api/inquiries', payload)
 
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
+      const data = (await response.json().catch(() => ({}))) as { error?: string; test?: boolean }
 
       if (!response.ok) {
         throw new Error(data.error || (spanish ? 'No se pudo enviar tu mensaje. Inténtalo de nuevo.' : 'Unable to submit your message. Please try again.'))
@@ -81,7 +81,7 @@ export function LuxorContactForm({
 
       setSubmitted(true)
 
-      try {
+      if (!data.test) try {
         const { trackLuxorPublicEvent } = await import('@/lib/luxorPublicAttribution')
         trackLuxorPublicEvent('contact_submitted', {
           source: 'contact_page',

@@ -4,6 +4,7 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { enqueueLuxorTestEmail, getLuxorTestSettings, resetLuxorTestRun } from '@/lib/luxorTestLeadServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
+import { buildLuxorTestEmailTemplate, isLuxorTestEmailCategory } from '@/lib/luxorTestEmailTemplates'
 
 async function authorizedMember() {
   const session = await getLuxorPortalSession()
@@ -31,8 +32,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       available: Boolean(settings), settings,
       system: {
-        formIntegrations: { inquiry: true, newsletter: true, elenaCreateContact: true },
-        emailProvider: `${luxorMailProvider()} (active)`,
+        emailProvider: luxorMailProvider(),
         normalizedPhone: settings.identification_phone,
       },
       lead: lead?.is_test === true ? lead : null, runs: visibleRuns, activity, artifacts, emails, page, pageSize, hasMore: runs.length === pageSize,
@@ -78,13 +78,13 @@ export async function POST(request: NextRequest) {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.testRunId)) {
         return NextResponse.json({ error: 'A valid test run ID is required.' }, { status: 400 })
       }
-      const category = body.category.replace(/[^a-z_]/g, '').slice(0, 80)
-      const categoryLabel = category.replaceAll('_', ' ')
+      const category = String(body.category)
+      if (!isLuxorTestEmailCategory(category)) return NextResponse.json({ error: 'Choose a supported test email template.' }, { status: 400 })
+      const template = buildLuxorTestEmailTemplate(category, body.testRunId)
       const result = await enqueueLuxorTestEmail({
         testRunId: body.testRunId,
         category,
-        subject: `Luxor test workflow: ${categoryLabel}`,
-        body: `<p>This is a test email for the <strong>${categoryLabel}</strong> workflow.</p><p>Run ID: ${body.testRunId}</p><p>No customer booking, contract, invoice, payment, or calendar event was created.</p>`,
+        ...template,
         source: 'portal_test_lead',
       })
       return NextResponse.json({ result, queued: true, recipient: 'luxoratlaspalmas@gmail.com' }, { status: 201 })

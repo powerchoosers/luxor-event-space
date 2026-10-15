@@ -26,6 +26,18 @@ export function hashPublicRequestIp(ip: string) {
 export async function recordLuxorPublicEvent(input: LuxorPublicEventInput) {
   const eventName = input.eventName.trim().slice(0, 80)
   if (!eventName) return null
+  if (input.inquiryId) {
+    if (input.inquiryId === '00b264d6-a3fb-4ea3-9142-415f76385c39') return null
+    try {
+      const [inquiry] = await supabaseRest<Array<{ id: string; is_test: boolean }>>(
+        `luxor_inquiries?select=id,is_test&id=eq.${encodeURIComponent(input.inquiryId)}&limit=1`,
+      )
+      if (inquiry?.is_test === true) return null
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (!/column .*is_test.* does not exist|could not find .*is_test.* in the schema cache/i.test(message)) throw error
+    }
+  }
 
   const [created] = await supabaseRest<Array<{ id: string }>>('luxor_public_events?select=id', {
     method: 'POST',

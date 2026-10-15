@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       sessionId?: string
       pagePath?: string
       source?: string
+      inquiryId?: string
       metadata?: Record<string, unknown>
     }
 
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
       sessionId: payload.sessionId,
       pagePath: payload.pagePath,
       source: payload.source,
+      inquiryId: payload.inquiryId,
       ipHash: hashPublicRequestIp(getPublicRequestIp(request.headers)),
       metadata: payload.metadata,
     })
