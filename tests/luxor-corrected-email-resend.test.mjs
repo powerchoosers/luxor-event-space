@@ -2,11 +2,12 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { getRecipientBounceEvidence, isCorrectedPaymentResendStage, isLeadEmailResendStage, rankCorrectEmailResendOptions } from '../src/lib/luxorLeadEmailResend.ts'
-import { canSendCorrectedPaymentReminder, claimAndProcessCorrectedPaymentResend, correctedPaymentReminderKind } from '../src/lib/luxorCorrectedPaymentResend.ts'
+import { canSendCorrectedPaymentReminder, claimAndProcessCorrectedPaymentResend, correctedPaymentReminderKind, runCorrectedPaymentResend } from '../src/lib/luxorCorrectedPaymentResend.ts'
 import { runProposalResendOperation } from '../src/lib/luxorProposalResendOperation.ts'
 
 const sql = await readFile(new URL('../supabase/migrations/20261015060000_unified_lead_email_resend.sql', import.meta.url), 'utf8')
 const route = await readFile(new URL('../src/app/api/leads/[id]/correct-email-resend/route.ts', import.meta.url), 'utf8')
+const paymentRoute = await readFile(new URL('../src/app/api/invoices/[id]/remind/route.ts', import.meta.url), 'utf8')
 const dialog = await readFile(new URL('../src/components/portal/CorrectEmailResendDialog.tsx', import.meta.url), 'utf8')
 const worker = await readFile(new URL('../src/lib/luxorEmailJobsServer.ts', import.meta.url), 'utf8')
 const tourSql = await readFile(new URL('../supabase/migrations/20261009010000_safe_lead_email_correction_and_tour_resend.sql', import.meta.url), 'utf8')
@@ -102,6 +103,9 @@ test('payment resend reserves one immutable recipient-bound invoice job and reva
   assert.ok(sql.includes("corrected_payment_resend_key' having count(*)>1"))
   assert.match(sql, /group by metadata->>'corrected_email_resend_source_id',metadata->>'corrected_email_resend_expected_recipient'/)
   assert.match(sql, /luxor_prepare_corrected_payment_email_resend/)
+  assert.match(sql, /corrected_payment_resend_preparing/)
+  assert.match(sql, /luxor_finalize_corrected_payment_resend/)
+  assert.match(sql, /corrected_payment_resend_checkout_session_id/)
   assert.match(sql, /luxor_validate_corrected_payment_resend/)
   assert.match(sql, /booking\.contract_status='signed'/)
   assert.match(sql, /sum\(amount\).*status='paid'/)
@@ -128,6 +132,91 @@ test('payment correction enforces finance permission and atomically claims on im
     return [{ status: 'sent' }]
   })
   assert.deepEqual(optionsSeen, { markSending: true })
+})
+
+test('payment resend route orchestration reserves before checkout and shares concurrent preparation', async () => {
+  const branchStart = paymentRoute.indexOf('if (body.correctedEmailResend) {', paymentRoute.indexOf('const reminderKind'))
+  const correctedBranch = paymentRoute.slice(branchStart, paymentRoute.indexOf('\n    let reviewUrl', branchStart))
+  assert.ok(correctedBranch.indexOf('reserve: async') < correctedBranch.indexOf('prepareContent: async'))
+  assert.match(correctedBranch, /runCorrectedPaymentResend\(/)
+  assert.match(correctedBranch, /createLuxorPostContractCheckout/)
+  const job = { id: 'payment-job-1', status: 'sending', subject: 'Preparing', body: 'Preparing', metadata: {} }
+  let reserved = false
+  let releaseContent
+  const contentGate = new Promise((resolve) => { releaseContent = resolve })
+  let checkoutSessions = 0
+  let jobCount = 0
+  let finalizeCount = 0
+  let processCount = 0
+  const reserve = async () => {
+    if (reserved) return { job, created: false, preparing: true }
+    reserved = true
+    jobCount += 1
+    return { job, created: true, preparing: true }
+  }
+  const makeAttempt = () => runCorrectedPaymentResend({
+    reserve,
+    prepareContent: async () => {
+      checkoutSessions += 1
+      await contentGate
+      return { subject: 'Payment reminder', body: 'Pay securely', checkoutSessionId: 'cs_test_mock', balanceDue: 125 }
+    },
+    finalize: async (_job, content) => {
+      finalizeCount += 1
+      job.status = 'queued'
+      job.subject = content.subject
+      job.body = content.body
+      job.metadata.checkout_session_id = content.checkoutSessionId
+      return job
+    },
+    process: async () => { processCount += 1 },
+    loadLatest: async (_id, fallback) => fallback,
+  })
+  const first = makeAttempt()
+  await Promise.resolve()
+  const duplicate = await makeAttempt()
+  assert.equal(duplicate.delivery, 'preparing')
+  releaseContent()
+  const firstResult = await first
+  assert.equal(firstResult.job.subject, 'Payment reminder')
+  assert.equal(checkoutSessions, 1)
+  assert.equal(jobCount, 1)
+  assert.equal(finalizeCount, 1)
+  assert.equal(processCount, 1)
+})
+
+test('payment resend recovers lost response without creating another checkout, job, or email content', async () => {
+  const job = { id: 'payment-job-2', status: 'sent', subject: 'Saved reminder', body: 'Saved checkout link', metadata: { checkout_session_id: 'cs_test_saved' } }
+  let checkoutSessions = 0
+  const jobs = 1
+  let contentBuilds = 0
+  let processorCalls = 0
+  let actualProviderSends = 1
+  const sentJobIds = new Set(['payment-job-2'])
+  const retry = await runCorrectedPaymentResend({
+    reserve: async () => ({ job, created: false, preparing: false }),
+    prepareContent: async () => { checkoutSessions += 1; contentBuilds += 1; return { subject: 'new', body: 'new', checkoutSessionId: 'new', balanceDue: 125 } },
+    finalize: async (_job, content) => { job.subject = content.subject; return job },
+    process: async (jobsToProcess) => {
+      processorCalls += 1
+      for (const candidate of jobsToProcess) {
+        if (sentJobIds.has(candidate.id)) continue
+        sentJobIds.add(candidate.id)
+        actualProviderSends += 1
+      }
+    },
+    loadLatest: async (_id, fallback) => fallback,
+  })
+  assert.equal(retry.job.id, 'payment-job-2')
+  assert.equal(retry.replayed, true)
+  assert.equal(retry.delivery, 'sent')
+  assert.equal(checkoutSessions, 0)
+  assert.equal(jobs, 1)
+  assert.equal(contentBuilds, 0)
+  assert.equal(processorCalls, 1)
+  assert.equal(actualProviderSends, 1, 'the already-sent job does not cause a second provider delivery')
+  assert.equal(job.subject, 'Saved reminder')
+  assert.equal(job.metadata.checkout_session_id, 'cs_test_saved')
 })
 
 test('proposal resend recovers a provider-accepted response loss with the same key and one delivery', async () => {

@@ -340,11 +340,12 @@ declare
   inquiry public.luxor_inquiries%rowtype; source_job public.luxor_email_jobs%rowtype;
   invoice public.luxor_invoices%rowtype; booking public.luxor_bookings%rowtype;
   resend_job public.luxor_email_jobs%rowtype; target_email text:=lower(btrim(coalesce(p_expected_recipient,'')));
-  resend_key text;
+  resend_key text; preparing boolean;
 begin
   if p_inquiry_id is null or p_source_job_id is null or p_invoice_id is null
     or target_email !~ '^[^[:space:]@<>]+@[^[:space:]@<>]+\.[^[:space:]@<>]+$'
-    or coalesce(p_subject,'')='' or coalesce(p_body,'')='' then raise exception 'Invalid payment resend request'; end if;
+    or ((coalesce(p_subject,'')='') is distinct from (coalesce(p_body,'')='')) then raise exception 'Invalid payment resend request'; end if;
+  preparing:=coalesce(p_subject,'')='';
   select * into inquiry from public.luxor_inquiries where id=p_inquiry_id for update;
   if not found or coalesce(inquiry.is_test,false) or inquiry.status<>'booked'
     or inquiry.pipeline_stage not in ('deposit','final_payment','planning','event','closing')
@@ -373,15 +374,20 @@ begin
       or lower(resend_job.recipient_email)<>target_email or resend_job.metadata->>'corrected_payment_resend_invoice_id'<>invoice.id::text then
       raise exception 'Payment resend key was reused with different values';
     end if;
-    return jsonb_build_object('job',to_jsonb(resend_job),'replayed',true);
+    return jsonb_build_object('job',to_jsonb(resend_job),'replayed',true,
+      'created',false,'preparing',coalesce(resend_job.metadata->>'corrected_payment_resend_preparing','false')='true');
   end if;
   insert into public.luxor_email_jobs(inquiry_id,booking_id,job_type,status,recipient_email,subject,body,scheduled_for,metadata)
-  values(p_inquiry_id,booking.id,source_job.job_type,'queued',target_email,p_subject,p_body,now(),jsonb_build_object(
+  values(p_inquiry_id,booking.id,source_job.job_type,case when preparing then 'sending' else 'queued' end,target_email,
+    case when preparing then 'Preparing secure payment link' else p_subject end,
+    case when preparing then 'This durable resend reservation is not deliverable until its payment content is finalized.' else p_body end,now(),jsonb_build_object(
     'manual',true,'corrected_payment_resend_key',resend_key,'corrected_payment_resend_source_id',source_job.id,
     'corrected_payment_resend_invoice_id',invoice.id,'corrected_payment_resend_source_recipient',source_job.recipient_email,
-    'corrected_payment_resend_expected_recipient',target_email,'corrected_payment_resend_snapshot_subject',p_subject,
-    'corrected_payment_resend_snapshot_body',p_body,'corrected_payment_resend_confirmed_at',now())) returning * into resend_job;
-  return jsonb_build_object('job',to_jsonb(resend_job),'replayed',false);
+    'corrected_payment_resend_expected_recipient',target_email,
+    'corrected_payment_resend_snapshot_subject',case when preparing then 'Preparing secure payment link' else p_subject end,
+    'corrected_payment_resend_snapshot_body',case when preparing then 'This durable resend reservation is not deliverable until its payment content is finalized.' else p_body end,
+    'corrected_payment_resend_preparing',preparing,'corrected_payment_resend_confirmed_at',now())) returning * into resend_job;
+  return jsonb_build_object('job',to_jsonb(resend_job),'replayed',false,'created',true,'preparing',preparing);
 end;
 $$;
 
@@ -456,14 +462,41 @@ returns jsonb language plpgsql security invoker set search_path = '' as $$
 begin return public.luxor_validate_corrected_payment_resend(p_inquiry_id,p_job_id,'worker'); end;
 $$;
 
+create or replace function public.luxor_finalize_corrected_payment_resend(
+  p_inquiry_id uuid,p_job_id uuid,p_subject text,p_body text,p_checkout_session_id text,p_balance_due numeric
+) returns jsonb language plpgsql security invoker set search_path = '' as $$
+declare job public.luxor_email_jobs%rowtype; result jsonb;
+begin
+  if coalesce(p_subject,'')='' or coalesce(p_body,'')='' or coalesce(p_checkout_session_id,'')=''
+    or coalesce(p_balance_due,0)<=0 then raise exception 'Payment resend content is incomplete'; end if;
+  result:=public.luxor_validate_corrected_payment_resend(p_inquiry_id,p_job_id,'worker');
+  if coalesce((result->>'eligible')::boolean,false) is not true then raise exception 'Payment resend is not eligible'; end if;
+  select * into job from public.luxor_email_jobs where id=p_job_id and inquiry_id=p_inquiry_id for update;
+  if not found or job.status<>'sending' or job.metadata->>'corrected_payment_resend_preparing' is distinct from 'true' then
+    raise exception 'Payment resend reservation is no longer being prepared';
+  end if;
+  update public.luxor_email_jobs set status='queued',subject=p_subject,body=p_body,
+    metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object(
+      'corrected_payment_resend_preparing',false,
+      'corrected_payment_resend_snapshot_subject',p_subject,
+      'corrected_payment_resend_snapshot_body',p_body,
+      'corrected_payment_resend_checkout_session_id',p_checkout_session_id,
+      'corrected_payment_resend_balance_due',p_balance_due),updated_at=now()
+    where id=job.id returning * into job;
+  return jsonb_build_object('job',to_jsonb(job),'preparing',false);
+end;
+$$;
+
 revoke all on function public.luxor_prepare_corrected_payment_email_resend(uuid,uuid,uuid,text,text,text) from public,anon,authenticated;
 revoke all on function public.luxor_validate_corrected_payment_resend(uuid,uuid,text) from public,anon,authenticated;
 revoke all on function public.luxor_claim_corrected_payment_resend(uuid,uuid) from public,anon,authenticated;
 revoke all on function public.luxor_check_corrected_payment_resend(uuid,uuid) from public,anon,authenticated;
+revoke all on function public.luxor_finalize_corrected_payment_resend(uuid,uuid,text,text,text,numeric) from public,anon,authenticated;
 grant execute on function public.luxor_prepare_corrected_payment_email_resend(uuid,uuid,uuid,text,text,text) to service_role;
 grant execute on function public.luxor_validate_corrected_payment_resend(uuid,uuid,text) to service_role;
 grant execute on function public.luxor_claim_corrected_payment_resend(uuid,uuid) to service_role;
 grant execute on function public.luxor_check_corrected_payment_resend(uuid,uuid) to service_role;
+grant execute on function public.luxor_finalize_corrected_payment_resend(uuid,uuid,text,text,text,numeric) to service_role;
 
 notify pgrst, 'reload schema';
 

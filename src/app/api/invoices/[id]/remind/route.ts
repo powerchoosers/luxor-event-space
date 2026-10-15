@@ -12,7 +12,7 @@ import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer
 import { getLuxorPaymentReminderBookingLookup, getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
-import { canSendCorrectedPaymentReminder, claimAndProcessCorrectedPaymentResend } from '@/lib/luxorCorrectedPaymentResend'
+import { canSendCorrectedPaymentReminder, runCorrectedPaymentResend } from '@/lib/luxorCorrectedPaymentResend'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -81,6 +81,58 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const notes = await listNotesByInquiry(inquiry.id).catch(() => [])
 
+    const reminderKind = invoice.invoice_kind === 'final_balance'
+      ? 'final_payment'
+      : body.kind === 'unpaid_invoice'
+        ? 'unpaid_invoice'
+        : 'unpaid_invoice'
+
+    if (body.correctedEmailResend) {
+      if (!body.sourceJobId || !/^[0-9a-f-]{8}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{4}-[0-9a-f-]{12}$/i.test(body.sourceJobId)) {
+        return NextResponse.json({ error: 'The original payment reminder could not be verified.' }, { status: 409 })
+      }
+      const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+      const outcome = await runCorrectedPaymentResend({
+        reserve: async () => {
+          const reservation = await supabaseRest<{ job: import('@/lib/luxorInquiryTypes').LuxorEmailJob; created: boolean; preparing: boolean }>(
+            'rpc/luxor_prepare_corrected_payment_email_resend', {
+              method: 'POST',
+              body: JSON.stringify({ p_inquiry_id: inquiry.id, p_source_job_id: body.sourceJobId, p_invoice_id: invoice.id,
+                p_expected_recipient: inquiry.email!.trim().toLowerCase(), p_subject: '', p_body: '' }),
+            },
+          )
+          if (!reservation.job) throw new Error('The payment resend could not be reserved.')
+          return reservation
+        },
+        prepareContent: async () => {
+          const checkout = await createLuxorPostContractCheckout({ invoice, inquiry, booking: booking!, origin })
+          if (!checkout) throw new Error('This payment invoice no longer has a balance due.')
+          const email = await buildAiTailoredInvoiceReminderEmail({
+            inquiry, invoice, booking, reviewUrl: checkout.checkoutUrl, balanceDue: checkout.paymentAmount,
+            dueDate, notes, kind: reminderKind,
+          })
+          return { subject: email.subject, body: email.body, checkoutSessionId: checkout.checkoutId, balanceDue: checkout.paymentAmount }
+        },
+        finalize: async (job, content) => {
+          const result = await supabaseRest<{ job: import('@/lib/luxorInquiryTypes').LuxorEmailJob }>(
+            'rpc/luxor_finalize_corrected_payment_resend', {
+              method: 'POST', body: JSON.stringify({ p_inquiry_id: inquiry.id, p_job_id: job.id,
+                p_subject: content.subject, p_body: content.body, p_checkout_session_id: content.checkoutSessionId,
+                p_balance_due: content.balanceDue }),
+            },
+          )
+          if (!result.job) throw new Error('The payment resend content could not be finalized.')
+          return result.job
+        },
+        process: processLuxorEmailJobs,
+        loadLatest: async (jobId, fallback) => (await listLuxorEmailJobsForInquiry(inquiry.id, 200)).find((candidate) => candidate.id === jobId) || fallback,
+      })
+      if (outcome.job.status === 'failed' || outcome.job.status === 'cancelled') {
+        return NextResponse.json({ job: outcome.job, error: outcome.job.last_error || 'Delivery failed or is unresolved; do not create a new payment email.' }, { status: 409 })
+      }
+      return NextResponse.json({ job: outcome.job, delivery: outcome.delivery, replayed: outcome.replayed }, { status: 202 })
+    }
+
     const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
     let reviewUrl: string
     let checkoutId: string | null = null
@@ -101,11 +153,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       reviewUrl = `${origin}/proposal/${publicToken}`
     }
     const now = new Date().toISOString()
-    const reminderKind = invoice.invoice_kind === 'final_balance'
-      ? 'final_payment'
-      : body.kind === 'unpaid_invoice'
-        ? 'unpaid_invoice'
-        : 'unpaid_invoice'
     const email = await buildAiTailoredInvoiceReminderEmail({
       inquiry,
       invoice,
@@ -116,25 +163,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       notes,
       kind: reminderKind,
     })
-
-    if (body.correctedEmailResend) {
-      if (!body.sourceJobId || !/^[0-9a-f-]{36}$/i.test(body.sourceJobId)) return NextResponse.json({ error: 'The original payment reminder could not be verified.' }, { status: 409 })
-      const reservation = await supabaseRest<{ job: import('@/lib/luxorInquiryTypes').LuxorEmailJob; replayed: boolean }>(
-        'rpc/luxor_prepare_corrected_payment_email_resend', {
-          method: 'POST',
-          body: JSON.stringify({ p_inquiry_id: inquiry.id, p_source_job_id: body.sourceJobId, p_invoice_id: invoice.id,
-            p_expected_recipient: inquiry.email.trim().toLowerCase(), p_subject: email.subject, p_body: email.body }),
-        },
-      )
-      if (!reservation.job) return NextResponse.json({ error: 'The payment resend could not be reserved.' }, { status: 409 })
-      await claimAndProcessCorrectedPaymentResend(reservation.job, processLuxorEmailJobs)
-        .catch((error) => console.error('Corrected payment email remains in its durable queue:', error))
-      const latest = (await listLuxorEmailJobsForInquiry(inquiry.id, 200)).find((candidate) => candidate.id === reservation.job.id) || reservation.job
-      if (latest.status === 'failed' || latest.status === 'cancelled') {
-        return NextResponse.json({ job: latest, error: latest.last_error || 'Delivery failed or is unresolved; do not create a new payment email.' }, { status: 409 })
-      }
-      return NextResponse.json({ job: latest, delivery: latest.status, replayed: reservation.replayed }, { status: 202 })
-    }
 
     const job = await createLuxorEmailJob({
       inquiryId: inquiry.id,
