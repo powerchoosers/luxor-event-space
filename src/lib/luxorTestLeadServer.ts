@@ -58,9 +58,42 @@ export async function startLuxorTestRun(input: LuxorInquiryInput, request: { ide
       }),
     },
   )
-  const workflow = result.run.status === 'in_progress'
-    ? await prepareLuxorTestSubmission(input, result.run.id, result.run.started_at)
-    : null
+  let workflow: Record<string, unknown> | null = null
+  if (result.run.status === 'in_progress') {
+    // Idempotent replays must use the consent, contact, and timing saved by
+    // the original request. The current retry payload is never authoritative.
+    const [storedRun] = await supabaseRest<Array<{
+      id: string
+      status: string
+      source: string
+      started_at: string
+      submitted_email: string | null
+      submitted_phone: string | null
+      submitted_details: { form?: Record<string, unknown> } | null
+    }>>(`luxor_test_runs?select=id,status,source,started_at,submitted_email,submitted_phone,submitted_details&id=eq.${encodeURIComponent(result.run.id)}&limit=1`)
+    if (!storedRun || storedRun.status !== 'in_progress') {
+      throw new Error('The saved test run is no longer active; no workflow actions were prepared.')
+    }
+    const form = storedRun.submitted_details?.form || {}
+    const runInput: LuxorInquiryInput = {
+      fullName: 'Luxor Test Lead',
+      email: storedRun.submitted_email || undefined,
+      phone: storedRun.submitted_phone || undefined,
+      source: storedRun.source,
+      eventType: typeof form.eventType === 'string' ? form.eventType : undefined,
+      targetDate: typeof form.targetDate === 'string' ? form.targetDate : undefined,
+      guestCount: typeof form.guestCount === 'string' ? form.guestCount : undefined,
+      budget: typeof form.budget === 'string' ? form.budget : undefined,
+      preferredTourDate: typeof form.preferredTourDate === 'string' ? form.preferredTourDate : undefined,
+      preferredTourTime: typeof form.preferredTourTime === 'string' ? form.preferredTourTime : undefined,
+      marketingOptIn: form.marketingOptIn === true,
+      packageInterest: typeof form.packageInterest === 'string' ? form.packageInterest : undefined,
+      message: typeof form.message === 'string' ? form.message : undefined,
+      flow: typeof form.flow === 'string' ? form.flow : undefined,
+      metadata: form.metadata && typeof form.metadata === 'object' ? form.metadata as Record<string, unknown> : {},
+    }
+    workflow = await prepareLuxorTestSubmission(runInput, storedRun.id, storedRun.started_at)
+  }
   return {
     leadId: result.lead.id,
     run: { id: result.run.id, status: result.run.status, source: result.run.source, started_at: result.run.started_at },
@@ -174,18 +207,14 @@ async function prepareLuxorTestBrochureFollowUps(
         }
         if (template.channel === 'email' && template.active) {
           const email = buildLuxorTestFollowUpEmail(runId, template)
-          await supabaseRest('rpc/luxor_prepare_test_submission', {
+          await supabaseRest('rpc/luxor_enqueue_test_follow_up_email', {
             method: 'POST',
             body: JSON.stringify({
               p_test_run_id: runId,
-              p_tour_intent: false,
-              p_preferred_tour_date: null,
-              p_preferred_tour_time: null,
-              p_confirmed_slot: false,
-              p_email_category: 'follow_up',
+              p_step_key: template.step_key,
               p_email_subject: email.subject,
               p_email_body: email.body,
-              p_automatic_source: `portal_test_email:brochure_follow_up:${template.step_key}`,
+              p_source: `portal_test_email:brochure_follow_up:${template.step_key}`,
               p_scheduled_for: scheduledAt,
             }),
           })
