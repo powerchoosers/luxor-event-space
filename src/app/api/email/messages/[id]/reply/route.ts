@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         `luxor_test_runs?select=id&test_lead_id=eq.${encodeURIComponent(linkedInquiry.id)}&status=eq.in_progress&order=started_at.desc&limit=1`,
       )
       if (!run) return NextResponse.json({ error: 'The test lead has no active run; reset or start a run before replying.' }, { status: 409 })
-      const template = buildLuxorTestEmailTemplate('direct_message', run.id)
+      const template = await buildLuxorTestEmailTemplate('direct_message', run.id)
       const queued = await enqueueLuxorTestEmail({
         testRunId: run.id,
         category: 'direct_message',

@@ -469,8 +469,8 @@ begin
   if v_run.status = 'reset' then
     return jsonb_build_object('run', jsonb_build_object('id', v_run.id, 'status', v_run.status), 'replayed', true);
   end if;
-  if v_run.status <> 'in_progress' then
-    raise exception 'Only the active test run can be reset.' using errcode = '55000';
+  if v_run.status not in ('in_progress', 'completed', 'failed') then
+    raise exception 'Only an active or finished test run can be reset.' using errcode = '55000';
   end if;
   -- A worker that claimed first holds the run row until its atomic claim is
   -- committed; refuse reset while the provider send is in flight.
@@ -522,7 +522,7 @@ begin
     when 'tour' then array['simulated','requested','scheduled','confirmed','completed','failed']
     when 'proposal' then array['simulated','drafted','sent','accepted','failed']
     when 'contract' then array['simulated','prepared','sent','signed','failed']
-    when 'invoice' then array['simulated','issued','paid','failed']
+    when 'invoice' then array['simulated','issued','failed']
     when 'booking' then array['simulated','tentative','confirmed','cancelled','failed']
     when 'payment' then array['simulated','pending','paid','failed']
     when 'sms' then array['simulated','queued','sent','delivered','failed']
@@ -538,7 +538,7 @@ begin
     when 'tour' then case v_current_status when 'simulated' then 'requested' when 'requested' then 'scheduled' when 'scheduled' then 'confirmed' when 'confirmed' then 'completed' else null end
     when 'proposal' then case v_current_status when 'simulated' then 'drafted' when 'drafted' then 'sent' when 'sent' then 'accepted' else null end
     when 'contract' then case v_current_status when 'simulated' then 'prepared' when 'prepared' then 'sent' when 'sent' then 'signed' else null end
-    when 'invoice' then case v_current_status when 'simulated' then 'issued' when 'issued' then 'paid' else null end
+    when 'invoice' then case v_current_status when 'simulated' then 'issued' else null end
     when 'booking' then case v_current_status when 'simulated' then 'tentative' when 'tentative' then 'confirmed' when 'confirmed' then 'cancelled' else null end
     when 'payment' then case v_current_status when 'simulated' then 'pending' when 'pending' then 'paid' else null end
     when 'sms' then case v_current_status when 'simulated' then 'queued' when 'queued' then 'sent' when 'sent' then 'delivered' else null end
@@ -552,6 +552,22 @@ begin
   if p_details is null or jsonb_typeof(p_details) <> 'object' then
     raise exception 'Simulated workflow details must be a JSON object.' using errcode = '22023';
   end if;
+  if p_status <> 'failed' then
+    if p_artifact_type = 'proposal' and not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='tour' and status='completed'
+    ) then raise exception 'Complete the simulated tour before advancing the proposal.' using errcode = '22023'; end if;
+    if p_artifact_type = 'contract' and not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='proposal' and status='accepted'
+    ) then raise exception 'Accept the simulated proposal before advancing the contract.' using errcode = '22023'; end if;
+    if p_artifact_type in ('invoice','booking') and not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='contract' and status='signed'
+    ) then raise exception 'Sign the simulated contract before advancing billing or booking.' using errcode = '22023'; end if;
+    if p_artifact_type = 'payment' and (not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='invoice' and status='issued'
+    ) or not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='booking' and status='confirmed'
+    )) then raise exception 'Issue the simulated invoice and confirm the booking before advancing payment.' using errcode = '22023'; end if;
+  end if;
   insert into public.luxor_test_run_artifacts (test_run_id, artifact_type, status, details, updated_at)
   values (v_run.id, p_artifact_type, p_status, p_details || jsonb_build_object('simulation_only', true), now())
   on conflict (test_run_id, artifact_type) do update set
@@ -562,6 +578,26 @@ begin
   insert into public.luxor_test_run_activity (test_run_id, event_type, status, details)
   values (v_run.id, 'simulated_' || p_artifact_type, p_status,
     jsonb_build_object('artifact_id', v_artifact.id, 'simulation_only', true, 'details', p_details));
+  if p_status = 'failed' then
+    update public.luxor_test_runs set status='failed', completed_at=now(), updated_at=now() where id=v_run.id;
+    insert into public.luxor_test_run_activity (test_run_id,event_type,status,details)
+    values (v_run.id,'run_failed','failed',jsonb_build_object('artifact_type',p_artifact_type,'simulation_only',true));
+  elsif p_artifact_type = 'tour' and p_status = 'requested' then
+    update public.luxor_inquiries set status='tour_requested', pipeline_stage='tour', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+  elsif p_artifact_type = 'tour' and p_status = 'confirmed' then
+    update public.luxor_inquiries set status='tour_confirmed', pipeline_stage='tour', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+  elsif p_artifact_type = 'proposal' and p_status = 'sent' then
+    update public.luxor_inquiries set status='proposal_sent', pipeline_stage='proposal_sent', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+  elsif p_artifact_type = 'contract' and p_status = 'signed' then
+    update public.luxor_inquiries set status='booked', pipeline_stage='planning_begins', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+  elsif p_artifact_type = 'payment' and p_status = 'paid' then
+    update public.luxor_test_run_artifacts set status='paid', details=details || jsonb_build_object('simulation_only',true,'completed_by_payment',true), updated_at=now()
+    where test_run_id=v_run.id and artifact_type='invoice' and status='issued';
+    update public.luxor_test_runs set status='completed', completed_at=now(), updated_at=now() where id=v_run.id;
+    update public.luxor_inquiries set status='booked', pipeline_stage='planning_begins', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+    insert into public.luxor_test_run_activity (test_run_id,event_type,status,details)
+    values (v_run.id,'run_completed','completed',jsonb_build_object('simulation_only',true,'money_moved',false));
+  end if;
   return jsonb_build_object('artifact', to_jsonb(v_artifact), 'simulation_only', true);
 end;
 $$;
@@ -884,7 +920,11 @@ alter table public.luxor_test_run_emails enable row level security;
 revoke all on public.luxor_test_settings, public.luxor_test_identifier_collision_exemptions, public.luxor_test_runs, public.luxor_test_run_activity, public.luxor_test_run_artifacts, public.luxor_test_run_emails from anon, authenticated;
 -- Managed public-schema default ACLs can be broad; grant only the rights used below.
 revoke all on public.luxor_test_settings, public.luxor_test_identifier_collision_exemptions, public.luxor_test_runs, public.luxor_test_run_activity, public.luxor_test_run_artifacts, public.luxor_test_run_emails from public, anon, authenticated, service_role;
-grant select on public.luxor_test_settings, public.luxor_test_runs to service_role;
+grant select on public.luxor_test_settings, public.luxor_test_runs, public.luxor_test_identifier_collision_exemptions to service_role;
+-- The invoker test-mail claimant uses SELECT FOR UPDATE to serialize settings
+-- and run fences. PostgreSQL requires UPDATE privilege to acquire those locks;
+-- column-scoped rights allow locks without permitting business-field changes.
+grant update (updated_at) on public.luxor_test_settings, public.luxor_test_runs to service_role;
 grant select, insert on public.luxor_test_run_activity to service_role;
 grant select on public.luxor_test_run_artifacts to service_role;
 grant select, update on public.luxor_test_run_emails to service_role;

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       }
       const category = String(body.category)
       if (!isLuxorTestEmailCategory(category)) return NextResponse.json({ error: 'Choose a supported test email template.' }, { status: 400 })
-      const template = buildLuxorTestEmailTemplate(category, body.testRunId)
+      const template = await buildLuxorTestEmailTemplate(category, body.testRunId)
       const result = await enqueueLuxorTestEmail({
         testRunId: body.testRunId,
         category,

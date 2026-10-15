@@ -466,9 +466,12 @@ export async function buildLuxorProposalContractEmail(input: {
   booking: LuxorBooking
   signingUrl: string
   notes?: LuxorNote[]
+  introductionOverride?: string
 }) {
   const firstName = input.inquiry.full_name.split(/\s+/)[0] || input.inquiry.full_name
-  const introduction = await generateProposalContractIntroduction(input)
+  const introduction = input.introductionOverride
+    ? { copy: input.introductionOverride, aiGenerated: false }
+    : await generateProposalContractIntroduction(input)
   const summary = getLuxorProposalPricingSummary(input.invoice)
   const packageName = summary.packageName || input.booking.package_name || input.inquiry.package_interest || 'Custom Luxor package'
   const offerDisclosure = offerDisclosureHtml(input.invoice, summary, 'accepted')
@@ -541,11 +544,14 @@ export async function buildLuxorPaymentRequestEmail(input: {
   paymentLabel: string
   paidTotal: number
   balanceDue: number
+  introductionOverride?: string
 }) {
   const { invoice, inquiry, booking, paymentUrl, paymentAmount, paymentLabel, paidTotal, balanceDue } = input
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
   const remainingAfterPayment = Math.max(0, Math.round((balanceDue - paymentAmount) * 100) / 100)
-  const personalizedIntroduction = await generateProposalIntroduction(input)
+  const personalizedIntroduction = input.introductionOverride
+    ? { copy: input.introductionOverride, aiGenerated: false }
+    : await generateProposalIntroduction(input)
   const finalDueDate = booking.final_payment_due_date
     ? displayEventDate(booking.final_payment_due_date)
     : 'the due date in your Event Agreement'

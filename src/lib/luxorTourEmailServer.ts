@@ -25,8 +25,8 @@ export type TourEmailContext = {
 
 const FALLBACK_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
 
-export async function buildAiTourConfirmationEmail(context: TourEmailContext) {
-  const copy = await generateTourCopy(context)
+export async function buildAiTourConfirmationEmail(context: TourEmailContext, options: { skipAi?: boolean } = {}) {
+  const copy = options.skipAi ? fallbackCopy(context) : await generateTourCopy(context)
   return {
     subject: copy.subject,
     body: renderTourEmailHtml(context, copy),

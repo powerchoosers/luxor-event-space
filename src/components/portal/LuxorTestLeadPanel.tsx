@@ -51,6 +51,7 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
 
   const activeRun = data?.runs.find((run) => run.status === 'in_progress')
   const latestRun = data?.runs[0] ?? null
+  const resetRun = activeRun || (latestRun && ['completed', 'failed'].includes(latestRun.status) ? latestRun : null)
   const lastReset = data?.runs.reduce<string | null>((latest, run) => run.reset_at && (!latest || run.reset_at > latest) ? run.reset_at : latest, null) ?? null
   async function saveSettings() {
     if (enabled && !data?.settings?.enabled) {
@@ -73,16 +74,16 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
   }
 
   async function reset() {
-    if (!activeRun || !window.confirm('Reset this test pipeline? It will return the permanent test lead to Inquiry, cancel pending test-only jobs, and reset simulated tours, proposals, contracts, invoices, bookings, planning, payments, and SMS. Previous run history and the test lead will remain. No real customer data or transactions are affected.')) return
+    if (!resetRun || !window.confirm('Reset this test pipeline? It will return the permanent test lead to Inquiry, cancel pending test-only jobs, and reset simulated tours, proposals, contracts, invoices, bookings, planning, payments, and SMS. Previous run history and the test lead will remain. No real customer data or transactions are affected.')) return
     setBusy(true); setNotice('')
     try {
       const response = await fetch('/api/portal/test-lead', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reset', testRunId: activeRun.id, confirm: true }),
+        body: JSON.stringify({ action: 'reset', testRunId: resetRun.id, confirm: true }),
       })
       const result = await response.json() as { error?: string }
       if (!response.ok) throw new Error(result.error || 'Unable to reset test pipeline.')
-      setNotice(`Test run ${activeRun.id} reset. The permanent lead and history were preserved; the next qualifying submission will start a new run.`)
+      setNotice(`Test run ${resetRun.id} reset. The permanent lead and history were preserved; the next qualifying submission will start a new run.`)
       await refresh()
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Unable to reset test pipeline.') }
     finally { setBusy(false) }
@@ -122,7 +123,7 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
     tour: { simulated: 'requested', requested: 'scheduled', scheduled: 'confirmed', confirmed: 'completed' },
     proposal: { simulated: 'drafted', drafted: 'sent', sent: 'accepted' },
     contract: { simulated: 'prepared', prepared: 'sent', sent: 'signed' },
-    invoice: { simulated: 'issued', issued: 'paid' },
+    invoice: { simulated: 'issued' },
     booking: { simulated: 'tentative', tentative: 'confirmed' },
     payment: { simulated: 'pending', pending: 'paid' },
     sms: { simulated: 'queued', queued: 'sent', sent: 'delivered' },
@@ -142,7 +143,7 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
           <Link href={`/portal/leads/${leadId}`} className="inline-flex h-9 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)]">View Test Lead</Link>
           <button type="button" onClick={() => setView(view === 'history' ? null : 'history')} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)]"><History size={13} /> Test History</button>
           <button type="button" onClick={() => setView(view === 'settings' ? null : 'settings')} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)]"><Settings2 size={13} /> Test Settings</button>
-          <button type="button" disabled={!activeRun || busy} onClick={() => void reset()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={13} /> Reset Pipeline</button>
+          <button type="button" disabled={!resetRun || busy} onClick={() => void reset()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={13} /> Reset Pipeline</button>
         </div>
       </div>
       {notice ? <p role="status" className="mt-3 text-xs text-[color:var(--portal-text)]">{notice}</p> : null}
