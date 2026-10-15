@@ -79,6 +79,8 @@ declare
   v_tour_status text;
   v_lead_status text;
   v_email_created boolean := false;
+  v_tour_already_recorded boolean := false;
+  v_tour_lifecycle_changed boolean := false;
 begin
   -- Match start/reset lock order: settings -> permanent lead -> run.
   select * into v_run from public.luxor_test_runs where id=p_test_run_id;
@@ -121,7 +123,23 @@ begin
     raise exception 'Tour time is too long.' using errcode='22023';
   end if;
 
+  select exists (select 1 from public.luxor_test_run_activity where test_run_id=v_run.id
+    and event_type in ('test_tour_rescheduled','test_tour_cancelled')) into v_tour_lifecycle_changed;
   if p_tour_intent then
+    select exists (
+      select 1 from public.luxor_test_run_activity
+      where test_run_id=v_run.id and event_type in ('test_tour_recorded','test_tour_rescheduled','test_tour_cancelled')
+    ) into v_tour_already_recorded;
+    if v_tour_already_recorded then
+      select status into v_tour_status from public.luxor_test_run_artifacts
+      where test_run_id=v_run.id and artifact_type='tour';
+    end if;
+  end if;
+
+  -- The first test_tour_recorded event freezes submission state. Network
+  -- retries may re-read/dedupe its email, but only the explicit run-scoped
+  -- reschedule/cancel RPC may subsequently alter the tour lifecycle.
+  if p_tour_intent and not v_tour_already_recorded then
     v_tour_status := case when p_confirmed_slot then 'scheduled' else 'requested' end;
     v_lead_status := case when p_confirmed_slot then 'tour_confirmed' else 'tour_requested' end;
     insert into public.luxor_test_run_artifacts (test_run_id,artifact_type,status,details,updated_at)
@@ -166,7 +184,7 @@ begin
     where test_run_id=v_run.id and category=p_email_category
       and details->>'automatic_source'=p_automatic_source
     order by created_at limit 1 for update;
-    if not found then
+    if not found and not (v_tour_lifecycle_changed and p_automatic_source in ('public_tour_submission','public_tour_reminder_24','public_tour_reminder_2')) then
       insert into public.luxor_email_jobs (
         inquiry_id,job_type,status,recipient_email,subject,body,scheduled_for,metadata,test_run_id
       ) values (
@@ -398,3 +416,165 @@ $$;
 
 revoke all on function public.luxor_simulate_test_tour_change(uuid,text,text,jsonb) from public,anon,authenticated;
 grant execute on function public.luxor_simulate_test_tour_change(uuid,text,text,jsonb) to service_role;
+
+
+create or replace function public.luxor_advance_test_artifact(
+  p_test_run_id uuid,
+  p_artifact_type text,
+  p_status text,
+  p_details jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_settings public.luxor_test_settings;
+  v_initial_run public.luxor_test_runs;
+  v_lead public.luxor_inquiries;
+  v_run public.luxor_test_runs;
+  v_artifact public.luxor_test_run_artifacts;
+  v_allowed text[];
+  v_current_status text;
+  v_next_status text;
+begin
+  select * into v_initial_run from public.luxor_test_runs where id = p_test_run_id;
+  if not found then raise exception 'Test run not found.' using errcode = 'P0002'; end if;
+  perform 1 from public.luxor_test_settings where id=1 for update;
+  if not found then raise exception 'Test settings are not provisioned.' using errcode='55000'; end if;
+  select * into v_lead from public.luxor_inquiries where id=v_initial_run.test_lead_id and is_test is true for update;
+  if not found or v_lead.id is distinct from '00b264d6-a3fb-4ea3-9142-415f76385c39'::uuid then
+    raise exception 'The permanent test lead is not provisioned.' using errcode='55000';
+  end if;
+  select * into v_run from public.luxor_test_runs where id=p_test_run_id and test_lead_id=v_lead.id for update;
+  if not found or v_run.status <> 'in_progress' then
+    raise exception 'Only the active test run can advance simulated workflow records.' using errcode = '55000';
+  end if;
+  if p_artifact_type not in ('tour','proposal','contract','invoice','booking','payment','sms') then
+    raise exception 'Unsupported simulated workflow type.' using errcode = '22023';
+  end if;
+  v_allowed := case p_artifact_type
+    when 'tour' then array['simulated','requested','scheduled','confirmed','completed','failed']
+    when 'proposal' then array['simulated','drafted','sent','accepted','failed']
+    when 'contract' then array['simulated','prepared','sent','signed','failed']
+    when 'invoice' then array['simulated','issued','failed']
+    when 'booking' then array['simulated','tentative','confirmed','cancelled','failed']
+    when 'payment' then array['simulated','pending','paid','failed']
+    when 'sms' then array['simulated','queued','sent','delivered','failed']
+    else array['simulated']
+  end;
+  if p_status <> all(v_allowed) then
+    raise exception 'Status is not valid for this simulated workflow type.' using errcode = '22023';
+  end if;
+  select status into v_current_status from public.luxor_test_run_artifacts
+  where test_run_id=v_run.id and artifact_type=p_artifact_type for update;
+  if not found then v_current_status := 'simulated'; end if;
+  v_next_status := case p_artifact_type
+    when 'tour' then case v_current_status when 'simulated' then 'requested' when 'requested' then 'scheduled' when 'scheduled' then 'confirmed' when 'confirmed' then 'completed' else null end
+    when 'proposal' then case v_current_status when 'simulated' then 'drafted' when 'drafted' then 'sent' when 'sent' then 'accepted' else null end
+    when 'contract' then case v_current_status when 'simulated' then 'prepared' when 'prepared' then 'sent' when 'sent' then 'signed' else null end
+    when 'invoice' then case v_current_status when 'simulated' then 'issued' else null end
+    when 'booking' then case v_current_status when 'simulated' then 'tentative' when 'tentative' then 'confirmed' when 'confirmed' then 'cancelled' else null end
+    when 'payment' then case v_current_status when 'simulated' then 'pending' when 'pending' then 'paid' else null end
+    when 'sms' then case v_current_status when 'simulated' then 'queued' when 'queued' then 'sent' when 'sent' then 'delivered' else null end
+  end;
+  if p_status <> 'failed' and p_status is distinct from v_next_status then
+    raise exception 'Workflow transition is out of sequence; expected next state: %.', coalesce(v_next_status, 'terminal') using errcode = '22023';
+  end if;
+  if p_status = 'failed' and v_current_status in ('completed','accepted','signed','paid','cancelled','delivered','failed','reset') then
+    raise exception 'A completed simulated workflow cannot be marked failed.' using errcode = '22023';
+  end if;
+  if p_details is null or jsonb_typeof(p_details) <> 'object' then
+    raise exception 'Simulated workflow details must be a JSON object.' using errcode = '22023';
+  end if;
+  if p_status = 'failed' or (p_artifact_type = 'payment' and p_status = 'paid') then
+    if exists (select 1 from public.luxor_email_jobs where test_run_id=v_run.id and status in ('sending','claimed')) then
+      raise exception 'A test email is in flight. Record its provider outcome before failing or completing the run.' using errcode = '55000';
+    end if;
+  end if;
+  if p_status <> 'failed' then
+    if p_artifact_type = 'proposal' and not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='tour' and status='completed'
+    ) then raise exception 'Complete the simulated tour before advancing the proposal.' using errcode = '22023'; end if;
+    if p_artifact_type = 'contract' and not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='proposal' and status='accepted'
+    ) then raise exception 'Accept the simulated proposal before advancing the contract.' using errcode = '22023'; end if;
+    if p_artifact_type in ('invoice','booking') and not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='contract' and status='signed'
+    ) then raise exception 'Sign the simulated contract before advancing billing or booking.' using errcode = '22023'; end if;
+    if p_artifact_type = 'payment' and (not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='invoice' and status='issued'
+    ) or not exists (
+      select 1 from public.luxor_test_run_artifacts where test_run_id=v_run.id and artifact_type='booking' and status='confirmed'
+    )) then raise exception 'Issue the simulated invoice and confirm the booking before advancing payment.' using errcode = '22023'; end if;
+  end if;
+  insert into public.luxor_test_run_artifacts (test_run_id, artifact_type, status, details, updated_at)
+  values (v_run.id, p_artifact_type, p_status, p_details || jsonb_build_object('simulation_only', true), now())
+  on conflict (test_run_id, artifact_type) do update set
+    status = excluded.status,
+    details = public.luxor_test_run_artifacts.details || excluded.details,
+    updated_at = now()
+  returning * into v_artifact;
+  insert into public.luxor_test_run_activity (test_run_id, event_type, status, details)
+  values (v_run.id, 'simulated_' || p_artifact_type, p_status,
+    jsonb_build_object('artifact_id', v_artifact.id, 'simulation_only', true, 'details', p_details));
+  if p_status = 'failed' then
+    with cancelled_jobs as (
+      update public.luxor_email_jobs set status='cancelled',
+        last_error='Cancelled because the simulated test run failed before delivery.', updated_at=now()
+      where test_run_id=v_run.id and job_type='test_notification' and status='queued'
+      returning id
+    ), cancelled_emails as (
+      update public.luxor_test_run_emails set status='failed',
+        provider_status='cancelled_before_send', delivery_status='unknown',
+        error_message='Cancelled because the simulated test run failed before delivery.', updated_at=now()
+      where email_job_id in (select id from cancelled_jobs) and status='queued'
+      returning id, email_job_id
+    )
+    insert into public.luxor_test_run_activity (test_run_id,event_type,status,provider_status,delivery_status,error_message,details)
+    select v_run.id,'test_email_cancelled','failed','cancelled_before_send','unknown',
+      'Cancelled because the simulated test run failed before delivery.',jsonb_build_object('email_id',cancelled_emails.id,'email_job_id',cancelled_emails.email_job_id)
+    from cancelled_emails;
+    update public.luxor_test_runs set status='failed', completed_at=now(), updated_at=now() where id=v_run.id;
+    insert into public.luxor_test_run_activity (test_run_id,event_type,status,details)
+    values (v_run.id,'run_failed','failed',jsonb_build_object('artifact_type',p_artifact_type,'simulation_only',true));
+  elsif p_artifact_type = 'tour' and p_status = 'requested' then
+    update public.luxor_inquiries set status='tour_requested', pipeline_stage='tour', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+  elsif p_artifact_type = 'tour' and p_status = 'confirmed' then
+    update public.luxor_inquiries set status='tour_confirmed', pipeline_stage='tour', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+  elsif p_artifact_type = 'proposal' and p_status = 'sent' then
+    update public.luxor_inquiries set status='proposal_sent', pipeline_stage='proposal_sent', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+  elsif p_artifact_type = 'contract' and p_status = 'signed' then
+    update public.luxor_inquiries set status='booked', pipeline_stage='planning_begins', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+  elsif p_artifact_type = 'payment' and p_status = 'paid' then
+    with cancelled_jobs as (
+      update public.luxor_email_jobs set status='cancelled',
+        last_error='Cancelled because the simulated test run completed before delivery.', updated_at=now()
+      where test_run_id=v_run.id and job_type='test_notification' and status='queued'
+      returning id
+    ), cancelled_emails as (
+      update public.luxor_test_run_emails set status='failed',
+        provider_status='cancelled_before_send', delivery_status='unknown',
+        error_message='Cancelled because the simulated test run completed before delivery.', updated_at=now()
+      where email_job_id in (select id from cancelled_jobs) and status='queued'
+      returning id, email_job_id
+    )
+    insert into public.luxor_test_run_activity (test_run_id,event_type,status,provider_status,delivery_status,error_message,details)
+    select v_run.id,'test_email_cancelled','failed','cancelled_before_send','unknown',
+      'Cancelled because the simulated test run completed before delivery.',jsonb_build_object('email_id',cancelled_emails.id,'email_job_id',cancelled_emails.email_job_id)
+    from cancelled_emails;
+    update public.luxor_test_run_artifacts set status='paid', details=details || jsonb_build_object('simulation_only',true,'completed_by_payment',true), updated_at=now()
+    where test_run_id=v_run.id and artifact_type='invoice' and status='issued';
+    update public.luxor_test_runs set status='completed', completed_at=now(), updated_at=now() where id=v_run.id;
+    update public.luxor_inquiries set status='booked', pipeline_stage='planning_begins', updated_at=now() where id=v_run.test_lead_id and is_test is true;
+    insert into public.luxor_test_run_activity (test_run_id,event_type,status,details)
+    values (v_run.id,'run_completed','completed',jsonb_build_object('simulation_only',true,'money_moved',false));
+  end if;
+  return jsonb_build_object('artifact', to_jsonb(v_artifact), 'simulation_only', true);
+end;
+$$;
+
+
+revoke all on function public.luxor_advance_test_artifact(uuid,text,text,jsonb) from public,anon,authenticated;
+grant execute on function public.luxor_advance_test_artifact(uuid,text,text,jsonb) to service_role;
