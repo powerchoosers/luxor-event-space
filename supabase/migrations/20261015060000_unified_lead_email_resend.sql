@@ -348,6 +348,7 @@ begin
     or invoice.booking_id<>source_job.booking_id or invoice.invoice_kind not in ('deposit','final_balance','security_deposit')
     or invoice.status in ('cancelled','paid') or invoice.status is null
     or (source_job.job_type='final_payment_reminder' and invoice.invoice_kind<>'final_balance')
+    or (source_job.job_type='final_payment_request' and invoice.invoice_kind<>'final_balance')
     or (source_job.job_type='unpaid_invoice_reminder' and invoice.invoice_kind='final_balance') then
     raise exception 'The original payment reminder no longer matches this invoice';
   end if;
@@ -410,6 +411,7 @@ begin
       and lower(source_job.recipient_email)<>lower(job.recipient_email)
       and invoice.invoice_kind in ('deposit','final_balance','security_deposit') and invoice.status not in ('cancelled','paid')
       and (source_job.job_type<>'final_payment_reminder' or invoice.invoice_kind='final_balance')
+      and (source_job.job_type<>'final_payment_request' or invoice.invoice_kind='final_balance')
       and (source_job.job_type<>'unpaid_invoice_reminder' or invoice.invoice_kind<>'final_balance')
       and booking.id is not null and booking.contract_status='signed'
       and coalesce(invoice.due_date,booking.final_payment_due_date) is not null

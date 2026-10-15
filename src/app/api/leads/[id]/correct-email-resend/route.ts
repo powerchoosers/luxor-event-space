@@ -33,9 +33,11 @@ function filterForLeadStage(options: CorrectEmailResendOption[], inquiry: { stat
     && ['proposal_sent', 'booked'].includes(inquiry.status)
   const activeAgreement = ['contract', 'deposit'].includes(inquiry.pipeline_stage || '')
     && ['proposal_sent', 'booked'].includes(inquiry.status)
+  const payment = inquiry.status === 'booked' && ['deposit', 'final_payment', 'planning', 'event', 'closing'].includes(inquiry.pipeline_stage || '')
   return options.filter((option) => (postEvent && option.sourceKind === 'Event follow-up')
     || (planning && option.sourceKind === 'Layout review')
     || (contract && option.resendKind === 'proposal')
+    || (payment && option.resendKind === 'payment')
     || (activeAgreement && option.resendKind === 'agreement'))
 }
 
@@ -124,7 +126,7 @@ async function loadPaymentOptions(inquiryId: string, email: string, jobs: LuxorE
     const candidates = invoices.filter((candidate) => candidate.booking_id === job.booking_id
       && (typeof job.metadata?.invoice_id !== 'string' || job.metadata.invoice_id === candidate.id)
       && ['deposit', 'final_balance', 'security_deposit'].includes(candidate.invoice_kind || '')
-      && (job.job_type !== 'final_payment_reminder' || candidate.invoice_kind === 'final_balance')
+      && (!['final_payment_reminder', 'final_payment_request'].includes(job.job_type) || candidate.invoice_kind === 'final_balance')
       && (job.job_type !== 'unpaid_invoice_reminder' || candidate.invoice_kind !== 'final_balance'))
     const invoice = candidates.length === 1 ? candidates[0] : null
     if (!invoice || invoice.status === 'cancelled' || !booking || booking.contract_status !== 'signed'
@@ -303,7 +305,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const source = jobs.find((job) => job.id === sourceJobId && job.booking_id === booking.id && job.status === 'sent'
         && job.recipient_email.trim().toLowerCase() !== email
         && ['unpaid_invoice_reminder', 'final_payment_reminder', 'final_payment_request'].includes(job.job_type)
-        && (job.job_type !== 'final_payment_reminder' || invoice.invoice_kind === 'final_balance')
+        && (!['final_payment_reminder', 'final_payment_request'].includes(job.job_type) || invoice.invoice_kind === 'final_balance')
         && (job.job_type !== 'unpaid_invoice_reminder' || invoice.invoice_kind !== 'final_balance'))
       if (!source) return NextResponse.json({ error: 'The selected payment reminder is no longer eligible.' }, { status: 409 })
       const response = await fetch(`${new URL(request.url).origin}/api/invoices/${encodeURIComponent(invoiceId)}/remind`, {
