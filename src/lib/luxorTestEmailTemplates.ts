@@ -3,6 +3,8 @@ import 'server-only'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 import {
   buildBrochureDeliveryEmailHtml,
+  buildNewsletterConfirmationEmailHtml,
+  buildTourRequestReceivedEmailHtml,
   buildLuxorFollowUpEmailHtml,
   buildStandardInquiryEmailHtml,
 } from './luxorEmailJobsServer'
@@ -149,8 +151,15 @@ function markTestOnly(subject: string, body: string, runId: string) {
   return { subject: `[TEST ONLY] ${subject}`, body: html }
 }
 
-export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCategory, runId: string) {
+export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCategory, runId: string, options: {
+  flow?: string | null
+  preferredTourDate?: string | null
+  preferredTourTime?: string | null
+  confirmedSlot?: boolean
+} = {}) {
   const inquiry = syntheticInquiry()
+  inquiry.preferred_tour_date = options.preferredTourDate || inquiry.preferred_tour_date
+  inquiry.preferred_tour_time = options.preferredTourTime || inquiry.preferred_tour_time
   const invoice = syntheticInvoice()
   const booking = syntheticBooking()
   const portalUrl = safePortalUrl(runId)
@@ -166,14 +175,28 @@ export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCatego
   }
 
   if (category === 'form_confirmation' || category === 'other') {
+    if (category === 'form_confirmation' && options.flow === 'newsletter_signup') {
+      return markTestOnly('Welcome to Luxor', buildNewsletterConfirmationEmailHtml(inquiry), runId)
+    }
     return markTestOnly('Your celebration starts here', buildStandardInquiryEmailHtml(inquiry), runId)
   }
   if (category === 'brochure') {
     return markTestOnly('Your Luxor Venue Brochure', buildBrochureDeliveryEmailHtml(inquiry), runId)
   }
   if (category === 'tour_confirmation') {
-    const email = await buildAiTourConfirmationEmail(tourContext, { skipAi: true })
-    return markTestOnly(email.subject, email.body, runId)
+    if (!options.confirmedSlot && (options.flow || options.preferredTourDate || options.preferredTourTime)) {
+      return markTestOnly('Your Luxor tour request is received', buildTourRequestReceivedEmailHtml(inquiry, safeRunId(runId)), runId)
+    }
+    const tourDate = options.preferredTourDate ? new Date(`${options.preferredTourDate}T12:00:00Z`) : null
+    const tourDateLabel = tourDate && Number.isFinite(tourDate.getTime())
+      ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(tourDate)
+      : 'November 1, 2026'
+    const personalized = await buildAiTourConfirmationEmail({
+      ...tourContext,
+      tourDateLabel: options.preferredTourDate ? tourDateLabel : tourContext.tourDateLabel,
+      tourTimeLabel: options.preferredTourTime || tourContext.tourTimeLabel,
+    }, options.confirmedSlot ? {} : { skipAi: true })
+    return markTestOnly(personalized.subject, personalized.body, runId)
   }
   if (category === 'tour_reminder') {
     const email = buildTourReminderEmail(tourContext, 'tomorrow')

@@ -4,6 +4,7 @@ import { supabaseRest } from './supabaseRestServer'
 import { getLuxorCalendarEvent, normalizedState, type LuxorCalendarEvent, type LuxorCalendarState } from './luxorCalendarServer'
 import { sendLuxorResendEmail } from './luxorResendMailServer'
 import type { LuxorEmailJob, LuxorInquiry } from './luxorInquiryTypes'
+import { LUXOR_TEST_EMAIL_RECIPIENT, sendLuxorTestEmail } from './luxorTestEmailDelivery'
 
 type TourTemplate = { subject: string; body: string; text?: string; heroImage?: string; aiGenerated?: boolean }
 type SavedTour = {
@@ -28,7 +29,33 @@ export async function saveLuxorTourSchedule(input: {
 }
 
 /** Revision-bound notices stay on Resend even during a global provider rollback. */
-export async function deliverLuxorTourNotice(job: LuxorEmailJob) {
+export async function deliverLuxorTourNotice(job: LuxorEmailJob, options: { testRunId?: string } = {}) {
+  if (options.testRunId) {
+    // The worker has already authorized and pinned this run's recipient. Keep
+    // the production Resend transport while bypassing real calendar/inventory
+    // eligibility and revision writes for the explicitly simulated tour.
+    if (job.test_run_id !== options.testRunId || job.job_type !== 'test_notification'
+      || job.metadata?.test_category !== 'tour_confirmation'
+      || job.metadata?.automatic_test_workflow !== true) {
+      throw new Error('Test tour notice is not linked to an authorized simulated tour workflow.')
+    }
+    const sent = await sendLuxorTestEmail({
+      subject: job.subject,
+      body: job.body,
+      from: 'booking@luxoratlaspalmas.com',
+      fromName: 'Luxor Event Space',
+      sendProvider: ({ to, subject, body, from, fromName }) => sendLuxorResendEmail({
+        to: to === LUXOR_TEST_EMAIL_RECIPIENT ? to : LUXOR_TEST_EMAIL_RECIPIENT,
+        subject,
+        content: body,
+        from,
+        fromName,
+        idempotencyKey: `email-job/${job.id}`,
+        metadata: { testRunId: options.testRunId, tourNotice: 'confirmation' },
+      }),
+    })
+    return { status: 'sent' as const, messageId: sent.providerMessageId, provider: 'resend' as const }
+  }
   const expectedKind = job.tour_notice === 'confirmation' ? 'tour_confirmation'
     : ['reminder_24', 'reminder_2'].includes(job.tour_notice || '') ? 'tour_reminder' : null
   if (!job.inquiry_id || !job.tour_revision_id || !expectedKind || job.job_type !== expectedKind) {
@@ -59,5 +86,5 @@ export async function deliverLuxorTourNotice(job: LuxorEmailJob) {
   const sent = await sendLuxorResendEmail({ to: job.recipient_email, subject: job.subject, content: job.body,
     from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Event Space', idempotencyKey: `email-job/${job.id}`,
     metadata: { calendarUid: current.uid, calendarSequence: revision.sequence, tourNotice: job.tour_notice } })
-  return { status: 'sent' as const, messageId: sent.messageId }
+  return { status: 'sent' as const, messageId: sent.messageId, provider: 'resend' as const }
 }

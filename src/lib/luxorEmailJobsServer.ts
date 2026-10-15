@@ -779,6 +779,11 @@ export async function claimDueLuxorTestEmailJobs(limit = 3) {
   })
 }
 
+export async function processDueLuxorTestEmailJobs(limit = 1) {
+  const jobs = await claimDueLuxorTestEmailJobs(Math.max(1, Math.min(limit, 3)))
+  return jobs.length ? processLuxorEmailJobs(jobs, { markSending: false }) : []
+}
+
 export async function claimDueLuxorFollowUpEmailJobs() {
   return supabaseRest<LuxorEmailJob[]>('rpc/luxor_claim_due_follow_up_email_jobs', {
     method: 'POST', body: JSON.stringify({ job_limit: 1 }),
@@ -978,6 +983,28 @@ export async function processLuxorEmailJobs(
       if ((job.job_type === 'contract_signature' && metadata.flow_stage === 'contract_completed')
         || (job.job_type === 'deposit_payment_confirmation' && metadata.includes_paid_invoice === true)) {
         throw new Error('Legacy direct-send receipt needs delivery review; its original PDF cannot be reconstructed by the generic email worker.')
+      }
+      if (job.test_run_id && job.metadata?.test_category === 'tour_confirmation') {
+        assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
+        const { deliverLuxorTourNotice } = await import('./luxorTourScheduleServer')
+        const delivery = await deliverLuxorTourNotice(job, { testRunId: job.test_run_id })
+        if (delivery.status === 'sent') testProviderAccepted = true
+        await updateLuxorEmailJob(job.id, delivery.status === 'sent'
+          ? { status: 'sent', sent_at: new Date().toISOString(), last_error: null }
+          : { status: 'cancelled', last_error: 'Simulated tour notice is no longer eligible for delivery.' })
+        if (delivery.status === 'sent') {
+          await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(job.id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ ...luxorTestEmailAcceptedPatch({ provider: delivery.provider, providerMessageId: delivery.messageId }), details: { ...(job.metadata || {}), provider_called: true } }),
+          })
+          await supabaseRest('luxor_test_run_activity', {
+            method: 'POST',
+            headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ test_run_id: job.test_run_id, event_type: 'test_email_provider_accepted', status: 'provider_accepted', recipient_email: job.recipient_email, provider: delivery.provider, provider_message_id: delivery.messageId || null, provider_status: 'accepted', delivery_status: 'unknown', attempt: Number(job.attempts || 0) + 1, details: { delivery_is_confirmed_separately: true, transport: 'production_tour_resend' } }),
+          })
+        }
+        results.push({ id: job.id, status: delivery.status })
+        continue
       }
       if (job.job_type === 'calendar_invitation' || job.job_type === 'inquiry_notification' || job.job_type === 'transactional_notice' || job.tour_revision_id) {
         if (markSending && !isPreparedTourResend) {
@@ -1331,6 +1358,7 @@ export async function processDueLuxorEmailJobs(limit = 1) {
     console.warn('Dedicated test-email queue is unavailable; ordinary mail processing continues:', error instanceof Error ? error.message : error)
   }
   const testResults = testJobs.length ? await processLuxorEmailJobs(testJobs, { markSending: false }) : []
+  if (testResults.length) return testResults
   try {
     const jobs = await claimDueLuxorEmailJobs(limit)
     return [...testResults, ...await processLuxorEmailJobs(jobs, { markSending: false })]

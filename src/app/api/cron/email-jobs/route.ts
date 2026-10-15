@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { syncPendingLuxorEmailBodies } from '@/lib/luxorEmailArchiveServer'
-import { processDueLuxorEmailJobs, processDueLuxorFollowUpEmailJobs, processDueLuxorInquiryNotifications, reconcileLuxorFollowUpFinalizations } from '@/lib/luxorEmailJobsServer'
+import { processDueLuxorEmailJobs, processDueLuxorFollowUpEmailJobs, processDueLuxorInquiryNotifications, processDueLuxorTestEmailJobs, reconcileLuxorFollowUpFinalizations } from '@/lib/luxorEmailJobsServer'
 import { getLuxorWorkerHealth, safelyRecordLuxorWorkerHealth } from '@/lib/luxorWorkerHealthServer'
 import { isLuxorZohoAuthorizationError, verifyLuxorZohoMailConnection } from '@/lib/zohoMailServer'
 import { processPendingLuxorResendEvents } from '@/lib/luxorResendWebhookServer'
@@ -98,12 +98,17 @@ export async function POST(request: NextRequest) {
     // Reconcile finished sequences before claiming other work so a busy
     // transactional queue cannot starve day-30 recovery.
     await reconcileLuxorFollowUpFinalizations()
+    // Controlled test confirmations can reach only the verified owner inbox;
+    // process that isolated queue outside customer hours without opening the
+    // ordinary mail queue or exceeding the one-message worker budget.
+    const testResults = outsideSendWindow ? await processDueLuxorTestEmailJobs(1) : []
     // This all-hours claim includes internal alerts and requested transactional receipts.
-    const internalResults = await processDueLuxorInquiryNotifications(1)
+    const internalResults = testResults.length ? [] : await processDueLuxorInquiryNotifications(1)
     // Preserve the one-message runtime budget: summary rendering plus two
     // sequential provider calls could exceed the function's 60-second limit.
     const followUpResults = internalResults.length ? [] : await processDueLuxorFollowUpEmailJobs()
-    const results = internalResults.length ? internalResults
+    const results = testResults.length ? testResults
+      : internalResults.length ? internalResults
       : followUpResults.length ? followUpResults
         : outsideSendWindow ? [] : await processDueLuxorEmailJobs(1)
     const failed = results.find((result) => result.status === 'failed')
@@ -121,7 +126,7 @@ export async function POST(request: NextRequest) {
       })
     }
     return NextResponse.json({ success: true, processed: results.length, results,
-      ...(outsideSendWindow && !followUpResults.length ? { skipped: 'outside_customer_send_window', sendWindow: '8:00 AM-8:00 PM America/Chicago' } : {}) })
+      ...(outsideSendWindow && !testResults.length && !followUpResults.length ? { skipped: 'outside_customer_send_window', sendWindow: '8:00 AM-8:00 PM America/Chicago' } : {}) })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Email processing failed.'
     console.error('Luxor scheduled email worker failed:', message)

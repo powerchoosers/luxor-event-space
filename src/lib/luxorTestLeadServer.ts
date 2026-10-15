@@ -55,10 +55,74 @@ export async function startLuxorTestRun(input: LuxorInquiryInput, request: { ide
       }),
     },
   )
+  const workflow = result.run.status === 'in_progress'
+    ? await prepareLuxorTestSubmission(input, result.run.id)
+    : null
   return {
     leadId: result.lead.id,
     run: { id: result.run.id, status: result.run.status, source: result.run.source, started_at: result.run.started_at },
     replayed: result.replayed,
+    ...(workflow ? { workflow } : {}),
+  }
+}
+
+async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: string) {
+  const flow = String(input.flow || '')
+  const source = String(input.source || '').toLowerCase()
+  if (flow === 'elena_contact' || source === 'manual entry') return null
+
+  const isTourIntent = ['visit_booking', 'custom_visit_request', 'tour_booking'].includes(flow)
+    || Boolean(input.preferredTourDate || input.preferredTourTime)
+    || input.metadata?.autoScheduleTour === true
+  const isConfirmedSlot = isTourIntent && flow === 'visit_booking'
+    && input.metadata?.autoScheduleTour === true
+    && typeof input.metadata?.selectedTourSlotId === 'string'
+    && input.metadata.selectedTourSlotId.length > 0
+
+  const brochureSubmission = flow === 'brochure_lead' || source === 'homepage_brochure'
+  const emailSteps = isTourIntent
+    ? [{ category: 'tour_confirmation' as const, automaticSource: 'public_tour_submission' }]
+    : brochureSubmission
+      ? [
+        { category: 'form_confirmation' as const, automaticSource: 'public_inquiry_submission' },
+        { category: 'brochure' as const, automaticSource: 'public_brochure_submission' },
+      ]
+      : flow === 'newsletter_signup'
+        ? [{ category: 'form_confirmation' as const, automaticSource: 'public_newsletter_submission' }]
+        : flow === 'contact_form'
+          ? [{ category: 'form_confirmation' as const, automaticSource: 'public_inquiry_submission' }]
+          : []
+  if (!isTourIntent && (!emailSteps.length || !input.email)) return null
+
+  const { buildLuxorTestEmailTemplate } = await import('@/lib/luxorTestEmailTemplates')
+  const workflows: Record<string, unknown>[] = []
+  for (const step of emailSteps) {
+    const template = await buildLuxorTestEmailTemplate(step.category, runId, {
+      flow,
+      preferredTourDate: input.preferredTourDate ?? null,
+      preferredTourTime: input.preferredTourTime ?? null,
+      confirmedSlot: isConfirmedSlot,
+    })
+    const workflow = await supabaseRest<Record<string, unknown>>('rpc/luxor_prepare_test_submission', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_test_run_id: runId,
+        p_tour_intent: isTourIntent,
+        p_preferred_tour_date: input.preferredTourDate || null,
+        p_preferred_tour_time: input.preferredTourTime || null,
+        p_confirmed_slot: isConfirmedSlot,
+        p_email_category: step.category,
+        p_email_subject: template.subject,
+        p_email_body: template.body,
+        p_automatic_source: step.automaticSource,
+      }),
+    })
+    workflows.push(workflow)
+  }
+  return {
+    tour_simulated: isTourIntent,
+    ...(isTourIntent ? { tour_status: workflows[0]?.tour_status ?? null } : {}),
+    test_emails_queued: workflows.filter((workflow) => workflow.test_email_queued === true).length,
   }
 }
 
