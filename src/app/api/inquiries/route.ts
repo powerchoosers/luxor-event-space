@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listAllLuxorInquiries, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
@@ -236,8 +236,10 @@ export async function POST(request: NextRequest) {
             },
           })
           if (job) {
-            void processLuxorEmailJobs([job]).catch((err) => {
-              console.error('Failed delivering brochure email job immediately:', err)
+            after(async () => {
+              await processLuxorEmailJobs([job]).catch((err) => {
+                console.error('Failed delivering brochure email job immediately:', err)
+              })
             })
             // Optional sequence enrollment has an independent server-side gate.
             // The existing brochure delivery remains the sole Email #1.
