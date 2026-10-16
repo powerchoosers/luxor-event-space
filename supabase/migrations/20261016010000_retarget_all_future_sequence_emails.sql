@@ -8,6 +8,10 @@ returns trigger language plpgsql security invoker set search_path = '' as $$
 declare
   job public.luxor_email_jobs%rowtype;
   pre_booking_lead boolean;
+  event public.luxor_calendar_events%rowtype;
+  previous_revision public.luxor_calendar_revisions%rowtype;
+  current_revision public.luxor_calendar_revisions%rowtype;
+  destination_job public.luxor_email_jobs%rowtype;
 begin
   if lower(btrim(coalesce(old.email,''))) is not distinct from lower(btrim(coalesce(new.email,''))) then
     return new;
@@ -28,6 +32,83 @@ begin
   loop
     raise exception 'A corrected email resend is already queued or sending; wait for its result before changing the address';
   end loop;
+
+  -- The correction RPC advances the current tour revision before it updates
+  -- this inquiry row. If no prior invitation was sent (and therefore no
+  -- owner-confirmable replacement was prepared), carry a future, unattempted
+  -- branded REQUEST forward to that new revision. Keep the existing job ID,
+  -- schedule, body, and provider idempotency key.
+  select * into event from public.luxor_calendar_events where inquiry_id=old.id for update;
+  if found and event.status='confirmed'
+    and new.tour_attendance_status='pending'
+    and new.status is distinct from 'closed_lost'
+    and new.pipeline_stage is distinct from 'closed_lost'
+    and coalesce(event.state->>'startUtc','')<>''
+    and (event.state->>'startUtc')::timestamptz>now()
+    and (event.state->'attendeeEmails') ? lower(btrim(new.email))
+    and not ((event.state->'attendeeEmails') ? lower(btrim(old.email))) then
+    select * into current_revision from public.luxor_calendar_revisions
+      where event_id=event.id and sequence=event.sequence for update;
+    select * into previous_revision from public.luxor_calendar_revisions
+      where event_id=event.id and sequence=event.sequence-1 for update;
+    if found and current_revision.id is not null then
+      for job in select * from public.luxor_email_jobs j
+        where j.inquiry_id=old.id and j.calendar_revision_id=previous_revision.id
+          and j.job_type='calendar_invitation' and j.calendar_method='REQUEST'
+          and j.recipient_email=lower(btrim(old.email)) and j.status='queued'
+          and coalesce(j.attempts,0)=0
+          and j.metadata->>'delivery'='branded_confirmation'
+        order by j.id for update of j
+      loop
+        -- A prepared replacement uses the same revision and recipient. Leave
+        -- it to the owner-confirmed resend flow instead of creating a duplicate.
+        if exists(select 1 from public.luxor_email_jobs prepared
+          where prepared.inquiry_id=old.id and prepared.calendar_revision_id=current_revision.id
+            and prepared.calendar_method='REQUEST' and prepared.recipient_email=lower(btrim(new.email))
+            and prepared.metadata->>'prepared_tour_email_resend'='true'
+            and prepared.status in ('cancelled','failed','queued')) then
+          continue;
+        end if;
+
+        select * into destination_job from public.luxor_email_jobs destination
+          where destination.inquiry_id=old.id and destination.calendar_revision_id=previous_revision.id
+            and destination.job_type='calendar_invitation' and destination.calendar_method='REQUEST'
+            and destination.recipient_email=lower(btrim(new.email)) and destination.status='queued'
+            and coalesce(destination.attempts,0)=0
+            and destination.subject=job.subject and destination.body=job.body
+          order by destination.id limit 1 for update;
+        if found then
+          update public.luxor_email_jobs set status='cancelled',updated_at=now(),
+            last_error='Replaced by an existing queued invitation for the corrected attendee.'
+            where id=job.id and status='queued' and coalesce(attempts,0)=0;
+          update public.luxor_email_jobs set calendar_revision_id=current_revision.id,updated_at=now(),
+            metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object(
+              'calendar_snapshot',coalesce(metadata->'calendar_snapshot','{}'::jsonb)||event.state||jsonb_build_object(
+                'uid',event.uid,'sequence',event.sequence,'stamp',now(),'createdAt',event.created_at,
+                'attendeeEmail',lower(btrim(new.email)),'method','REQUEST'),
+              'email_correction_history',
+              (case when jsonb_typeof(metadata->'email_correction_history')='array'
+                then metadata->'email_correction_history' else '[]'::jsonb end)
+                || jsonb_build_array(jsonb_build_object('from',job.recipient_email,'to',lower(btrim(new.email)),'at',now()))
+            )
+            where id=destination_job.id and status='queued' and coalesce(attempts,0)=0;
+        else
+          update public.luxor_email_jobs set calendar_revision_id=current_revision.id,
+            recipient_email=lower(btrim(new.email)),updated_at=now(),
+            metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object(
+              'calendar_snapshot',coalesce(metadata->'calendar_snapshot','{}'::jsonb)||event.state||jsonb_build_object(
+                'uid',event.uid,'sequence',event.sequence,'stamp',now(),'createdAt',event.created_at,
+                'attendeeEmail',lower(btrim(new.email)),'method','REQUEST'),
+              'email_correction_history',
+              (case when jsonb_typeof(metadata->'email_correction_history')='array'
+                then metadata->'email_correction_history' else '[]'::jsonb end)
+                || jsonb_build_array(jsonb_build_object('from',job.recipient_email,'to',lower(btrim(new.email)),'at',now()))
+            )
+            where id=job.id and status='queued' and coalesce(attempts,0)=0;
+        end if;
+      end loop;
+    end if;
+  end if;
 
   for job in select * from public.luxor_email_jobs j
     where j.inquiry_id=old.id and lower(j.recipient_email)=lower(btrim(old.email))

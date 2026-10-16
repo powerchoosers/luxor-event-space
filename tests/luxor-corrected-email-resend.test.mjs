@@ -99,7 +99,7 @@ test('email correction retargets eligible brochure, planning/event, and post-eve
   assert.match(sequenceRetarget, /j\.status='queued' and coalesce\(j\.attempts,0\)=0 and j\.scheduled_for>now\(\)/)
   assert.match(sequenceRetarget, /set recipient_email=lower\(btrim\(new\.email\)\),updated_at=now\(\)/)
   assert.match(sequenceRetarget, /email_correction_history[\s\S]*job\.recipient_email[\s\S]*'to',lower\(btrim\(new\.email\)\)/)
-  assert.doesNotMatch(sequenceRetarget, /tour_reminder|calendar_invitation|contract_signature|final_payment_request|unpaid_invoice_reminder/)
+  assert.doesNotMatch(sequenceRetarget, /tour_reminder|contract_signature|final_payment_request|unpaid_invoice_reminder/)
   assert.doesNotMatch(sequenceRetarget, /set scheduled_for|set subject|set body|automation_enrollment_id=|automation_step_key=/)
 })
 
@@ -116,6 +116,9 @@ test('the normal portal email correction routes through the RPC that applies cal
   assert.match(tourSql, /update public\.luxor_email_jobs set tour_revision_id=new_revision\.id,[\s\S]*where inquiry_id=p_inquiry_id and tour_revision_id=old_revision\.id and job_type='tour_reminder'[\s\S]*status='queued' and attempts=0 and scheduled_for>stamp/)
   assert.match(tourSql, /'attendeeEmail',new_email/)
   assert.match(tourSql, /prepared_tour_email_resend.*awaiting_owner_confirmation/s)
+  assert.match(sequenceRetarget, /j\.calendar_revision_id=previous_revision\.id[\s\S]*j\.calendar_method='REQUEST'[\s\S]*j\.status='queued'[\s\S]*coalesce\(j\.attempts,0\)=0/)
+  assert.match(sequenceRetarget, /prepared_tour_email_resend[\s\S]*continue;/)
+  assert.match(sequenceRetarget, /calendar_revision_id=current_revision\.id[\s\S]*email_correction_history/)
 })
 
 test('the inventory of queue job kinds keeps one-time and identity-bound mail outside generic retargeting', () => {
@@ -128,7 +131,7 @@ test('the inventory of queue job kinds keeps one-time and identity-bound mail ou
   assert.match(sequenceRetarget, /j\.metadata->>'automation_key'='brochure_lead'/)
   assert.match(tourSql, /tour_revision_id=new_revision\.id/)
   assert.match(sequenceRetarget, /Proposals, agreements, payments/)
-  assert.doesNotMatch(sequenceRetarget, /'proposal_view_reminder'|'proposal_payment_reminder'|'contract_signature'|'contract_view_reminder'|'contract_signature_reminder'|'unpaid_invoice_reminder'|'sixty_day_payment_reminder'|'final_payment_request'|'final_payment_reminder'|'layout_review'|'transactional_notice'|'calendar_invitation'/)
+  assert.doesNotMatch(sequenceRetarget, /'proposal_view_reminder'|'proposal_payment_reminder'|'contract_signature'|'contract_view_reminder'|'contract_signature_reminder'|'unpaid_invoice_reminder'|'sixty_day_payment_reminder'|'final_payment_request'|'final_payment_reminder'|'layout_review'|'transactional_notice'/)
 })
 
 test('layout resends bind the active review to the original saved job', () => {
