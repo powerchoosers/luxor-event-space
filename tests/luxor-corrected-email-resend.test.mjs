@@ -13,9 +13,114 @@ const worker = await readFile(new URL('../src/lib/luxorEmailJobsServer.ts', impo
 const tourSql = await readFile(new URL('../supabase/migrations/20261009010000_safe_lead_email_correction_and_tour_resend.sql', import.meta.url), 'utf8')
 const dueClaims = await readFile(new URL('../supabase/migrations/20261015010000_permanent_test_lead_runs.sql', import.meta.url), 'utf8')
 const sequenceRetarget = await readFile(new URL('../supabase/migrations/20261016010000_retarget_all_future_sequence_emails.sql', import.meta.url), 'utf8')
+const calendarLifecycleSql = await readFile(new URL('../supabase/migrations/20260828033511_luxor_calendar_lifecycle.sql', import.meta.url), 'utf8')
 const inquiryRoute = await readFile(new URL('../src/app/api/inquiries/route.ts', import.meta.url), 'utf8')
 const leadPage = await readFile(new URL('../src/app/(portal)/portal/leads/[id]/page.tsx', import.meta.url), 'utf8')
 const emailJobTypes = await readFile(new URL('../src/lib/luxorInquiryTypes.ts', import.meta.url), 'utf8')
+
+function createSequenceRecipientStore({ lead, booking, jobs = [], now = Date.parse('2026-10-16T12:00:00Z') }) {
+  let tail = Promise.resolve()
+  const state = { lead: structuredClone(lead), booking: structuredClone(booking), jobs: structuredClone(jobs) }
+
+  async function withLeadLock(work) {
+    const prior = tail
+    let release
+    tail = new Promise((resolve) => { release = resolve })
+    await prior
+    try { return await work() } finally { release() }
+  }
+
+  function stageEligible(job) {
+    if (state.lead.is_test) return false
+    const lead = state.lead
+    if (job.job_type === 'marketing_campaign') {
+      return ['new', 'contacted', 'tour_requested', 'tour_confirmed'].includes(lead.status)
+        && ['newsletter', 'inquiry', 'tour'].includes(lead.pipeline_stage || 'inquiry')
+        && lead.marketing_opt_in === true && job.metadata.automation_key === 'brochure_lead'
+        && Boolean(job.automation_enrollment_id && job.automation_step_key)
+    }
+    if (!state.booking || state.booking.id !== job.booking_id || state.booking.inquiry_id !== lead.id || lead.status !== 'booked') return false
+    if (['event_details_reminder', 'event_day_reminder'].includes(job.job_type)) {
+      return ['planning', 'final_payment', 'event'].includes(lead.pipeline_stage)
+        && !['cancelled', 'completed'].includes(state.booking.status)
+        && Boolean(state.booking.metadata.planning_completed_at)
+        && job.metadata.event_date === state.booking.event_date
+        && job.metadata.automation_key === `${job.job_type}:${state.booking.id}`
+    }
+    return job.job_type === 'post_event_follow_up'
+      && ['event', 'closing'].includes(lead.pipeline_stage)
+      && state.booking.status === 'completed'
+      && job.metadata.automation_key === `post_event_follow_up:${state.booking.id}`
+  }
+
+  function eligible(job) {
+    return job.status === 'queued' && Number(job.attempts || 0) === 0 && stageEligible(job)
+  }
+
+  return {
+    state,
+    enqueue(job, { beforeCommit } = {}) {
+      return withLeadLock(async () => {
+        if (beforeCommit) await beforeCommit()
+        const inserted = structuredClone(job)
+        if (eligible(inserted) && inserted.recipient_email.toLowerCase() !== state.lead.email.toLowerCase()) {
+          const from = inserted.recipient_email
+          inserted.recipient_email = state.lead.email.toLowerCase()
+          inserted.metadata.email_correction_history = [
+            ...(inserted.metadata.email_correction_history || []),
+            { from, to: inserted.recipient_email, source: 'enqueue_sync' },
+          ]
+        }
+        state.jobs.push(inserted)
+        return inserted
+      })
+    },
+    correctEmail(email) {
+      return withLeadLock(async () => {
+        for (const job of state.jobs.filter((candidate) =>
+          candidate.recipient_email.toLowerCase() === state.lead.email.toLowerCase()
+          && ['queued', 'sending'].includes(candidate.status) && stageEligible(candidate))) {
+          if (job.status === 'sending') throw new Error('sending')
+          if (Number(job.attempts || 0) > 0) throw new Error('attempted')
+          if (Date.parse(job.scheduled_for) <= now) throw new Error('due')
+        }
+        for (const job of state.jobs) {
+          if (job.recipient_email.toLowerCase() === state.lead.email.toLowerCase()
+            && Date.parse(job.scheduled_for) > now && eligible(job)) {
+            const from = job.recipient_email
+            job.recipient_email = email.toLowerCase()
+            job.metadata.email_correction_history = [
+              ...(job.metadata.email_correction_history || []),
+              { from, to: job.recipient_email, source: 'correction' },
+            ]
+          }
+        }
+        state.lead.email = email
+      })
+    },
+  }
+}
+
+function sequenceFixture(jobType) {
+  const lead = { id: 'lead-1', email: 'old@example.com', is_test: false, status: 'new', pipeline_stage: 'inquiry', marketing_opt_in: true }
+  const booking = { id: 'booking-1', inquiry_id: 'lead-1', status: 'booked', event_date: '2027-04-20', metadata: { planning_completed_at: '2026-09-01' } }
+  const job = {
+    id: `job-${jobType}`, inquiry_id: 'lead-1', booking_id: ['event_details_reminder', 'event_day_reminder', 'post_event_follow_up'].includes(jobType) ? booking.id : null,
+    job_type: jobType, status: 'queued', attempts: 0, scheduled_for: '2026-11-01T12:00:00Z', recipient_email: lead.email,
+    automation_enrollment_id: jobType === 'marketing_campaign' ? 'enrollment-1' : null,
+    automation_step_key: jobType === 'marketing_campaign' ? 'email_2' : null,
+    metadata: jobType === 'marketing_campaign' ? { automation_key: 'brochure_lead' }
+      : jobType === 'post_event_follow_up' ? { automation_key: 'post_event_follow_up:booking-1' }
+        : { automation_key: `${jobType}:booking-1`, event_date: booking.event_date },
+    subject: 'Keep this subject', body: 'Keep this saved content',
+  }
+  if (jobType !== 'marketing_campaign') {
+    lead.status = 'booked'
+    lead.pipeline_stage = jobType === 'post_event_follow_up' ? 'closing' : 'planning'
+  }
+  if (jobType === 'post_event_follow_up') booking.status = 'completed'
+  return { lead, booking, job }
+}
 
 test('latest relevant bounce ranks ahead of a newer non-bounced message', () => {
   const ranked = rankCorrectEmailResendOptions([
@@ -119,6 +224,85 @@ test('the normal portal email correction routes through the RPC that applies cal
   assert.match(sequenceRetarget, /j\.calendar_revision_id=previous_revision\.id[\s\S]*j\.calendar_method='REQUEST'[\s\S]*j\.status='queued'[\s\S]*coalesce\(j\.attempts,0\)=0/)
   assert.match(sequenceRetarget, /prepared_tour_email_resend[\s\S]*continue;/)
   assert.match(sequenceRetarget, /calendar_revision_id=current_revision\.id[\s\S]*email_correction_history/)
+})
+
+test('calendar correction keeps a queued REQUEST stale when a sent confirmation will create a replacement', () => {
+  assert.match(calendarLifecycleSql, /create unique index luxor_calendar_delivery_unique on public\.luxor_email_jobs\(calendar_revision_id, recipient_email, calendar_method\)/)
+  assert.match(sequenceRetarget, /sent_job\.status='sent'[\s\S]*sent_job\.sent_at>=now\(\)-interval '30 days'[\s\S]*sent_job\.metadata->>'delivery'='branded_confirmation'[\s\S]*\(sent_revision\.state-'attendeeEmails'\)=\(event\.state-'attendeeEmails'\)/)
+
+  const previousRevision = 7
+  const currentRevision = previousRevision + 1
+  const queuedOldRequest = { calendar_revision_id: previousRevision, recipient_email: 'old@example.com', calendar_method: 'REQUEST', status: 'queued' }
+  const sentConfirmation = { status: 'sent', sent_at: Date.parse('2026-10-01T12:00:00Z'), contentMatches: true }
+  const createsOwnerConfirmedReplacement = sentConfirmation.status === 'sent'
+    && sentConfirmation.sent_at >= Date.parse('2026-09-16T12:00:00Z')
+    && sentConfirmation.contentMatches
+  const safeQueuedRequest = { ...queuedOldRequest }
+  if (!createsOwnerConfirmedReplacement) {
+    safeQueuedRequest.calendar_revision_id = currentRevision
+    safeQueuedRequest.recipient_email = 'new@example.com'
+  }
+  const preparedReplacement = { calendar_revision_id: currentRevision, recipient_email: 'new@example.com', calendar_method: 'REQUEST', status: 'cancelled' }
+  const deliveryKeys = [safeQueuedRequest, preparedReplacement].map((job) => `${job.calendar_revision_id}|${job.recipient_email}|${job.calendar_method}`)
+  assert.equal(new Set(deliveryKeys).size, 2, 'the current-revision owner-confirmable replacement does not collide with the queued old revision')
+  assert.equal(safeQueuedRequest.calendar_revision_id, previousRevision)
+  assert.equal(safeQueuedRequest.recipient_email, 'old@example.com')
+
+  const unsafeQueuedRequest = { ...queuedOldRequest, calendar_revision_id: currentRevision, recipient_email: 'new@example.com' }
+  const unsafeKeys = [unsafeQueuedRequest, preparedReplacement].map((job) => `${job.calendar_revision_id}|${job.recipient_email}|${job.calendar_method}`)
+  assert.equal(new Set(unsafeKeys).size, 1, 'retargeting first would violate the unique delivery key, including cancelled rows')
+})
+
+test('sequence enqueue and correction serialize in either order and keep the queued recipient current', async () => {
+  for (const jobType of ['marketing_campaign', 'event_details_reminder', 'event_day_reminder', 'post_event_follow_up']) {
+    const firstFixture = sequenceFixture(jobType)
+    const correctionWins = createSequenceRecipientStore(firstFixture)
+    await correctionWins.correctEmail('new@example.com')
+    const afterCorrectionEnqueue = await correctionWins.enqueue(firstFixture.job)
+    assert.equal(afterCorrectionEnqueue.recipient_email, 'new@example.com', `${jobType} uses the current address when correction commits first`)
+    assert.equal(afterCorrectionEnqueue.subject, firstFixture.job.subject)
+    assert.equal(afterCorrectionEnqueue.body, firstFixture.job.body)
+    assert.equal(afterCorrectionEnqueue.scheduled_for, firstFixture.job.scheduled_for)
+    assert.equal(afterCorrectionEnqueue.metadata.email_correction_history[0].from, 'old@example.com')
+
+    const secondFixture = sequenceFixture(jobType)
+    const enqueueWins = createSequenceRecipientStore(secondFixture)
+    let releaseEnqueue
+    let announceLock
+    const enqueueGate = new Promise((resolve) => { releaseEnqueue = resolve })
+    const locked = new Promise((resolve) => { announceLock = resolve })
+    const insert = enqueueWins.enqueue(secondFixture.job, { beforeCommit: async () => { announceLock(); await enqueueGate } })
+    await locked
+    const correction = enqueueWins.correctEmail('new@example.com')
+    releaseEnqueue()
+    const [inserted] = await Promise.all([insert, correction])
+    assert.equal(inserted.recipient_email, 'new@example.com', `${jobType} is retargeted when enqueue acquires the lead lock first`)
+    assert.equal(inserted.subject, secondFixture.job.subject)
+    assert.equal(inserted.body, secondFixture.job.body)
+    assert.equal(inserted.scheduled_for, secondFixture.job.scheduled_for)
+  }
+
+  assert.match(sequenceRetarget, /select \* into inquiry from public\.luxor_inquiries where id=new\.inquiry_id for update/)
+  assert.match(sequenceRetarget, /before insert on public\.luxor_email_jobs[\s\S]*execute function public\.luxor_sync_sequence_email_job_recipient/)
+  assert.match(sequenceRetarget, /new\.recipient_email := lower\(btrim\(inquiry\.email\)\)/)
+})
+
+test('sequence correction fails without mutation for sending, attempted, or due brochure mail', async () => {
+  const cases = [
+    { status: 'sending', attempts: 0, scheduled_for: '2026-11-01T12:00:00Z', reason: 'sending' },
+    { status: 'queued', attempts: 1, scheduled_for: '2026-11-01T12:00:00Z', reason: 'attempted' },
+    { status: 'queued', attempts: 0, scheduled_for: '2026-10-16T11:59:00Z', reason: 'due' },
+  ]
+  for (const blocked of cases) {
+    const fixture = sequenceFixture('marketing_campaign')
+    const job = { ...fixture.job, ...blocked }
+    delete job.reason
+    const store = createSequenceRecipientStore({ ...fixture, jobs: [job] })
+    const before = structuredClone(store.state)
+    await assert.rejects(store.correctEmail('new@example.com'), new RegExp(blocked.reason))
+    assert.deepEqual(store.state, before, `${blocked.reason} mail leaves both lead and queue row unchanged`)
+  }
+  assert.match(sequenceRetarget, /status in \('queued','sending'\)[\s\S]*job_type='marketing_campaign'[\s\S]*pre_booking_lead[\s\S]*if job\.status='sending'[\s\S]*coalesce\(job\.attempts,0\)>0[\s\S]*job\.scheduled_for<=now\(\)[\s\S]*raise exception/)
 })
 
 test('the inventory of queue job kinds keeps one-time and identity-bound mail outside generic retargeting', () => {

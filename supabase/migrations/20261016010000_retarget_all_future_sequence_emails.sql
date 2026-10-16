@@ -33,6 +33,44 @@ begin
     raise exception 'A corrected email resend is already queued or sending; wait for its result before changing the address';
   end loop;
 
+  -- Serialize corrections with every eligible sequence enqueue as well as
+  -- with the worker. A sending/attempted delivery is immutable, and due jobs
+  -- are resolved by the worker before an address correction can proceed.
+  for job in select j.* from public.luxor_email_jobs j
+    where j.inquiry_id=old.id and lower(j.recipient_email)=lower(btrim(old.email))
+      and j.status in ('queued','sending')
+      and (
+        (j.job_type='marketing_campaign' and pre_booking_lead and new.marketing_opt_in is true
+          and j.metadata->>'automation_key'='brochure_lead'
+          and j.automation_enrollment_id is not null and j.automation_step_key is not null)
+        or (not coalesce(new.is_test,false) and new.status='booked'
+          and new.pipeline_stage in ('planning','final_payment','event')
+          and j.job_type in ('event_details_reminder','event_day_reminder')
+          and j.booking_id is not null
+          and j.metadata->>'automation_key'=j.job_type||':'||j.booking_id::text
+          and exists (select 1 from public.luxor_bookings b
+            where b.id=j.booking_id and b.inquiry_id=new.id
+              and b.status not in ('cancelled','completed')
+              and nullif(b.metadata->>'planning_completed_at','') is not null
+              and j.metadata->>'event_date'=b.event_date::text))
+        or (not coalesce(new.is_test,false) and new.status='booked'
+          and new.pipeline_stage in ('event','closing') and j.job_type='post_event_follow_up'
+          and j.booking_id is not null
+          and j.metadata->>'automation_key'='post_event_follow_up:'||j.booking_id::text
+          and exists (select 1 from public.luxor_bookings b
+            where b.id=j.booking_id and b.inquiry_id=new.id and b.status='completed'))
+      )
+    order by j.id for update of j
+  loop
+    if job.status='sending' then
+      raise exception 'A lead email is already sending; retry the address edit after it finishes';
+    elsif coalesce(job.attempts,0)>0 then
+      raise exception 'A queued lead email has an uncertain prior attempt; resolve its delivery before changing the address';
+    elsif job.scheduled_for<=now() then
+      raise exception 'A sequence email is due to send; retry the address edit after the worker finishes';
+    end if;
+  end loop;
+
   -- The correction RPC advances the current tour revision before it updates
   -- this inquiry row. If no prior invitation was sent (and therefore no
   -- owner-confirmable replacement was prepared), carry a future, unattempted
@@ -60,6 +98,21 @@ begin
           and j.metadata->>'delivery'='branded_confirmation'
         order by j.id for update of j
       loop
+        -- The correction RPC chooses a prepared replacement from recent sent
+        -- confirmations after this inquiry trigger runs. Match that same
+        -- source test here so the queued old-revision invitation stays stale
+        -- for the worker to discard instead of becoming a duplicate delivery.
+        if exists(select 1 from public.luxor_email_jobs sent_job
+          join public.luxor_calendar_revisions sent_revision on sent_revision.id=sent_job.calendar_revision_id
+          where sent_job.inquiry_id=old.id and sent_job.job_type='calendar_invitation'
+            and sent_job.calendar_method='REQUEST' and sent_job.status='sent'
+            and sent_job.sent_at>=now()-interval '30 days'
+            and sent_job.metadata->>'delivery'='branded_confirmation'
+            and sent_revision.event_id=event.id
+            and (sent_revision.state-'attendeeEmails')=(event.state-'attendeeEmails')) then
+          continue;
+        end if;
+
         -- A prepared replacement uses the same revision and recipient. Leave
         -- it to the owner-confirmed resend flow instead of creating a duplicate.
         if exists(select 1 from public.luxor_email_jobs prepared
@@ -161,5 +214,76 @@ begin
   return new;
 end;
 $$;
+
+-- Enqueue requests can carry a lead snapshot loaded before an address edit.
+-- Lock the lead before the new job row exists: if correction wins, use the
+-- corrected address; if enqueue wins, the correction trigger sees and safely
+-- retargets or rejects the committed job. This keeps lock order lead -> jobs.
+create or replace function public.luxor_sync_sequence_email_job_recipient()
+returns trigger language plpgsql security invoker set search_path = '' as $$
+declare
+  inquiry public.luxor_inquiries%rowtype;
+  booking public.luxor_bookings%rowtype;
+  eligible boolean := false;
+  previous_recipient text;
+begin
+  if new.inquiry_id is null or new.status<>'queued' or coalesce(new.attempts,0)<>0 then
+    return new;
+  end if;
+
+  select * into inquiry from public.luxor_inquiries where id=new.inquiry_id for update;
+  if not found or coalesce(inquiry.is_test,false) or nullif(btrim(inquiry.email),'') is null then
+    return new;
+  end if;
+
+  if new.job_type='marketing_campaign' then
+    eligible := inquiry.status in ('new','contacted','tour_requested','tour_confirmed')
+      and coalesce(inquiry.pipeline_stage,'inquiry') in ('newsletter','inquiry','tour')
+      and inquiry.status<>'closed_lost' and inquiry.pipeline_stage is distinct from 'closed_lost'
+      and inquiry.marketing_opt_in is true
+      and new.metadata->>'automation_key'='brochure_lead'
+      and new.automation_enrollment_id is not null and new.automation_step_key is not null;
+  elsif new.job_type in ('event_details_reminder','event_day_reminder','post_event_follow_up')
+    and new.booking_id is not null then
+    select * into booking from public.luxor_bookings
+      where id=new.booking_id and inquiry_id=inquiry.id;
+    if found then
+      eligible := inquiry.status='booked' and (
+        (new.job_type in ('event_details_reminder','event_day_reminder')
+          and inquiry.pipeline_stage in ('planning','final_payment','event')
+          and booking.status not in ('cancelled','completed')
+          and nullif(booking.metadata->>'planning_completed_at','') is not null
+          and new.metadata->>'automation_key'=new.job_type||':'||booking.id::text
+          and new.metadata->>'event_date'=booking.event_date::text)
+        or (new.job_type='post_event_follow_up'
+          and inquiry.pipeline_stage in ('event','closing') and booking.status='completed'
+          and new.metadata->>'automation_key'='post_event_follow_up:'||booking.id::text)
+      );
+    end if;
+  end if;
+
+  if eligible then
+    previous_recipient := new.recipient_email;
+    new.recipient_email := lower(btrim(inquiry.email));
+    if lower(btrim(coalesce(previous_recipient,''))) is distinct from lower(btrim(inquiry.email)) then
+      new.metadata := coalesce(new.metadata,'{}'::jsonb)||jsonb_build_object(
+        'email_correction_history',
+        (case when jsonb_typeof(new.metadata->'email_correction_history')='array'
+          then new.metadata->'email_correction_history' else '[]'::jsonb end)
+          || jsonb_build_array(jsonb_build_object(
+            'from',previous_recipient,'to',lower(btrim(inquiry.email)),'at',now(),'source','enqueue_sync'))
+      );
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.luxor_sync_sequence_email_job_recipient() from public,anon,authenticated;
+grant execute on function public.luxor_sync_sequence_email_job_recipient() to service_role;
+drop trigger if exists luxor_email_jobs_sync_sequence_recipient on public.luxor_email_jobs;
+create trigger luxor_email_jobs_sync_sequence_recipient
+  before insert on public.luxor_email_jobs
+  for each row execute function public.luxor_sync_sequence_email_job_recipient();
 
 notify pgrst, 'reload schema';
