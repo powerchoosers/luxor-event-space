@@ -12,6 +12,10 @@ const dialog = await readFile(new URL('../src/components/portal/CorrectEmailRese
 const worker = await readFile(new URL('../src/lib/luxorEmailJobsServer.ts', import.meta.url), 'utf8')
 const tourSql = await readFile(new URL('../supabase/migrations/20261009010000_safe_lead_email_correction_and_tour_resend.sql', import.meta.url), 'utf8')
 const dueClaims = await readFile(new URL('../supabase/migrations/20261015010000_permanent_test_lead_runs.sql', import.meta.url), 'utf8')
+const sequenceRetarget = await readFile(new URL('../supabase/migrations/20261016010000_retarget_all_future_sequence_emails.sql', import.meta.url), 'utf8')
+const inquiryRoute = await readFile(new URL('../src/app/api/inquiries/route.ts', import.meta.url), 'utf8')
+const leadPage = await readFile(new URL('../src/app/(portal)/portal/leads/[id]/page.tsx', import.meta.url), 'utf8')
+const emailJobTypes = await readFile(new URL('../src/lib/luxorInquiryTypes.ts', import.meta.url), 'utf8')
 
 test('latest relevant bounce ranks ahead of a newer non-bounced message', () => {
   const ranked = rankCorrectEmailResendOptions([
@@ -74,13 +78,57 @@ test('corrected resend queue binds recipient and immutable source content with i
   assert.match(worker, /provider accepted this delivery, but its queue status could not be confirmed/)
 })
 
-test('address trigger only retargets opted-in active brochure follow-ups and preflights unique indexes', () => {
+test('previous address trigger only retargets opted-in active brochure follow-ups and preflights unique indexes', () => {
   assert.match(sql, /Duplicate corrected email resend request IDs exist/)
   assert.match(sql, /Duplicate corrected email resend source\/recipient pairs exist/)
   assert.match(sql, /job_type='marketing_campaign'/)
   assert.match(sql, /metadata->>'automation_key'='brochure_lead'/)
   assert.match(sql, /new\.marketing_opt_in is true/)
   assert.match(sql, /automation_enrollment_id is not null and automation_step_key is not null/)
+})
+
+test('email correction retargets eligible brochure, planning/event, and post-event sequences only', () => {
+  assert.match(sequenceRetarget, /job_type='marketing_campaign'[\s\S]*metadata->>'automation_key'='brochure_lead'/)
+  assert.match(sequenceRetarget, /new\.marketing_opt_in is true/)
+  assert.match(sequenceRetarget, /j\.automation_enrollment_id is not null and j\.automation_step_key is not null/)
+  assert.match(sequenceRetarget, /j\.job_type in \('event_details_reminder','event_day_reminder'\)/)
+  assert.match(sequenceRetarget, /new\.status='booked'[\s\S]*new\.pipeline_stage in \('planning','final_payment','event'\)/)
+  assert.match(sequenceRetarget, /planning_completed_at[\s\S]*j\.metadata->>'event_date'=b\.event_date::text/)
+  assert.match(sequenceRetarget, /new\.pipeline_stage in \('event','closing'\)[\s\S]*j\.job_type='post_event_follow_up'[\s\S]*b\.status='completed'/)
+  assert.match(sequenceRetarget, /automation_key.*j\.job_type\|\|':'\|\|j\.booking_id::text/)
+  assert.match(sequenceRetarget, /j\.status='queued' and coalesce\(j\.attempts,0\)=0 and j\.scheduled_for>now\(\)/)
+  assert.match(sequenceRetarget, /set recipient_email=lower\(btrim\(new\.email\)\),updated_at=now\(\)/)
+  assert.match(sequenceRetarget, /email_correction_history[\s\S]*job\.recipient_email[\s\S]*'to',lower\(btrim\(new\.email\)\)/)
+  assert.doesNotMatch(sequenceRetarget, /tour_reminder|calendar_invitation|contract_signature|final_payment_request|unpaid_invoice_reminder/)
+  assert.doesNotMatch(sequenceRetarget, /set scheduled_for|set subject|set body|automation_enrollment_id=|automation_step_key=/)
+})
+
+test('email correction fails closed for claimed, attempted, and due jobs before retargeting', () => {
+  assert.match(sequenceRetarget, /j\.status='queued' and coalesce\(j\.attempts,0\)=0 and j\.scheduled_for>now\(\)/)
+  assert.match(sequenceRetarget, /where id=job\.id and status='queued' and coalesce\(attempts,0\)=0 and scheduled_for>now\(\)/)
+  assert.match(sequenceRetarget, /if not found then raise exception 'A lead email started sending/)
+  assert.match(sequenceRetarget, /status in \('queued','sending'\)[\s\S]*corrected_email_resend_request_id[\s\S]*raise exception 'A corrected email resend is already queued or sending/)
+})
+
+test('the normal portal email correction routes through the RPC that applies calendar revision safeguards', () => {
+  assert.match(inquiryRoute, /typeof updates\.email === 'string'[\s\S]*rpc\/luxor_update_inquiry_email_for_portal/)
+  assert.match(leadPage, /const emailChange = fieldKey === 'email'[\s\S]*fetch\('\/api\/inquiries'/)
+  assert.match(tourSql, /update public\.luxor_email_jobs set tour_revision_id=new_revision\.id,[\s\S]*where inquiry_id=p_inquiry_id and tour_revision_id=old_revision\.id and job_type='tour_reminder'[\s\S]*status='queued' and attempts=0 and scheduled_for>stamp/)
+  assert.match(tourSql, /'attendeeEmail',new_email/)
+  assert.match(tourSql, /prepared_tour_email_resend.*awaiting_owner_confirmation/s)
+})
+
+test('the inventory of queue job kinds keeps one-time and identity-bound mail outside generic retargeting', () => {
+  const declaredKinds = [...emailJobTypes.matchAll(/^\s*\| '([^']+)'/gm)].map((match) => match[1])
+  for (const kind of ['marketing_campaign', 'tour_confirmation', 'tour_reminder', 'event_details_reminder', 'event_day_reminder', 'post_event_follow_up', 'booking_package', 'proposal_view_reminder', 'proposal_payment_reminder', 'contract_signature', 'contract_view_reminder', 'contract_signature_reminder', 'unpaid_invoice_reminder', 'sixty_day_payment_reminder', 'final_payment_request', 'final_payment_reminder', 'layout_review', 'transactional_notice', 'calendar_invitation']) {
+    assert.ok(declaredKinds.includes(kind), `job kind ${kind} is present in the queue type inventory`)
+  }
+  assert.match(sequenceRetarget, /j\.job_type in \('event_details_reminder','event_day_reminder'\)/)
+  assert.match(sequenceRetarget, /j\.job_type='post_event_follow_up'/)
+  assert.match(sequenceRetarget, /j\.metadata->>'automation_key'='brochure_lead'/)
+  assert.match(tourSql, /tour_revision_id=new_revision\.id/)
+  assert.match(sequenceRetarget, /Proposals, agreements, payments/)
+  assert.doesNotMatch(sequenceRetarget, /'proposal_view_reminder'|'proposal_payment_reminder'|'contract_signature'|'contract_view_reminder'|'contract_signature_reminder'|'unpaid_invoice_reminder'|'sixty_day_payment_reminder'|'final_payment_request'|'final_payment_reminder'|'layout_review'|'transactional_notice'|'calendar_invitation'/)
 })
 
 test('layout resends bind the active review to the original saved job', () => {
