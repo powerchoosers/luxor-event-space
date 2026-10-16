@@ -12,6 +12,13 @@ export type LuxorPushPayload = {
   tag: string
 }
 
+export type LuxorPushResult = {
+  configured: boolean
+  sent: number
+  failed: number
+  deliveredSubscriptionIds: string[]
+}
+
 type LuxorPushSubscriptionRow = {
   id: string
   user_email: string
@@ -108,16 +115,19 @@ async function recordDelivery(row: LuxorPushSubscriptionRow, error?: WebPushErro
 export async function sendLuxorWebPush(
   type: LuxorPushType,
   payload: LuxorPushPayload,
-  options: { userEmail?: string } = {},
-) {
+  options: { userEmail?: string; excludeSubscriptionIds?: string[] } = {},
+): Promise<LuxorPushResult> {
   const config = getWebPushConfig()
-  if (!config.configured) return { configured: false, sent: 0, failed: 0 }
+  if (!config.configured) return { configured: false, sent: 0, failed: 0, deliveredSubscriptionIds: [] }
 
   const rows = (await activeSubscriptions(options.userEmail))
     .filter((row) => Array.isArray(row.notification_types) && row.notification_types.includes(type))
+    .filter((row) => !options.excludeSubscriptionIds?.includes(row.id))
+    .filter((row) => row.expiration_time === null || row.expiration_time > Date.now())
 
   let sent = 0
   let failed = 0
+  const deliveredSubscriptionIds: string[] = []
   await Promise.all(rows.map(async (row) => {
     try {
       await webPush.sendNotification({
@@ -135,7 +145,12 @@ export async function sendLuxorWebPush(
         },
       })
       sent += 1
-      await recordDelivery(row)
+      deliveredSubscriptionIds.push(row.id)
+      // Provider acceptance must not become a delivery failure if bookkeeping
+      // fails: bounce retries use the accepted subscription IDs to deduplicate.
+      await recordDelivery(row).catch((recordError) => {
+        console.error('Failed to record Luxor Web Push delivery:', recordError)
+      })
     } catch (error) {
       failed += 1
       await recordDelivery(row, error as WebPushError).catch((recordError) => {
@@ -144,5 +159,5 @@ export async function sendLuxorWebPush(
     }
   }))
 
-  return { configured: true, sent, failed }
+  return { configured: true, sent, failed, deliveredSubscriptionIds }
 }

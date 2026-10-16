@@ -10,6 +10,7 @@ import { broadcastLuxorEmailArrival, broadcastLuxorPortalNotification } from './
 import { enqueueLuxorInvoiceAttachments } from './luxorBillIntakeServer'
 import { sendLuxorWebPush } from './luxorWebPushServer'
 import { handleLuxorResendBounce } from './luxorResendBounceHandler'
+import { sendLuxorResendBouncePush } from './luxorResendBouncePush'
 import { recordLuxorProposalDeliveryEvent } from './luxorInvoicesServer'
 import { luxorTestEmailDeliveryPatch } from './luxorTestEmailDelivery'
 
@@ -258,10 +259,13 @@ async function processDelivery(event: ResendEvent, eventId: string) {
     body: JSON.stringify({ p_message_id: row.id, p_event_id: eventId }) })
   await recordResendMarketingEngagement(row, event, eventId)
   if (next === 'bounced') {
-    await handleLuxorResendBounce(row, event, eventId, {
+    const inquiryIds = await handleLuxorResendBounce(row, event, eventId, {
       supabaseRest,
       broadcast: broadcastLuxorPortalNotification,
     })
+    if (inquiryIds?.[0]) {
+      await sendLuxorResendBouncePush(row.id, inquiryIds[0], eventId, { supabaseRest, sendPush: sendLuxorWebPush })
+    }
   }
   // Send only an opaque signal. The authenticated browser refetches protected
   // records and shows its normal deduplicated toast for opens/clicks instantly.
