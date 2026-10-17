@@ -71,6 +71,32 @@ body {
   color: var(--foreground);
 }
 
+.portal-shell {
+  /* 48px controls, 6px above/below, and the border, plus the device safe area. */
+  --portal-mobile-nav-height: calc(3.75rem + 1px + env(safe-area-inset-bottom, 0px));
+}
+
+.portal-mobile-nav {
+  padding-top: 0.375rem;
+  padding-bottom: calc(0.375rem + env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+}
+
+@media (max-width: 1023px) {
+  /* Keep the app in the fixed viewport; only its content panel scrolls. */
+  body.portal-shell {
+    position: fixed;
+    inset: 0;
+    height: auto;
+  }
+
+  .portal-main {
+    height: 100%;
+    padding-bottom: var(--portal-mobile-nav-height);
+  }
+}
+
 body[data-portal-theme='dark'] {
   --portal-bg: #080706;
   --portal-card: rgba(0, 0, 0, 0.36);

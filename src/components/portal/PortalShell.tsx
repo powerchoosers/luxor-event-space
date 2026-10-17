@@ -632,7 +632,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [router])
 
   return (
-    <body data-portal-theme={portalTheme} className="h-[100dvh] overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
+    <body data-portal-theme={portalTheme} className="portal-shell h-[100dvh] overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <PortalVoiceProvider>
       <aside onWheelCapture={handOffWheelToPage} onClick={handleSidebarEmptyClick} className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-visible ${
         portalTheme === 'light'
@@ -861,8 +861,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         </div>
       </aside>
 
-      <main onWheelCapture={handOffWheelToPage} className={`flex h-[100dvh] flex-col overflow-hidden pt-[env(safe-area-inset-top)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <header className={`z-50 grid h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b px-4 backdrop-blur-md sm:gap-x-4 sm:px-6 lg:px-8 ${
+      <main onWheelCapture={handOffWheelToPage} className={`portal-main flex h-[100dvh] min-w-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+        <header className={`z-50 grid h-14 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 border-b px-4 backdrop-blur-md sm:h-16 sm:gap-x-4 sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
             : 'border-[#caa24c]/10 bg-[#050505]/75'
@@ -873,8 +873,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 compact
                 horizontal
                 subline={false}
-                className="max-w-[9.5rem] [&_.luxor-wordmark]:!text-[1.35rem]"
-                markClassName="!h-10 !w-10"
+                className="max-w-[9.5rem] max-sm:!gap-2.5 [&_.luxor-wordmark]:!text-[1.2rem] sm:[&_.luxor-wordmark]:!text-[1.35rem]"
+                markClassName="!h-8 !w-8 sm:!h-10 sm:!w-10"
               />
             </Link>
 
@@ -1034,17 +1034,19 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           </div>
         </header>
 
-        {/* Phone and portrait-tablet content reserve space for the shared bottom bar. */}
-        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 flex-1 transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-[calc(10rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] lg:p-8'} ${
+        {/* The shell reserves the bottom bar; detail pages also reserve their action row. */}
+        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isLeadDetailPage ? 'px-4 pt-4 pb-24 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 sm:p-6 lg:p-8'} ${
           portalTheme === 'light'
             ? 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
             : 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
         }`}>
           <RouteTransition surface="portal" fillAvailableHeight={usesInternalTableScroll}>{children}</RouteTransition>
         </div>
+      </main>
 
         <nav
-          className={`fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] backdrop-blur-2xl lg:hidden ${
+          onWheelCapture={handOffWheelToPage}
+          className={`portal-mobile-nav fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t px-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] backdrop-blur-2xl lg:hidden ${
             portalTheme === 'light'
               ? 'border-[color:var(--portal-border)] bg-[#fffdf9]/85'
               : 'border-[#caa24c]/15 bg-[#080706]/85'
@@ -1082,12 +1084,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             <span>More</span>
           </button>
         </nav>
-      </main>
       <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} />
       <AnimatePresence>
         {mobileMoreOpen && (
           <motion.div
-            className="portal-modal-layer fixed inset-0 z-[70] flex items-end justify-center bg-black/45 px-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm lg:hidden"
+            className="portal-modal-layer fixed inset-0 z-[70] flex items-end justify-center bg-black/45 px-3 pb-[calc(var(--portal-mobile-nav-height)+0.75rem)] pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm lg:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1097,7 +1098,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               role="dialog"
               aria-modal="true"
               aria-label="More portal sections"
-              className="portal-sheet max-h-[calc(100dvh-6.5rem-env(safe-area-inset-bottom))] w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[#fffdf9]/95 p-4 shadow-2xl backdrop-blur-2xl dark:bg-[#12110f]/95 sm:max-w-xl"
+              className="portal-sheet max-h-full w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[#fffdf9]/95 p-4 shadow-2xl backdrop-blur-2xl dark:bg-[#12110f]/95 sm:max-w-xl"
               initial={reduceMotion ? false : { opacity: 0, y: 28 }}
               animate={{ opacity: 1, y: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 28 }}

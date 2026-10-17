@@ -18,7 +18,7 @@ export function PortalPageFrame({
   // and table card shadows. Since the content containers (like PortalTableCard) handle their own internal scroll,
   // the page frame can safely allow shadows/glows to overflow into the surrounding page padding.
   const processedClassName = className.replace(/\boverflow-hidden\b/g, 'overflow-visible')
-  return <div className={`mx-auto flex min-h-full w-full max-w-[1500px] flex-col gap-6 ${processedClassName}`}>{children}</div>
+  return <div className={`mx-auto flex min-h-full min-w-0 w-full max-w-[1500px] flex-col gap-4 sm:gap-6 ${processedClassName}`}>{children}</div>
 }
 
 export function PortalPageHeader({
@@ -50,27 +50,27 @@ export function PortalPageHeader({
   }
 
   return (
-    <div className={`flex shrink-0 gap-3 ${mobileActionsInline ? 'flex-row items-center justify-between' : 'flex-col md:flex-row md:items-start md:justify-between'}`}>
-      <div className={`${description ? 'space-y-1.5' : ''} ${mobileActionsInline ? 'min-w-0' : ''}`}>
-        <div className="flex items-center gap-3">
+    <div className={`flex shrink-0 gap-3 ${mobileActionsInline ? 'flex-wrap items-center justify-between gap-x-2 sm:flex-nowrap sm:gap-3' : 'flex-col md:flex-row md:items-start md:justify-between'}`}>
+      <div className={`${description ? 'space-y-1.5' : ''} ${mobileActionsInline ? 'min-w-0 shrink-0' : ''}`}>
+        <div className={`flex items-center ${mobileActionsInline ? 'gap-2 sm:gap-3' : 'gap-3'}`}>
           {canGoBack ? (
             <button
               type="button"
               onClick={goBack}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
               aria-label="Go back"
               title="Go back"
             >
               <ArrowLeft size={14} />
             </button>
           ) : null}
-          {icon ? <span className="text-[#caa24c]">{icon}</span> : null}
-          <h1 className={`font-serif font-semibold leading-tight text-[color:var(--portal-text)] ${mobileActionsInline ? 'truncate text-xl sm:text-3xl' : 'text-2xl sm:text-3xl'}`}>{title}</h1>
+          {icon ? <span className="shrink-0 text-[#caa24c]">{icon}</span> : null}
+          <h1 className={`font-serif font-semibold leading-tight text-[color:var(--portal-text)] ${mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-3xl' : 'text-2xl sm:text-3xl'}`}>{title}</h1>
           {titleAccessory}
         </div>
         {description ? <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p> : null}
       </div>
-      {actions ? <div className={`flex flex-wrap items-center gap-3 ${mobileActionsInline ? 'shrink-0' : ''}`}>{actions}</div> : null}
+      {actions ? <div className={`flex flex-wrap items-center gap-3 ${mobileActionsInline ? 'ml-auto shrink-0' : ''}`}>{actions}</div> : null}
     </div>
   )
 }
@@ -238,7 +238,7 @@ export function PortalAnimatedTabs<T extends string>({
   }, [activeTab, tabsSignature])
 
   return (
-    <nav ref={containerRef} aria-label={ariaLabel} className={`relative inline-flex shrink-0 min-w-max items-end gap-5 ${className}`}>
+    <nav ref={containerRef} aria-label={ariaLabel} className={`relative inline-flex shrink-0 min-w-max items-stretch gap-5 ${className}`}>
       <span
         className="pointer-events-none absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
         style={{
@@ -257,7 +257,7 @@ export function PortalAnimatedTabs<T extends string>({
             }}
             type="button"
             onClick={() => onTabChange(tab.id)}
-            className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
+            className={`relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-0 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
               isActive
                 ? 'text-[#a8792f]'
                 : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'

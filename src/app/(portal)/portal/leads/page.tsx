@@ -656,7 +656,7 @@ export default function LeadsPage() {
 
               </>
             )}
-            <PortalButton variant="primary" className="!text-white hover:!text-white [&>svg]:!text-white" onClick={() => setIsLeadDrawerOpen(true)}>
+            <PortalButton variant="primary" className="max-sm:gap-1.5 max-sm:px-3 max-sm:text-[9px] !text-white hover:!text-white [&>svg]:!text-white" onClick={() => setIsLeadDrawerOpen(true)}>
               <Plus size={14} /> New Lead
             </PortalButton>
           </div>
@@ -664,7 +664,7 @@ export default function LeadsPage() {
       />
 
       {/* Sub-tab navigation */}
-      <div className="flex shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 overflow-x-auto portal-scrollbar">
+      <div className="portal-scrollbar flex min-w-0 w-full max-w-full shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2">
         <PortalAnimatedTabs
           tabs={[
           { id: 'dashboard', label: 'Funnel Dashboard', icon: <TrendingUp size={15} /> },
