@@ -30,7 +30,7 @@ export const LUXOR_PUBLIC_EVENT_PAGES: LuxorPublicEventPage[] = [
     walkthrough: ['Ceremony and reception layout', 'Sweetheart, family, and guest-table placement', 'DJ, dance floor, cake, and photo locations', 'Vendor access and timing questions'],
     faqs: [
       { question: 'Can we hold the ceremony and reception at Luxor?', answer: 'The room can be discussed for both moments. The final layout depends on guest count, timing, and the transition you want, so confirm the exact plan during your walkthrough.' },
-      { question: 'How many guests can we plan for?', answer: 'Luxor can accommodate events up to 200 guests. The practical count may be lower for layouts that need more room for a ceremony, dance floor, or production.' },
+      { question: 'How many guests can we plan for?', answer: 'Luxor can accommodate events up to 180 guests. The practical count may be lower for layouts that need more room for a ceremony, dance floor, or production.' },
       { question: 'Can we bring our own vendors?', answer: 'Bring your vendor list to the tour. The Luxor team will confirm access, timing, and any venue requirements before you commit.' },
     ],
   },
@@ -52,7 +52,7 @@ export const LUXOR_PUBLIC_EVENT_PAGES: LuxorPublicEventPage[] = [
     faqs: [
       { question: 'Can the decor match our colors?', answer: 'Yes. Luxor’s dark, gold, and neutral foundation works with many palettes. Bring inspiration images so the team can discuss the scale and placement of your decor.' },
       { question: 'Is there room for a court?', answer: 'Court seating and entrances can be planned into the layout. The best arrangement depends on court size and total guest count, which is why a walkthrough matters.' },
-      { question: 'What is the maximum guest count?', answer: 'Luxor can accommodate up to 200 guests, subject to the final layout and the space needed for traditions, dining, and dancing.' },
+      { question: 'What is the maximum guest count?', answer: 'Luxor can accommodate up to 180 guests, subject to the final layout and the space needed for traditions, dining, and dancing.' },
     ],
   },
   {

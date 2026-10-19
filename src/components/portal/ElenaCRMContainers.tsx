@@ -1,4 +1,5 @@
 'use client'
+import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 
 import React, { useState } from 'react'
 import {
@@ -40,6 +41,13 @@ export function ElenaLeadUpdateCard({
   const [status, setStatus] = useState(payload.currentStatus || 'new')
   const [targetDate, setTargetDate] = useState(payload.targetDate || '')
   const [guestCount, setGuestCount] = useState<number | string>(payload.guestCount || '')
+  const guestCountValidationError = guestCount === ''
+    ? null
+    : !Number.isInteger(Number(guestCount)) || Number(guestCount) < 1
+      ? 'Enter a whole guest count greater than zero.'
+      : Number(guestCount) > LUXOR_MAX_GUESTS && Number(guestCount) !== payload.guestCount
+        ? 'Guest count must be 180 or fewer.'
+        : null
   
   const [isUpdating, setIsUpdating] = useState(false)
   const [isDone, setIsDone] = useState(false)
@@ -47,6 +55,7 @@ export function ElenaLeadUpdateCard({
 
   const handleApply = async () => {
     if (isUpdating || isDone) return
+    if (guestCountValidationError) { setError(guestCountValidationError); return }
     setIsUpdating(true)
     setError(null)
 
@@ -167,6 +176,9 @@ export function ElenaLeadUpdateCard({
             </label>
             <input
               type="number"
+              min={1}
+              max={LUXOR_MAX_GUESTS}
+              step={1}
               value={guestCount}
               onChange={(e) => setGuestCount(e.target.value)}
               placeholder="e.g. 150"

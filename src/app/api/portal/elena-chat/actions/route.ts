@@ -7,6 +7,7 @@ import { getActiveLuxorSignatureRequestByBooking } from '@/lib/luxorSignaturesSe
 import { getInvoice } from '@/lib/luxorInvoicesServer'
 import { createLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { isConfiguredTestSubmission, startLuxorTestRun } from '@/lib/luxorTestLeadServer'
+import { LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,8 +40,8 @@ export async function POST(request: NextRequest) {
       if (!email && !phone) return NextResponse.json({ error: 'Add an email or phone number so Luxor can follow up.' }, { status: 400 })
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 })
       if (phone && phone.replace(/\D/g, '').length < 10) return NextResponse.json({ error: 'Enter a complete phone number.' }, { status: 400 })
-      if (parsedGuestCount !== null && (!Number.isInteger(parsedGuestCount) || parsedGuestCount < 1 || parsedGuestCount > 200)) {
-        return NextResponse.json({ error: 'Guest count must be between 1 and 200.' }, { status: 400 })
+      if (parsedGuestCount !== null && (!Number.isInteger(parsedGuestCount) || parsedGuestCount < 1 || parsedGuestCount > LUXOR_MAX_GUESTS)) {
+        return NextResponse.json({ error: LUXOR_GUEST_CAPACITY_MESSAGE }, { status: 400 })
       }
 
       const inquiryInput = {
@@ -109,6 +110,16 @@ export async function POST(request: NextRequest) {
       if (inquiryId) {
         const existingInquiry = await getLuxorInquiry(inquiryId)
         if (existingInquiry?.is_test) return NextResponse.json({ error: 'The permanent test lead can only be changed through its run lifecycle controls.' }, { status: 409 })
+        if (updates.guest_count !== undefined) {
+          const nextGuestCount = updates.guest_count === null || updates.guest_count === '' ? null : Number(updates.guest_count)
+          if (nextGuestCount !== null && (!Number.isInteger(nextGuestCount) || nextGuestCount < 1)) {
+            return NextResponse.json({ error: 'Enter a whole guest count greater than zero.' }, { status: 400 })
+          }
+          if (nextGuestCount !== null && nextGuestCount > LUXOR_MAX_GUESTS && nextGuestCount !== existingInquiry?.guest_count) {
+            return NextResponse.json({ error: LUXOR_GUEST_CAPACITY_MESSAGE }, { status: 400 })
+          }
+          updates.guest_count = nextGuestCount
+        }
         updatedRecord = await updateLuxorInquiry(inquiryId, updates)
       } else if (bookingId) {
         // Reuse the protected booking endpoint so Elena cannot sidestep the

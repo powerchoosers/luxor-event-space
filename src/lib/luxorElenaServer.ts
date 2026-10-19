@@ -83,7 +83,7 @@ const FALLBACK_KNOWLEDGE: Array<Pick<ElenaKnowledge, 'title' | 'content' | 'cate
   },
   {
     title: 'Guest capacity',
-    content: 'Luxor can accommodate up to 200 people. Do not imply that an exception above 200 guests is available.',
+    content: 'Luxor can accommodate up to 180 people. Do not imply that an exception above 180 guests is available.',
     category: 'Capacity',
     source_type: 'connected',
     source_label: 'Verified venue record',

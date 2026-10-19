@@ -69,7 +69,7 @@ const venueSettingQuestionPattern = /\b(indoor|indoors|outdoor|outdoors|outside|
 const indoorOnlyReply =
   'Luxor is fully indoors—our main hall and Luxor Lounge are never weather-dependent. We don’t have an outdoor space, patio, courtyard, garden, or terrace. If the indoor layout could work for you, I can help you schedule a visit.'
 const capacityReply =
-  'Luxor can accommodate up to 200 people. If you are planning for 200 or fewer, I can help you think through the layout and next step.'
+  'Luxor can accommodate up to 180 people. If you are planning for 180 or fewer, I can help you think through the layout and next step.'
 const overCapacityPattern = /\b(\d[\d,]*)\s*(?:guests?|people|attendees?|attendance)\b/i
 
 function createId() {

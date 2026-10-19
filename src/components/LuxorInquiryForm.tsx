@@ -7,7 +7,7 @@ import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
-import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
+import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import { LUXOR_LEGACY_PACKAGE_NAMES, LUXOR_PACKAGE_INTEREST_OPTIONS } from '@/lib/luxorServiceCatalog'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
@@ -335,7 +335,7 @@ export function LuxorInquiryForm({
                   <PortalDatePicker theme="light" value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" />
                 </FieldLabel>
                 <div>
-                  <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Expected guests" placeholder="For example, 120" inputMode="numeric" />
+                  <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Expected guests" placeholder="For example, 120" type="number" inputMode="numeric" min={1} max={LUXOR_MAX_GUESTS} step={1} />
                   {isGuestCountOverCapacity(guestCount) ? <p role="alert" className="mt-2 text-xs leading-5 text-[#f1d27a]">{LUXOR_GUEST_CAPACITY_MESSAGE}</p> : null}
                 </div>
                 <FieldLabel label="Planning budget">
@@ -433,7 +433,7 @@ function FieldLabel({ label, required, children }: { label: string; required?: b
   return <div className="flex h-full min-w-0 flex-col"><span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-[#d7b964]">{label}{required ? ' *' : ''}</span>{children}</div>
 }
 
-function TextField({ value, onChange, name, label, placeholder, type = 'text', required, inputMode, autoComplete, icon }: {
+function TextField({ value, onChange, name, label, placeholder, type = 'text', required, inputMode, autoComplete, icon, min, max, step }: {
   value: string
   onChange: (value: string) => void
   name: string
@@ -444,13 +444,16 @@ function TextField({ value, onChange, name, label, placeholder, type = 'text', r
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
   autoComplete?: string
   icon?: React.ReactNode
+  min?: number
+  max?: number
+  step?: number
 }) {
   return (
     <label className="flex h-full min-w-0 flex-col">
       <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-[#d7b964]">{label}{required ? ' *' : ''}</span>
       <span className="relative mt-2 block">
         {icon ? <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#caa24c]">{icon}</span> : null}
-        <input name={name} value={value} onChange={(event) => onChange(event.target.value)} required={required} type={type} inputMode={inputMode} autoComplete={autoComplete} placeholder={placeholder} className={`h-12 w-full rounded-md border border-[#caa24c]/24 bg-black/35 px-4 py-0 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#d7c29a]/42 focus:border-[#f1d27a]/70 ${icon ? 'pl-10' : ''}`} />
+        <input name={name} value={value} onChange={(event) => onChange(event.target.value)} required={required} type={type} inputMode={inputMode} autoComplete={autoComplete} min={min} max={max} step={step} placeholder={placeholder} className={`h-12 w-full rounded-md border border-[#caa24c]/24 bg-black/35 px-4 py-0 text-sm text-[#f7efe3] outline-none transition placeholder:text-[#d7c29a]/42 focus:border-[#f1d27a]/70 ${icon ? 'pl-10' : ''}`} />
       </span>
     </label>
   )

@@ -52,7 +52,7 @@ import {
   Languages,
   X,
 } from 'lucide-react'
-import { isLuxorTestInquiry, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
+import { isLuxorTestInquiry, LUXOR_MAX_GUESTS, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
@@ -8812,7 +8812,7 @@ export default function LeadDetailPage({
             </div>
             <div>
               <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Guest count</label>
-              <input type="number" min="0" value={newEventGuestCount} onChange={(event) => setNewEventGuestCount(event.target.value)} placeholder="150" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
+              <input type="number" min="0" max={LUXOR_MAX_GUESTS} step="1" value={newEventGuestCount} onChange={(event) => setNewEventGuestCount(event.target.value)} placeholder="150" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
             </div>
             <div className="sm:col-span-2">
               <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Package interest</label>
@@ -9274,7 +9274,8 @@ function ClientSummaryCard({
   const currentGuestCount = lead.guest_count ? String(lead.guest_count) : ''
   const guestCountOptions = Array.from(new Set([
     ...(currentGuestCount ? [currentGuestCount] : []),
-    ...Array.from({ length: 20 }, (_, index) => String((index + 1) * 25)),
+    ...Array.from({ length: 7 }, (_, index) => String((index + 1) * 25)),
+    String(LUXOR_MAX_GUESTS),
   ])).map((value) => ({ value, label: `${value} guests` }))
   const summaryRows: Array<{
     label: string

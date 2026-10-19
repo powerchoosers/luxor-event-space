@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { sendLuxorDirectText } from '@/lib/luxorDirectTextServer'
@@ -489,7 +490,7 @@ const TOOLS_DEFINITION = [
           eventType: { type: 'string', description: 'Known event type, or Other.' },
           source: { type: 'string', description: 'How the contact reached Luxor, or Manual Entry.' },
           targetDate: { type: 'string', description: 'Known event date or date range.' },
-          guestCount: { type: 'number', description: 'Expected guest count when known; maximum 200.' },
+          guestCount: { type: 'number', description: 'Expected guest count when known; maximum 180.' },
           notes: { type: 'string', description: 'Useful internal context supplied by the owner.' },
         },
         required: ['fullName']
@@ -639,7 +640,7 @@ const TOOLS_DEFINITION = [
           currentPipelineStage: { type: 'string' },
           currentStatus: { type: 'string' },
           targetDate: { type: 'string' },
-          guestCount: { type: 'number' },
+          guestCount: { type: 'number', description: 'New or changed count, maximum 180. Keep saved historical counts unchanged unless the owner changes them.' },
           eventType: { type: 'string' }
         },
         required: ['clientName']
@@ -1691,6 +1692,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
                 ? JSON.parse(toolCall.function.arguments)
                 : toolCall.function.arguments
               const guestCount = Number(args.guestCount)
+              if (Number.isFinite(guestCount) && guestCount > 0 && (!Number.isInteger(guestCount) || guestCount > LUXOR_MAX_GUESTS)) throw new Error(LUXOR_GUEST_CAPACITY_MESSAGE)
               newContactCardPayload = {
                 fullName: String(args.fullName || '').trim().slice(0, 120),
                 email: String(args.email || '').trim().slice(0, 320),
@@ -1698,7 +1700,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
                 eventType: String(args.eventType || 'Other').trim().slice(0, 120),
                 source: String(args.source || 'Manual Entry').trim().slice(0, 120),
                 targetDate: String(args.targetDate || '').trim().slice(0, 120),
-                guestCount: Number.isFinite(guestCount) && guestCount > 0 ? Math.min(200, Math.round(guestCount)) : null,
+                guestCount: Number.isInteger(guestCount) && guestCount > 0 ? guestCount : null,
                 notes: String(args.notes || '').trim().slice(0, 3_000),
               }
               openrouterMessages.push({

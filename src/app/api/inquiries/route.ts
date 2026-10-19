@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listAllLuxorInquiries, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
-import { isGuestCountOverCapacity, isLuxorEventTypeRequiredFlow, LUXOR_GUEST_CAPACITY_MESSAGE, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
+import { isGuestCountOverCapacity, isLuxorEventTypeRequiredFlow, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { addMarketingMember } from '@/lib/luxorMarketingServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
@@ -107,6 +107,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ inquiry: null }, { status: 201 })
     }
 
+    const submittedGuestCount = payload.guestCount === undefined || payload.guestCount === null || payload.guestCount === ''
+      ? null
+      : Number(payload.guestCount)
+    if (submittedGuestCount !== null && (!Number.isInteger(submittedGuestCount) || submittedGuestCount < 1)) {
+      return NextResponse.json({ error: 'Enter a whole guest count greater than zero.' }, { status: 400 })
+    }
     if (isGuestCountOverCapacity(payload.guestCount)) {
       return NextResponse.json({ error: LUXOR_GUEST_CAPACITY_MESSAGE }, { status: 400 })
     }
@@ -382,6 +388,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
     }
     if (existing.is_test) return NextResponse.json({ error: 'The permanent test lead can only be changed through its run lifecycle controls.' }, { status: 409 })
+    if (updates.guest_count !== undefined) {
+      const nextGuestCount = updates.guest_count === null || updates.guest_count === '' ? null : Number(updates.guest_count)
+      if (nextGuestCount !== null && (!Number.isInteger(nextGuestCount) || nextGuestCount < 1)) {
+        return NextResponse.json({ error: 'Enter a whole guest count greater than zero.' }, { status: 400 })
+      }
+      if (nextGuestCount !== null && nextGuestCount > LUXOR_MAX_GUESTS && nextGuestCount !== existing.guest_count) {
+        return NextResponse.json({ error: LUXOR_GUEST_CAPACITY_MESSAGE }, { status: 400 })
+      }
+      updates.guest_count = nextGuestCount
+    }
 
     if (updates.event_type !== undefined) {
       try {

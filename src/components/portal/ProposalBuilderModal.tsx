@@ -19,6 +19,7 @@ import {
   Users,
 } from 'lucide-react'
 import type { LuxorInvoiceLineItem, LuxorPromotion, LuxorProposalContext, LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'
+import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 import { PortalCloseButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import { ProposalPackageItemsPanel } from '@/components/portal/ProposalPackageItemsPanel'
 import { ProposalPaymentSchedule, calculateProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
@@ -786,6 +787,21 @@ export function ProposalBuilderModal({
     || (!invoiceId && !supersedesInvoiceId ? 'essentials' : '')
   const eventDateValue = normalizeEventDateValue(effectiveContext.event_date) || normalizeEventDateValue(eventDate)
   const guestCount = asNumber(effectiveContext.expected_guest_count, eventGuestCount) || 0
+  const initialInvoiceGuestCountRef = useRef<{ invoiceId?: string | null; value: number }>({
+    invoiceId,
+    value: asNumber(proposalContext?.expected_guest_count, eventGuestCount) || 0,
+  })
+  if (initialInvoiceGuestCountRef.current.invoiceId !== invoiceId) {
+    initialInvoiceGuestCountRef.current = {
+      invoiceId,
+      value: asNumber(proposalContext?.expected_guest_count, eventGuestCount) || 0,
+    }
+  }
+  const isPreservedSavedGuestCount = Boolean(
+    invoiceId
+      && guestCount > LUXOR_MAX_GUESTS
+      && guestCount === initialInvoiceGuestCountRef.current.value,
+  )
   const customTimeV4Enabled = Boolean(customTimeV4Policy)
   const customWeekdayEnabled = Boolean((weekdayPolicy && isWeekdayCustomRentalDate(eventDateValue)) || customTimeV4Enabled)
   const rentalPeriod = effectiveContext.rental_period || 'evening'
@@ -1033,9 +1049,9 @@ export function ProposalBuilderModal({
   }
 
   const setGuestCount = (value: string) => {
-    const parsed = Math.max(0, Math.min(200, Number(value) || 0))
+    const parsed = Number(value)
     updateProposalContext({ expected_guest_count: parsed })
-    onEventGuestCountChange?.(String(parsed || ''))
+    onEventGuestCountChange?.(value)
   }
 
   /**
@@ -1451,7 +1467,7 @@ export function ProposalBuilderModal({
   const paymentPlanRequired = pricingRequirements?.paymentPlan === true || publicationErrors.some((error) => error.toLowerCase().includes('payment plan'))
   const isCalculating = pricingStatus === 'loading'
   const hasFinalPrice = pricingStatus === 'ready' && !selectedPackageNeedsReview && typeof finalEventPrice === 'number' && finalEventPrice >= 0
-  const canPublish = Boolean(eventDateValue && guestCount > 0 && timeValidation.valid && hasFinalPrice && pricingErrors.length === 0 && publicationErrors.length === 0 && !paymentPlanRequired)
+  const canPublish = Boolean(eventDateValue && guestCount > 0 && Number.isInteger(guestCount) && (guestCount <= LUXOR_MAX_GUESTS || isPreservedSavedGuestCount) && timeValidation.valid && hasFinalPrice && pricingErrors.length === 0 && publicationErrors.length === 0 && !paymentPlanRequired)
   const reviewTogether = !testRunId && presentationMode === 'in_person'
   const publishDisabled = submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount
   const publishTitle = hasUnmigratedLegacyDiscount
@@ -1466,8 +1482,8 @@ export function ProposalBuilderModal({
 
   const advance = () => {
     if (stepIndex === 0) {
-      if (!eventDateValue || guestCount < 1 || guestCount > 200) {
-        setValidationMessage('Add the event date and an expected guest count from 1 to 200 before continuing.')
+      if (!eventDateValue || guestCount < 1 || !Number.isInteger(guestCount) || (guestCount > LUXOR_MAX_GUESTS && !isPreservedSavedGuestCount)) {
+        setValidationMessage('Add the event date and an expected guest count from 1 to 180 before continuing.')
         return
       }
       if (!timeValidation.valid) {
@@ -1645,15 +1661,16 @@ export function ProposalBuilderModal({
                         <input
                           type="number"
                           min="1"
-                          max="200"
+                          max={LUXOR_MAX_GUESTS}
+                          step="1"
                           inputMode="numeric"
                           value={guestCount || ''}
                           onChange={(event) => setGuestCount(event.target.value)}
-                          placeholder="1–200"
+                          placeholder="1–180"
                           className="portal-input-transparent min-h-10 min-w-0 flex-1 bg-transparent px-3 text-sm font-semibold outline-none"
                         />
                       </span>
-                      <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Luxor accommodates up to 200 guests.</p>
+                      <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Luxor accommodates up to 180 guests.</p>
                     </label>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -2138,7 +2155,7 @@ export function ProposalBuilderModal({
                       </div>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Guest Count</p>
-                        <p className="mt-1 text-sm font-bold">{guestCount} guests (maximum 200)</p>
+                        <p className="mt-1 text-sm font-bold">{guestCount} guests {isPreservedSavedGuestCount ? "(saved proposal)" : "(maximum 180)"}</p>
                       </div>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Event Type</p>

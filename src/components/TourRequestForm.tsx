@@ -11,6 +11,7 @@ import {
   isGuestCountOverCapacity,
   LUXOR_GUEST_CAPACITY_MESSAGE,
   LUXOR_GUEST_CAPACITY_MESSAGE_ES,
+  LUXOR_MAX_GUESTS,
   normalizeLuxorEventType,
   type LuxorInquiryInput,
 } from '@/lib/luxorInquiryTypes'
@@ -838,9 +839,13 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
 
             <Field label={spanish ? 'Invitados esperados' : 'Estimated Guests'}>
               <input
+                type="number"
                 value={guestCount}
                 onChange={(e) => setGuestCount(e.target.value)}
                 inputMode="numeric"
+                min={1}
+                max={LUXOR_MAX_GUESTS}
+                step={1}
                 placeholder={spanish ? 'Por ejemplo, 120' : 'For example, 120'}
                 className={inputClass}
               />

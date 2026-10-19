@@ -1,4 +1,5 @@
 'use client'
+import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { 
@@ -1326,7 +1327,8 @@ function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPa
   const [createdInquiryId, setCreatedInquiryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const canSave = Boolean(fullName.trim() && (email.trim() || phone.trim()) && eventType.trim()) && !createdInquiryId
+  const guestCountInvalid = Boolean(guestCount.trim() && (!Number.isInteger(Number(guestCount)) || Number(guestCount) < 1 || Number(guestCount) > LUXOR_MAX_GUESTS))
+  const canSave = Boolean(fullName.trim() && (email.trim() || phone.trim()) && eventType.trim()) && !guestCountInvalid && !createdInquiryId
 
   const handleCreate = async () => {
     if (!canSave || isSaving) return
@@ -1391,7 +1393,7 @@ function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPa
             <PortalSelect value={source} onChange={setSource} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" options={ELENA_CONTACT_SOURCE_OPTIONS} />
           </div>
           <ElenaContactField label="Event date" value={targetDate} onChange={setTargetDate} placeholder="YYYY-MM-DD or date range" />
-          <ElenaContactField label="Guests" value={guestCount} onChange={setGuestCount} placeholder="Optional" type="number" />
+          <div><ElenaContactField label="Guests" value={guestCount} onChange={setGuestCount} placeholder="Optional" type="number" />{guestCountInvalid ? <p role="alert" className="mt-1 text-[10px] text-rose-700 dark:text-rose-200">Guest count must be a whole number from 1 to 180.</p> : null}</div>
         </div>
 
         <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} maxLength={3000} placeholder="Context or follow-up notes (optional)" className="w-full resize-none rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] leading-4 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50" />
@@ -1417,7 +1419,7 @@ function ElenaContactField({ label, value, onChange, placeholder, type = 'text',
   return (
     <div>
       <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{label}{required ? ' *' : ''}</label>
-      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} min={type === 'number' ? 1 : undefined} max={type === 'number' ? 200 : undefined} className="min-h-9 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1.5 text-[10px] text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50" />
+      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} min={type === 'number' ? 1 : undefined} max={type === 'number' ? LUXOR_MAX_GUESTS : undefined} step={type === 'number' ? 1 : undefined} className="min-h-9 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1.5 text-[10px] text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50" />
     </div>
   )
 }

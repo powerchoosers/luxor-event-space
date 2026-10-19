@@ -49,7 +49,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
 
       <section className="border-y border-[#caa24c]/16 bg-[#0b0908]">
         <div className="mx-auto grid max-w-7xl gap-px bg-[#caa24c]/16 sm:grid-cols-3">
-          {[['Capacity', 'Up to 200 guests'], ['Visits', 'Private appointments'], ['Location', 'San Antonio, Texas']].map(([label, value]) => (
+          {[['Capacity', 'Up to 180 guests'], ['Visits', 'Private appointments'], ['Location', 'San Antonio, Texas']].map(([label, value]) => (
             <div key={label} className="bg-[#0b0908] px-6 py-7 text-center"><p className="font-mono text-xs uppercase tracking-[.24em] text-[#caa24c]">{label}</p><p className="mt-2 font-serif text-2xl">{value}</p></div>
           ))}
         </div>
