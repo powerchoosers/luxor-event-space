@@ -1004,6 +1004,10 @@ export function ProposalBuilderModal({
   }
 
   const savePromotion = async () => {
+    if (testRunId) {
+      setPromotionError('Test proposals can use a saved promotion, but cannot create or change shared Luxor promotions.')
+      return
+    }
     const name = promotionDraft.name.trim()
     const value = Number(promotionDraft.value)
     if (!name || !Number.isFinite(value) || value <= 0 || (promotionDraft.discount_type === 'percent' && value > 100)) return
@@ -1763,7 +1767,7 @@ export function ProposalBuilderModal({
                         <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Add promotion</p>
                         <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">Promotions are saved once and can be used on future proposals.</p>
                       </div>
-                      <button type="button" onClick={() => { setPromotionDraft({ name: '', discount_type: 'percent', value: '' }); setPromotionCreatorOpen(true) }} className="inline-flex min-h-8 shrink-0 items-center rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 text-[9px] font-black uppercase tracking-[0.1em] text-[#8c6529] transition hover:bg-[#caa24c]/16 dark:text-[#f1d27a]">Create</button>
+                      {!testRunId ? <button type="button" onClick={() => { setPromotionDraft({ name: '', discount_type: 'percent', value: '' }); setPromotionCreatorOpen(true) }} className="inline-flex min-h-8 shrink-0 items-center rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 text-[9px] font-black uppercase tracking-[0.1em] text-[#8c6529] transition hover:bg-[#caa24c]/16 dark:text-[#f1d27a]">Create</button> : null}
                     </div>
                     <PortalSelect
                       value={selectedPromotionId || ''}
@@ -2332,7 +2336,7 @@ export function ProposalBuilderModal({
           </section>
         </PortalModal>
 
-        <PortalModal isOpen={promotionCreatorOpen} onClose={() => setPromotionCreatorOpen(false)} ariaLabel="Create saved promotion" maxWidth="max-w-md">
+        <PortalModal isOpen={promotionCreatorOpen && !testRunId} onClose={() => setPromotionCreatorOpen(false)} ariaLabel="Create saved promotion" maxWidth="max-w-md">
           <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] px-5 py-4">
               <div>

@@ -80,6 +80,7 @@ import { CorrectEmailResendDialog } from '@/components/portal/CorrectEmailResend
 import type { CorrectEmailResendOption } from '@/lib/luxorLeadEmailResend'
 import { WeekdayRentalSummary } from '@/components/portal/WeekdayRentalSummary'
 import { LuxorTestLeadPanel } from '@/components/portal/LuxorTestLeadPanel'
+import { LuxorTestLeadWorkflow } from '@/components/portal/LuxorTestLeadWorkflow'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
@@ -4831,6 +4832,7 @@ export default function LeadDetailPage({
         <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:sticky lg:top-[3.25rem] lg:h-[calc(100dvh-7.25rem)] lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:pb-0">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
           <div className="space-y-6 px-2.5 pt-2 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-3 lg:pt-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
+            {activeLeadTab === 'planning' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="planning" onOpenProposal={() => openProposalBuilder()} /> : null}
             
             {/* Stage-specific Content Router */}
             {(() => {
@@ -7821,6 +7823,7 @@ export default function LeadDetailPage({
 
           {activeLeadTab === 'proposals' ? (
           <section id="lead-proposals" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            {isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="proposals" onOpenProposal={() => openProposalBuilder()} /> : null}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]"><FileText size={16} className="text-[#a8792f] dark:text-[#caa24c]" /> Proposals</h3>
@@ -8035,6 +8038,7 @@ export default function LeadDetailPage({
 
           {activeLeadTab === 'documents' || activeLeadTab === 'contract' ? (
           <div id="lead-documents" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            {activeLeadTab === 'contract' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="contract" onOpenProposal={() => openProposalBuilder()} /> : null}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]"><FileText size={16} className="text-[#a8792f] dark:text-[#caa24c]" /> PDF library</h3>
@@ -8209,6 +8213,7 @@ export default function LeadDetailPage({
 
           {activeLeadTab === 'documents' || activeLeadTab === 'payments' ? (
           <div id="lead-billing" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+            {activeLeadTab === 'payments' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="payments" onOpenProposal={() => openProposalBuilder()} /> : null}
             <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
                 <FileText size={16} className="text-zinc-500" />

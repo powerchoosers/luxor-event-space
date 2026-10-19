@@ -80,18 +80,45 @@ export async function POST(request: NextRequest) {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(testRunId)) {
         return NextResponse.json({ error: 'Choose a valid active Test Lead run.' }, { status: 400 })
       }
-      const allowedTypes = new Set(['test_note', 'test_task', 'test_task_completed', 'event_planning', 'event_completion', 'test_activity'])
+      const allowedTypes = new Set(['test_note', 'test_task', 'test_task_completed', 'event_planning', 'event_completion', 'post_event_preview', 'test_activity'])
       if (!allowedTypes.has(activityType)) return NextResponse.json({ error: 'Choose a supported simulated activity.' }, { status: 400 })
       const raw = body.details && typeof body.details === 'object' && !Array.isArray(body.details) ? body.details as Record<string, unknown> : {}
-      const details = {
-        title: typeof raw.title === 'string' ? raw.title.trim().slice(0, 160) : '',
-        body: typeof raw.body === 'string' ? raw.body.trim().slice(0, 2_000) : '',
+      const eventPlanRaw = raw.eventPlan && typeof raw.eventPlan === 'object' && !Array.isArray(raw.eventPlan)
+        ? raw.eventPlan as Record<string, unknown>
+        : null
+      const eventPlan = activityType === 'event_planning' && eventPlanRaw ? {
+        eventDate: typeof eventPlanRaw.eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(eventPlanRaw.eventDate) ? eventPlanRaw.eventDate : null,
+        expectedGuests: Number.isInteger(Number(eventPlanRaw.expectedGuests)) && Number(eventPlanRaw.expectedGuests) >= 1 && Number(eventPlanRaw.expectedGuests) <= 180 ? Number(eventPlanRaw.expectedGuests) : null,
+        runOfShow: typeof eventPlanRaw.runOfShow === 'string' ? eventPlanRaw.runOfShow.trim().slice(0, 4_000) : '',
+        vendors: typeof eventPlanRaw.vendors === 'string' ? eventPlanRaw.vendors.trim().slice(0, 2_000) : '',
+        operationsNotes: typeof eventPlanRaw.operationsNotes === 'string' ? eventPlanRaw.operationsNotes.trim().slice(0, 2_000) : '',
+        eventDayContact: typeof eventPlanRaw.eventDayContact === 'string' ? eventPlanRaw.eventDayContact.trim().slice(0, 160) : '',
+      } : null
+      const details: Record<string, unknown> = {
+        title: typeof raw.title === 'string' ? raw.title.trim().slice(0, 160) : eventPlan ? 'Event plan saved' : '',
+        body: typeof raw.body === 'string' ? raw.body.trim().slice(0, 2_000) : eventPlan ? 'Run-of-show and vendor details saved to this isolated Test Lead run.' : '',
         noteType: ['note', 'call_log', 'email_log', 'status_change'].includes(String(raw.noteType)) ? String(raw.noteType) : null,
         dueDate: typeof raw.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.dueDate) ? raw.dueDate : null,
         priority: ['low', 'medium', 'high', 'urgent'].includes(String(raw.priority)) ? String(raw.priority) : null,
         completionStatus: typeof raw.completionStatus === 'string' ? raw.completionStatus.trim().slice(0, 80) : null,
       }
-      if (!details.title && !details.body) return NextResponse.json({ error: 'Add a title or note before saving simulated activity.' }, { status: 400 })
+      if (eventPlan) details.eventPlan = eventPlan
+      if (!details.title && !details.body && !eventPlan) return NextResponse.json({ error: 'Add a title or note before saving simulated activity.' }, { status: 400 })
+      if (activityType === 'event_completion') {
+        const [artifacts, plan] = await Promise.all([
+          supabaseRest<Array<{ artifact_type: string; status: string }>>(`luxor_test_run_artifacts?select=artifact_type,status&test_run_id=eq.${encodeURIComponent(testRunId)}&artifact_type=in.(booking,payment)&limit=2`),
+          supabaseRest<Array<{ id: number }>>(`luxor_test_run_activity?select=id&test_run_id=eq.${encodeURIComponent(testRunId)}&event_type=eq.event_planning&limit=1`),
+        ])
+        if (!artifacts.some((artifact) => artifact.artifact_type === 'booking' && artifact.status === 'confirmed')
+          || !artifacts.some((artifact) => artifact.artifact_type === 'payment' && artifact.status === 'pending')) {
+          return NextResponse.json({ error: 'Confirm the simulated booking and create a pending simulated payment before recording event completion.' }, { status: 409 })
+        }
+        if (!plan.length) return NextResponse.json({ error: 'Save an isolated event plan before recording event completion.' }, { status: 409 })
+      }
+      if (activityType === 'post_event_preview') {
+        const [completion] = await supabaseRest<Array<{ id: number }>>(`luxor_test_run_activity?select=id&test_run_id=eq.${encodeURIComponent(testRunId)}&event_type=eq.event_completion&limit=1`)
+        if (!completion) return NextResponse.json({ error: 'Complete the simulated event before preparing the post-event follow-up preview.' }, { status: 409 })
+      }
       const activity = await recordLuxorTestRunActivity({
         testRunId,
         eventType: activityType,
@@ -168,11 +195,39 @@ export async function POST(request: NextRequest) {
       if (typeof body.testRunId !== 'string' || typeof body.artifactType !== 'string' || typeof body.status !== 'string') {
         return NextResponse.json({ error: 'A run, simulated workflow type, and status are required.' }, { status: 400 })
       }
+      if (body.artifactType === 'contract' && body.status === 'prepared') {
+        return NextResponse.json({ error: 'Prepare the watermarked contract preview from the Contract tab before advancing its simulated status.' }, { status: 409 })
+      }
+      if (body.artifactType === 'contract' && ['sent', 'signed'].includes(body.status)) {
+        const [contract] = await supabaseRest<Array<{ details: Record<string, unknown> }>>(
+          `luxor_test_run_artifacts?select=details&test_run_id=eq.${encodeURIComponent(body.testRunId)}&artifact_type=eq.contract&limit=1`,
+        )
+        const preview = contract?.details?.contract_preview && typeof contract.details.contract_preview === 'object'
+          ? contract.details.contract_preview as Record<string, unknown>
+          : null
+        if (!preview || preview.legal_effect !== false || !preview.booking) {
+          return NextResponse.json({ error: 'Prepare a watermarked, non-signable contract preview before simulating its later workflow states.' }, { status: 409 })
+        }
+      }
+      if (body.artifactType === 'payment' && body.status === 'paid') {
+        const [completion] = await supabaseRest<Array<{ id: number }>>(
+          `luxor_test_run_activity?select=id&test_run_id=eq.${encodeURIComponent(body.testRunId)}&event_type=eq.event_completion&limit=1`,
+        )
+        if (!completion) return NextResponse.json({ error: 'Record simulated event completion before settling and closing this test run.' }, { status: 409 })
+      }
       const artifact = await supabaseRest('rpc/luxor_advance_test_artifact', {
         method: 'POST',
         body: JSON.stringify({ p_test_run_id: body.testRunId, p_artifact_type: body.artifactType, p_status: body.status, p_details: body.details && typeof body.details === 'object' ? body.details : {} }),
       })
       return NextResponse.json({ artifact, simulated: true })
+    }
+    if (body.action === 'prepare_contract_preview') {
+      const testRunId = typeof body.testRunId === 'string' ? body.testRunId : ''
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(testRunId)) {
+        return NextResponse.json({ error: 'A valid active Test Lead run is required.' }, { status: 400 })
+      }
+      const { prepareLuxorTestContractPreview } = await import('@/lib/luxorTestContractPreviewServer')
+      return NextResponse.json({ ...(await prepareLuxorTestContractPreview(testRunId)), simulated: true })
     }
     if (body.action !== 'reset' || typeof body.testRunId !== 'string' || body.confirm !== true) {
       return NextResponse.json({ error: 'Confirm reset for the selected test run.' }, { status: 400 })
