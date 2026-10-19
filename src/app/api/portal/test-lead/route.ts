@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { enqueueLuxorTestEmail, getLuxorTestSettings, resetLuxorTestRun, simulateLuxorTestTourChange } from '@/lib/luxorTestLeadServer'
+import { cancelLuxorTestTour, enqueueLuxorTestEmail, ensureActiveLuxorTestRun, getLuxorTestSettings, recordLuxorTestRunActivity, resetLuxorTestRun, simulateLuxorTestTourChange } from '@/lib/luxorTestLeadServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { buildLuxorTestEmailTemplate, isLuxorTestEmailCategory } from '@/lib/luxorTestEmailTemplates'
@@ -71,6 +71,44 @@ export async function POST(request: NextRequest) {
   try {
     if (!await authorizedMember()) return NextResponse.json({ error: 'Owner or admin access required.' }, { status: 403 })
     const body = await request.json()
+    if (body.action === 'ensure_active_run') {
+      return NextResponse.json({ ...(await ensureActiveLuxorTestRun()), simulated: true })
+    }
+    if (body.action === 'record_activity') {
+      const testRunId = typeof body.testRunId === 'string' ? body.testRunId : ''
+      const activityType = typeof body.activityType === 'string' ? body.activityType : ''
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(testRunId)) {
+        return NextResponse.json({ error: 'Choose a valid active Test Lead run.' }, { status: 400 })
+      }
+      const allowedTypes = new Set(['test_note', 'test_task', 'test_task_completed', 'event_planning', 'event_completion', 'test_activity'])
+      if (!allowedTypes.has(activityType)) return NextResponse.json({ error: 'Choose a supported simulated activity.' }, { status: 400 })
+      const raw = body.details && typeof body.details === 'object' && !Array.isArray(body.details) ? body.details as Record<string, unknown> : {}
+      const details = {
+        title: typeof raw.title === 'string' ? raw.title.trim().slice(0, 160) : '',
+        body: typeof raw.body === 'string' ? raw.body.trim().slice(0, 2_000) : '',
+        noteType: ['note', 'call_log', 'email_log', 'status_change'].includes(String(raw.noteType)) ? String(raw.noteType) : null,
+        dueDate: typeof raw.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.dueDate) ? raw.dueDate : null,
+        priority: ['low', 'medium', 'high', 'urgent'].includes(String(raw.priority)) ? String(raw.priority) : null,
+        completionStatus: typeof raw.completionStatus === 'string' ? raw.completionStatus.trim().slice(0, 80) : null,
+      }
+      if (!details.title && !details.body) return NextResponse.json({ error: 'Add a title or note before saving simulated activity.' }, { status: 400 })
+      const activity = await recordLuxorTestRunActivity({
+        testRunId,
+        eventType: activityType,
+        status: activityType === 'event_completion' || activityType === 'test_task_completed' ? 'completed' : 'recorded',
+        source: 'portal_test_lead',
+        details,
+      })
+      return NextResponse.json({ activity, simulated: true }, { status: 201 })
+    }
+    if (body.action === 'tour_cancel') {
+      const testRunId = typeof body.testRunId === 'string' ? body.testRunId : ''
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(testRunId)) {
+        return NextResponse.json({ error: 'Choose a valid active Test Lead run.' }, { status: 400 })
+      }
+      const result = await cancelLuxorTestTour({ testRunId, reason: typeof body.reason === 'string' ? body.reason : '' })
+      return NextResponse.json({ result, simulated: true })
+    }
     if (body.action === 'tour_change') {
       if (typeof body.testRunId !== 'string' || typeof body.actionKey !== 'string'
         || !/^[0-9a-f-]{8,160}$/i.test(body.actionKey)

@@ -14,6 +14,7 @@ import { resolveLuxorTourOutcomePrecondition } from '@/lib/luxorTourOutcome'
 import { getLuxorLeadEventForInquiry, listLuxorLeadEventsByInquiry, updateLuxorLeadEvent } from '@/lib/luxorLeadEventsServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { LuxorEmailJob, LuxorEmailJobKind, LuxorInquiryStatus, LuxorPipelineStage, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import { buildLuxorTourPlan } from '@/lib/luxorTourPlanningServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
@@ -22,7 +23,7 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorCalendarEvent, getLuxorCalendarStatus } from '@/lib/luxorCalendarServer'
 import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
 import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
-import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { cancelLuxorTestTour, ensureActiveLuxorTestRun, recordLuxorTestTourOutcome, scheduleLuxorTestTour } from '@/lib/luxorTestLeadServer'
 
 const PRE_PROPOSAL_STATUSES = new Set<LuxorInquiryStatus>(['new', 'contacted', 'tour_requested', 'tour_confirmed'])
 const PRE_PROPOSAL_STAGES = new Set<LuxorPipelineStage | null | undefined>([null, undefined, 'inquiry', 'tour'])
@@ -60,7 +61,54 @@ export async function POST(request: NextRequest) {
 
     const inquiry = await getLuxorInquiry(inquiryId)
     if (!inquiry) return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
-    if (inquiry.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
+    if (inquiry.is_test) {
+      const member = await getLuxorPortalMember(session.email)
+      if (!member || !['owner', 'admin'].includes(member.role) || !memberCan(member, 'settings')) {
+        return NextResponse.json({ error: 'Owner or admin access required for the isolated Test Lead.' }, { status: 403 })
+      }
+      if (inquiry.id !== '00b264d6-a3fb-4ea3-9142-415f76385c39') {
+        return NextResponse.json({ error: 'Only the permanent isolated Test Lead can use simulator actions.' }, { status: 409 })
+      }
+      const context = await ensureActiveLuxorTestRun()
+      if (action === 'schedule-tour') {
+        const tourDate = String(body.tourDate || '').trim()
+        const tourTime = String(body.tourTime || '').trim()
+        if (!tourDate || !tourTime) return NextResponse.json({ error: 'Choose a date and time for the simulated tour.' }, { status: 400 })
+        const result = await scheduleLuxorTestTour({
+          testRunId: context.run.id,
+          date: tourDate,
+          time: tourTime,
+          durationMinutes: Number(body.durationMinutes) || 30,
+          meetingType: String(body.meetingType || 'Private Venue Tour'),
+          clientFacingNotes: typeof body.clientFacingNotes === 'string' ? body.clientFacingNotes : '',
+          assignees: Array.isArray(body.tourAssignees) ? body.tourAssignees.map((value: unknown) => String(value)) : [],
+        })
+        return NextResponse.json({
+          inquiry: result.inquiry,
+          simulated: true,
+          calendar: { calendarEventCreated: false, inventoryReserved: false },
+          confirmationJob: null,
+          reminderJobs: [],
+        }, { status: 201 })
+      }
+      if (action === 'cancel-tour' || (action === 'attendance' && body.attendance === 'cancelled')) {
+        const result = await cancelLuxorTestTour({ testRunId: context.run.id, reason: typeof body.reason === 'string' ? body.reason : '' })
+        return NextResponse.json({ inquiry: result.inquiry, simulated: true, cancellation: result })
+      }
+      if (action === 'attendance') {
+        const attendance = String(body.attendance || '')
+        if (!['attended', 'no_show'].includes(attendance)) {
+          return NextResponse.json({ error: 'The Test Lead supports simulated completed or no-show tour outcomes here.' }, { status: 400 })
+        }
+        const result = await recordLuxorTestTourOutcome({
+          testRunId: context.run.id,
+          attendance: attendance as 'attended' | 'no_show',
+          expectedAttendance: typeof body.expectedAttendance === 'string' ? body.expectedAttendance : body.expectedAttendance === null ? null : undefined,
+        })
+        return NextResponse.json({ inquiry: result.inquiry, simulated: true, warnings: [], idempotent: result.replayed === true })
+      }
+      return NextResponse.json({ error: 'This action is not available for the isolated Test Lead. Use its run-scoped test controls.' }, { status: 409 })
+    }
     if (inquiry.status === 'closed_lost') {
       return NextResponse.json({ error: 'This opportunity is closed lost. Reopen it before scheduling or changing a tour.' }, { status: 409 })
     }

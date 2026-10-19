@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { supabaseRest } from '@/lib/supabaseRestServer'
-import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import type { LuxorInquiry, LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { matchesTestLeadIdentifiers } from '@/lib/luxorTestLeadPolicy'
 import { getLuxorBrochureFollowUpSequence, scheduleBrochureFollowUpOffsets } from '@/lib/luxorFollowUpsServer'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
@@ -16,6 +16,8 @@ export type LuxorTestSettings = {
   updated_by: string | null
   updated_at: string
 }
+
+const LUXOR_PERMANENT_TEST_LEAD_ID = '00b264d6-a3fb-4ea3-9142-415f76385c39'
 
 export async function getLuxorTestSettings() {
   const rows = await supabaseRest<LuxorTestSettings[]>('luxor_test_settings?select=*&id=eq.1&limit=1')
@@ -100,6 +102,302 @@ export async function startLuxorTestRun(input: LuxorInquiryInput, request: { ide
     replayed: result.replayed,
     ...(workflow ? { workflow } : {}),
   }
+}
+
+/** Resume the active isolated run or idempotently start one from the portal. */
+export async function ensureActiveLuxorTestRun() {
+  const settings = await getLuxorTestSettings()
+  if (!settings || !settings.enabled || !settings.email_recipient_confirmed_at) {
+    throw new Error('The isolated Test Lead workflow is paused until its verified inbox is enabled in Test Settings.')
+  }
+
+  const [lead] = await supabaseRest<Array<{ id: string; is_test: boolean }>>(
+    `luxor_inquiries?select=id,is_test&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true&limit=1`,
+  )
+  if (!lead || lead.is_test !== true) throw new Error('The permanent Test Lead is unavailable.')
+
+  const [activeRun] = await supabaseRest<Array<{ id: string; status: string; source: string; started_at: string }>>(
+    `luxor_test_runs?select=id,status,source,started_at&test_lead_id=eq.${encodeURIComponent(lead.id)}&status=eq.in_progress&order=started_at.desc&limit=1`,
+  )
+  if (activeRun) return { leadId: lead.id, run: activeRun, created: false }
+
+  const [latestRun] = await supabaseRest<Array<{ id: string }>>(
+    `luxor_test_runs?select=id&test_lead_id=eq.${encodeURIComponent(lead.id)}&order=started_at.desc&limit=1`,
+  )
+  // Every concurrent portal opener after the same completed/reset run uses
+  // the same key. The start RPC locks the permanent lead and returns that
+  // run on replay instead of cancelling one opener's new run for another.
+  const idempotencyKey = `portal-test-lead:${lead.id}:${latestRun?.id || 'initial'}`
+  const started = await startLuxorTestRun({
+    fullName: 'Luxor Test Lead',
+    email: settings.identification_email,
+    phone: settings.identification_phone,
+    source: 'manual entry',
+  }, { idempotencyKey })
+  if (started.run.status !== 'in_progress') {
+    throw new Error('The isolated Test Lead run could not be activated. Open Test History and start a fresh run.')
+  }
+  return { leadId: started.leadId, run: started.run, created: !started.replayed }
+}
+
+export async function recordLuxorTestRunActivity(input: {
+  testRunId: string
+  eventType: string
+  status?: string | null
+  details?: Record<string, unknown>
+  source?: string | null
+}) {
+  const [run] = await supabaseRest<Array<{ id: string }>>(
+    `luxor_test_runs?select=id&id=eq.${encodeURIComponent(input.testRunId)}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
+  )
+  if (!run) throw new Error('Choose the active permanent Test Lead run before recording activity.')
+  const [activity] = await supabaseRest<Array<Record<string, unknown>>>('luxor_test_run_activity?select=*', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      test_run_id: run.id,
+      event_type: input.eventType,
+      status: input.status || null,
+      source: input.source || 'portal_test_lead',
+      details: { ...(input.details || {}), simulation_only: true },
+    }),
+  })
+  return activity ?? null
+}
+
+export async function scheduleLuxorTestTour(input: {
+  testRunId: string
+  date: string
+  time: string
+  durationMinutes?: number
+  meetingType?: string
+  clientFacingNotes?: string
+  assignees?: string[]
+}) {
+  const [run] = await supabaseRest<Array<{ id: string }>>(
+    `luxor_test_runs?select=id&id=eq.${encodeURIComponent(input.testRunId)}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
+  )
+  if (!run) throw new Error('Choose the active permanent Test Lead run before scheduling a simulated tour.')
+
+  const [lead] = await supabaseRest<Array<Record<string, unknown> & { id: string; is_test: boolean }>>(
+    `luxor_inquiries?select=*&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true&limit=1`,
+  )
+  if (!lead || lead.is_test !== true) throw new Error('The permanent Test Lead is unavailable.')
+
+  const meetingType = String(input.meetingType || 'Private Venue Tour').trim().slice(0, 120)
+  const clientFacingNotes = String(input.clientFacingNotes || '').trim().slice(0, 2_000)
+  const durationMinutes = Math.min(Math.max(Number(input.durationMinutes) || 30, 30), 180)
+  const assignees = Array.isArray(input.assignees) ? input.assignees.map((assignee) => String(assignee).trim()).filter(Boolean).slice(0, 12) : []
+  const { buildLuxorTestTourPlan } = await import('@/lib/luxorTestEmailTemplates')
+  const planned = await buildLuxorTestTourPlan(input.testRunId, input.date, input.time, lead as LuxorInquiry, {
+    meetingType, clientFacingNotes, durationMinutes, assignees,
+  })
+  const details = {
+    simulation_only: true,
+    calendar_event_created: false,
+    inventory_reserved: false,
+    preferred_tour_date: input.date,
+    preferred_tour_time: input.time,
+    start_utc: planned.plan.startUtc.toISOString(),
+    end_utc: planned.plan.endUtc.toISOString(),
+    location: planned.plan.state.location,
+    meeting_type: meetingType,
+    duration_minutes: durationMinutes,
+    client_facing_notes: clientFacingNotes,
+    assignees,
+  }
+
+  const [artifact] = await supabaseRest<Array<{ id: string; status: string; details: Record<string, unknown> }>>(
+    `luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`,
+  )
+  let status = artifact?.status || 'simulated'
+  if (['completed', 'cancelled', 'reset', 'failed'].includes(status)) {
+    throw new Error('This simulated tour has a final outcome. Start a new test run to schedule another tour.')
+  }
+  const nextStatuses: Record<string, string> = { simulated: 'requested', requested: 'scheduled', scheduled: 'confirmed' }
+  while (status !== 'confirmed') {
+    const nextStatus = nextStatuses[status]
+    if (!nextStatus) throw new Error('This simulated tour cannot be scheduled from its current status.')
+    await supabaseRest('rpc/luxor_advance_test_artifact', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_test_run_id: run.id,
+        p_artifact_type: 'tour',
+        p_status: nextStatus,
+        p_details: { ...details, requested_by: 'portal_test_lead' },
+      }),
+    })
+    status = nextStatus
+  }
+
+  const [updatedLead] = await supabaseRest<Array<Record<string, unknown>>>('luxor_inquiries?select=*&id=eq.' + encodeURIComponent(lead.id) + '&is_test=eq.true', {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      status: 'tour_confirmed',
+      pipeline_stage: 'tour',
+      preferred_tour_date: input.date,
+      preferred_tour_time: input.time,
+      tour_attendance_status: 'pending',
+      tour_confirmed_at: new Date().toISOString(),
+      metadata: {
+        ...(lead.metadata && typeof lead.metadata === 'object' ? lead.metadata as Record<string, unknown> : {}),
+        tourMeetingType: meetingType,
+        tourClientFacingNotes: clientFacingNotes,
+        tour_assignees: assignees,
+      },
+      updated_at: new Date().toISOString(),
+    }),
+  })
+  if (!updatedLead) throw new Error('The simulated tour was saved, but the Test Lead view could not be refreshed.')
+
+  await supabaseRest('luxor_test_run_artifacts?test_run_id=eq.' + encodeURIComponent(run.id) + '&artifact_type=eq.tour', {
+    method: 'PATCH',
+      body: JSON.stringify({ details: { ...(artifact?.details || {}), ...details }, updated_at: new Date().toISOString() }),
+  })
+  await recordLuxorTestRunActivity({
+    testRunId: run.id,
+    eventType: 'test_tour_scheduled',
+    status: 'confirmed',
+    source: 'portal_test_lead',
+    details,
+  })
+
+  return { inquiry: updatedLead, tour: { status: 'confirmed', ...details }, simulated: true, emailsQueued: false }
+}
+
+export async function recordLuxorTestTourOutcome(input: {
+  testRunId: string
+  attendance: 'attended' | 'no_show'
+  expectedAttendance?: string | null
+}) {
+  const [run] = await supabaseRest<Array<{ id: string }>>(
+    `luxor_test_runs?select=id&id=eq.${encodeURIComponent(input.testRunId)}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
+  )
+  if (!run) throw new Error('Choose the active permanent Test Lead run before recording a tour outcome.')
+  const [lead] = await supabaseRest<Array<Record<string, unknown> & { id: string; is_test: boolean; preferred_tour_date: string | null; tour_attendance_status: string | null; status: string; pipeline_stage: string | null }>>(
+    `luxor_inquiries?select=*&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true&limit=1`,
+  )
+  if (!lead || lead.is_test !== true) throw new Error('The permanent Test Lead is unavailable.')
+  if (!lead.preferred_tour_date) throw new Error('Schedule a simulated tour before recording its outcome.')
+  if (input.expectedAttendance !== undefined && lead.tour_attendance_status !== input.expectedAttendance && lead.tour_attendance_status !== input.attendance) {
+    throw new Error('The tour outcome changed since this view loaded. Refresh and review the current outcome before correcting it.')
+  }
+  if (lead.tour_attendance_status === 'cancelled') throw new Error('A cancelled simulated tour cannot be changed through attendance controls.')
+  if (lead.tour_attendance_status === input.attendance) {
+    return { inquiry: lead, simulated: true, calendarEventChanged: false, inventoryChanged: false, replayed: true }
+  }
+
+  const [artifact] = await supabaseRest<Array<{ id: string; status: string; details: Record<string, unknown> }>>(
+    `luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`,
+  )
+  if (!artifact || ['simulated', 'requested', 'failed', 'cancelled', 'reset'].includes(artifact.status)) {
+    throw new Error('Schedule this simulated tour before marking it complete or no-show.')
+  }
+
+  if (artifact.status !== 'completed') {
+    let status = artifact.status
+    const nextStatuses: Record<string, string> = { scheduled: 'confirmed', confirmed: 'completed' }
+    while (status !== 'completed') {
+      const nextStatus = nextStatuses[status]
+      if (!nextStatus) throw new Error('This simulated tour cannot record an outcome from its current status.')
+      await supabaseRest('rpc/luxor_advance_test_artifact', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_test_run_id: run.id,
+          p_artifact_type: 'tour',
+          p_status: nextStatus,
+          p_details: nextStatus === 'completed'
+            ? { tour_attendance_status: input.attendance, outcome_recorded_at: new Date().toISOString() }
+            : { outcome_preparation: true },
+        }),
+      })
+      status = nextStatus
+    }
+  }
+
+  const updatedAt = new Date().toISOString()
+  const [updatedLead] = await supabaseRest<Array<Record<string, unknown>>>('luxor_inquiries?select=*&id=eq.' + encodeURIComponent(lead.id) + '&is_test=eq.true', {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      tour_attendance_status: input.attendance,
+      status: input.attendance === 'attended' ? 'tour_confirmed' : lead.status,
+      pipeline_stage: input.attendance === 'attended' ? 'proposal' : 'tour',
+      tour_confirmed_at: lead.tour_confirmed_at || updatedAt,
+      updated_at: updatedAt,
+    }),
+  })
+  if (!updatedLead) throw new Error('The simulated tour outcome was recorded, but the Test Lead view could not be refreshed.')
+
+  const [currentArtifact] = await supabaseRest<Array<{ details: Record<string, unknown> }>>(
+    `luxor_test_run_artifacts?select=details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`,
+  )
+  if (currentArtifact) {
+    await supabaseRest('luxor_test_run_artifacts?test_run_id=eq.' + encodeURIComponent(run.id) + '&artifact_type=eq.tour', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        details: { ...(currentArtifact.details || {}), tour_attendance_status: input.attendance, outcome_recorded_at: updatedAt, simulation_only: true },
+        updated_at: updatedAt,
+      }),
+    })
+  }
+  await recordLuxorTestRunActivity({
+    testRunId: run.id,
+    eventType: 'test_tour_outcome',
+    status: input.attendance,
+    source: 'portal_test_lead',
+    details: { tour_attendance_status: input.attendance, simulation_only: true, calendar_event_changed: false, inventory_changed: false },
+  })
+  return { inquiry: updatedLead, simulated: true, calendarEventChanged: false, inventoryChanged: false }
+}
+
+export async function cancelLuxorTestTour(input: { testRunId: string; reason?: string }) {
+  const runId = encodeURIComponent(input.testRunId)
+  const [run] = await supabaseRest<Array<{ id: string }>>(
+    `luxor_test_runs?select=id&id=eq.${runId}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
+  )
+  if (!run) throw new Error('Choose the active permanent Test Lead run before cancelling a simulated tour.')
+  const [lead] = await supabaseRest<Array<{ id: string; is_test: boolean; preferred_tour_date: string | null; tour_attendance_status: string | null }>>(
+    `luxor_inquiries?select=id,is_test,preferred_tour_date,tour_attendance_status&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true&limit=1`,
+  )
+  if (!lead || lead.is_test !== true) throw new Error('The permanent Test Lead is unavailable.')
+  if (!lead.preferred_tour_date) throw new Error('Schedule a simulated tour before cancelling it.')
+  if (['attended', 'no_show'].includes(lead.tour_attendance_status || '')) {
+    throw new Error('A completed simulated tour cannot be cancelled.')
+  }
+  const [artifact] = await supabaseRest<Array<{ id: string; status: string; details: Record<string, unknown> }>>(
+    `luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${runId}&artifact_type=eq.tour&limit=1`,
+  )
+  if (!artifact || !['requested', 'scheduled', 'confirmed'].includes(artifact.status)) {
+    throw new Error('There is no upcoming simulated tour to cancel.')
+  }
+  const updatedAt = new Date().toISOString()
+  const details = {
+    ...(artifact.details || {}),
+    simulation_only: true,
+    cancellation_reason: String(input.reason || '').trim().slice(0, 500) || null,
+    cancelled_at: updatedAt,
+    calendar_event_cancelled: false,
+    inventory_released: false,
+    test_email_queued: false,
+  }
+  await supabaseRest(`luxor_test_run_artifacts?test_run_id=eq.${runId}&artifact_type=eq.tour`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'cancelled', details, updated_at: updatedAt }),
+  })
+  const [updatedLead] = await supabaseRest<Array<Record<string, unknown>>>(
+    `luxor_inquiries?select=*&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true`,
+    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ tour_attendance_status: 'cancelled', updated_at: updatedAt }) },
+  )
+  await recordLuxorTestRunActivity({
+    testRunId: run.id,
+    eventType: 'test_tour_cancelled',
+    status: 'cancelled',
+    source: 'portal_test_lead',
+    details,
+  })
+  return { inquiry: updatedLead ?? lead, simulated: true, calendarEventChanged: false, inventoryChanged: false, emailQueued: false }
 }
 
 async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: string, startedAt: string) {

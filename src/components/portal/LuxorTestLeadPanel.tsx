@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { History, RotateCcw, Settings2 } from 'lucide-react'
-import { PortalDatePicker } from '@/components/portal/PortalUI'
+import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 
 type Payload = {
   page?: number
@@ -32,6 +32,11 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
   const [historyPage, setHistoryPage] = useState(1)
   const [tourDate, setTourDate] = useState('')
   const [tourTime, setTourTime] = useState('')
+  const [activityType, setActivityType] = useState('test_note')
+  const [activityTitle, setActivityTitle] = useState('')
+  const [activityBody, setActivityBody] = useState('')
+  const [activityDueDate, setActivityDueDate] = useState('')
+  const [activityPriority, setActivityPriority] = useState('medium')
 
   const refresh = useCallback(async () => {
     try {
@@ -50,11 +55,16 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
   }, [historyPage])
 
   useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    const refreshActivity = () => { void refresh() }
+    window.addEventListener('luxor-test-activity-recorded', refreshActivity)
+    return () => window.removeEventListener('luxor-test-activity-recorded', refreshActivity)
+  }, [refresh])
   if (authorized !== true || (data && data.lead?.id !== leadId)) return null
 
   const activeRun = data?.runs.find((run) => run.status === 'in_progress')
   const activeRunArtifacts = activeRun ? (data?.artifacts || []).filter((artifact) => artifact.test_run_id === activeRun.id) : []
-  const simulatedTourComplete = activeRunArtifacts.some((artifact) => artifact.artifact_type === 'tour' && artifact.status === 'completed')
+  const simulatedTourComplete = activeRunArtifacts.some((artifact) => artifact.artifact_type === 'tour' && artifact.status === 'completed' && artifact.details?.tour_attendance_status !== 'no_show')
   const savedTestProposal = activeRunArtifacts.find((artifact) => artifact.artifact_type === 'proposal')
   const latestRun = data?.runs[0] ?? null
   const resetRun = activeRun || (latestRun && ['completed', 'failed'].includes(latestRun.status) ? latestRun : null)
@@ -89,7 +99,24 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
       })
       const result = await response.json() as { error?: string }
       if (!response.ok) throw new Error(result.error || 'Unable to reset test pipeline.')
-      setNotice(`Test run ${resetRun.id} reset. The permanent lead and history were preserved; the next qualifying submission will start a new run.`)
+      window.dispatchEvent(new CustomEvent('luxor-test-run-reset'))
+      let nextRunNotice = 'Start or resume a run before continuing.'
+      try {
+        const startResponse = await fetch('/api/portal/test-lead', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'ensure_active_run' }),
+        })
+        const started = await startResponse.json() as { leadId?: string; run?: { id?: string; status?: string }; error?: string }
+        if (startResponse.ok && started.leadId === leadId && started.run?.id && started.run.status === 'in_progress') {
+          window.dispatchEvent(new CustomEvent('luxor-test-run-ready', { detail: { runId: started.run.id } }))
+          nextRunNotice = `New isolated run ${started.run.id} is ready.`
+        } else if (started.error) {
+          nextRunNotice = started.error
+        }
+      } catch {
+        nextRunNotice = 'The pipeline reset is complete. Start or resume a run before continuing.'
+      }
+      setNotice(`Test run ${resetRun.id} reset. The permanent lead and history were preserved. ${nextRunNotice}`)
       await refresh()
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Unable to reset test pipeline.') }
     finally { setBusy(false) }
@@ -107,6 +134,26 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
       setNotice(`${artifactType} marked ${status} in the simulation.`)
       await refresh()
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Unable to advance simulated workflow.') }
+    finally { setBusy(false) }
+  }
+
+  async function recordActivity(runId: string) {
+    if (!activityTitle.trim() && !activityBody.trim()) return
+    setBusy(true); setNotice('')
+    try {
+      const response = await fetch('/api/portal/test-lead', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'record_activity', testRunId: runId, activityType, details: {
+          title: activityTitle, body: activityBody, dueDate: activityDueDate || null, priority: activityPriority,
+          completionStatus: activityType === 'event_completion' ? 'completed' : null,
+        } }),
+      })
+      const result = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(result.error || 'Unable to save simulated activity.')
+      setNotice('Saved to isolated Test Lead activity. No production task, event, or customer note was created.')
+      setActivityTitle(''); setActivityBody(''); setActivityDueDate(''); setActivityPriority('medium')
+      await refresh()
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Unable to save simulated activity.') }
     finally { setBusy(false) }
   }
 
@@ -186,6 +233,16 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
         <button type="button" disabled={busy} onClick={() => void changeTour(activeRun.id, 'cancel')} className="h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-45">Cancel simulated tour</button>
       </div> : null}
       {view === 'history' && activeRun ? <div className="mt-3 grid gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:grid-cols-2 xl:grid-cols-4"><p className="text-xs font-bold text-[color:var(--portal-text)] sm:col-span-2 xl:col-span-4">Test lifecycle artifacts stay isolated; tour changes do not write production calendar or inventory. Test emails may send to the verified inbox; SMS and money movement remain simulated.</p>{(data?.artifacts || []).filter((artifact) => artifact.test_run_id === activeRun.id && artifact.artifact_type !== 'proposal').map((artifact) => { const next = simulatedNextStatus[artifact.artifact_type]?.[artifact.status]; return <div key={artifact.id} className="flex items-center justify-between gap-2 rounded-lg border border-[color:var(--portal-border)] p-2"><div><p className="text-xs font-semibold capitalize text-[color:var(--portal-text)]">{artifact.artifact_type}</p><p className="text-[11px] text-[color:var(--portal-muted)]">{artifact.status} · simulated</p></div><button type="button" disabled={busy || !next} onClick={() => next && void advanceArtifact(activeRun.id, artifact.artifact_type, next)} className="rounded-md bg-sky-700 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-40">{next ? `Advance to ${next}` : 'Complete'}</button></div>})}</div> : null}
+      {view === 'history' && activeRun && savedTestProposal?.status === 'sent' ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3"><p className="text-xs text-[color:var(--portal-muted)]">The published proposal can be accepted in the simulator to unlock the simulated contract.</p><button type="button" disabled={busy} onClick={() => void advanceArtifact(activeRun.id, 'proposal', 'accepted')} className="h-9 rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white disabled:opacity-45">Accept test proposal</button></div> : null}
+      {view === 'history' && activeRun ? <div className="mt-3 grid gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 md:grid-cols-2">
+        <h3 className="text-xs font-bold text-[color:var(--portal-text)] md:col-span-2">Add isolated note, task, or event activity</h3>
+        <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Activity type<PortalSelect value={activityType} onChange={setActivityType} options={[{ value: 'test_note', label: 'Note' }, { value: 'test_task', label: 'Task' }, { value: 'test_task_completed', label: 'Task completed' }, { value: 'event_planning', label: 'Event planning' }, { value: 'event_completion', label: 'Event completed' }, { value: 'test_activity', label: 'Other activity' }]} /></label>
+        <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Priority<PortalSelect value={activityPriority} onChange={setActivityPriority} options={[{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]} /></label>
+        <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Title<input value={activityTitle} onChange={(event) => setActivityTitle(event.target.value)} maxLength={160} className="mt-1 block h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)]" /></label>
+        <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Due date<PortalDatePicker value={activityDueDate} onChange={setActivityDueDate} placeholder="No due date" /></label>
+        <label className="text-xs font-semibold text-[color:var(--portal-muted)] md:col-span-2">Details<textarea value={activityBody} onChange={(event) => setActivityBody(event.target.value)} rows={3} maxLength={2000} className="mt-1 block w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-sm text-[color:var(--portal-text)]" /></label>
+        <div className="flex flex-wrap items-center gap-3 md:col-span-2"><button type="button" disabled={busy || (!activityTitle.trim() && !activityBody.trim())} onClick={() => void recordActivity(activeRun.id)} className="h-10 rounded-lg bg-sky-700 px-4 text-xs font-semibold text-white disabled:opacity-45">Save isolated activity</button><span className="text-[11px] text-[color:var(--portal-muted)]">Stored with this run only; no production task, event, or note is created.</span></div>
+      </div> : null}
       {view === 'history' && activeRun ? <div className="mt-3 overflow-x-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"><table className="w-full min-w-[760px] text-left text-xs"><thead><tr className="border-b border-[color:var(--portal-border)] text-[color:var(--portal-muted)]"><th className="p-3">Email category</th><th className="p-3">Actual recipient</th><th className="p-3">Queue status</th><th className="p-3">Provider status</th><th className="p-3">Delivery</th><th className="p-3">Action</th></tr></thead><tbody>{(data?.emails || []).filter((email) => email.test_run_id === activeRun.id).map((email) => <tr key={email.id} className="border-b border-[color:var(--portal-border)] last:border-0"><td className="p-3">{email.category.replaceAll('_', ' ')}</td><td className="p-3">{email.actual_recipient}</td><td className="p-3">{email.status}</td><td className="p-3">{email.provider_status || 'not attempted'}</td><td className="p-3">{email.delivery_status}</td><td className="p-3">{email.category === 'proposal' ? <span className="text-[color:var(--portal-muted)]">Use proposal builder</span> : <button type="button" disabled={busy || email.status === 'queued' || email.status === 'provider_accepted' || email.status === 'delivered'} onClick={() => void queueTestEmail(activeRun.id, email.category)} className="rounded-md bg-sky-700 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-40">Send test</button>}</td></tr>)}</tbody></table><p className="p-3 text-[11px] text-[color:var(--portal-muted)]">Test mail routes only to the verified inbox. Provider acceptance does not imply delivery; delivery status changes on provider callbacks.</p></div> : null}
       {view === 'settings' ? <div className="mt-4 grid gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 md:grid-cols-2">
         <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Test identification email<input value={email} readOnly className="mt-1 block h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)]" /></label>

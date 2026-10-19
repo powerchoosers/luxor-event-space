@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, use } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -408,12 +408,14 @@ export default function LeadDetailPage({
 }) {
   const { id } = use(params)
   const searchParams = useSearchParams()
-  const requestedTestRunId = searchParams?.get('testRunId')?.trim() || null
   const router = useRouter()
   const pathname = usePathname()
   const { notify } = useToast()
 
   const [lead, setLead] = useState<LuxorInquiry | null>(null)
+  const [activeTestRunId, setActiveTestRunId] = useState<string | null>(null)
+  const [loadingTestRun, setLoadingTestRun] = useState(false)
+  const activeTestRunRequestRef = useRef<string | null>(null)
   const [notes, setNotes] = useState<LuxorNote[]>([])
   const [callRecords, setCallRecords] = useState<LuxorCall[]>([])
   const [tasks, setTasks] = useState<LuxorTask[]>([])
@@ -480,6 +482,7 @@ export default function LeadDetailPage({
   // Invoice creation state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
   const testProposalOpenRequestRef = useRef<string | null>(null)
+  const testProposalLoadBusyRef = useRef(false)
   const [testProposalRevision, setTestProposalRevision] = useState(0)
   const proposalEditorOpenRef = useRef(false)
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
@@ -1631,8 +1634,8 @@ export default function LeadDetailPage({
           .catch(() => []),
       ])
 
-      setNotes(notesData)
-      setTasks(tasksData)
+      setNotes(isLuxorTestInquiry(leadData) ? [] : notesData)
+      setTasks(isLuxorTestInquiry(leadData) ? [] : tasksData)
       setInvoices(invoicesData)
       setDocuments((documentsData as LuxorDocument[]).filter((document) => document.inquiry_id === id))
       setSignatureRequests((signaturesData as Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null }>).filter((signature) => signature.inquiry_id === id))
@@ -1708,6 +1711,60 @@ export default function LeadDetailPage({
   useEffect(() => {
     fetchAllData()
   }, [id])
+
+  const ensureActiveTestRun = useCallback(async (showSuccess = false) => {
+    if (!lead || !isLuxorTestInquiry(lead)) return
+    activeTestRunRequestRef.current = lead.id
+    setLoadingTestRun(true)
+    try {
+      const response = await fetch('/api/portal/test-lead', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ensure_active_run' }),
+        cache: 'no-store',
+      })
+      const payload = await response.json().catch(() => ({})) as { leadId?: string; run?: { id?: string; status?: string }; error?: string }
+      if (!response.ok || payload.leadId !== lead.id || !payload.run?.id || payload.run.status !== 'in_progress') {
+        throw new Error(payload.error || 'Open Test Settings and enable the verified inbox before using the isolated workflow.')
+      }
+      setActiveTestRunId(payload.run.id)
+      if (showSuccess) notify({ title: 'Isolated test run ready', description: 'This Test Lead is connected to a run-scoped simulation.', variant: 'success' })
+    } catch (error) {
+      activeTestRunRequestRef.current = null
+      notify({ title: 'Test run unavailable', description: error instanceof Error ? error.message : 'The isolated Test Lead run could not be prepared.', variant: 'error' })
+    } finally {
+      setLoadingTestRun(false)
+    }
+  }, [lead, notify])
+
+  useEffect(() => {
+    if (!lead || !isLuxorTestInquiry(lead)) {
+      setActiveTestRunId(null)
+      setLoadingTestRun(false)
+      activeTestRunRequestRef.current = null
+      return
+    }
+    if (activeTestRunRequestRef.current === lead.id) return
+    void ensureActiveTestRun()
+  }, [ensureActiveTestRun, lead?.id, lead?.is_test, lead?.metadata?.is_test_record])
+
+  useEffect(() => {
+    const handleReset = () => {
+      activeTestRunRequestRef.current = null
+      setActiveTestRunId(null)
+    }
+    const handleReady = (event: Event) => {
+      const runId = (event as CustomEvent<{ runId?: string }>).detail?.runId
+      if (!runId) return
+      activeTestRunRequestRef.current = lead?.id || null
+      setActiveTestRunId(runId)
+    }
+    window.addEventListener('luxor-test-run-reset', handleReset)
+    window.addEventListener('luxor-test-run-ready', handleReady)
+    return () => {
+      window.removeEventListener('luxor-test-run-reset', handleReset)
+      window.removeEventListener('luxor-test-run-ready', handleReady)
+    }
+  }, [lead?.id])
 
   // The Luxor tables are private behind RLS, so browser Realtime may not receive
   // their row payloads. Keep the payment/open cards current through the
@@ -2107,11 +2164,40 @@ export default function LeadDetailPage({
     }
   }
 
+  const saveIsolatedTestActivity = async (activityType: string, details: Record<string, unknown>) => {
+    if (!activeTestRunId) throw new Error('Start or resume the isolated Test Lead run before saving activity.')
+    const response = await fetch('/api/portal/test-lead', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'record_activity', testRunId: activeTestRunId, activityType, details }),
+    })
+    const payload = await response.json().catch(() => ({})) as { activity?: { id?: string | number; created_at?: string }; error?: string }
+    if (!response.ok) throw new Error(payload.error || 'Unable to save isolated Test Lead activity.')
+    window.dispatchEvent(new CustomEvent('luxor-test-activity-recorded'))
+    return payload.activity || { id: crypto.randomUUID(), created_at: new Date().toISOString() }
+  }
+
   const handlePostNote = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!noteContent.trim()) return
     try {
       setSubmittingNote(true)
+      if (lead && isLuxorTestInquiry(lead)) {
+        const activity = await saveIsolatedTestActivity('test_note', { title: noteType.replaceAll('_', ' '), body: noteContent, noteType })
+        const note: LuxorNote = {
+          id: `test-${activity.id}`,
+          created_at: activity.created_at || new Date().toISOString(),
+          inquiry_id: lead.id,
+          author: 'Test run',
+          content: noteContent,
+          note_type: noteType,
+        }
+        setNotes((prev) => [...prev, note])
+        setNoteContent('')
+        setNoteType('note')
+        setActiveFeedTab('notes')
+        notify({ title: 'Test activity saved', description: 'Saved with this isolated run; no production note was created.', variant: 'success' })
+        return
+      }
       const res = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2142,6 +2228,24 @@ export default function LeadDetailPage({
     if (!taskTitle.trim()) return
     try {
       setSubmittingTask(true)
+      if (lead && isLuxorTestInquiry(lead)) {
+        const activity = await saveIsolatedTestActivity('test_task', { title: taskTitle, body: taskDesc, dueDate: taskDueDate || null, priority: taskPriority, completionStatus: 'pending' })
+        const task: LuxorTask = {
+          id: `test-${activity.id}`,
+          created_at: activity.created_at || new Date().toISOString(),
+          inquiry_id: lead.id,
+          title: taskTitle,
+          description: taskDesc || null,
+          due_date: taskDueDate || null,
+          completed_at: null,
+          priority: taskPriority,
+          status: 'pending',
+        }
+        setTasks((prev) => [task, ...prev])
+        setTaskTitle(''); setTaskDesc(''); setTaskDueDate(''); setTaskPriority('medium')
+        notify({ title: 'Test task saved', description: 'Saved with this isolated run; no production task was created.', variant: 'success' })
+        return
+      }
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2174,6 +2278,19 @@ export default function LeadDetailPage({
       const isCompleted = task.status === 'completed'
       const newStatus = isCompleted ? 'pending' : 'completed'
       const completedAt = isCompleted ? null : new Date().toISOString()
+
+      if (lead && isLuxorTestInquiry(lead)) {
+        await saveIsolatedTestActivity(isCompleted ? 'test_task' : 'test_task_completed', {
+          title: task.title,
+          body: task.description || '',
+          dueDate: task.due_date,
+          priority: task.priority,
+          completionStatus: newStatus,
+        })
+        setTasks((prev) => prev.map((item) => item.id === task.id ? { ...item, status: newStatus, completed_at: completedAt } : item))
+        notify({ title: newStatus === 'completed' ? 'Test task completed' : 'Test task reopened', description: 'Saved as isolated Test Lead activity.', variant: 'success' })
+        return
+      }
 
       const res = await fetch('/api/tasks', {
         method: 'PATCH',
@@ -2234,7 +2351,7 @@ export default function LeadDetailPage({
     return `${firstName}’s ${proposalEventType}`
   }
 
-  const openProposalBuilder = (invoice?: LuxorInvoice | null) => {
+  const initializeProposalBuilder = (invoice?: LuxorInvoice | null) => {
     if (invoiceSubmitBusy.current) return
     invoiceCreationRequest.current = crypto.randomUUID()
     savedPublicationInvoice.current = null
@@ -2326,14 +2443,43 @@ export default function LeadDetailPage({
     setIsInvoiceModalOpen(true)
   }
 
+  const openProposalBuilder = async (invoice?: LuxorInvoice | null) => {
+    if (!lead || !isLuxorTestInquiry(lead)) {
+      initializeProposalBuilder(invoice)
+      return
+    }
+    if (!activeTestRunId) {
+      notify({ title: 'Test run is not ready', description: loadingTestRun ? 'The isolated Test Lead run is being prepared. Try again in a moment.' : 'Start or resume the isolated Test Lead run before opening its proposal.', variant: 'warning' })
+      return
+    }
+    if (testProposalLoadBusyRef.current) return
+    testProposalLoadBusyRef.current = true
+    try {
+      const response = await fetch(`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(activeTestRunId)}`, { cache: 'no-store' })
+      const payload = await response.json().catch(() => ({})) as { artifact?: { status?: string; revision?: number; details?: { invoice?: unknown } | null }; error?: string }
+      if (!response.ok) throw new Error(payload.error || 'The test proposal could not be loaded.')
+      setTestProposalRevision(payload.artifact?.revision ?? 0)
+      if (payload.artifact?.status === 'sent') {
+        notify({ title: 'Test proposal already published', description: 'The proposal is preserved in this run. Open a new Test Lead run to draft another proposal.', variant: 'success' })
+        return
+      }
+      const savedInvoice = payload.artifact?.details?.invoice
+      initializeProposalBuilder(savedInvoice && typeof savedInvoice === 'object' ? savedInvoice as LuxorInvoice : null)
+    } catch (error) {
+      notify({ title: 'Test proposal unavailable', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
+    } finally {
+      testProposalLoadBusyRef.current = false
+    }
+  }
+
   useEffect(() => {
-    if (!lead || !isLuxorTestInquiry(lead) || !requestedTestRunId || searchParams?.get('createTestProposal') !== '1') return
-    const requestKey = `${lead.id}:${requestedTestRunId}`
+    if (!lead || !isLuxorTestInquiry(lead) || !activeTestRunId || searchParams?.get('createTestProposal') !== '1') return
+    const requestKey = `${lead.id}:${activeTestRunId}`
     if (testProposalOpenRequestRef.current === requestKey) return
     testProposalOpenRequestRef.current = requestKey
     void (async () => {
       try {
-        const response = await fetch(`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(requestedTestRunId)}`, { cache: 'no-store' })
+        const response = await fetch(`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(activeTestRunId)}`, { cache: 'no-store' })
         const payload = await response.json().catch(() => ({})) as { artifact?: { status?: string; revision?: number; details?: { invoice?: unknown } | null }; error?: string }
         if (!response.ok) throw new Error(payload.error || 'The test proposal could not be loaded.')
         setTestProposalRevision(payload.artifact?.revision ?? 0)
@@ -2348,7 +2494,7 @@ export default function LeadDetailPage({
         notify({ title: 'Test proposal unavailable', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
       }
     })()
-  }, [lead, notify, openProposalBuilder, requestedTestRunId, searchParams])
+  }, [lead, notify, openProposalBuilder, activeTestRunId, searchParams])
 
   const duplicateProposalDraft = (invoice: LuxorInvoice) => {
     openProposalBuilder()
@@ -2557,13 +2703,13 @@ export default function LeadDetailPage({
     let handoffWindow: Window | null = null
     try {
       if (isLuxorTestInquiry(lead)) {
-        if (!requestedTestRunId) throw new Error('Open the proposal builder from the active Test Lead run so this proposal stays isolated.')
+        if (!activeTestRunId) throw new Error('Start or resume the isolated Test Lead run before saving this proposal.')
         if (action === 'in_person') throw new Error('In-person handoff and signing are blocked for the permanent test lead.')
         if (!invoiceDueDate) throw new Error('Choose when this proposal offer expires before saving it.')
         const response = await fetch('/api/portal/test-lead/proposal', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            testRunId: requestedTestRunId,
+            testRunId: activeTestRunId,
             action: action === 'save' ? 'save' : 'publish',
             expectedRevision: testProposalRevision,
             description: invoiceDesc,
@@ -2676,6 +2822,17 @@ export default function LeadDetailPage({
   }
 
   const createFlowNote = async (content: string, noteType: LuxorNote['note_type'] = 'note') => {
+    if (lead && isLuxorTestInquiry(lead)) {
+      const activity = await saveIsolatedTestActivity('test_note', { title: noteType.replaceAll('_', ' '), body: content, noteType })
+      return {
+        id: `test-${activity.id}`,
+        created_at: activity.created_at || new Date().toISOString(),
+        inquiry_id: lead.id,
+        author: 'Test run',
+        content,
+        note_type: noteType,
+      } satisfies LuxorNote
+    }
     const res = await fetch('/api/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2691,6 +2848,20 @@ export default function LeadDetailPage({
   }
 
   const createFlowTask = async (title: string, description: string, priority: LuxorTask['priority'] = 'medium') => {
+    if (lead && isLuxorTestInquiry(lead)) {
+      const activity = await saveIsolatedTestActivity('test_task', { title, body: description, priority, completionStatus: 'pending' })
+      return {
+        id: `test-${activity.id}`,
+        created_at: activity.created_at || new Date().toISOString(),
+        inquiry_id: lead.id,
+        title,
+        description,
+        due_date: null,
+        completed_at: null,
+        priority,
+        status: 'pending',
+      } satisfies LuxorTask
+    }
     const res = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3247,7 +3418,7 @@ export default function LeadDetailPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createLuxorTourAttendancePayload({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, attendance, expectedAttendance: lead.tour_attendance_status || null })),
       })
-      const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: unknown; warnings?: string[] }
+      const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: unknown; warnings?: string[]; simulated?: boolean }
       if (!response.ok) throw new Error(payload.error || 'Tour attendance could not be updated.')
       if (payload.inquiry) setLead(payload.inquiry as LuxorInquiry)
       if (attendance === 'attended') {
@@ -3261,7 +3432,9 @@ export default function LeadDetailPage({
       const warnings = payload.warnings ?? []
       notify({
         title: attendance === 'attended' ? (lead.tour_attendance_status === 'no_show' ? 'Tour outcome corrected to complete' : 'Tour marked complete') : 'Tour marked no show',
-        description: warnings.length ? warnings.join(' ') : 'The outcome was saved without sending a message.',
+        description: warnings.length ? warnings.join(' ') : payload.simulated
+          ? 'Saved in the isolated Test Lead run. No customer message, venue calendar event, or inventory slot changed.'
+          : 'The outcome was saved without sending a message.',
         variant: warnings.length ? 'warning' : 'success',
       })
     } catch (error) {
@@ -3289,16 +3462,18 @@ export default function LeadDetailPage({
           tourAssignees,
         }),
       })
-      const payload = await response.json().catch(() => ({}))
+      const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: LuxorInquiry; simulated?: boolean; confirmationJob?: LuxorEmailJob | null; reminderJobs?: LuxorEmailJob[] }
       if (!response.ok) throw new Error(payload.error || 'The tour could not be scheduled.')
 
       setLead(payload.inquiry as LuxorInquiry)
-      setTourEmailJobs([payload.confirmationJob, ...(payload.reminderJobs || [])].filter(Boolean) as LuxorEmailJob[])
+      setTourEmailJobs(payload.simulated ? [] : [payload.confirmationJob, ...(payload.reminderJobs || [])].filter(Boolean) as LuxorEmailJob[])
       setIsTourScheduleModalOpen(false)
       await fetchAllData(false)
       notify({
-        title: 'Tour scheduled and invite sent',
-        description: `${payload.reminderJobs?.length || 0} reminder email${payload.reminderJobs?.length === 1 ? '' : 's'} queued automatically.`,
+        title: payload.simulated ? 'Simulated tour scheduled' : 'Tour scheduled and invite sent',
+        description: payload.simulated
+          ? 'Saved in the isolated Test Lead run. No email, calendar event, or venue inventory was changed.'
+          : `${payload.reminderJobs?.length || 0} reminder email${payload.reminderJobs?.length === 1 ? '' : 's'} queued automatically.`,
         variant: 'success',
       })
     } catch (err) {
@@ -3973,7 +4148,11 @@ export default function LeadDetailPage({
           ? 'No status updates match this filter yet.'
           : 'No activity has been logged yet.'
   const activityEmptyCopy =
-    activeFeedTab === 'notes'
+    isLuxorTestInquiry(lead) && activeFeedTab === 'notes'
+      ? 'Test notes and activity are saved to the isolated run and shown in Test History.'
+      : isLuxorTestInquiry(lead) && activeFeedTab === 'comms'
+        ? 'Use the isolated Test History controls for simulated client communication; this lead does not create production communication records.'
+        : activeFeedTab === 'notes'
       ? 'Use the note box above to capture the first written follow-up or summary.'
       : activeFeedTab === 'comms'
         ? 'Add a call log, email note, or sync email history to populate this view.'
@@ -4181,6 +4360,10 @@ export default function LeadDetailPage({
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0">
       {lead.is_test ? <LuxorTestLeadPanel leadId={lead.id} /> : null}
+      {lead.is_test && !activeTestRunId ? <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3" role="status">
+        <p className="text-xs text-[color:var(--portal-muted)]">{loadingTestRun ? 'Preparing the isolated Test Lead run…' : 'This lead needs an active isolated run before tours or proposals can be simulated.'}</p>
+        {!loadingTestRun ? <button type="button" onClick={() => void ensureActiveTestRun(true)} className="min-h-10 rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white">Start or resume isolated run</button> : null}
+      </div> : null}
 {invoices.some(invoice => invoice.same_day_booking_status === 'review') || payments.some(payment => payment.metadata?.receipt_received && payment.status !== 'paid') ? <div role="alert" className="mb-4 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-text)]"><p className="font-semibold">Payment received — owner review required</p><p className="text-[color:var(--portal-muted)]">Funds are recorded in the ledger but have not qualified the same-day booking. Do not collect again or revise a received-payment proposal. Verify receipt evidence or reconcile the exception with the client.</p></div> : null}
 
       <div className="mb-4 flex shrink-0 items-center justify-between">
@@ -8500,7 +8683,7 @@ export default function LeadDetailPage({
       <ProposalDeliveryPreview
         invoice={proposalDeliveryPreview?.invoice || null}
         initialTab={proposalDeliveryPreview?.initialTab || 'email'}
-        clientEmail={isLuxorTestInquiry(lead) && requestedTestRunId ? 'luxoratlaspalmas@gmail.com' : lead.email}
+        clientEmail={isLuxorTestInquiry(lead) ? 'luxoratlaspalmas@gmail.com' : lead.email}
         onClose={() => setProposalDeliveryPreview(null)}
       />
 
@@ -8715,7 +8898,7 @@ export default function LeadDetailPage({
         legacyDiscount={legacyProposalDiscount}
         onCalculationChange={handleProposalCalculationChange}
         pricingEndpoint="/api/proposal-pricing"
-        testRunId={isLuxorTestInquiry(lead) ? requestedTestRunId : null}
+        testRunId={isLuxorTestInquiry(lead) ? activeTestRunId : null}
         notes={invoiceNotes}
         onNotesChange={setInvoiceNotes}
         taxRate={invoiceTaxRate}

@@ -73,11 +73,11 @@ export async function prepareLuxorTestProposal(input: {
   const [lead, artifacts, tourArtifacts] = await Promise.all([
     getLuxorInquiry(LUXOR_PERMANENT_TEST_LEAD_ID),
     supabaseRest<Artifact[]>(`luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.proposal&limit=1`),
-    supabaseRest<Pick<Artifact, 'status'>[]>(`luxor_test_run_artifacts?select=status&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`),
+    supabaseRest<Pick<Artifact, 'status' | 'details'>[]>(`luxor_test_run_artifacts?select=status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`),
   ])
   if (!lead || lead.is_test !== true) throw new Error('The permanent test lead is unavailable.')
-  if (tourArtifacts[0]?.status !== 'completed') {
-    throw new Error('Complete the simulated tour before saving or publishing a test proposal.')
+  if (tourArtifacts[0]?.status !== 'completed' || tourArtifacts[0]?.details?.tour_attendance_status === 'no_show') {
+    throw new Error('Complete the simulated tour after an attended visit before saving or publishing a test proposal.')
   }
   const existing = artifacts[0] ?? null
   const requestFingerprint = input.action === 'publish'
