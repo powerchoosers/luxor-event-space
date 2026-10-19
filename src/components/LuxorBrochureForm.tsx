@@ -289,6 +289,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
                   label="Event Type"
                   required
                   variant="public-light"
+                  suggestionLayout="flow"
                   value={eventType}
                   onChange={setEventType}
                   className="block sm:col-span-1"

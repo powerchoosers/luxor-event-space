@@ -17,6 +17,7 @@ type LuxorEventTypeComboboxProps = {
   labelClassName?: string
   inputClassName?: string
   listClassName?: string
+  suggestionLayout?: 'overlay' | 'flow'
   maxLength?: number
   onBlur?: () => void
   onEnterCustom?: (value: string) => void
@@ -54,6 +55,7 @@ export function LuxorEventTypeCombobox({
   labelClassName = '',
   inputClassName = '',
   listClassName = '',
+  suggestionLayout = 'overlay',
   maxLength = LUXOR_EVENT_TYPE_MAX_LENGTH,
   onBlur,
   onEnterCustom,
@@ -68,6 +70,7 @@ export function LuxorEventTypeCombobox({
   const [activeIndex, setActiveIndex] = useState(-1)
   const suggestions = filterLuxorEventTypes(value)
   const activeSuggestion = suggestions[activeIndex]
+  const showSuggestions = isOpen && suggestions.length > 0
 
   const selectSuggestion = (suggestion: string) => {
     onChange(suggestion)
@@ -79,6 +82,7 @@ export function LuxorEventTypeCombobox({
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
+      if (!suggestions.length) return
       setIsOpen(true)
       setActiveIndex((current) => current < suggestions.length - 1 ? current + 1 : 0)
       return
@@ -86,6 +90,7 @@ export function LuxorEventTypeCombobox({
 
     if (event.key === 'ArrowUp') {
       event.preventDefault()
+      if (!suggestions.length) return
       setIsOpen(true)
       setActiveIndex((current) => current > 0 ? current - 1 : suggestions.length - 1)
       return
@@ -124,9 +129,9 @@ export function LuxorEventTypeCombobox({
           role="combobox"
           aria-autocomplete="list"
           aria-haspopup="listbox"
-          aria-expanded={isOpen}
-          aria-controls={listId}
-          aria-activedescendant={isOpen && activeSuggestion ? `${listId}-option-${activeIndex}` : undefined}
+          aria-expanded={showSuggestions}
+          aria-controls={showSuggestions ? listId : undefined}
+          aria-activedescendant={showSuggestions && activeSuggestion ? `${listId}-option-${activeIndex}` : undefined}
           aria-required={required || undefined}
           autoComplete="off"
           autoCapitalize="none"
@@ -171,14 +176,14 @@ export function LuxorEventTypeCombobox({
         ) : null}
       </div>
 
-      {isOpen ? (
+      {showSuggestions ? (
         <ul
           id={listId}
           role="listbox"
           aria-label={`${label} suggestions`}
-          className={`absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border p-1 shadow-xl ${LIST_STYLES[variant]} ${listClassName}`}
+          className={`${suggestionLayout === 'flow' ? 'relative mt-2' : 'absolute left-0 top-full z-50 mt-1'} max-h-64 w-full overflow-y-auto rounded-xl border p-1 shadow-xl ${LIST_STYLES[variant]} ${listClassName}`}
         >
-          {suggestions.length ? suggestions.map((suggestion, index) => (
+          {suggestions.map((suggestion, index) => (
             <li
               id={`${listId}-option-${index}`}
               key={suggestion}
@@ -196,11 +201,7 @@ export function LuxorEventTypeCombobox({
             >
               {suggestion}
             </li>
-          )) : (
-            <li role="status" className={`px-3 py-3 text-sm ${variant === 'portal' ? 'text-[color:var(--portal-muted)]' : variant === 'public-dark' ? 'text-[#d7c29a]/70' : 'text-[#665a4e]'}`}>
-              No matching suggestions. Your entry is still valid.
-            </li>
-          )}
+          ))}
         </ul>
       ) : null}
     </div>
