@@ -6,6 +6,131 @@ export const RENTAL_WINDOWS = {
   full_day: { start: '09:00', end: '23:00' },
 } as const
 
+export const LUXOR_EVENT_TIME_ZONE = 'America/Chicago'
+
+const luxorLocalDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: LUXOR_EVENT_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+type LocalClockParts = { date: string; time: string }
+
+function localClockParts(instant: number): LocalClockParts {
+  const parts = Object.fromEntries(luxorLocalDateTimeFormatter.formatToParts(new Date(instant)).map((part) => [part.type, part.value]))
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  }
+}
+
+function utcMilliseconds(year: number, month: number, day: number, hour: number, minute: number) {
+  const value = new Date(0)
+  value.setUTCFullYear(year, month - 1, day)
+  value.setUTCHours(hour, minute, 0, 0)
+  return value.getTime()
+}
+
+function luxorOffsetMinutesAt(instant: number) {
+  const parts = Object.fromEntries(luxorLocalDateTimeFormatter.formatToParts(new Date(instant)).map((part) => [part.type, part.value]))
+  const localAsUtc = utcMilliseconds(Number(parts.year), Number(parts.month), Number(parts.day), Number(parts.hour), Number(parts.minute))
+  return Math.round((localAsUtc - instant) / 60_000)
+}
+
+const localInstantCache = new Map<string, number[]>()
+
+/** Resolve a venue-local clock reading without using the host machine's timezone. */
+function luxorLocalInstants(date: string, time: string) {
+  const cacheKey = `${date}T${time}`
+  const cached = localInstantCache.get(cacheKey)
+  if (cached) return [...cached]
+
+  const [year, month, day] = date.split('-').map(Number)
+  const [hour, minute] = time.split(':').map(Number)
+  const wallClockAsUtc = utcMilliseconds(year, month, day, hour, minute)
+  const offsets = new Set<number>()
+  // Sampling on both sides of the requested local date discovers both offsets
+  // during a daylight-saving transition, so repeated and skipped times are explicit.
+  for (let hours = -36; hours <= 36; hours += 3) {
+    offsets.add(luxorOffsetMinutesAt(wallClockAsUtc + hours * 3_600_000))
+  }
+
+  const candidates = [...offsets]
+    .map((offset) => wallClockAsUtc - offset * 60_000)
+    .filter((instant) => {
+      const parts = localClockParts(instant)
+      return parts.date === date && parts.time === time
+    })
+    .sort((left, right) => left - right)
+
+  if (localInstantCache.size > 512) localInstantCache.clear()
+  localInstantCache.set(cacheKey, candidates)
+  return [...candidates]
+}
+
+function nextCalendarDate(date: string) {
+  const next = new Date(`${date}T12:00:00Z`)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next.toISOString().slice(0, 10)
+}
+
+/**
+ * Resolve actual elapsed security time between guest arrival and event end.
+ * Times are venue-local and end times before arrival belong to the next date.
+ * Missing, identical, skipped, and repeated local times are rejected instead
+ * of being replaced with a rental-window duration or an assumed minimum.
+ */
+export function proposalSecurityDuration(eventDate: string, arrivalValue?: string | null, eventEndValue?: string | null) {
+  const fail = (error: string) => ({
+    valid: false as const,
+    error,
+    durationMinutes: 0,
+    durationHours: 0,
+    timeZone: LUXOR_EVENT_TIME_ZONE,
+  })
+  if (!validCalendarDate(eventDate)) return fail('A valid event date is required to calculate actual security hours.')
+
+  const arrival = typeof arrivalValue === 'string' ? arrivalValue.trim() : ''
+  const eventEnd = typeof eventEndValue === 'string' ? eventEndValue.trim() : ''
+  if (!arrival) return fail('Enter the guest arrival time to calculate actual security hours.')
+  if (!eventEnd) return fail('Enter the event end time to calculate actual security hours.')
+
+  const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/
+  if (!timePattern.test(arrival)) return fail('Guest arrival time is invalid.')
+  if (!timePattern.test(eventEnd)) return fail('Event end time is invalid.')
+  if (arrival === eventEnd) return fail('Guest arrival time must be before event end time.')
+
+  const arrivalMinutes = Number(arrival.slice(0, 2)) * 60 + Number(arrival.slice(3, 5))
+  const eventEndMinutes = Number(eventEnd.slice(0, 2)) * 60 + Number(eventEnd.slice(3, 5))
+  const arrivalDate = arrivalMinutes < 6 * 60 ? nextCalendarDate(eventDate) : eventDate
+  const eventEndDate = eventEndMinutes < arrivalMinutes ? nextCalendarDate(arrivalDate) : arrivalDate
+  const arrivalInstants = luxorLocalInstants(arrivalDate, arrival)
+  const eventEndInstants = luxorLocalInstants(eventEndDate, eventEnd)
+
+  if (!arrivalInstants.length) return fail('Guest arrival time does not exist on this event date in Luxor local time.')
+  if (arrivalInstants.length > 1) return fail('Guest arrival time is ambiguous on this event date in Luxor local time. Choose an unambiguous time.')
+  if (!eventEndInstants.length) return fail('Event end time does not exist on this event date in Luxor local time.')
+  if (eventEndInstants.length > 1) return fail('Event end time is ambiguous on this event date in Luxor local time. Choose an unambiguous time.')
+
+  const durationMinutes = (eventEndInstants[0] - arrivalInstants[0]) / 60_000
+  if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) return fail('Event end time must be after guest arrival in Luxor local time.')
+
+  return {
+    valid: true as const,
+    durationMinutes,
+    durationHours: durationMinutes / 60,
+    arrivalAt: new Date(arrivalInstants[0]).toISOString(),
+    eventEndAt: new Date(eventEndInstants[0]).toISOString(),
+    arrivalLocal: `${arrivalDate}T${arrival}`,
+    eventEndLocal: `${eventEndDate}T${eventEnd}`,
+    timeZone: LUXOR_EVENT_TIME_ZONE,
+  }
+}
+
 function minutes(value: string) {
   const match = /^(\d{2}):(\d{2})$/.exec(value)
   if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return null

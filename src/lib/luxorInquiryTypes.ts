@@ -350,6 +350,9 @@ export type LuxorProposalContext = {
   rental_total?: number
   security_rate?: number
   security_hours?: number
+  security_duration_minutes?: number
+  security_time_zone?: string
+  security_calculation_version?: number
   security_guards?: number
   security_total?: number
   venue_services_total?: number

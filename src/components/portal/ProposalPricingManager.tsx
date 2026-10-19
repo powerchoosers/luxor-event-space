@@ -53,7 +53,6 @@ const MONEY_GROUPS: FieldGroup[] = [
       { label: 'Booking payment due at signing', path: ['luxor_costs', 'booking_payment', 'amount'], step: '0.01' },
       ...[0, 1, 2].map((index) => ({ label: `Cleaning ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} guests`, path: ['luxor_costs', 'required_fees', 'cleaning', 'retail', index, 'amount'] })),
       { label: 'Security rate', path: ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], suffix: '/ guard / hour', step: '1' },
-      { label: 'Security minimum', path: ['luxor_costs', 'required_fees', 'security', 'minimum_hours'], suffix: 'hours', step: '1', hideDollar: true },
       { label: 'Refundable security deposit', path: ['luxor_costs', 'security_deposit', 'amount'] },
     ],
     subgroups: [
@@ -141,7 +140,7 @@ export function ProposalPricingManager() {
       let loadedConfig = structuredClone(payload.config)
       setCustomTimeV4Ready(payload.custom_time_v4_ready === true)
       if (catalogValue(loadedConfig, 'luxor_costs', 'required_fees', 'security', 'hourly_rate') === undefined) {
-        loadedConfig = setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], 40)
+      loadedConfig = setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], 30)
       }
       if (catalogValue(loadedConfig, 'luxor_costs', 'required_fees', 'security', 'minimum_hours') === undefined) {
         loadedConfig = setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'minimum_hours'], 4)
@@ -310,7 +309,7 @@ export function ProposalPricingManager() {
                 <MoneyInput draft={draft} field={{ label: 'Each additional hour', path: [...path, 'additional_hour_rate'], optional: true }} onChange={update} />
                 <label className="flex min-h-11 items-center gap-2 self-end text-[10px] font-semibold text-[color:var(--portal-muted)]"><input type="checkbox" checked={catalogValue(draft, ...path, 'show_publicly') === true} onChange={(event) => update([...path, 'show_publicly'], event.target.checked)} className="h-4 w-4 accent-[#caa24c]" /> Show Custom Time starting price publicly</label>
               </div>
-              <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">{day.id === 'monday_thursday' ? `The minimum price is ${shownMinimumPrice != null ? `$${shownMinimumPrice.toFixed(2)}` : 'set by the base hourly rate'} for ${shownMinimumHours ?? 'the configured'} minimum billed hours; each additional hour uses the editable extra-hour rate.` : `The base price covers the first ${minimumHours ?? 'configured'} minimum billed hours, then each additional hour uses the editable extra-hour rate.`} Venue access is 6:00 AM-1:00 AM the next day. Security uses guest arrival through event end with the existing four-hour minimum.</p>
+                  <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">{day.id === 'monday_thursday' ? `The minimum price is ${shownMinimumPrice != null ? `$${shownMinimumPrice.toFixed(2)}` : 'set by the base hourly rate'} for ${shownMinimumHours ?? 'the configured'} minimum billed hours; each additional hour uses the editable extra-hour rate.` : `The base price covers the first ${minimumHours ?? 'configured'} minimum billed hours, then each additional hour uses the editable extra-hour rate.`} Venue access is 6:00 AM-1:00 AM the next day. Security uses the actual guest arrival to event end at the configured hourly rate.</p>
               {enabled && !catalogNumber(draft, ...path, 'minimum_price') ? <p role="status" className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Set {day.id === 'monday_thursday' ? 'the' : `${day.label}'s`} base price before enabling this Custom Time day.</p> : null}
             </article>
           })}

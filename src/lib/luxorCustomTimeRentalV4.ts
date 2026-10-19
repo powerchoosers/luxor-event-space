@@ -1,4 +1,4 @@
-import { validCalendarDate } from './luxorProposalTerms'
+import { proposalSecurityDuration, validCalendarDate } from './luxorProposalTerms'
 import { catalogNumber, catalogValue, setCatalogValue, type PricingCatalog } from './luxorPricingCatalog'
 
 export const LUXOR_CUSTOM_TIME_V4_GATE = 'LUXOR_CUSTOM_TIME_V4_READY'
@@ -174,6 +174,7 @@ export function validateLuxorCustomTimeScheduleV4(
   guestArrivalValue: string,
   eventEndValue: string,
   policy: LuxorCustomTimeRentalPolicyV4 | null,
+  options: { historicalSnapshot?: boolean } = {},
 ): LuxorCustomTimeScheduleV4 {
   const fail = (error: string): LuxorCustomTimeScheduleV4 => ({ valid: false, error, rentalStartAt: '', rentalEndAt: '', guestArrivalAt: '', eventEndAt: '', durationMinutes: 0, securityHours: 0 })
   if (!validCalendarDate(eventDate) || !luxorCustomTimeDayGroup(eventDate)) return fail('A valid event date is required for Custom Time.')
@@ -191,11 +192,15 @@ export function validateLuxorCustomTimeScheduleV4(
   if (end <= start) return fail('Rental end must be after rental start on the actual calendar date.')
   if (start % 60 || end % 60) return fail('Custom rental boundaries must use whole-hour increments.')
   if (guest < start || guest > end) return fail('Guest arrival must fall within the rental access period.')
-  if (eventEnd < guest) return fail('Event end must be after guest arrival on the actual calendar date.')
+  if (eventEnd < guest || (!options.historicalSnapshot && eventEnd === guest)) return fail('Event end must be after guest arrival on the actual calendar date.')
   if (eventEnd > end) return fail('Event end must be at or before rental end.')
   const durationMinutes = end - start
   if (durationMinutes > 19 * 60) return fail('Custom rentals cannot exceed 19 hours.')
-  const securityHours = Math.max(4, (eventEnd - guest) / 60)
+  const securityDuration = proposalSecurityDuration(eventDate, guestArrivalValue, eventEndValue)
+  if (!options.historicalSnapshot && !securityDuration.valid) return fail(securityDuration.error)
+  const securityHours = options.historicalSnapshot
+    ? Math.max(4, (eventEnd - guest) / 60)
+    : securityDuration.valid ? securityDuration.durationHours : 0
   return {
     valid: true,
     rentalStartAt: venueDateTime(eventDate, rentalStartValue)!,
@@ -214,8 +219,9 @@ export function luxorCustomTimeRentalSnapshotV4(
   guestArrival: string,
   eventEnd: string,
   policy: LuxorCustomTimeRentalPolicyV4,
+  options: { historicalSnapshot?: boolean } = {},
 ): LuxorCustomTimeRentalSnapshotV4 {
-  const schedule = validateLuxorCustomTimeScheduleV4(eventDate, rentalStart, rentalEnd, guestArrival, eventEnd, policy)
+  const schedule = validateLuxorCustomTimeScheduleV4(eventDate, rentalStart, rentalEnd, guestArrival, eventEnd, policy, options)
   if (!schedule.valid) throw new Error(schedule.error || 'Valid custom rental timing is required.')
   const dayGroup = luxorCustomTimeDayGroup(eventDate)!
   const durationHours = schedule.durationMinutes / 60
@@ -274,11 +280,22 @@ export function getLuxorCustomTimeRentalSnapshotV4(value: unknown): LuxorCustomT
   if (!['portal_only', 'public_and_portal'].includes(policy.selection_surface)) return null
   if (validateLuxorCustomTimeRentalV4Config({ custom_time_rental_v4: { [snapshot.day_group as string]: policy } }).length) return null
   try {
-    const computed = luxorCustomTimeRentalSnapshotV4(String(snapshot.event_date), String(snapshot.start_time), String(snapshot.end_time), String(snapshot.guest_arrival_at).slice(11, 16), String(snapshot.event_end_at).slice(11, 16), policy)
-    for (const key of Object.keys(computed) as Array<keyof LuxorCustomTimeRentalSnapshotV4>) {
-      if (snapshot[key] !== computed[key]) return null
+    const args = [String(snapshot.event_date), String(snapshot.start_time), String(snapshot.end_time), String(snapshot.guest_arrival_at).slice(11, 16), String(snapshot.event_end_at).slice(11, 16), policy] as const
+    const legacy = luxorCustomTimeRentalSnapshotV4(...args, { historicalSnapshot: true })
+    let current: LuxorCustomTimeRentalSnapshotV4 | null = null
+    try {
+      current = luxorCustomTimeRentalSnapshotV4(...args)
+    } catch {
+      // A historical snapshot can contain times that the new calculation
+      // explicitly rejects, including identical or DST-ambiguous local times.
     }
-    return computed
+    const computed = current || legacy
+    for (const key of Object.keys(computed) as Array<keyof LuxorCustomTimeRentalSnapshotV4>) {
+      if (key !== 'security_hours' && snapshot[key] !== computed[key]) return null
+    }
+    const savedSecurityHours = numeric(snapshot.security_hours)
+    if (savedSecurityHours === null || ![legacy.security_hours, current?.security_hours].includes(savedSecurityHours)) return null
+    return { ...computed, security_hours: savedSecurityHours }
   } catch {
     return null
   }

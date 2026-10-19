@@ -24,7 +24,7 @@ import { ProposalPackageItemsPanel } from '@/components/portal/ProposalPackageIt
 import { ProposalPaymentSchedule, calculateProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import { LUXOR_TIME_DROPDOWN_OPTIONS } from '@/lib/luxorTimeOptions'
 import { PromotionTermsFields, type PromotionTermsDraft } from './PromotionTermsFields'
-import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
+import { proposalEventTiming, proposalSecurityDuration, RENTAL_WINDOWS, luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from '@/lib/luxorDecorCatalog'
 import { DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS, packageInclusionsForDisplay, type LuxorProposalPackageOption } from '@/lib/luxorProposalPackages'
@@ -566,6 +566,13 @@ function normalizeCalculation(payload: unknown): ProposalPricingCalculation | nu
   }
 }
 
+function pricingSelectionWithoutLegacySecurityHours(selection: Record<string, unknown> | null | undefined) {
+  const result = { ...(selection || {}) }
+  delete result.securityHours
+  delete result.security_hours
+  return result
+}
+
 function selectedServiceIdsFrom(context: ProposalBuilderContext, items: LuxorInvoiceLineItem[]) {
   const selection = context.pricing_selection || {}
   // An intentionally empty add-on list is meaningful: do not infer add-ons from
@@ -792,19 +799,26 @@ export function ProposalBuilderModal({
   const rentalEndTime = isCustomRental
     ? customTimesSelected ? asString(effectiveContext.rental_end_time ?? effectiveContext.end_time ?? effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || '' : ''
     : asString(effectiveContext.rental_end_time ?? effectiveContext.end_time) || RENTAL_WINDOWS[rentalPeriod].end
+  const savedGuestArrivalTime = effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime
+  const savedEventEndTime = effectiveContext.event_end_time ?? effectiveContext.eventEndTime
   const guestArrivalTime = isCustomRental
     ? customTimesSelected ? asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || '' : ''
-    : asString(effectiveContext.guest_arrival_time ?? effectiveContext.guestArrivalTime) || RENTAL_WINDOWS[rentalPeriod].start
+    : typeof savedGuestArrivalTime === 'string' ? savedGuestArrivalTime : RENTAL_WINDOWS[rentalPeriod].start
   const eventEndTime = isCustomRental
     ? customTimesSelected ? asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || '' : ''
-    : asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || RENTAL_WINDOWS[rentalPeriod].end
+    : typeof savedEventEndTime === 'string' ? savedEventEndTime : RENTAL_WINDOWS[rentalPeriod].end
   const rentalAccess = asRecord(calculation?.rental_access)
   const timeValidation = useMemo(
-    () => isCustomRental
-      ? customTimeV4Enabled && customTimeV4Policy
-        ? validateLuxorCustomTimeScheduleV4(eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, customTimeV4Policy)
-        : validateWeekdayCustomRentalSchedule(eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, weekdayPolicy)
-      : validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod),
+    () => {
+      const rentalTiming = isCustomRental
+        ? customTimeV4Enabled && customTimeV4Policy
+          ? validateLuxorCustomTimeScheduleV4(eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, customTimeV4Policy)
+          : validateWeekdayCustomRentalSchedule(eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, weekdayPolicy)
+        : validateEventTimes(guestArrivalTime, eventEndTime, rentalPeriod)
+      if (!rentalTiming.valid) return rentalTiming
+      const securityTiming = proposalSecurityDuration(eventDateValue, guestArrivalTime, eventEndTime)
+      return securityTiming.valid ? rentalTiming : { valid: false, error: securityTiming.error }
+    },
     [eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, isCustomRental, rentalPeriod, weekdayPolicy, customTimeV4Enabled, customTimeV4Policy]
   )
   const customTimeOptions = useMemo(() => weekdayPolicy || customTimeV4Policy ? Array.from({ length: 25 * 60 - 6 * 60 + 1 }, (_, index) => index + 6 * 60)
@@ -873,17 +887,9 @@ export function ProposalBuilderModal({
       event_end_time: nextEnd || undefined, eventEndTime: nextEnd || undefined,
       pricing_selection: nextSelection,
     } : {
-      [field]: value || undefined,
-      ...(field === 'guest_arrival_time' ? { guestArrivalTime: value || undefined } : {}),
-      ...(field === 'event_end_time' ? { eventEndTime: value || undefined } : {}),
-    })
-  }
-  const handleSecurityHoursChange = (value: string) => {
-    updateProposalContext({
-      rental_period: 'custom',
-      guest_arrival_time: guestArrivalTime || undefined, guestArrivalTime: guestArrivalTime || undefined,
-      event_end_time: eventEndTime || undefined, eventEndTime: eventEndTime || undefined,
-      pricing_selection: { ...effectiveContext.pricing_selection, securityHours: value || null, security_hours: value || null },
+      [field]: value,
+      ...(field === 'guest_arrival_time' ? { guestArrivalTime: value } : {}),
+      ...(field === 'event_end_time' ? { eventEndTime: value } : {}),
     })
   }
   const selectedServiceIds = useMemo(() => selectedServiceIdsFrom(effectiveContext, items), [effectiveContext, items])
@@ -914,8 +920,6 @@ export function ProposalBuilderModal({
   const optionalServices = useMemo(() => selectedPackageOption ? availableServices : [], [availableServices, selectedPackageOption])
   const paymentPlanDraft = getPaymentPlanDraft(effectiveContext)
   const pricingSelection = asRecord(effectiveContext.pricing_selection)
-  const securityHoursSelection = customTimesSelected ? pricingSelection?.securityHours ?? pricingSelection?.security_hours : undefined
-  const securityHoursValue = typeof securityHoursSelection === 'number' || typeof securityHoursSelection === 'string' ? String(securityHoursSelection) : ''
   const selectedDecorPackageId = asString(pricingSelection && 'decor_package_id' in pricingSelection ? pricingSelection.decor_package_id : pricingSelection?.decorPackageId ?? effectiveContext.decor_package_id) || ''
   const decorAddOnQuantities = useMemo(() => {
     const saved = asRecord(pricingSelection?.decor_add_on_quantities ?? pricingSelection?.decorAddOnQuantities ?? effectiveContext.decor_add_on_quantities) || {}
@@ -1094,7 +1098,7 @@ export function ProposalBuilderModal({
   const selectPackageTier = (nextPackageTierId: LuxorProposalPackageOption['id']) => {
     const option = DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS.options[nextPackageTierId]
     const nextPricingSelection = {
-      ...effectivePricingSelection,
+      ...pricingSelectionWithoutLegacySecurityHours(effectivePricingSelection),
       packageTierId: nextPackageTierId,
       package_tier_id: nextPackageTierId,
       // The new tiered packages replace the legacy Classic/Signature/Luxor
@@ -1250,7 +1254,6 @@ export function ProposalBuilderModal({
       guest_arrival_time: guestArrivalTime || null,
       eventEndTime: eventEndTime || null,
       event_end_time: eventEndTime || null,
-      ...(isCustomRental && weekdayPolicy?.security_hours_policy === 'owner_entered' ? { securityHours: securityHoursValue.trim() ? Number(securityHoursValue) : null } : {}),
       addOns: selectedServiceIds,
       decorPackageId: packageTierId ? null : selectedDecorPackageId || null,
       decorAddOnQuantities,
@@ -1271,7 +1274,7 @@ export function ProposalBuilderModal({
     event_end_time: eventEndTime || null,
     package_id: 'luxor_venue_proposal',
     pricing_selection: {
-      ...(effectiveContext.pricing_selection || {}),
+      ...pricingSelectionWithoutLegacySecurityHours(effectiveContext.pricing_selection),
       ...(packageTierId ? { packageTierId, package_tier_id: packageTierId } : {}),
       service_ids: selectedServiceIds,
       decor_package_id: packageTierId ? null : selectedDecorPackageId || null,
@@ -1291,7 +1294,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [invoiceId, supersedesInvoiceId, testRunId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, isCustomRental, items, removedServiceIds, rentalEndTime, rentalPeriod, rentalStartTime, securityHoursValue, selectedPackage, packageTierId, selectedPromotionId, selectedServiceIds, taxRate, weekdayPolicy?.security_hours_policy])
+  }), [invoiceId, supersedesInvoiceId, testRunId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, isCustomRental, items, removedServiceIds, rentalEndTime, rentalPeriod, rentalStartTime, selectedPackage, packageTierId, selectedPromotionId, selectedServiceIds, taxRate])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1469,10 +1472,6 @@ export function ProposalBuilderModal({
       }
       if (!timeValidation.valid) {
         setValidationMessage(timeValidation.error || 'Please correct the event times before continuing.')
-        return
-      }
-      if (isCustomRental && weekdayPolicy?.security_hours_policy === 'owner_entered' && !(Number(securityHoursValue) > 0)) {
-        setValidationMessage('Enter the approved security hours for this custom rental before continuing.')
         return
       }
     }
@@ -1706,7 +1705,7 @@ export function ProposalBuilderModal({
                         {isCustomRental ? `Choose rental boundaries separately from guest arrival and event end. Venue access is available 6:00 AM-1:00 AM the next day, in ${customTimeV4Enabled ? 60 : weekdayPolicy?.time_increment_minutes || ''}-minute increments. The ${formatMoney((customTimeV4Enabled ? customTimeV4Policy?.minimum_price : weekdayPolicy?.minimum_price) || 0)} minimum covers ${(customTimeV4Enabled ? customTimeV4Policy?.minimum_hours : weekdayPolicy?.minimum_hours) || ''} billed hours; shorter valid rentals still use this minimum.${!customTimeV4Enabled && weekdayPolicy?.reset_window_policy === 'blocked' ? ' The 3:00-5:00 PM reset period is reserved.' : ''}` : <>{rentalPeriod === 'morning' ? 'Morning access can start before 9:00 AM and must end by 3:00 PM.' : rentalPeriod === 'evening' ? 'Evening access starts at or after 5:00 PM and can extend after 11:00 PM.' : 'Full-day access includes the 3:00-5:00 PM period and can extend before 9:00 AM or after 11:00 PM.'} Extensions are billed in whole hours, within 6:00 AM-1:00 AM.</>}
                       </p>
                     )}
-                    {isCustomRental && weekdayPolicy?.security_hours_policy === 'owner_entered' ? <label className="mt-4 block space-y-1.5"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Approved security hours</span><input type="number" min="0" step="any" inputMode="decimal" value={securityHoursValue} onChange={event => handleSecurityHoursChange(event.target.value)} placeholder="Enter approved hours" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /><span className="block text-[10px] leading-4 text-[color:var(--portal-muted)]">Required for this custom rental. Luxor verifies the saved minimum and hourly security rate.</span></label> : isCustomRental && weekdayPolicy?.security_hours_policy === 'arrival_to_end' ? <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Security is calculated from guest arrival through event end, using the existing security rate and officer rules with a four-hour minimum.</p> : isCustomRental && weekdayPolicy?.security_hours_policy === 'rental_duration' ? <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Security hours follow the selected rental duration, subject to the existing minimum. Security and cleaning rates are unchanged.</p> : null}
+                    <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Required security is calculated from the actual guest arrival to event end in Luxor local time, using the configured hourly rate. Rental minimums remain separate.</p>
                   </div>
                 </div>
 

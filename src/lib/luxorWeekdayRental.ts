@@ -1,4 +1,4 @@
-import { validCalendarDate } from './luxorProposalTerms'
+import { proposalSecurityDuration, validCalendarDate } from './luxorProposalTerms'
 
 export const INACTIVE_WEEKDAY_CUSTOM_RENTAL_POLICY = {
   enabled: false,
@@ -148,10 +148,8 @@ export function validateWeekdayCustomRentalPolicy(config: unknown, options: { hi
   const buffer = number(policy.cleanup_buffer_minutes)
   if (buffer === null || !Number.isInteger(buffer) || buffer < 0 || buffer > 19 * 60) errors.push('Confirm the weekday cleanup buffer in whole minutes, including zero if none is required.')
   else if (!options.historicalSnapshot && buffer !== 0) errors.push('New weekday custom rentals require a zero-minute additional cleanup buffer.')
-  if (options.historicalSnapshot) {
-    if (policy.security_hours_policy !== 'rental_duration' && policy.security_hours_policy !== 'owner_entered' && policy.security_hours_policy !== 'arrival_to_end') errors.push('The saved historical security-hour policy is invalid.')
-  } else if (policy.security_hours_policy !== 'arrival_to_end') {
-    errors.push('New weekday security pricing must use guest arrival through event end, with the existing four-hour minimum.')
+  if (policy.security_hours_policy !== 'rental_duration' && policy.security_hours_policy !== 'owner_entered' && policy.security_hours_policy !== 'arrival_to_end') {
+    errors.push('Choose a valid security-hour policy for the saved rental settings.')
   }
   if (policy.selection_surface !== 'portal_only' && policy.selection_surface !== 'public_and_portal') errors.push('Set where weekday custom rental times may be selected.')
   else if (!options.historicalSnapshot && policy.selection_surface !== 'portal_only') errors.push('New weekday custom proposals may select times in the owner portal only.')
@@ -245,10 +243,12 @@ export function validateWeekdayCustomRentalSchedule(
   if (end <= start) return fail('Rental start time must be before rental end time.')
   if (policy.reset_window_policy === 'blocked' && start < 17 * 60 && end > 15 * 60) return fail('The 3:00–5:00 PM reset period is reserved.')
   if (guest < start || guest > end) return fail('Guest arrival time must be within the rental period.')
-  if (finish < guest) return fail('Event end time must be at or after guest arrival time.')
+  if (finish <= guest) return fail('Event end time must be after guest arrival time.')
   if (finish > end) return fail('Your event end time must be at or before your rental end time. Please adjust your event schedule or extend your rental period.')
+  const securityDuration = proposalSecurityDuration(eventDate, guestArrival, eventEnd)
+  if (!securityDuration.valid) return fail(securityDuration.error)
   const durationMinutes = end - start
-  return { valid: true, rentalStart, rentalEnd, guestArrival, eventEnd, durationMinutes, durationHours: durationMinutes / 60, securityHours: (finish - guest) / 60 }
+  return { valid: true, rentalStart, rentalEnd, guestArrival, eventEnd, durationMinutes, durationHours: durationMinutes / 60, securityHours: securityDuration.durationHours }
 }
 
 /** Price integer minutes in cents once; never stack the fixed-period extension. */
@@ -278,7 +278,7 @@ export function weekdayCustomRentalSnapshot(eventDate: string, timing: LuxorWeek
     reset_window_policy: policy.reset_window_policy,
     booking_policy: policy.booking_policy,
     cleanup_buffer_minutes: policy.cleanup_buffer_minutes,
-    security_hours_policy: policy.security_hours_policy,
+    security_hours_policy: historical ? policy.security_hours_policy : 'arrival_to_end',
     selection_surface: policy.selection_surface,
     time_zone: 'America/Chicago',
   }
