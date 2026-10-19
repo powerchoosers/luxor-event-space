@@ -27,6 +27,7 @@ import { PromotionTermsFields, type PromotionTermsDraft } from './PromotionTerms
 import { proposalEventTiming, RENTAL_WINDOWS, luxorCalendarDate, proposalValidThrough } from '@/lib/luxorProposalTerms'
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from '@/lib/luxorDecorCatalog'
+import { DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS, packageInclusionsForDisplay, type LuxorProposalPackageOption } from '@/lib/luxorProposalPackages'
 import { SAME_DAY_BOOKING_CODE, SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TERMS, type LuxorSameDayBookingSnapshot } from '@/lib/luxorSameDayBooking'
 import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown, getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekdayCustomRentalDate, validateWeekdayCustomRentalSchedule, validateWeekdayCustomRentalTiming, type LuxorWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
 import { formatLuxorCustomTimeRentalPriceBreakdownV4, getLuxorCustomTimeRentalSnapshotV4, validateLuxorCustomTimeScheduleV4, type LuxorCustomTimeRentalPolicyV4 } from '@/lib/luxorCustomTimeRentalV4'
@@ -104,7 +105,13 @@ type CalculatedPackage = {
   id: string
   name: string
   description?: string
-  finalEventPrice?: number
+  positioning?: string
+  summaryTitle?: string
+  summary?: string
+  inclusions?: string[]
+  packageFeeAmount?: number | null
+  pricingReviewRequired?: boolean
+  finalEventPrice?: number | null
   refundableSecurityDeposit?: number
   amountDueToBook?: number
   subtotal?: number
@@ -122,6 +129,7 @@ export type ProposalPricingCalculation = {
   custom_time_rental_v4_policy?: LuxorCustomTimeRentalPolicyV4 | null
   context?: Partial<LuxorProposalContext>
   packages?: CalculatedPackage[]
+  packageOptions?: LuxorProposalPackageOption[]
   lineItems?: LuxorInvoiceLineItem[]
   warnings?: string[]
   calculationErrors?: string[]
@@ -262,8 +270,8 @@ const DEFAULT_SERVICE_LIBRARY: ProposalServiceOption[] = [
 const STEPS = [
   { id: 'details', label: 'Details', icon: ClipboardList },
   { id: 'services', label: 'Services & decor', icon: PackageCheck },
-  { id: 'compare', label: 'Investment', icon: ReceiptText },
-  { id: 'review', label: 'Selected proposal', icon: FileText },
+  { id: 'compare', label: 'Selection', icon: ReceiptText },
+  { id: 'review', label: 'Selected Proposal', icon: FileText },
   { id: 'payment', label: 'Payment plan', icon: Handshake },
   { id: 'contract', label: 'Agreement', icon: ShieldCheck },
 ] as const
@@ -509,7 +517,13 @@ function normalizeCalculation(payload: unknown): ProposalPricingCalculation | nu
       id,
       name: asString(packageRecord.name) || asString(packageRecord.package_name) || PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(id))?.name || id,
       description: asString(packageRecord.description),
-      finalEventPrice: asNumber(packageRecord.final_event_price, packageRecord.finalEventPrice, packageRecord.total, packageRecord.event_total),
+      positioning: asString(packageRecord.positioning),
+      summaryTitle: asString(packageRecord.summaryTitle) || asString(packageRecord.summary_title),
+      summary: asString(packageRecord.summary),
+      inclusions: arrayFromUnknown(packageRecord.inclusions).filter((inclusion): inclusion is string => typeof inclusion === 'string'),
+      packageFeeAmount: packageRecord.package_fee_amount === null || packageRecord.packageFeeAmount === null ? null : asNumber(packageRecord.package_fee_amount, packageRecord.packageFeeAmount),
+      pricingReviewRequired: Boolean(packageRecord.pricingReviewRequired ?? packageRecord.pricing_review_required),
+      finalEventPrice: packageRecord.final_event_price === null || packageRecord.finalEventPrice === null ? null : asNumber(packageRecord.final_event_price, packageRecord.finalEventPrice, packageRecord.total, packageRecord.event_total),
       refundableSecurityDeposit: asNumber(packageRecord.refundable_security_deposit, packageRecord.refundableSecurityDeposit, packageRecord.security_deposit),
       amountDueToBook: asNumber(packageRecord.amount_due_to_book, packageRecord.amountDueToBook, packageRecord.due_now),
       subtotal: asNumber(packageRecord.subtotal),
@@ -529,6 +543,23 @@ function normalizeCalculation(payload: unknown): ProposalPricingCalculation | nu
     custom_time_rental_v4_policy: asRecord(root.custom_time_rental_v4_policy) as LuxorCustomTimeRentalPolicyV4 | null,
     context: context as Partial<LuxorProposalContext> | undefined,
     packages,
+    packageOptions: arrayFromUnknown(record.packageOptions || record.package_options).map((value) => {
+      const option = asRecord(value)
+      if (!option) return null
+      const id = asString(option.id)
+      if (!id || !['essentials', 'signature', 'luxor', 'customized'].includes(id)) return null
+      return {
+        id: id as LuxorProposalPackageOption['id'],
+        name: asString(option.name) || '',
+        positioning: asString(option.positioning) || '',
+        description: asString(option.description) || '',
+        summary_title: asString(option.summary_title) || asString(option.summaryTitle) || '',
+        summary: asString(option.summary) || '',
+        inclusions: arrayFromUnknown(option.inclusions).filter((inclusion): inclusion is string => typeof inclusion === 'string'),
+        price_tiers: arrayFromUnknown(option.price_tiers).map((value) => asRecord(value)).filter((tier): tier is Record<string, unknown> => Boolean(tier)).map((tier) => ({ min_guests: asNumber(tier.min_guests) || 0, max_guests: asNumber(tier.max_guests) || 0, amount: asNumber(tier.amount) || 0 })),
+        ...(asString(option.most_popular_label) ? { most_popular_label: asString(option.most_popular_label) } : {}),
+      } satisfies LuxorProposalPackageOption
+    }).filter((option): option is LuxorProposalPackageOption => Boolean(option)),
     lineItems: arrayFromUnknown(record.line_items || record.lineItems || record.items).map(normalizeLineItem).filter((item): item is LuxorInvoiceLineItem => Boolean(item)),
     warnings: arrayFromUnknown(record.warnings).filter((warning): warning is string => typeof warning === 'string'),
     errors: arrayFromUnknown(record.errors).filter((error): error is string => typeof error === 'string'),
@@ -739,6 +770,13 @@ export function ProposalBuilderModal({
 
   const effectiveContext = localContext
   const selectedPackage = 'rent_only'
+  const effectivePricingSelection = asRecord(effectiveContext.pricing_selection) || {}
+  const packageTierId = asString(effectiveContext.package_tier_id)
+    || asString(effectivePricingSelection.packageTierId)
+    || asString(effectivePricingSelection.package_tier_id)
+    || asString(effectivePricingSelection.luxorPackageId)
+    || asString(effectivePricingSelection.luxor_package_id)
+    || (!invoiceId && !supersedesInvoiceId ? 'essentials' : '')
   const eventDateValue = normalizeEventDateValue(effectiveContext.event_date) || normalizeEventDateValue(eventDate)
   const guestCount = asNumber(effectiveContext.expected_guest_count, eventGuestCount) || 0
   const customTimeV4Enabled = Boolean(customTimeV4Policy)
@@ -883,7 +921,7 @@ export function ProposalBuilderModal({
     const saved = asRecord(pricingSelection?.decor_add_on_quantities ?? pricingSelection?.decorAddOnQuantities ?? effectiveContext.decor_add_on_quantities) || {}
     return Object.fromEntries(Object.entries(saved).filter((entry): entry is [string, number] => typeof entry[1] === 'number'))
   }, [pricingSelection, effectiveContext.decor_add_on_quantities])
-  const decorServices: ProposalServiceOption[] = OFFICIAL_DECOR_SERVICES.map((service) => ({
+  const decorServices: ProposalServiceOption[] = OFFICIAL_DECOR_SERVICES.filter((service) => service.category === 'decor_add_ons').map((service) => ({
     id: service.id,
     name: service.name,
     category: service.category === 'decor_packages' ? 'Decor Packages' : 'Decor Add-ons',
@@ -1053,6 +1091,30 @@ export function ProposalBuilderModal({
     onItemsChange(nextItems)
   }
 
+  const selectPackageTier = (nextPackageTierId: LuxorProposalPackageOption['id']) => {
+    const option = DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS.options[nextPackageTierId]
+    const nextPricingSelection = {
+      ...effectivePricingSelection,
+      packageTierId: nextPackageTierId,
+      package_tier_id: nextPackageTierId,
+      // The new tiered packages replace the legacy Classic/Signature/Luxor
+      // decor-package selector. Preserve separately selected individual items.
+      decorPackageId: null,
+      decor_package_id: null,
+      decorAddOnQuantities,
+      decor_add_on_quantities: decorAddOnQuantities,
+    }
+    updateProposalContext({
+      package_name: option.name,
+      package_tier_id: nextPackageTierId,
+      package_tier_name: option.name,
+      decor_package_id: null,
+      decor_add_on_quantities: decorAddOnQuantities,
+      pricing_selection: nextPricingSelection,
+    })
+    setPendingPackageChange(null)
+  }
+
   const requestPackageChange = (packageId: string, requireConfirmation = false) => {
     const nextPackageId = normalizePackageId(packageId)
     if (!nextPackageId || nextPackageId === selectedPackage) return
@@ -1175,6 +1237,7 @@ export function ProposalBuilderModal({
     ...(testRunId ? { testRunId } : {}),
     selection: {
       packageId: 'rental_only',
+      packageTierId: packageTierId || null,
       eventDate: eventDateValue || null,
       guestCount: guestCount || null,
       eventType: eventType || effectiveContext.event_type || null,
@@ -1189,7 +1252,7 @@ export function ProposalBuilderModal({
       event_end_time: eventEndTime || null,
       ...(isCustomRental && weekdayPolicy?.security_hours_policy === 'owner_entered' ? { securityHours: securityHoursValue.trim() ? Number(securityHoursValue) : null } : {}),
       addOns: selectedServiceIds,
-      decorPackageId: selectedDecorPackageId || null,
+      decorPackageId: packageTierId ? null : selectedDecorPackageId || null,
       decorAddOnQuantities,
       removedServiceIds,
       customItems: customItemSelection(customItems),
@@ -1209,10 +1272,11 @@ export function ProposalBuilderModal({
     package_id: 'luxor_venue_proposal',
     pricing_selection: {
       ...(effectiveContext.pricing_selection || {}),
+      ...(packageTierId ? { packageTierId, package_tier_id: packageTierId } : {}),
       service_ids: selectedServiceIds,
-      decor_package_id: selectedDecorPackageId || null,
+      decor_package_id: packageTierId ? null : selectedDecorPackageId || null,
       decor_add_on_quantities: decorAddOnQuantities,
-      decorPackageId: selectedDecorPackageId || null,
+      decorPackageId: packageTierId ? null : selectedDecorPackageId || null,
       decorAddOnQuantities,
       removedServiceIds,
       removed_service_ids: removedServiceIds,
@@ -1227,7 +1291,7 @@ export function ProposalBuilderModal({
       pricingRole: item.pricingRole,
     })),
     tax_rate: taxRate.trim() === '' ? null : Math.max(0, Number(taxRate) || 0),
-  }), [invoiceId, supersedesInvoiceId, testRunId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, isCustomRental, items, removedServiceIds, rentalEndTime, rentalPeriod, rentalStartTime, securityHoursValue, selectedPackage, selectedPromotionId, selectedServiceIds, taxRate, weekdayPolicy?.security_hours_policy])
+  }), [invoiceId, supersedesInvoiceId, testRunId, taxCoveragePromotionId, customItems, decorAddOnQuantities, selectedDecorPackageId, effectiveContext.event_type, effectiveContext.payment_plan, effectiveContext.pricing_selection, eventDateValue, eventEndTime, eventType, guestArrivalTime, guestCount, isCustomRental, items, removedServiceIds, rentalEndTime, rentalPeriod, rentalStartTime, securityHoursValue, selectedPackage, packageTierId, selectedPromotionId, selectedServiceIds, taxRate, weekdayPolicy?.security_hours_policy])
   const pricingRequestKey = useMemo(() => JSON.stringify(pricingRequest), [pricingRequest])
 
   useEffect(() => {
@@ -1279,20 +1343,13 @@ export function ProposalBuilderModal({
   }, [eventDateValue, guestCount, isOpen, pricingEndpoint, pricingRequestKey, pricingClock])
 
   const calculatedPackages = useMemo(() => calculation?.packages || [], [calculation])
-  const packageCards = useMemo(() => PACKAGE_OPTIONS.map((option) => {
-    const calculated = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === option.id)
-    return { ...option, ...(calculated || {}), id: calculated?.id || option.id }
-  }), [calculatedPackages])
-  const servicePackageOptions = useMemo(() => PACKAGE_OPTIONS.map((option) => {
-    const calculated = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === option.id)
-    return {
-      ...option,
-      // Keep the UI's canonical package ID even though the calculator uses
-      // rental_only / bronze_essentials etc. internally.
-      id: option.id,
-      finalEventPrice: calculated?.finalEventPrice,
-    }
-  }), [calculatedPackages])
+  const packageTierOptions = useMemo(() => calculation?.packageOptions?.length
+    ? calculation.packageOptions
+    : Object.values(DEFAULT_LUXOR_PROPOSAL_PACKAGE_SETTINGS.options), [calculation?.packageOptions])
+  const packageCards = useMemo(() => packageTierOptions.map((option) => {
+    const calculated = calculatedPackages.find((candidate) => candidate.id === option.id)
+    return { ...option, ...(calculated || {}), id: option.id }
+  }), [calculatedPackages, packageTierOptions])
   const servicePrices = useMemo(() => {
     const result: Record<string, number | null> = {}
     for (const value of arrayFromUnknown(calculation?.addOnQuotes)) {
@@ -1313,7 +1370,11 @@ export function ProposalBuilderModal({
     }
     return result
   }, [calculation])
-  const selectedCalculatedPackage = calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === 'rent_only')
+  const selectedCalculatedPackage = packageTierId
+    ? calculatedPackages.find((candidate) => candidate.id === packageTierId)
+    : calculatedPackages.find((candidate) => normalizePackageId(candidate.id) === 'rent_only')
+      || calculatedPackages.find((candidate) => candidate.id === 'luxor_venue_proposal')
+  const selectedTierOption = packageTierOptions.find((option) => option.id === packageTierId)
   const selectedContext = calculation?.context || effectiveContext
   const customRentalSnapshot = getWeekdayCustomRentalSnapshot(selectedContext.weekday_custom_rental)
   const customTimeV4Snapshot = getLuxorCustomTimeRentalSnapshotV4(selectedContext.weekday_custom_rental)
@@ -1323,7 +1384,8 @@ export function ProposalBuilderModal({
     if (dueDate !== validThrough) onDueDateChange(validThrough)
     if (offerExpiryTime !== '23:59') onOfferExpiryTimeChange('23:59')
   }, [isOpen, dueDate, validThrough, offerExpiryTime, onDueDateChange, onOfferExpiryTimeChange])
-  const finalEventPrice = selectedCalculatedPackage?.finalEventPrice ?? asNumber(selectedContext.final_event_price)
+  const selectedPackageNeedsReview = selectedCalculatedPackage?.pricingReviewRequired === true
+  const finalEventPrice = selectedPackageNeedsReview ? undefined : selectedCalculatedPackage?.finalEventPrice ?? asNumber(selectedContext.final_event_price)
   const refundableSecurityDeposit = selectedCalculatedPackage?.refundableSecurityDeposit ?? asNumber(selectedContext.refundable_security_deposit)
   const finalLineItems = selectedCalculatedPackage?.lineItems?.length
     ? selectedCalculatedPackage.lineItems
@@ -1333,11 +1395,11 @@ export function ProposalBuilderModal({
   // Discounts and tax belong in the one concise financial summary, not in the
   // client-facing checklist of package selections.
   const proposalChecklistItems = finalLineItems.filter((item) => (
-    item.pricingRole !== 'discount' && item.pricingRole !== 'tax' && item.pricingRole !== 'tax_coverage'
+    item.pricingRole !== 'discount' && item.pricingRole !== 'tax' && item.pricingRole !== 'tax_coverage' && !item.id?.startsWith('package-inclusions-')
   ))
-  const proposalSubtotal = selectedCalculatedPackage?.subtotal ?? asNumber(selectedContext.subtotal)
-  const proposalDiscountAmount = selectedCalculatedPackage?.discountAmount ?? asNumber(selectedContext.discount_amount, selectedContext.discountAmount)
-  const proposalTaxAmount = selectedCalculatedPackage?.taxAmount ?? asNumber(selectedContext.tax_amount, selectedContext.taxAmount)
+  const proposalSubtotal = selectedPackageNeedsReview ? undefined : selectedCalculatedPackage?.subtotal ?? asNumber(selectedContext.subtotal)
+  const proposalDiscountAmount = selectedPackageNeedsReview ? undefined : selectedCalculatedPackage?.discountAmount ?? asNumber(selectedContext.discount_amount, selectedContext.discountAmount)
+  const proposalTaxAmount = selectedPackageNeedsReview ? undefined : selectedCalculatedPackage?.taxAmount ?? asNumber(selectedContext.tax_amount, selectedContext.taxAmount)
   const proposalTaxRate = selectedCalculatedPackage?.taxRate ?? asNumber(selectedContext.tax_rate, selectedContext.taxRate)
   const sameDayBenefit = selectedContext.same_day_booking as LuxorSameDayBookingSnapshot | undefined
   const taxCoverageAmount = sameDayBenefit?.coverage_amount || 0
@@ -1351,6 +1413,15 @@ export function ProposalBuilderModal({
   const venueServicesTotal = asNumber(selectedContext.venue_services_total)
   const eventServicesTotal = asNumber(selectedContext.event_services_total)
   const eventAccess = asString(selectedContext.event_access)
+  const additionalRentalLine = finalLineItems.find((item) => item.id === 'venue-additional-hours')
+  const actualRentalHours = asNumber(selectedContext.rental_hours)
+    ?? (customTimeV4Snapshot?.duration_hours || customRentalSnapshot?.duration_hours)
+    ?? ((asNumber(rentalAccess?.hours) ?? (rentalPeriod === 'full_day' ? 14 : 6)) + (asNumber(additionalRentalLine?.quantity) || 0))
+  const customRentalMinimumHours = asNumber(customTimeV4Snapshot?.minimum_hours ?? customRentalSnapshot?.minimum_hours)
+  const customRentalAdditionalRate = asNumber(customTimeV4Snapshot?.additional_hour_rate ?? customRentalSnapshot?.additional_hour_rate)
+  const customRentalAdditionalHours = customRentalMinimumHours === undefined ? 0 : Math.max(0, actualRentalHours - customRentalMinimumHours)
+  const selectedPackageInclusions = selectedCalculatedPackage?.inclusions
+    || (selectedTierOption ? packageInclusionsForDisplay(selectedTierOption, actualRentalHours) : [])
   const pricingWarnings = uniqueMessages([
     ...(calculation?.warnings || []),
     ...(selectedCalculatedPackage?.warnings || []),
@@ -1376,7 +1447,7 @@ export function ProposalBuilderModal({
   const pricingRequirements = asRecord(calculation?.requirements)
   const paymentPlanRequired = pricingRequirements?.paymentPlan === true || publicationErrors.some((error) => error.toLowerCase().includes('payment plan'))
   const isCalculating = pricingStatus === 'loading'
-  const hasFinalPrice = pricingStatus === 'ready' && typeof finalEventPrice === 'number' && finalEventPrice >= 0
+  const hasFinalPrice = pricingStatus === 'ready' && !selectedPackageNeedsReview && typeof finalEventPrice === 'number' && finalEventPrice >= 0
   const canPublish = Boolean(eventDateValue && guestCount > 0 && timeValidation.valid && hasFinalPrice && pricingErrors.length === 0 && publicationErrors.length === 0 && !paymentPlanRequired)
   const reviewTogether = !testRunId && presentationMode === 'in_person'
   const publishDisabled = submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount
@@ -1427,6 +1498,12 @@ export function ProposalBuilderModal({
         preferred_payment_method: paymentPlanDraft?.preferred_payment_method ?? 'card',
       })
     }
+    if (stepIndex === 3 && !hasFinalPrice) {
+      setValidationMessage(selectedPackageNeedsReview
+        ? 'The selected package needs owner-approved pricing for this guest count before you can continue.'
+        : 'Wait for final pricing to finish before you continue to the payment plan.')
+      return
+    }
     setValidationMessage(null)
     setStepDirection(1)
     setStepIndex((current) => {
@@ -1457,7 +1534,7 @@ export function ProposalBuilderModal({
   const continueLabel = stepIndex === 0
     ? 'Continue to services & decor'
     : stepIndex === 1
-      ? 'Continue to investment'
+      ? 'Continue to package selection'
     : stepIndex === 2
       ? 'Continue to review'
     : stepIndex === 3
@@ -1540,7 +1617,7 @@ export function ProposalBuilderModal({
           {stepIndex === 0 ? (
             <section className="mx-auto max-w-4xl space-y-6">
               <div className="max-w-2xl">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 1 of 5</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 1 of 6</p>
                 <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Start with the facts that set the price.</h3>
                 <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The date, rental period, guest count, promotion, tax treatment, and selected services are the only inputs that shape this proposal. The final price comes from Luxor’s pricing rules.</p>
               </div>
@@ -1710,9 +1787,9 @@ export function ProposalBuilderModal({
             <section aria-busy={isCalculating} className="mx-auto max-w-6xl space-y-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="max-w-3xl">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 3 of 5</p>
-                  <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Compare the packages against your service selections.</h3>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Every card uses the same date, guest count, rental period, required services, saved promotion, and tax treatment. Switch packages here only when the comparison changes the right fit; compatible add-ons and custom items stay with the proposal.</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 3 of 6</p>
+                  <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Choose Your Package</h3>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Compare our packages to find the perfect fit for your event. From a DIY setup to a fully styled experience, choose the level of service that works best for you.</p>
                 </div>
                 <div className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-bold ${pricingStatus === 'ready' && !pricingErrors.length ? paymentPlanRequired ? 'border-amber-500/25 bg-amber-500/8 text-amber-800 dark:text-amber-200' : 'border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>
                   {isCalculating ? <ProposalCalculationStatus label="Updating final prices" /> : <><ReceiptText size={14} />{pricingStatus === 'ready' && paymentPlanRequired && !pricingErrors.length ? 'Final prices calculated — set payment plan later' : pricingStatus === 'ready' ? 'Final prices calculated' : 'Complete event details to calculate'}</>}
@@ -1726,49 +1803,64 @@ export function ProposalBuilderModal({
                 </div>
               ) : null}
 
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {packageCards.map((packageOption) => {
-                  const active = normalizePackageId(packageOption.id) === normalizePackageId(selectedPackage)
-                  const showPrice = pricingStatus === 'ready' && typeof packageOption.finalEventPrice === 'number'
-                  const inclusions = PACKAGE_OPTIONS.find((option) => option.id === normalizePackageId(packageOption.id))?.inclusions || []
+                  const active = packageOption.id === packageTierId
+                  const showPrice = pricingStatus === 'ready' && typeof packageOption.finalEventPrice === 'number' && !packageOption.pricingReviewRequired
+                  const packageFee = typeof packageOption.packageFeeAmount === 'number' ? packageOption.packageFeeAmount : 0
+                  const packageFeeLabel = packageOption.pricingReviewRequired ? 'Needs review' : packageFee > 0 ? formatMoney(packageFee) : 'No added fee'
+                  const badge = packageOption.id === 'luxor' ? packageOption.most_popular_label || '⭐ MOST POPULAR' : null
                   return (
                     <button
                       key={packageOption.id}
                       type="button"
-                      onClick={() => requestPackageChange(packageOption.id, true)}
+                      onClick={() => selectPackageTier(packageOption.id as LuxorProposalPackageOption['id'])}
                       aria-pressed={active}
-                      className={`relative flex min-h-[400px] flex-col rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${active ? 'border-[#caa24c] bg-[#caa24c]/11 shadow-[0_0_0_1px_rgba(202,162,76,0.12)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)]'}`}
+                      className={`relative flex min-h-[270px] flex-col rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${active ? 'border-[#caa24c] bg-[#caa24c]/11 shadow-[0_0_0_1px_rgba(202,162,76,0.12)]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)]'}`}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">{packageOption.eyebrow}</span>
-                        {active ? <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#caa24c] text-white"><Check size={13} /></span> : null}
+                      <div className="flex min-h-6 items-start justify-between gap-2">
+                        <span className="text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">{packageOption.positioning}</span>
+                        {badge ? <span className="inline-flex items-center gap-1 rounded-full border border-[#caa24c]/40 bg-[#caa24c]/12 px-2 py-1 text-[8px] font-black uppercase tracking-[0.08em] text-[#8c6529] dark:text-[#f1d27a]">{badge}</span> : active ? <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#caa24c] text-white"><Check size={13} /></span> : null}
                       </div>
-                      <h4 className="mt-3 font-serif text-xl font-semibold leading-6">{packageOption.name}</h4>
-                      <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{packageOption.description}</p>
-                      <div className="mt-4 border-y border-[color:var(--portal-border)] py-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final event price</p>
-                        {isCalculating ? <ProposalPriceSkeleton /> : showPrice ? <p className="mt-1 font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(packageOption.finalEventPrice)}</p> : <p className="mt-2 text-xs font-semibold text-[color:var(--portal-muted)]">Pricing appears after details are complete.</p>}
+                      <h4 className="mt-2 font-serif text-lg font-semibold leading-6">{packageOption.name}</h4>
+                      <p className="mt-1 text-[11px] font-bold text-[color:var(--portal-muted)]">{packageOption.summary_title}</p>
+                      <p className="mt-2 line-clamp-3 text-xs leading-5 text-[color:var(--portal-muted)]">{packageOption.summary}</p>
+                      <div className="mt-auto border-t border-[color:var(--portal-border)] pt-3">
+                        <div className="flex items-center justify-between gap-2 text-[10px]">
+                          <span className="text-[color:var(--portal-muted)]">Package fee</span>
+                          <span className={`font-mono font-semibold ${packageOption.pricingReviewRequired ? 'text-amber-800 dark:text-amber-200' : ''}`}>{packageFeeLabel}</span>
+                        </div>
+                        <div className="mt-2 flex items-end justify-between gap-2">
+                          <span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Estimated event total</span>
+                          {isCalculating ? <ProposalPriceSkeleton /> : showPrice ? <span className="font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(packageOption.finalEventPrice)}</span> : packageOption.pricingReviewRequired ? <span className="text-[10px] font-bold text-amber-800 dark:text-amber-200">Needs review</span> : <span className="text-[10px] font-semibold text-[color:var(--portal-muted)]">Complete event details</span>}
+                        </div>
                       </div>
-                      <div className="mt-4">
-                        <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">What’s included</p>
-                        <ul className="mt-2 space-y-2 text-xs leading-4 text-[color:var(--portal-muted)]">
-                          {inclusions.map((inclusion) => <li key={inclusion} className="flex gap-2"><Check size={13} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" /> <span>{inclusion}</span></li>)}
-                        </ul>
-                      </div>
-                      <span className={`mt-auto inline-flex min-h-10 items-center justify-center rounded-lg border px-3 text-[10px] font-black uppercase tracking-[0.12em] ${active ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-[color:var(--portal-border)] text-[color:var(--portal-text)]'}`}>{active ? 'Selected package' : 'Select package'}</span>
+                      <span className={`mt-3 inline-flex min-h-9 items-center justify-center rounded-lg border px-3 text-[10px] font-black uppercase tracking-[0.12em] ${active ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-[color:var(--portal-border)] text-[color:var(--portal-text)]'}`}>{active ? 'Selected package' : 'Select package'}</span>
                     </button>
                   )
                 })}
               </div>
 
-              {selectedPackageOption ? (
+              {selectedTierOption ? (
+                <>
+                <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div><p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">What&apos;s Included in Your Package</p><h4 className="mt-1 font-serif text-xl font-semibold">{selectedCalculatedPackage?.name || selectedTierOption.name}</h4></div>
+                    {additionalRentalLine ? <p className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/[0.08] px-3 py-2 text-xs font-semibold">{actualRentalHours} rental hours, including {additionalRentalLine.quantity} additional {Number(additionalRentalLine.quantity) === 1 ? 'hour' : 'hours'} at {formatMoney(additionalRentalLine.unitPrice)} / hour ({formatMoney(additionalRentalLine.total)}).</p> : customRentalAdditionalHours > 0 && customRentalAdditionalRate !== undefined ? <p className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/[0.08] px-3 py-2 text-xs font-semibold">{actualRentalHours} rental hours, including {customRentalAdditionalHours} additional {customRentalAdditionalHours === 1 ? 'hour' : 'hours'} at {formatMoney(customRentalAdditionalRate)} / hour ({formatMoney(customRentalAdditionalHours * customRentalAdditionalRate)}).</p> : <p className="text-xs text-[color:var(--portal-muted)]">{actualRentalHours} venue rental hours</p>}
+                  </div>
+                  <ul className="mt-4 grid gap-x-5 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {selectedPackageInclusions.map((inclusion) => <li key={inclusion} className="flex items-start gap-2 text-xs leading-5"><Check size={14} className="mt-0.5 shrink-0 text-emerald-700 dark:text-emerald-300" /><span>{inclusion}</span></li>)}
+                  </ul>
+                </section>
+
                 <section className="grid gap-4 rounded-2xl border border-[#caa24c]/24 bg-[#caa24c]/[0.045] p-4 sm:p-5 lg:grid-cols-[1.35fr_.9fr]">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Selected package</p>
-                    <h4 className="mt-1 font-serif text-2xl font-semibold">{selectedCalculatedPackage?.name || selectedPackageOption.name}</h4>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Its base services are locked into the price. Compatible add-ons and custom items stay with the proposal; any service now included by the new package is absorbed and never charged twice.</p>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                      {selectedPackageOption.inclusions.map((inclusion) => <p key={inclusion} className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs font-semibold"><Check size={13} className="shrink-0 text-emerald-700 dark:text-emerald-300" />{inclusion}</p>)}
+                    <h4 className="mt-1 font-serif text-2xl font-semibold">{selectedCalculatedPackage?.name || selectedTierOption.name}</h4>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">{selectedCalculatedPackage?.description || selectedTierOption.description}</p>
+                    <div className="mt-4 space-y-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Itemized Luxor charges</p>
+                      {isCalculating ? <div className="space-y-2"><ProposalPriceSkeleton /><ProposalPriceSkeleton /></div> : finalLineItems.filter((item) => item.id !== `package-inclusions-${packageTierId}` && item.pricingRole !== 'discount' && item.pricingRole !== 'tax' && item.pricingRole !== 'tax_coverage' && Number(item.total || 0) !== 0).map((item, index) => <div key={`${item.id || item.description}-${index}`} className="flex items-start justify-between gap-3 text-xs"><span className="min-w-0"><span className="block font-semibold">{item.description}{item.quantity > 1 ? ` x ${item.quantity}` : ''}</span>{item.detail ? <span className="mt-0.5 block text-[10px] leading-4 text-[color:var(--portal-muted)]">{item.detail}</span> : null}</span><span className="shrink-0 font-mono font-semibold">{formatMoney(item.total)}</span></div>)}
                     </div>
                   </div>
                   <aside className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
@@ -1777,14 +1869,16 @@ export function ProposalBuilderModal({
                       {typeof proposalSubtotal === 'number' ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Package &amp; services</span><span className="font-mono font-semibold">{formatMoney(proposalSubtotal)}</span></div> : null}
                       {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">{selectedPromotion?.name || 'Promotion'}</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
                       {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
-{taxCoverageAmount > 0 ? <div className="flex items-center justify-between gap-3 text-sm"><span className="text-[color:var(--portal-muted)]">LUXOR pays your sales tax (conditional)</span><span className="font-mono font-semibold">-{formatMoney(taxCoverageAmount)}</span></div> : null}
+                      {taxCoverageAmount > 0 ? <div className="flex items-center justify-between gap-3 text-sm"><span className="text-[color:var(--portal-muted)]">LUXOR pays your sales tax (conditional)</span><span className="font-mono font-semibold">-{formatMoney(taxCoverageAmount)}</span></div> : null}
+                      {typeof calculation?.estimatedVendorTotal === 'number' && calculation.estimatedVendorTotal > 0 ? <div className="flex items-center justify-between gap-3 border-t border-[color:var(--portal-border)] pt-2 text-xs"><span className="text-[color:var(--portal-muted)]">Preferred vendor estimates (not collected by Luxor)</span><span className="font-mono font-semibold">{formatMoney(calculation.estimatedVendorTotal)}</span></div> : null}
                       <div className="flex items-end justify-between gap-3 border-t border-[#caa24c]/20 pt-3"><span className="text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Final event price</span><span className="font-mono text-xl font-black text-[#8c6529] dark:text-[#f1d27a]">{hasFinalPrice ? formatMoney(finalEventPrice) : 'Pricing not ready'}</span></div>
                       <div className="flex items-center justify-between gap-3 text-xs"><span className="text-[color:var(--portal-muted)]">Refundable security deposit</span><span className="font-mono font-bold">{formatMoney(refundableSecurityDeposit ?? 750)}</span></div>
                     </div>}
-                    <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">The $750 deposit is collected separately after the Event Agreement is signed. It never changes the event price.</p>
+                    <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">The refundable deposit is collected separately after the Event Agreement is signed. It never changes the event price.</p>
                   </aside>
                 </section>
-              ) : null}
+                </>
+              ) : <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 p-4 text-sm leading-5 text-amber-900 dark:text-amber-100">Choose one of the new packages to continue this proposal with the updated pricing structure.</div>}
 
               {pricingWarnings.length ? (
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/7 p-4">
@@ -1812,23 +1906,24 @@ export function ProposalBuilderModal({
             <section aria-busy={isCalculating} className="mx-auto max-w-6xl space-y-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="max-w-3xl">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 2 of 5</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 2 of 6</p>
                   <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Build the services and items for this event.</h3>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Choose a starting package above, then adjust the exact service list. Required services stay locked; basic choices and upgrades are priced from Luxor’s approved rules.</p>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">Select individual decor and services here. They are included in your total when you choose Customized in the next step; preferred-vendor estimates stay separate from Luxor charges.</p>
                 </div>
-                <button type="button" onClick={() => { setStepIndex(2); setValidationMessage(null) }} className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]"><ReceiptText size={13} /> Review investment</button>
+                <button type="button" onClick={() => { setStepIndex(2); setValidationMessage(null) }} className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]"><ReceiptText size={13} /> Review packages</button>
               </div>
 
               <div className="rounded-2xl border border-[#caa24c]/20 bg-[#caa24c]/[0.055] p-4 text-sm leading-6 text-[color:var(--portal-muted)]">
                 <div className="flex items-start gap-3">
                   <ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
-                  <p>Choose one decor package and any additional decor items. Package inclusions are already covered by the package price. Required services stay locked, and every price is verified before publishing.</p>
+                  <p>Choose individual decor add-ons and services here. Official decor add-ons are charged only with Customized; included items are never added a second time. Preferred-vendor estimates remain separate from the Luxor event price.</p>
                 </div>
               </div>
 
               <ProposalPackageItemsPanel
-                packageName={selectedCalculatedPackage?.name || selectedPackageOption?.name || null}
-                packageOptions={servicePackageOptions}
+                packageName={selectedTierOption?.name || null}
+                packageOptions={[]}
+                showPackageSwitcher={false}
                 selectedPackageId={selectedPackage}
                 onSelectPackage={selectPackage}
                 lineItems={finalLineItems}
@@ -1868,7 +1963,7 @@ export function ProposalBuilderModal({
           {stepIndex === 3 ? (
             <section aria-busy={isCalculating} className="mx-auto max-w-4xl space-y-6">
               <div className="max-w-2xl">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 4 of 5</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 4 of 6</p>
                 <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Review the client’s final proposal.</h3>
                 <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">This screen is intentionally read-only. Go back to the earlier steps to change facts or services; publishing creates an immutable snapshot for the email, PDF, private page, and contract.</p>
               </div>
@@ -1931,7 +2026,7 @@ export function ProposalBuilderModal({
                           {typeof proposalDiscountAmount === 'number' && proposalDiscountAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">{selectedPromotion?.name || 'Promotion'}</span><span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300">−{formatMoney(proposalDiscountAmount)}</span></div> : null}
                           {typeof proposalTaxAmount === 'number' && proposalTaxAmount > 0 ? <div className="flex items-center justify-between gap-3"><span className="text-[color:var(--portal-muted)]">Sales tax{typeof proposalTaxRate === 'number' ? ` (${formatTaxRate(proposalTaxRate)})` : ''}</span><span className="font-mono font-semibold">{formatMoney(proposalTaxAmount)}</span></div> : null}
 {taxCoverageAmount > 0 ? <div className="flex items-center justify-between gap-3 text-sm"><span className="text-[color:var(--portal-muted)]">LUXOR pays your sales tax (conditional)</span><span className="font-mono font-semibold">-{formatMoney(taxCoverageAmount)}</span></div> : null}
-                          <div className="border-t border-[#caa24c]/20 pt-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final total</p><p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p></div>
+                          <div className="border-t border-[#caa24c]/20 pt-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Final total</p><p className="mt-1 font-mono text-2xl font-black text-[#8c6529] dark:text-[#f1d27a]">{hasFinalPrice ? formatMoney(finalEventPrice) : 'Pricing needs review'}</p></div>
                         </div>
                         <div className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3"><p className="text-[9px] font-black uppercase tracking-[0.11em] text-[#8c6529] dark:text-[#f1d27a]">Payment process</p><p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Proposal acceptance → Event Agreement → payment choice after signature. The client can use Card, Zelle, or Cash; the separate refundable security deposit is handled with the first payment.</p></div>
                       </aside>
@@ -2098,7 +2193,7 @@ export function ProposalBuilderModal({
                       {taxCoverageAmount > 0 ? <div className="flex items-center justify-between gap-4 p-3.5 text-sm"><span>LUXOR pays your sales tax (conditional)</span><span className="font-mono">-{formatMoney(taxCoverageAmount)}</span></div> : null}
                       <div className="flex items-center justify-between gap-4 p-4 text-base font-black bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]">
                         <span>Final Event Price (Total)</span>
-                        <span className="font-mono text-xl">{formatMoney(finalEventPrice)}</span>
+                        <span className="font-mono text-xl">{hasFinalPrice ? formatMoney(finalEventPrice) : 'Pricing needs review'}</span>
                       </div>
                     </div>
                   </div>

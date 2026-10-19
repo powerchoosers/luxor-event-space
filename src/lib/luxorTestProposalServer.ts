@@ -111,6 +111,7 @@ export async function prepareLuxorTestProposal(input: {
   const sameDayBooking = await resolveLuxorSameDayBooking(input.selection, storedInvoice, originalCreatedAt)
   const calculation = calculateLuxorProposal(input.selection, pricing.config, { promotion, sameDayBooking })
   if (!calculation.valid) throw new Error(calculation.calculationErrors[0] || 'The production proposal calculator could not validate this selection.')
+  if (calculation.total === null) throw new Error('The selected package requires owner pricing before it can be saved or published.')
   if (input.action === 'publish' && !calculation.publishable) {
     throw new Error(calculation.publicationErrors[0] || 'Complete the production publication requirements before publishing this test proposal.')
   }

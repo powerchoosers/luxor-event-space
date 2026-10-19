@@ -41,6 +41,8 @@ type ContractPromotion = {
 }
 
 type ContractProposalSummary = {
+  packageName: string | null
+  packageInclusions: string[]
   lines: ContractProposalLine[]
   decorSubtotal: number | null
   subtotal: number | null
@@ -126,6 +128,15 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
   const pricingSnapshot = recordFrom(context.pricing_snapshot)
     ?? recordFrom(context.pricingSnapshot)
     ?? {}
+  const packageSelectionSnapshot = recordFrom(context.package_selection_snapshot)
+    ?? recordFrom(context.packageSelectionSnapshot)
+    ?? recordFrom(pricingSnapshot.package_selection)
+    ?? recordFrom(pricingSnapshot.packageSelection)
+  const rawInclusions = [context.package_inclusions, context.packageInclusions, packageSelectionSnapshot?.inclusions]
+    .find(Array.isArray)
+  const packageInclusions = Array.isArray(rawInclusions)
+    ? [...new Set(rawInclusions.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean))]
+    : []
   const rawLines = Array.isArray(pricingSnapshot.line_items)
     ? pricingSnapshot.line_items
     : Array.isArray(metadata.proposalLineItems)
@@ -138,6 +149,7 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
   const lines = rawLines.flatMap((value): ContractProposalLine[] => {
     const line = recordFrom(value)
     if (!line) return []
+    if ((textValue(line.id) || '').startsWith('package-inclusions-')) return []
     const description = textValue(line.description)
     if (!description) return []
     const category = textValue(line.category)
@@ -167,6 +179,8 @@ export function proposalSummaryForBooking(booking: LuxorBooking): ContractPropos
   const tax = moneyValue(pricingSnapshot.tax_amount ?? pricingSnapshot.taxAmount ?? context.tax_amount ?? context.taxAmount)
   const finalEventPrice = Math.max(0, Number(booking.contract_total || context.final_event_price || 0))
   return {
+    packageName: textValue(context.package_name ?? context.packageName ?? packageSelectionSnapshot?.name),
+    packageInclusions,
     lines,
     decorSubtotal: lines.some((item) => item.decorTotal !== null)
       ? Math.round(lines.reduce((sum, item) => sum + (item.decorTotal || 0), 0) * 100) / 100
@@ -480,13 +494,14 @@ export async function buildLuxorContractPdf(booking: LuxorBooking, requestId: st
   w.fieldPair('Final payment due', displayDate(finalPaymentDueDate), 'Payment timing', 'After agreement signature')
   w.fieldPair('Refundable security deposit', money(securityDeposit), 'Security deposit due', proposalSummary.paymentCollectionScope === 'luxor_services_only' ? `${displayDate(new Date(`${booking.event_date}T12:00:00Z`).toISOString().slice(0, 10))} (30 days before event)` : 'Separate payment after signed agreement')
   if (proposalSummary.promotion) w.paragraph(`${proposalSummary.promotion.name} is already reflected in the locked Final Event Price for this Agreement. The secure booking-payment link is sent only after this Agreement is signed.`)
-  if (proposalSummary.lines.length) {
-    w.subheading('Accepted package')
+  if (proposalSummary.lines.length || proposalSummary.packageInclusions.length) {
+    w.subheading(proposalSummary.packageName ? `Accepted package: ${proposalSummary.packageName}` : 'Accepted package')
     for (const item of proposalSummary.lines) {
       const quantity = item.decorTotal === null && item.quantity > 1 ? ` (Qty ${Number.isInteger(item.quantity) ? item.quantity : item.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })})` : ''
       const amount = item.decorTotal === null ? '' : ` - ${money(item.decorTotal)}`
       w.checklistItem(`${item.category ? `${item.category}: ` : ''}${item.description}${quantity}${amount}`)
     }
+    for (const item of proposalSummary.packageInclusions) w.checklistItem(item)
     if (proposalSummary.decorSubtotal !== null) w.feeRow('Total Decor Investment (before tax)', money(proposalSummary.decorSubtotal))
   }
   w.paragraph(proposalSummary.paymentCollectionScope === 'luxor_services_only'

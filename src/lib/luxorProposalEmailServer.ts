@@ -41,6 +41,7 @@ export type LuxorProposalPromotionSnapshot = {
 
 export type LuxorProposalPricingSummary = {
   packageName: string | null
+  packageInclusions: string[]
   /** The date frozen with the proposal, which can differ from a lead's old request. */
   eventDate: string | null
   expectedGuestCount: number | null
@@ -276,6 +277,14 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
   const refundableSecurityDeposit = asNonNegativeMoney(context.refundable_security_deposit)
     ?? (securityLineTotal > 0 ? securityLineTotal : (isEventProposal ? LUXOR_STANDARD_REFUNDABLE_SECURITY_DEPOSIT : 0))
   const pricingSnapshot = recordFrom(context.pricing_snapshot)
+  const packageSelectionSnapshot = recordFrom(context.package_selection_snapshot)
+    ?? recordFrom(context.packageSelectionSnapshot)
+    ?? recordFrom(pricingSnapshot?.package_selection)
+    ?? recordFrom(pricingSnapshot?.packageSelection)
+  const packageInclusions = [context.package_inclusions, context.packageInclusions, packageSelectionSnapshot?.inclusions]
+    .find(Array.isArray)
+    ?.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+    .map((item) => item.trim()) || []
   const preferredVendorSnapshot = recordFrom(pricingSnapshot?.preferred_vendor_estimates)
   const rawVendorLines = Array.isArray(context.preferred_vendor_estimate_lines)
     ? context.preferred_vendor_estimate_lines
@@ -297,13 +306,16 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
 
   return {
     packageName: asText(context.package_name),
+    packageInclusions: [...new Set(packageInclusions)],
     eventDate: weekdayCustomRental?.event_date ?? asText(context.event_date),
     expectedGuestCount: asMoney(context.expected_guest_count),
     eventAccess: asText(context.event_access),
     guestArrivalTime: weekdayCustomRental?.start_time ?? asText(context.guest_arrival_time) ?? asText(context.guestArrivalTime),
     eventEndTime: weekdayCustomRental?.end_time ?? asText(context.event_end_time) ?? asText(context.eventEndTime),
     weekdayCustomRental,
-    lines: serviceItems.map(({ id, officialDecor, category, service, quantity, unitPrice, lineTotal, included, detail }) => ({ id, officialDecor, category, service, quantity, unitPrice, lineTotal, included, detail })),
+    lines: serviceItems
+      .filter((item) => !item.id?.startsWith('package-inclusions-'))
+      .map(({ id, officialDecor, category, service, quantity, unitPrice, lineTotal, included, detail }) => ({ id, officialDecor, category, service, quantity, unitPrice, lineTotal, included, detail })),
     decorSubtotal: serviceItems.some((item) => item.officialDecor)
       ? roundMoney(serviceItems.filter((item) => item.officialDecor).reduce((sum, item) => sum + item.lineTotal, 0))
       : null,
@@ -343,14 +355,21 @@ function displayEventDate(value: string) {
 }
 
 function proposalBreakdownHtml(summary: LuxorProposalPricingSummary) {
-  const rows = summary.lines.map((item) => `<tr>
+  const rows = summary.lines.map((item) => {
+    const showLinePricing = item.officialDecor || item.id === 'venue-additional-hours'
+    const showLineDetail = item.officialDecor || item.id === 'venue-additional-hours'
+    return `<tr>
     <td style="padding:12px 8px 12px 0;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#caa24c;font-size:15px;line-height:1.2">&#10003;</td>
-    <td style="padding:12px 8px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#f7efe3;font-size:12px;line-height:1.45"><span style="display:block;color:#a99878;font-size:9px;line-height:1.35;text-transform:uppercase;letter-spacing:.08em">${escapeHtml(item.category)}</span>${escapeHtml(item.service)}${item.officialDecor && item.detail ? `<span style="display:block;color:#a99878;font-size:10px">${escapeHtml(item.detail)}</span>` : ''}${decorQuantityLabel(item) ? `<span style="display:block;color:#d7c29a;font-size:10px">${escapeHtml(decorQuantityLabel(item)!)}</span>` : ''}</td>
-    <td align="right" style="padding:12px 0 12px 6px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px;white-space:nowrap">${item.officialDecor ? money(item.lineTotal) : item.quantity > 1 ? `Qty ${displayQuantity(item.quantity)}` : ''}</td>
-  </tr>`).join('') || `<tr><td colspan="3" style="padding:18px 0;color:#b8aa9a;font-size:12px;line-height:1.6">Your finalized package details are available in the secure proposal.</td></tr>`
+    <td style="padding:12px 8px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#f7efe3;font-size:12px;line-height:1.45"><span style="display:block;color:#a99878;font-size:9px;line-height:1.35;text-transform:uppercase;letter-spacing:.08em">${escapeHtml(item.category)}</span>${escapeHtml(item.service)}${showLineDetail && item.detail ? `<span style="display:block;color:#a99878;font-size:10px">${escapeHtml(item.detail)}</span>` : ''}${decorQuantityLabel(item) ? `<span style="display:block;color:#d7c29a;font-size:10px">${escapeHtml(decorQuantityLabel(item)!)}</span>` : ''}</td>
+    <td align="right" style="padding:12px 0 12px 6px;border-bottom:1px solid rgba(202,162,76,.12);vertical-align:top;color:#d7c29a;font-size:11px;white-space:nowrap">${showLinePricing ? money(item.lineTotal) : item.quantity > 1 ? `Qty ${displayQuantity(item.quantity)}` : ''}</td>
+  </tr>`
+  }).join('') || `<tr><td colspan="3" style="padding:18px 0;color:#b8aa9a;font-size:12px;line-height:1.6">Your finalized package details are available in the secure proposal.</td></tr>`
+  const inclusions = summary.packageInclusions.length
+    ? `<tr><td colspan="3" style="padding:18px 0 8px;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Package inclusions</td></tr>${summary.packageInclusions.map((item) => `<tr><td style="padding:5px 8px 5px 0;color:#caa24c;font-size:13px">&#10003;</td><td colspan="2" style="padding:5px 0;color:#f7efe3;font-size:11px;line-height:1.45">${escapeHtml(item)}</td></tr>`).join('')}`
+    : ''
 
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">
-    <tr><td colspan="3" style="padding:0 0 9px;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Your package</td></tr>${rows}
+    <tr><td colspan="3" style="padding:0 0 9px;color:#8c754f;font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase">Your package</td></tr>${rows}${inclusions}
     ${summary.decorSubtotal !== null ? `<tr><td colspan="2" style="padding:14px 0;color:#d7c29a;font-size:11px;font-weight:700">Total Decor Investment (before tax)</td><td align="right" style="padding:14px 0;color:#f1d27a;font-size:12px;font-weight:700">${money(summary.decorSubtotal)}</td></tr>` : ''}
   </table>`
 }

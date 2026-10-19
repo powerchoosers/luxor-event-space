@@ -115,7 +115,7 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   const drawTableHeader = () => {
     page.drawRectangle({ x: margin, y: y - 18, width: contentRight - margin, height: 18, color: rgb(0.88, 0.84, 0.76) })
     text('YOUR PACKAGE', margin + 6, y - 12, 7, bold, muted)
-    rightText(summary.decorSubtotal !== null ? 'QTY / AMOUNT' : 'QTY', contentRight - 6, y - 12, 7, bold, muted)
+    rightText(summary.decorSubtotal !== null || summary.lines.some(item => item.id === 'venue-additional-hours') ? 'QTY / AMOUNT' : 'QTY', contentRight - 6, y - 12, 7, bold, muted)
     y -= 27
   }
 
@@ -194,9 +194,11 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
   }
 
   for (const item of summary.lines) {
+    const showLinePricing = item.officialDecor || item.id === 'venue-additional-hours'
     const rowWidth = item.officialDecor ? 365 : 450
     const categoryLines = wrap(item.category.toUpperCase(), bold, 7.5, rowWidth)
-    const titleWithDetail = item.detail && !item.service.includes('|') ? `${item.service} (${item.detail})` : item.service
+    const detail = item.id === 'venue-additional-hours' ? item.detail?.replace(/\$(?=\d)/g, 'USD ') : item.detail
+    const titleWithDetail = detail && (item.officialDecor || item.id === 'venue-additional-hours') && !item.service.includes('|') ? `${item.service} (${detail})` : item.service
     const itemTitle = decorQuantityLabel(item) ? `${titleWithDetail} | ${decorQuantityLabel(item)}` : titleWithDetail
     const serviceLines = wrap(itemTitle, regular, 9.2, rowWidth)
     const rowHeight = categoryLines.length * 10 + serviceLines.length * 12 + 15
@@ -207,9 +209,31 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
     drawCheckmark(margin + 7, y - 14)
     drawLines(categoryLines, margin + 24, y - 11, 7.5, bold, muted, 10)
     drawLines(serviceLines, margin + 24, y - 11 - categoryLines.length * 10, 9.2, regular, ink, 12)
-    rightText(item.officialDecor ? money(item.lineTotal) : displayQuantity(item.quantity), contentRight - 6, y - 11, 9, regular, muted)
+    rightText(showLinePricing ? money(item.lineTotal) : displayQuantity(item.quantity), contentRight - 6, y - 11, 9, regular, muted)
     page.drawLine({ start: { x: margin, y: y - rowHeight }, end: { x: contentRight, y: y - rowHeight }, thickness: 0.45, color: line })
     y -= rowHeight
+  }
+
+  if (summary.packageInclusions.length) {
+    const drawInclusionHeading = () => {
+      text('PACKAGE INCLUSIONS', margin + 24, y - 8, 7.5, bold, gold)
+      y -= 17
+    }
+    ensureSpace(28, true)
+    drawInclusionHeading()
+    for (const item of summary.packageInclusions) {
+      const lines = wrap(item, regular, 9.2, 450)
+      const rowHeight = lines.length * 12 + 5
+      if (y - rowHeight < 76) {
+        startNewPage(true)
+        drawTableHeader()
+        drawInclusionHeading()
+      }
+      drawCheckmark(margin + 7, y - 9)
+      drawLines(lines, margin + 24, y - 8, 9.2, regular, ink, 12)
+      page.drawLine({ start: { x: margin, y: y - rowHeight }, end: { x: contentRight, y: y - rowHeight }, thickness: 0.45, color: line })
+      y -= rowHeight
+    }
   }
 
   if (summary.decorSubtotal !== null) {

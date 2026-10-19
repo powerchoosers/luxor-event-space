@@ -77,6 +77,7 @@ type ProposalPackageItemsPanelProps = {
   packageName?: string | null
   /** A compact, in-context package switcher for the Services & Items workspace. */
   packageOptions?: ProposalPackageOption[]
+  showPackageSwitcher?: boolean
   selectedPackageId?: string | null
   onSelectPackage?: (packageId: string) => void
   lineItems: LuxorInvoiceLineItem[]
@@ -205,6 +206,7 @@ function quoteMath(quote?: ProposalServiceQuote) {
 export function ProposalPackageItemsPanel({
   packageName,
   packageOptions,
+  showPackageSwitcher = true,
   selectedPackageId,
   onSelectPackage,
   lineItems,
@@ -281,7 +283,7 @@ export function ProposalPackageItemsPanel({
     setCustomDraft(null)
   }
 
-  if (!packageName && !displayedPackages.length) {
+  if (showPackageSwitcher && !packageName && !displayedPackages.length) {
     return (
       <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-5 text-sm leading-6 text-amber-900 dark:text-amber-100">
         <p className="font-bold">Choose a package before building its item list.</p>
@@ -292,7 +294,7 @@ export function ProposalPackageItemsPanel({
 
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+      {showPackageSwitcher ? <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
         <div className="flex flex-col gap-2 border-b border-[color:var(--portal-border)] px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Package selection</p>
@@ -325,7 +327,7 @@ export function ProposalPackageItemsPanel({
             ) : <div key={pkg.id} className={sharedClassName}>{contents}</div>
           })}
         </div>
-      </section>
+      </section> : null}
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,.86fr)_minmax(0,1.14fr)]">
         <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">

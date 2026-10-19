@@ -27,6 +27,7 @@ import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
 import { validateWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
 import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 import { getLuxorCustomTimeRentalPolicyV4, validateLuxorCustomTimeRentalV4Config } from '@/lib/luxorCustomTimeRentalV4'
+import { validateLuxorProposalPackageSettings } from '@/lib/luxorProposalPackages'
 
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -151,6 +152,8 @@ export async function PATCH(request: NextRequest) {
     ]
     const luxorCosts = object(config.luxor_costs) || config
     const structuralErrors: string[] = []
+    const packageSettings = catalogValue(luxorCosts, 'package_selection_v1')
+    if (packageSettings !== undefined) structuralErrors.push(...validateLuxorProposalPackageSettings(packageSettings))
     structuralErrors.push(...validateWeekdayCustomRentalPolicy(config))
     structuralErrors.push(...validateLuxorCustomTimeRentalV4Config(config))
     const bookingPayment = catalogNumber(luxorCosts, 'booking_payment', 'amount')

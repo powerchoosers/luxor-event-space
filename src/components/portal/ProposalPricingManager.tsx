@@ -7,6 +7,7 @@ import { useToast } from '@/components/portal/ToastProvider'
 import { catalogNumber, catalogValue, setCatalogValue, type PricingCatalog } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
 import { updateLuxorCustomTimeWeekdayPricingV4 } from '@/lib/luxorCustomTimeRentalV4'
+import { getLuxorProposalPackageSettings, LUXOR_PROPOSAL_PACKAGE_IDS } from '@/lib/luxorProposalPackages'
 
 type PricingRecord = {
   id: string
@@ -137,14 +138,15 @@ export function ProposalPricingManager() {
       const response = await fetch('/api/proposal-pricing', { cache: 'no-store' })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'Could not load the pricing catalog.')
-      const loadedConfig = structuredClone(payload.config)
+      let loadedConfig = structuredClone(payload.config)
       setCustomTimeV4Ready(payload.custom_time_v4_ready === true)
       if (catalogValue(loadedConfig, 'luxor_costs', 'required_fees', 'security', 'hourly_rate') === undefined) {
-        setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], 40)
+        loadedConfig = setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], 40)
       }
       if (catalogValue(loadedConfig, 'luxor_costs', 'required_fees', 'security', 'minimum_hours') === undefined) {
-        setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'minimum_hours'], 4)
+        loadedConfig = setCatalogValue(loadedConfig, ['luxor_costs', 'required_fees', 'security', 'minimum_hours'], 4)
       }
+      loadedConfig = setCatalogValue(loadedConfig, ['luxor_costs', 'package_selection_v1'], getLuxorProposalPackageSettings(loadedConfig))
       setRecord({ ...payload, config: loadedConfig })
       setDraft(loadedConfig)
       setState('ready')
@@ -328,6 +330,36 @@ export function ProposalPricingManager() {
           ))}
         </details>
       ))}
+
+      <details className="group overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-4 sm:px-6"><span><span className="block text-sm font-bold text-[color:var(--portal-text)]">Proposal packages</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">These versioned settings price the new Essentials, Signature, Luxor, and Customized proposal choices. Saving here affects new proposals; sent proposals retain their saved pricing snapshot.</span></span><ChevronDown size={17} className="mt-1 shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>
+        <div className="grid gap-4 border-t border-[color:var(--portal-border)] p-4 sm:p-6 xl:grid-cols-2">
+          {LUXOR_PROPOSAL_PACKAGE_IDS.map((packageId) => {
+            const optionPath = ['luxor_costs', 'package_selection_v1', 'options', packageId]
+            const tiers = (catalogValue(draft, ...optionPath, 'price_tiers') as Array<Record<string, unknown>> | undefined) || []
+            return <article key={packageId} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+              <h4 className="text-xs font-black uppercase tracking-[0.14em] text-[color:var(--portal-text)]">{String(catalogValue(draft, ...optionPath, 'name') || packageId)}</h4>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {([
+                  ['Name', 'name'], ['Positioning', 'positioning'], ['Description', 'description'],
+                  ['Card heading', 'summary_title'], ['Card summary', 'summary'],
+                ] as const).map(([label, field]) => <label key={field} className="block min-w-0 space-y-1.5">
+                  <span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{label}</span>
+                  {field === 'description' || field === 'summary' ? <textarea value={String(catalogValue(draft, ...optionPath, field) || '')} onChange={(event) => update([...optionPath, field], event.target.value)} className={`${inputClass} min-h-20 resize-y py-2`} /> : <input type="text" value={String(catalogValue(draft, ...optionPath, field) || '')} onChange={(event) => update([...optionPath, field], event.target.value)} className={inputClass} />}
+                </label>)}
+                {packageId === 'luxor' ? <label className="block min-w-0 space-y-1.5 sm:col-span-2"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Most Popular badge</span><input type="text" value={String(catalogValue(draft, ...optionPath, 'most_popular_label') || '')} onChange={(event) => update([...optionPath, 'most_popular_label'], event.target.value)} className={inputClass} /></label> : null}
+                <label className="block min-w-0 space-y-1.5 sm:col-span-2"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Inclusions (one per line; use %rental_hours% for venue hours)</span><textarea value={Array.isArray(catalogValue(draft, ...optionPath, 'inclusions')) ? (catalogValue(draft, ...optionPath, 'inclusions') as string[]).join('\n') : ''} onChange={(event) => update([...optionPath, 'inclusions'], event.target.value.split('\n').map((line) => line.trim()).filter(Boolean))} className={`${inputClass} min-h-32 resize-y py-2`} /></label>
+              </div>
+              {tiers.map((tier, index) => <div key={`${packageId}-tier-${index}`} className="mt-4 grid gap-3 border-t border-[color:var(--portal-border)] pt-4 sm:grid-cols-3">
+                <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Tier {index + 1} starts at guests</span><input type="number" min="0" step="1" value={String(tier.min_guests ?? '')} onChange={(event) => update([...optionPath, 'price_tiers', index, 'min_guests'], event.target.value === '' ? null : Number(event.target.value))} className={inputClass} /></label>
+                <label className="block space-y-1.5"><span className="block text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Tier {index + 1} ends at guests</span><input type="number" min="0" step="1" value={String(tier.max_guests ?? '')} onChange={(event) => update([...optionPath, 'price_tiers', index, 'max_guests'], event.target.value === '' ? null : Number(event.target.value))} className={inputClass} /></label>
+                <MoneyInput draft={draft} field={{ label: `Tier ${index + 1} package fee`, path: [...optionPath, 'price_tiers', index, 'amount'] }} onChange={update} />
+              </div>)}
+              {tiers.length === 0 ? <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">No package fee. Customized additions use their existing approved catalog prices.</p> : null}
+            </article>
+          })}
+        </div>
+      </details>
 
       <details className="group overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-4 sm:px-6"><span><span className="block text-sm font-bold text-[color:var(--portal-text)]">Sales tax</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">Stored as a percentage and applied to taxable proposal line items.</span></span><ChevronDown size={17} className="mt-1 shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>
