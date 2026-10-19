@@ -4,9 +4,10 @@ import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CalendarDays, Check, Loader2, Mail, Phone } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
-import { isGuestCountOverCapacity, LUXOR_EVENT_TYPES, LUXOR_GUEST_CAPACITY_MESSAGE } from '@/lib/luxorInquiryTypes'
+import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import { LUXOR_LEGACY_PACKAGE_NAMES, LUXOR_PACKAGE_INTEREST_OPTIONS } from '@/lib/luxorServiceCatalog'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
@@ -138,7 +139,14 @@ export function LuxorInquiryForm({
     const requestedEvent = params.get('event')
     const normalizedPackage = requestedPackage ? (LUXOR_LEGACY_PACKAGE_NAMES[requestedPackage] || requestedPackage) : ''
     if (normalizedPackage && LUXOR_PACKAGE_INTEREST_OPTIONS.some((option) => option.value === normalizedPackage)) setPackageInterest(normalizedPackage)
-    if (requestedEvent && LUXOR_EVENT_TYPES.includes(requestedEvent as (typeof LUXOR_EVENT_TYPES)[number])) setEventType(requestedEvent)
+    if (requestedEvent) {
+      try {
+        const normalizedEvent = normalizeLuxorEventType(requestedEvent)
+        if (normalizedEvent) setEventType(normalizedEvent)
+      } catch {
+        // Ignore overlong event types passed in the URL; the field remains editable.
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -168,8 +176,8 @@ export function LuxorInquiryForm({
 
   function goToContactStep() {
     markStarted()
-    if (!eventType) {
-      setError('Please select the type of event you are planning.')
+    if (!eventType.trim()) {
+      setError('Please enter the type of event you are planning.')
       return
     }
     if (isGuestCountOverCapacity(guestCount)) {
@@ -190,9 +198,9 @@ export function LuxorInquiryForm({
     const cleanEmail = email.trim()
     const cleanPhone = phone.trim()
 
-    if (!eventType) {
+    if (!eventType.trim()) {
       setStep(1)
-      setError('Please select the type of event you are planning.')
+      setError('Please enter the type of event you are planning.')
       return
     }
 
@@ -231,7 +239,7 @@ export function LuxorInquiryForm({
       smsOptIn: Boolean(cleanPhone && smsOptIn),
       smsMarketingOptIn: Boolean(cleanPhone && smsMarketingOptIn),
       marketingOptIn,
-      eventType,
+      eventType: eventType.trim(),
       targetDate,
       guestCount,
       budget,
@@ -313,9 +321,16 @@ export function LuxorInquiryForm({
           {step === 1 ? (
             <motion.div key="event-details" layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={FORM_TRANSITION}>
               <div className="grid items-start gap-x-4 gap-y-5 sm:grid-cols-2">
-                <FieldLabel label="Event type" required>
-                  <PortalSelect value={eventType} onChange={setEventType} className="w-full" buttonClassName={PUBLIC_SELECT_BUTTON_CLASS} placeholder="Select event type" options={LUXOR_EVENT_TYPES.map((type) => ({ value: type, label: type }))} />
-                </FieldLabel>
+                <LuxorEventTypeCombobox
+                  label="Event Type"
+                  required
+                  variant="public-dark"
+                  value={eventType}
+                  onChange={setEventType}
+                  className="flex h-full min-w-0 flex-col"
+                  labelClassName="mb-2 text-xs font-semibold tracking-[0.16em]"
+                  inputClassName={PUBLIC_SELECT_BUTTON_CLASS}
+                />
                 <FieldLabel label="Target event date">
                   <PortalDatePicker theme="light" value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" />
                 </FieldLabel>

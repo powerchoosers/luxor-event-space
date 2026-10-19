@@ -9,12 +9,13 @@ import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import { formatTourSlotDate, formatTourSlotTime } from '@/lib/luxorTourSlots'
 import {
   isGuestCountOverCapacity,
-  LUXOR_EVENT_TYPES,
   LUXOR_GUEST_CAPACITY_MESSAGE,
   LUXOR_GUEST_CAPACITY_MESSAGE_ES,
+  normalizeLuxorEventType,
   type LuxorInquiryInput,
 } from '@/lib/luxorInquiryTypes'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 
@@ -22,17 +23,6 @@ type Locale = 'en' | 'es'
 
 const publicDatePickerClass =
   'w-full [&>button]:min-h-12 [&>button]:rounded-xl [&>button]:border-[#d8c4a4] [&>button]:bg-[#fffdfa] [&>button]:px-3.5 [&>button]:text-sm [&>button]:normal-case [&>button]:tracking-normal hover:[&>button]:border-[#caa24c]'
-
-const eventTypeLabelsEs: Record<(typeof LUXOR_EVENT_TYPES)[number], string> = {
-  Wedding: 'Boda',
-  Quinceañera: 'Quinceañera',
-  'Baby shower': 'Baby shower',
-  Birthday: 'Cumpleaños',
-  Anniversary: 'Aniversario',
-  'Corporate event': 'Evento corporativo',
-  'Private celebration': 'Celebración privada',
-  Other: 'Otro',
-}
 
 const budgetOptions = [
   { value: 'Under $5,000', labelEn: 'Under $5,000', labelEs: 'Menos de $5,000' },
@@ -258,6 +248,18 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     if (e) e.preventDefault()
     setError(null)
 
+    let cleanEventType = ''
+    try {
+      cleanEventType = normalizeLuxorEventType(eventType)
+    } catch (eventTypeError) {
+      setError(eventTypeError instanceof Error ? eventTypeError.message : (spanish ? 'Acorta el tipo de evento.' : 'Please shorten the event type.'))
+      return
+    }
+    if (!cleanEventType) {
+      setError(spanish ? 'Indica el tipo de evento.' : 'Please enter an event type.')
+      return
+    }
+
     if (isGuestCountOverCapacity(guestCount)) {
       setError(spanish ? LUXOR_GUEST_CAPACITY_MESSAGE_ES : LUXOR_GUEST_CAPACITY_MESSAGE)
       return
@@ -281,7 +283,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       fullName: fullName.trim(),
       email: email.trim(),
       phone: phone.trim(),
-      eventType: eventType || 'Private celebration',
+      eventType: cleanEventType,
       targetDate: eventDate,
       guestCount,
       budget,
@@ -823,20 +825,16 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Field label={spanish ? 'Tipo de evento' : 'Event Type'}>
-              <PortalSelect
-                theme="light"
-                value={eventType}
-                onChange={setEventType}
-                options={LUXOR_EVENT_TYPES.map((type) => ({
-                  value: type,
-                  label: spanish ? eventTypeLabelsEs[type] : type,
-                }))}
-                placeholder={spanish ? 'Selecciona un tipo de evento' : 'Select an event type'}
-                className="w-full"
-                buttonClassName="min-h-12 rounded-xl bg-[#fffdfa] border-[#d8c4a4] px-3.5 text-sm normal-case tracking-normal hover:border-[#caa24c]"
-              />
-            </Field>
+            <LuxorEventTypeCombobox
+              label="Event Type"
+              required
+              variant="public-light"
+              value={eventType}
+              onChange={setEventType}
+              className="w-full"
+              labelClassName="mb-2 text-[10px] font-bold tracking-[0.16em]"
+              inputClassName="min-h-12 rounded-xl bg-[#fffdfa] border-[#d8c4a4] px-3.5 py-0 text-sm normal-case tracking-normal hover:border-[#caa24c]"
+            />
 
             <Field label={spanish ? 'Invitados esperados' : 'Estimated Guests'}>
               <input
@@ -874,7 +872,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
                 }))}
                 placeholder={spanish ? 'Selecciona un rango' : 'Select a budget range'}
                 className="w-full"
-                buttonClassName="min-h-12 rounded-xl bg-[#fffdfa] border-[#d8c4a4] px-3.5 text-sm normal-case tracking-normal hover:border-[#caa24c]"
+                buttonClassName="min-h-12 sm:!min-h-12 rounded-xl bg-[#fffdfa] border-[#d8c4a4] px-3.5 text-sm normal-case tracking-normal hover:border-[#caa24c]"
               />
             </Field>
           </div>

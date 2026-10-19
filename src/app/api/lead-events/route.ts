@@ -7,7 +7,7 @@ import {
   listLuxorLeadEventsByInquiry,
   updateLuxorLeadEvent,
 } from '@/lib/luxorLeadEventsServer'
-import type { LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
+import { normalizeLuxorEventType, type LuxorInquiryStatus, type LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
 
 const statuses = new Set<LuxorInquiryStatus>(['new', 'contacted', 'tour_requested', 'tour_confirmed', 'proposal_sent', 'booked', 'closed_lost'])
 const pipelineStages = new Set<LuxorPipelineStage>(['newsletter', 'inquiry', 'tour', 'proposal', 'contract', 'deposit', 'planning', 'final_payment', 'event', 'closing', 'closed_lost'])
@@ -35,7 +35,12 @@ export async function POST(request: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     const body = await request.json()
     const inquiryId = String(body.inquiry_id || body.inquiryId || '').trim()
-    const eventType = String(body.event_type || body.eventType || '').trim()
+    let eventType = ''
+    try {
+      eventType = normalizeLuxorEventType(body.event_type ?? body.eventType)
+    } catch (eventTypeError) {
+      return NextResponse.json({ error: eventTypeError instanceof Error ? eventTypeError.message : 'Please shorten the event type.' }, { status: 400 })
+    }
     if (!inquiryId || !eventType) return NextResponse.json({ error: 'inquiry_id and event_type are required.' }, { status: 400 })
     if (!await getLuxorInquiry(inquiryId)) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
 
@@ -67,7 +72,13 @@ export async function PATCH(request: NextRequest) {
     if (!existing) return NextResponse.json({ error: 'Event not found.' }, { status: 404 })
 
     const updates: Record<string, unknown> = {}
-    if (body.event_type !== undefined) updates.event_type = String(body.event_type || '').trim() || existing.event_type
+    if (body.event_type !== undefined) {
+      try {
+        updates.event_type = normalizeLuxorEventType(body.event_type) || existing.event_type
+      } catch (eventTypeError) {
+        return NextResponse.json({ error: eventTypeError instanceof Error ? eventTypeError.message : 'Please shorten the event type.' }, { status: 400 })
+      }
+    }
     if (body.target_date !== undefined) updates.target_date = body.target_date || null
     if (body.guest_count !== undefined) updates.guest_count = normalizeGuestCount(body.guest_count)
     if (body.package_interest !== undefined) updates.package_interest = body.package_interest || null

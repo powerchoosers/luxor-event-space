@@ -41,7 +41,7 @@ const CallCenterTab = dynamic(() => import('./tabs/CallCenterTab').then(m => m.C
 const MarketingCalendarTab = dynamic(() => import('./tabs/MarketingCalendarTab').then(m => m.MarketingCalendarTab), { ssr: false, loading: () => <MarketingCalendarSkeleton /> })
 
 import { EMAIL_TEMPLATES, type EmailTemplate } from './emailTemplates'
-import type { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
+import { normalizeLuxorEventType, type LuxorInquiry, type LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 
 export type MarketingTab =
   | 'overview'
@@ -595,10 +595,25 @@ function MarketingPageContent() {
 
   async function handleAddContact(contact: Partial<LuxorInquiry>) {
     try {
+      const eventType = normalizeLuxorEventType(contact.event_type)
+      if (!eventType) throw new Error('Please enter an event type.')
       const res = await fetch('/api/inquiries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contact)
+        body: JSON.stringify({
+          fullName: typeof contact.full_name === 'string' ? contact.full_name.trim() : '',
+          email: contact.email || '',
+          phone: contact.phone || '',
+          eventType,
+          targetDate: contact.target_date || '',
+          guestCount: contact.guest_count ?? '',
+          budget: contact.budget || '',
+          message: contact.message || '',
+          source: contact.source || 'portal_manual',
+          flow: 'manual_entry',
+          pagePath: '/portal/marketing',
+          marketingOptIn: Boolean(contact.marketing_opt_in),
+        }),
       })
       if (!res.ok) {
         const payload = await res.json()

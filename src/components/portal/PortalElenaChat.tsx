@@ -27,6 +27,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
+import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -1316,7 +1317,7 @@ function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPa
   const [fullName, setFullName] = useState(payload.fullName || '')
   const [email, setEmail] = useState(payload.email || '')
   const [phone, setPhone] = useState(payload.phone || '')
-  const [eventType, setEventType] = useState(payload.eventType || 'Other')
+  const [eventType, setEventType] = useState(payload.eventType || '')
   const [source, setSource] = useState(payload.source || 'Manual Entry')
   const [targetDate, setTargetDate] = useState(payload.targetDate || '')
   const [guestCount, setGuestCount] = useState(payload.guestCount ? String(payload.guestCount) : '')
@@ -1325,7 +1326,7 @@ function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPa
   const [createdInquiryId, setCreatedInquiryId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const canSave = Boolean(fullName.trim() && (email.trim() || phone.trim())) && !createdInquiryId
+  const canSave = Boolean(fullName.trim() && (email.trim() || phone.trim()) && eventType.trim()) && !createdInquiryId
 
   const handleCreate = async () => {
     if (!canSave || isSaving) return
@@ -1339,7 +1340,7 @@ function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPa
             fullName,
             email,
             phone,
-            eventType,
+            eventType: eventType.trim(),
             source,
             targetDate,
             guestCount: guestCount ? Number(guestCount) : null,
@@ -1374,10 +1375,17 @@ function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPa
           <ElenaContactField label="Full name" value={fullName} onChange={setFullName} placeholder="Full name" required />
           <ElenaContactField label="Email" value={email} onChange={setEmail} placeholder="name@example.com" type="email" />
           <ElenaContactField label="Phone" value={phone} onChange={setPhone} placeholder="(210) 555-0199" type="tel" />
-          <div>
-            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Event type</label>
-            <PortalSelect value={eventType} onChange={setEventType} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" options={ELENA_CONTACT_EVENT_OPTIONS} />
-          </div>
+          <LuxorEventTypeCombobox
+            label="Event Type"
+            value={eventType}
+            onChange={setEventType}
+            required
+            variant="portal"
+            className="min-w-0"
+            labelClassName="!mb-1 !text-[9px] !tracking-wider"
+            inputClassName="!min-h-9 !rounded-xl !px-2.5 !py-1.5 !text-[10px]"
+            listClassName="text-[10px]"
+          />
           <div>
             <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Source</label>
             <PortalSelect value={source} onChange={setSource} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" options={ELENA_CONTACT_SOURCE_OPTIONS} />
@@ -1509,16 +1517,6 @@ const TOUR_MEETING_TYPE_OPTIONS = [
   { value: 'Quinceañera Walkthrough', label: 'Quinceañera Walkthrough' },
   { value: 'Event Planning Consultation', label: 'Event Planning Consultation' },
   { value: 'Vendor Walkthrough', label: 'Vendor Walkthrough' },
-]
-
-const ELENA_CONTACT_EVENT_OPTIONS = [
-  { value: 'Wedding', label: 'Wedding' },
-  { value: 'Quinceañera', label: 'Quinceañera' },
-  { value: 'Baby shower', label: 'Baby shower' },
-  { value: 'Birthday', label: 'Birthday' },
-  { value: 'Corporate event', label: 'Corporate event' },
-  { value: 'Private celebration', label: 'Private celebration' },
-  { value: 'Other', label: 'Other' },
 ]
 
 const ELENA_CONTACT_SOURCE_OPTIONS = [

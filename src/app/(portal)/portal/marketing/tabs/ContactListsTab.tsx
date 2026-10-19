@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import {
   Users,
   Plus,
@@ -108,7 +109,7 @@ export function ContactListsTab({
   const [newFullName, setNewFullName] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newPhone, setNewPhone] = useState('')
-  const [newEventType, setNewEventType] = useState('wedding')
+  const [newEventType, setNewEventType] = useState('Wedding')
   const [newSource, setNewSource] = useState('Website')
   const [newFormSubmitted, setNewFormSubmitted] = useState('General Contact Form')
   const [newTags, setNewTags] = useState('')
@@ -458,7 +459,7 @@ export function ContactListsTab({
 
   async function handleSubmitContact(e: React.FormEvent) {
     e.preventDefault()
-    if (!newFullName.trim() || !newEmail.trim()) return
+    if (!newFullName.trim() || !newEmail.trim() || !newEventType.trim()) return
 
     setSubmittingContact(true)
     try {
@@ -466,7 +467,7 @@ export function ContactListsTab({
         full_name: newFullName,
         email: newEmail,
         phone: newPhone,
-        event_type: newEventType,
+        event_type: newEventType.trim(),
         source: newSource,
         message: `Submitted Form: ${newFormSubmitted}. Tags: ${newTags}`
       })
@@ -475,6 +476,7 @@ export function ContactListsTab({
       setNewFullName('')
       setNewEmail('')
       setNewPhone('')
+      setNewEventType('Wedding')
       setNewTags('')
       
       notify({ title: 'Contact Created', description: 'New marketing contact added successfully.', variant: 'success' })
@@ -930,21 +932,14 @@ export function ContactListsTab({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Event Type</label>
-              <PortalSelect
-                value={newEventType}
-                onChange={setNewEventType}
-                className="w-full"
-                options={[
-                  { value: 'wedding', label: 'Wedding' },
-                  { value: 'quinceañera', label: 'Quinceañera' },
-                  { value: 'corporate', label: 'Corporate Event' },
-                  { value: 'private celebration', label: 'Private Celebration' },
-                  { value: 'other', label: 'Other Event' },
-                ]}
-              />
-            </div>
+            <LuxorEventTypeCombobox
+              label="Event Type"
+              required
+              value={newEventType}
+              onChange={setNewEventType}
+              className="space-y-1"
+              labelClassName="mb-1 text-[9px] font-black tracking-wider"
+            />
             <div className="space-y-1">
               <label className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Lead Source</label>
               <PortalSelect

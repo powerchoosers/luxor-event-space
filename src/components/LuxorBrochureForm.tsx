@@ -3,17 +3,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Check, Download, FileText, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalDatePicker } from '@/components/portal/PortalUI'
+import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Link from 'next/link'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
-
-const EVENT_TYPE_OPTIONS = [
-  { value: 'Wedding', label: 'Wedding' },
-  { value: 'Quinceañera', label: 'Quinceañera' },
-  { value: 'Birthday', label: 'Birthday / Milestone Celebration' },
-  { value: 'Corporate', label: 'Corporate Event' },
-  { value: 'Other', label: 'Other Special Event' },
-]
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -75,8 +68,9 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
       return
     }
 
-    if (!eventType) {
-      setError('Please select an event type.')
+    const cleanEventType = eventType.trim()
+    if (!cleanEventType) {
+      setError('Please enter an event type.')
       return
     }
 
@@ -87,7 +81,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
         fullName: fullName.trim(),
         email: email.trim(),
         phone: phone.trim(),
-        eventType,
+        eventType: cleanEventType,
         targetDate: eventDate || null,
         message: 'Requested venue brochure via homepage',
         source: 'homepage_brochure',
@@ -117,7 +111,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
       if (!data.test) try {
         const { trackLuxorPublicEvent } = await import('@/lib/luxorPublicAttribution')
         trackLuxorPublicEvent('brochure_submitted', {
-          event_type: eventType,
+          event_type: cleanEventType,
           lead_source: 'Homepage Brochure Form',
           has_date: Boolean(eventDate),
         })
@@ -291,21 +285,16 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
                   />
                 </label>
 
-                {/* Event Type (Required) */}
-                <div className="block sm:col-span-1">
-                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-[#caa24c]">
-                    Event Type *
-                  </span>
-                  <PortalSelect
-                    theme="light"
-                    value={eventType}
-                    onChange={setEventType}
-                    options={EVENT_TYPE_OPTIONS}
-                    placeholder="Select event type"
-                    className="w-full"
-                    buttonClassName="min-h-12 rounded-xl border-[#d8c4a4] bg-white px-4 text-sm normal-case tracking-normal text-[#241d17] hover:border-[#b98a3d]"
-                  />
-                </div>
+                <LuxorEventTypeCombobox
+                  label="Event Type"
+                  required
+                  variant="public-light"
+                  value={eventType}
+                  onChange={setEventType}
+                  className="block sm:col-span-1"
+                  labelClassName="mb-1.5 text-[11px] tracking-[0.18em] text-[#caa24c]"
+                  inputClassName="h-12 rounded-xl border-[#d8c4a4] bg-white px-4 py-0 text-sm text-[#241d17] hover:border-[#b98a3d]"
+                />
 
                 {/* Estimated Event Date (Optional - only optional field) */}
                 <div className="block sm:col-span-1">

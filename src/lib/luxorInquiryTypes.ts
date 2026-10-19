@@ -9,14 +9,57 @@ export type LuxorInquiryStatus =
 
 export const LUXOR_EVENT_TYPES = [
   'Wedding',
+  'Wedding Reception',
   'Quinceañera',
-  'Baby shower',
-  'Birthday',
+  'Sweet 16',
+  'Cincoañera',
+  'Birthday Party',
   'Anniversary',
-  'Corporate event',
-  'Private celebration',
-  'Other',
+  'Vow Renewal',
+  'Baby Shower',
+  'Bridal Shower',
+  'Graduation Party',
+  'Corporate Event',
+  'Networking Event',
+  'Fashion Show',
+  'Workshop',
+  'Holiday Party',
+  'Repast / Repass',
+  'Celebration of Life',
+  'Memorial Service',
+  'Funeral Reception',
+  'Bereavement Gathering',
+  'Other Special Event',
 ] as const
+
+export const LUXOR_EVENT_TYPE_MAX_LENGTH = 120
+export const LUXOR_EVENT_TYPE_REQUIRED_FLOWS = [
+  'tour_request',
+  'brochure_lead',
+  'visit_booking',
+  'custom_visit_request',
+  'manual_entry',
+] as const
+
+export function isLuxorEventTypeRequiredFlow(flow: unknown) {
+  return typeof flow === 'string'
+    && LUXOR_EVENT_TYPE_REQUIRED_FLOWS.includes(flow.trim() as (typeof LUXOR_EVENT_TYPE_REQUIRED_FLOWS)[number])
+}
+
+export function filterLuxorEventTypes(query: string) {
+  const normalizedQuery = query.trim().toLowerCase()
+  return normalizedQuery
+    ? LUXOR_EVENT_TYPES.filter((eventType) => eventType.toLowerCase().includes(normalizedQuery))
+    : [...LUXOR_EVENT_TYPES]
+}
+
+export function normalizeLuxorEventType(value: unknown) {
+  const eventType = typeof value === 'string' ? value.trim() : ''
+  if (Array.from(eventType).length > LUXOR_EVENT_TYPE_MAX_LENGTH) {
+    throw new Error(`Please shorten the event type to ${LUXOR_EVENT_TYPE_MAX_LENGTH} characters or fewer.`)
+  }
+  return eventType
+}
 
 export const LUXOR_MAX_GUESTS = 200
 export const LUXOR_GUEST_CAPACITY_MESSAGE = 'Luxor accommodates up to 200 people. Please enter 200 or fewer, and add any layout needs in the notes.'

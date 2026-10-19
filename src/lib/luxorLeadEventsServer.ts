@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { LuxorLeadEvent, LuxorPipelineStage, LuxorInquiryStatus } from './luxorInquiryTypes'
+import { normalizeLuxorEventType, type LuxorLeadEvent, type LuxorPipelineStage, type LuxorInquiryStatus } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
 
 export type LuxorLeadEventCreateInput = {
@@ -49,12 +49,15 @@ export async function getLuxorLeadEventForInquiry(id: string, inquiryId: string)
 }
 
 export async function createLuxorLeadEvent(data: LuxorLeadEventCreateInput) {
+  const eventType = normalizeLuxorEventType(data.event_type)
+  if (!eventType) throw new Error('Please enter an event type.')
+
   const [event] = await supabaseRest<LuxorLeadEvent[]>('luxor_lead_events?select=*', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
       inquiry_id: data.inquiry_id,
-      event_type: data.event_type,
+      event_type: eventType,
       target_date: data.target_date || null,
       guest_count: data.guest_count ?? null,
       package_interest: data.package_interest || null,
@@ -70,12 +73,19 @@ export async function createLuxorLeadEvent(data: LuxorLeadEventCreateInput) {
 }
 
 export async function updateLuxorLeadEvent(id: string, updates: LuxorLeadEventUpdateInput) {
+  const normalizedUpdates = { ...updates }
+  if (normalizedUpdates.event_type !== undefined) {
+    const eventType = normalizeLuxorEventType(normalizedUpdates.event_type)
+    if (!eventType) throw new Error('Please enter an event type.')
+    normalizedUpdates.event_type = eventType
+  }
+
   const [event] = await supabaseRest<LuxorLeadEvent[]>(
     `luxor_lead_events?select=*&id=eq.${encodeURIComponent(id)}`,
     {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ ...normalizedUpdates, updated_at: new Date().toISOString() }),
     },
   )
 

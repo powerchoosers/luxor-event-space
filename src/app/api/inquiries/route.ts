@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listAllLuxorInquiries, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
-import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
+import { isGuestCountOverCapacity, isLuxorEventTypeRequiredFlow, LUXOR_GUEST_CAPACITY_MESSAGE, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { addMarketingMember } from '@/lib/luxorMarketingServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
@@ -93,6 +93,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const payload = (await request.json()) as LuxorInquiryInput
+    if (isLuxorEventTypeRequiredFlow(payload.flow)) {
+      try {
+        payload.eventType = normalizeLuxorEventType(payload.eventType)
+      } catch (eventTypeError) {
+        return NextResponse.json({ error: eventTypeError instanceof Error ? eventTypeError.message : 'Please shorten the event type.' }, { status: 400 })
+      }
+      if (!payload.eventType) return NextResponse.json({ error: 'Please enter an event type.' }, { status: 400 })
+    }
     const ipHash = hashPublicRequestIp(getPublicRequestIp(request.headers))
 
     if (payload.website) {
@@ -374,6 +382,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
     }
     if (existing.is_test) return NextResponse.json({ error: 'The permanent test lead can only be changed through its run lifecycle controls.' }, { status: 409 })
+
+    if (updates.event_type !== undefined) {
+      try {
+        updates.event_type = normalizeLuxorEventType(updates.event_type)
+      } catch (eventTypeError) {
+        return NextResponse.json({ error: eventTypeError instanceof Error ? eventTypeError.message : 'Please shorten the event type.' }, { status: 400 })
+      }
+      if (!updates.event_type) return NextResponse.json({ error: 'Please enter an event type.' }, { status: 400 })
+    }
 
     if (typeof updates.email === 'string') {
       const email = updates.email.trim().toLowerCase()

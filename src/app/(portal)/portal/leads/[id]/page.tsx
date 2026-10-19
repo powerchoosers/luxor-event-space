@@ -52,7 +52,7 @@ import {
   Languages,
   X,
 } from 'lucide-react'
-import { isLuxorTestInquiry, LUXOR_EVENT_TYPES, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor } from '@/lib/luxorInquiryTypes'
+import { isLuxorTestInquiry, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
@@ -80,6 +80,7 @@ import { CorrectEmailResendDialog } from '@/components/portal/CorrectEmailResend
 import type { CorrectEmailResendOption } from '@/lib/luxorLeadEmailResend'
 import { WeekdayRentalSummary } from '@/components/portal/WeekdayRentalSummary'
 import { LuxorTestLeadPanel } from '@/components/portal/LuxorTestLeadPanel'
+import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -342,7 +343,7 @@ type EditableLeadField =
   | 'phone'
   | 'address'
 
-type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select'
+type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select' | 'event-type'
 type LeadDetailTab = 'overview' | 'activity' | 'proposals' | 'contract' | 'payments' | 'planning' | 'messages' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'notes'
 
 const LEAD_BUDGET_OPTIONS = [
@@ -1497,7 +1498,7 @@ export default function LeadDetailPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           inquiry_id: lead.id,
-          event_type: newEventType,
+        event_type: newEventType.trim(),
           target_date: newEventDate || null,
           guest_count: newEventGuestCount || null,
           package_interest: newEventPackage || null,
@@ -1957,7 +1958,19 @@ export default function LeadDetailPage({
   const handleLeadFieldUpdate = async (field: EditableLeadField, nextValue: string) => {
     if (!lead || savingLeadField) return false
 
-    const normalizedValue = normalizeLeadFieldValue(field, nextValue)
+    let normalizedValue: string | number | null
+    try {
+      normalizedValue = field === 'event_type'
+        ? normalizeLuxorEventType(nextValue)
+        : normalizeLeadFieldValue(field, nextValue)
+    } catch (eventTypeError) {
+      notify({ title: 'Event type not saved', description: eventTypeError instanceof Error ? eventTypeError.message : 'Please shorten the event type.', variant: 'error' })
+      return false
+    }
+    if (field === 'event_type' && !normalizedValue) {
+      notify({ title: 'Event type required', description: 'Enter an event type before saving.', variant: 'error' })
+      return false
+    }
 
     if (field === 'address') {
       const currentValue = lead.metadata?.address || ''
@@ -3669,7 +3682,8 @@ export default function LeadDetailPage({
       copyValue: activeEventForDisplay?.event_type || lead.event_type || '',
       field: 'event_type',
       icon: <Sparkles size={14} />,
-      placeholder: 'Wedding, Quinceañera, birthday...',
+      inputType: 'event-type',
+      placeholder: 'Search or enter an event type...',
     },
     {
       label: 'Guest Count',
@@ -8600,8 +8614,14 @@ export default function LeadDetailPage({
           </div>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event type <span className="text-[#caa24c]">Required</span></label>
-              <PortalSelect value={newEventType} onChange={setNewEventType} options={[{ value: '', label: 'Choose event type' }, ...LUXOR_EVENT_TYPES.map((type) => ({ value: type, label: type }))]} className="w-full" />
+              <LuxorEventTypeCombobox
+                label="Event Type"
+                required
+                value={newEventType}
+                onChange={setNewEventType}
+                className="sm:col-span-2"
+                labelClassName="mb-1.5 text-[9px] font-black tracking-[0.16em]"
+              />
             </div>
             <div>
               <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Date</label>
@@ -8622,7 +8642,7 @@ export default function LeadDetailPage({
           </div>
           <div className="mt-6 flex justify-end gap-3">
             <button type="button" onClick={() => setIsAddEventModalOpen(false)} disabled={submittingEvent} className="rounded-lg border border-[color:var(--portal-border)] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] disabled:opacity-40">Cancel</button>
-            <button type="submit" disabled={submittingEvent || !newEventType} className="rounded-lg bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-[#dfbd68] disabled:opacity-40">{submittingEvent ? 'Adding event...' : 'Add event'}</button>
+            <button type="submit" disabled={submittingEvent || !newEventType.trim()} className="rounded-lg bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-[#dfbd68] disabled:opacity-40">{submittingEvent ? 'Adding event...' : 'Add event'}</button>
           </div>
         </form>
       </PortalModal>
@@ -9093,7 +9113,7 @@ function ClientSummaryCard({
       { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address' as EditableLeadField, placeholder: 'San Antonio, TX' },
       { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Expected Guests` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count' as EditableLeadField, inputType: 'select' as LeadDetailInputType, options: guestCountOptions },
       { label: 'Planning Budget', icon: <DollarSign size={14} />, value: lead.budget || 'Budget not provided', editValue: lead.budget || '', copyValue: lead.budget || '', field: 'budget' as EditableLeadField, inputType: 'select' as LeadDetailInputType, options: LEAD_BUDGET_OPTIONS },
-      { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type' as EditableLeadField, inputType: 'select' as LeadDetailInputType, options: LUXOR_EVENT_TYPES.map((value) => ({ value, label: value })) },
+      { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type' as EditableLeadField, inputType: 'event-type' as LeadDetailInputType, placeholder: 'Search or enter an event type...' },
     ]),
   ]
 
@@ -9557,12 +9577,12 @@ function DetailItem({
     startEditing()
   }
 
-  const commitDraft = async () => {
+  const commitValue = async (value: string) => {
     if (!onCommit || isSaving || commitInFlightRef.current) return
 
     commitInFlightRef.current = true
     try {
-      const saved = await onCommit(draft)
+      const saved = await onCommit(value)
       if (saved) {
         setIsEditing(false)
       }
@@ -9570,6 +9590,8 @@ function DetailItem({
       commitInFlightRef.current = false
     }
   }
+
+  const commitDraft = () => commitValue(draft)
 
   const copyDetail = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -9624,6 +9646,30 @@ function DetailItem({
                   }
                 }
               }}
+            />
+          </div>
+        ) : inputType === 'event-type' ? (
+          <div className={`${compact ? '' : 'mt-2'} w-full`} onClick={(event) => event.stopPropagation()}>
+            <LuxorEventTypeCombobox
+              label={label}
+              hideLabel={!compact}
+              required
+              value={draft}
+              disabled={isSaving}
+              variant="portal"
+              placeholder="Search or enter an event type..."
+              onChange={setDraft}
+              onBlur={() => { void commitDraft() }}
+              onEnterCustom={(value) => {
+                setDraft(value)
+                void commitValue(value)
+              }}
+              onSelectSuggestion={(value) => {
+                setDraft(value)
+                void commitValue(value)
+              }}
+              labelClassName="mb-1.5 text-[9px] font-black tracking-[0.16em]"
+              inputClassName={`${compact ? 'py-1.5' : 'py-2'} rounded-lg px-3 text-sm font-bold ${isMono ? 'font-mono' : ''}`}
             />
           </div>
         ) : inputType === 'select' ? (

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { compactText, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, parseGuestCount } from './luxorInquiryTypes'
+import { compactText, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
 import { compareLuxorScheduledTours, getLuxorInquiryPageRequest, loadLuxorPages } from './luxorTourMetrics'
@@ -28,6 +28,12 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
   const email = compactText(input.email).toLowerCase()
   const phone = compactText(input.phone)
   const message = typeof input.message === 'string' ? input.message.trim() : ''
+  const flow = compactText(input.flow) || 'tour_request'
+  const eventType = normalizeLuxorEventType(input.eventType)
+
+  if (isLuxorEventTypeRequiredFlow(flow) && !eventType) {
+    throw new Error('Please enter an event type.')
+  }
 
   if (!fullName) {
     throw new Error('Please add your full name.')
@@ -79,7 +85,7 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     full_name: fullName,
     email: email || null,
     phone: phone || null,
-    event_type: compactText(input.eventType) || null,
+    event_type: eventType || null,
     target_date: compactText(input.targetDate) || null,
     guest_count: parseGuestCount(input.guestCount),
     budget: compactText(input.budget) || null,
@@ -88,7 +94,7 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     package_interest: compactText(input.packageInterest) || null,
     message: message || null,
     source: compactText(input.source) || 'website',
-    flow: compactText(input.flow) || 'tour_request',
+    flow,
     campaign_key: compactText(input.campaignKey) || null,
     rsvp_status: normalizeRsvpStatus(input.rsvpStatus),
     marketing_opt_in: Boolean(input.marketingOptIn),
@@ -328,13 +334,20 @@ export async function listLuxorConfirmedTours() {
 }
 
 export async function updateLuxorInquiry(id: string, updates: Partial<Record<string, unknown>>) {
+  const normalizedUpdates = { ...updates }
+  if (normalizedUpdates.event_type !== undefined) {
+    const eventType = normalizeLuxorEventType(normalizedUpdates.event_type)
+    if (!eventType) throw new Error('Please enter an event type.')
+    normalizedUpdates.event_type = eventType
+  }
+
   const [updated] = await supabaseRest<LuxorInquiry[]>(
     `luxor_inquiries?select=*&id=eq.${encodeURIComponent(id)}`,
     {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({
-        ...updates,
+        ...normalizedUpdates,
         updated_at: new Date().toISOString(),
       }),
     }

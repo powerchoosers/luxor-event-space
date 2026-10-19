@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { isLuxorNonRevenueTestInquiry, isLuxorTestInquiry, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
+import { isLuxorNonRevenueTestInquiry, isLuxorTestInquiry, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
@@ -81,6 +81,7 @@ import {
 } from '@/components/portal/PortalBulkSelection'
 import { useToast } from '@/components/portal/ToastProvider'
 import FollowUpsTab from '@/components/portal/FollowUpsTab'
+import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { LuxorCrmRecordCard, LuxorCrmSecondaryAction, luxorCrmStatusTone } from '@/components/portal/LuxorCrmRecordCard'
 import { LuxorTestLeadPanel } from '@/components/portal/LuxorTestLeadPanel'
 
@@ -265,13 +266,25 @@ export default function LeadsPage() {
     e.preventDefault()
     if (!newLeadName.trim()) return
 
+    let cleanEventType = ''
+    try {
+      cleanEventType = normalizeLuxorEventType(newLeadEventType)
+    } catch (eventTypeError) {
+      alert(eventTypeError instanceof Error ? eventTypeError.message : 'Please enter a shorter event type.')
+      return
+    }
+    if (!cleanEventType) {
+      alert('Please enter an event type.')
+      return
+    }
+
     try {
       setSubmitting(true)
       const payload: LuxorInquiryInput = {
         fullName: newLeadName,
         email: newLeadEmail || undefined,
         phone: newLeadPhone || undefined,
-        eventType: newLeadEventType,
+        eventType: cleanEventType,
         guestCount: newLeadGuestCount || undefined,
         targetDate: newLeadTargetDate || undefined,
         message: newLeadMessage || undefined,
@@ -1059,22 +1072,14 @@ export default function LeadsPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Event type</label>
-                <PortalSelect
-                  value={newLeadEventType}
-                  onChange={setNewLeadEventType}
-                  className="w-full"
-                  options={[
-                    { value: 'Wedding', label: 'Wedding' },
-                    { value: 'Quinceañera', label: 'Quinceañera' },
-                    { value: 'Baby shower', label: 'Baby Shower' },
-                    { value: 'Birthday', label: 'Birthday' },
-                    { value: 'Corporate event', label: 'Corporate' },
-                    { value: 'Private celebration', label: 'Celebration' }
-                  ]}
-                />
-              </div>
+              <LuxorEventTypeCombobox
+                label="Event Type"
+                required
+                value={newLeadEventType}
+                onChange={setNewLeadEventType}
+                className="space-y-1.5"
+                labelClassName="mb-1.5 text-[10px] font-bold tracking-widest"
+              />
               <div className="space-y-1.5">
                 <label htmlFor="new-lead-guests" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Guest count</label>
                 <input
