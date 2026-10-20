@@ -7,7 +7,7 @@ import type {
 } from './luxorInquiryTypes'
 import { isLuxorCollectedLineItem } from './luxorPaymentOwnership'
 import { formatCatalogTime } from './luxorPricingCatalog'
-import { LUXOR_EVENT_TIME_ZONE, proposalEventTiming, proposalSecurityDuration } from './luxorProposalTerms'
+import { LUXOR_EVENT_TIME_ZONE, proposalSecurityDuration, resolveFixedProposalRentalRange, validateFixedProposalRentalSchedule, RENTAL_WINDOWS } from './luxorProposalTerms'
 import { OFFICIAL_DECOR_SERVICES, getOfficialDecorService } from './luxorDecorCatalog'
 import {
   includedLuxorDecorQuantity,
@@ -493,12 +493,24 @@ function eventAccessLabel(luxor: PricingRecord, rentalPeriod: LuxorRentalPeriod,
 }
 
 function eventTimingErrors(selection: LuxorProposalSelection, _config: PricingRecord, period: LuxorRentalPeriod) {
-  const timing = proposalEventTiming(period, trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time), trimmedString(selection.eventEndTime ?? selection.event_end_time))
+  const timing = validateFixedProposalRentalSchedule(
+    period,
+    trimmedString(selection.rentalStartTime ?? selection.rental_start_time),
+    trimmedString(selection.rentalEndTime ?? selection.rental_end_time),
+    trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time),
+    trimmedString(selection.eventEndTime ?? selection.event_end_time),
+  )
   return timing.valid ? [] : [timing.error!]
 }
 
 function addRentalExtension(items: LuxorInvoiceLineItem[], errors: string[], selection: LuxorProposalSelection, config: PricingRecord, period: LuxorRentalPeriod, eventDate: string) {
-  const timing = proposalEventTiming(period, trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time), trimmedString(selection.eventEndTime ?? selection.event_end_time))
+  const timing = validateFixedProposalRentalSchedule(
+    period,
+    trimmedString(selection.rentalStartTime ?? selection.rental_start_time),
+    trimmedString(selection.rentalEndTime ?? selection.rental_end_time),
+    trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time),
+    trimmedString(selection.eventEndTime ?? selection.event_end_time),
+  )
   if (!timing.valid || !timing.additionalHours) return
   const group = dateRateGroup(eventDate)
   const rate = group ? readNumber(config, 'additional_time_rates', group) : undefined
@@ -2290,24 +2302,55 @@ function calculateProposal(
 }
 
 export function calculateLuxorProposal(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig = LUXOR_DEFAULT_PROPOSAL_PRICING_CONFIG, options: LuxorProposalCalculationOptions = {}): LuxorProposalCalculation {
-  const custom = normalizeRentalPeriod(selection.rentalPeriod) === 'custom'
-  const rentalStartTime = trimmedString(selection.rentalStartTime ?? selection.rental_start_time ?? selection.guestArrivalTime ?? selection.guest_arrival_time)
-  const rentalEndTime = trimmedString(selection.rentalEndTime ?? selection.rental_end_time ?? selection.eventEndTime ?? selection.event_end_time)
+  const period = normalizeRentalPeriod(selection.rentalPeriod) || 'evening'
+  const custom = period === 'custom'
   const guestArrivalTime = trimmedString(selection.guestArrivalTime ?? selection.guest_arrival_time)
   const eventEndTime = trimmedString(selection.eventEndTime ?? selection.event_end_time)
+  const explicitRentalStart = trimmedString(selection.rentalStartTime ?? selection.rental_start_time)
+  const explicitRentalEnd = trimmedString(selection.rentalEndTime ?? selection.rental_end_time)
+  const fixedRange = custom ? null : resolveFixedProposalRentalRange(
+    period,
+    explicitRentalStart,
+    explicitRentalEnd,
+    guestArrivalTime,
+    eventEndTime,
+  )
+  const partialRentalRange = Boolean(explicitRentalStart) !== Boolean(explicitRentalEnd)
+  const rentalStartTime = custom
+    ? explicitRentalStart || guestArrivalTime
+    : partialRentalRange ? fixedRange?.startTime || '' : fixedRange?.startTime || RENTAL_WINDOWS[period as keyof typeof RENTAL_WINDOWS]?.start || ''
+  const rentalEndTime = custom
+    ? explicitRentalEnd || eventEndTime
+    : partialRentalRange ? fixedRange?.endTime || '' : fixedRange?.endTime || RENTAL_WINDOWS[period as keyof typeof RENTAL_WINDOWS]?.end || ''
   const customSchedule = custom
     ? validateWeekdayCustomRentalSchedule(String(selection.eventDate || ''), rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, getWeekdayCustomRentalPolicy(config))
     : null
   const timing = custom
     ? { valid: Boolean(customSchedule?.valid), error: customSchedule?.error, arrival: guestArrivalTime, end: eventEndTime, durationMinutes: customSchedule?.durationMinutes || 0, durationHours: customSchedule?.durationHours || 0, additionalHours: 0 }
-    : proposalEventTiming(String(selection.rentalPeriod || 'evening'), guestArrivalTime, eventEndTime)
+    : validateFixedProposalRentalSchedule(period, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime)
   const normalized = custom
     ? { ...selection, rentalStartTime, rental_start_time: rentalStartTime, rentalEndTime, rental_end_time: rentalEndTime, guestArrivalTime, guest_arrival_time: guestArrivalTime, eventEndTime, event_end_time: eventEndTime }
-    : { ...selection, guestArrivalTime, guest_arrival_time: guestArrivalTime, eventEndTime, event_end_time: eventEndTime }
+    : { ...selection, rentalPeriod: period, rentalStartTime, rental_start_time: rentalStartTime, rentalEndTime, rental_end_time: rentalEndTime, guestArrivalTime, guest_arrival_time: guestArrivalTime, eventEndTime, event_end_time: eventEndTime }
   const result = calculateProposal(normalized, config, options)
   result.context.booking_payment_default = readNumber(readRecord(config, 'luxor_costs') || config, 'booking_payment', 'amount')
   const extension = result.lineItems.find(item => item.id === 'venue-additional-hours')
-  Object.assign(result.context, { event_access: formatCatalogTime(timing.arrival) + '–' + formatCatalogTime(timing.end) + ' access', additional_rental_hours: timing.additionalHours, additional_rental_charge: extension?.total || 0 })
+  Object.assign(result.context, {
+    event_access: formatCatalogTime(timing.arrival) + '-' + formatCatalogTime(timing.end) + ' access',
+    rental_start_time: rentalStartTime,
+    rental_end_time: rentalEndTime,
+    start_time: rentalStartTime,
+    end_time: rentalEndTime,
+    additional_rental_hours: timing.additionalHours,
+    additional_rental_charge: extension?.total || 0,
+    pricing_selection: {
+      ...(result.context.pricing_selection || {}),
+      rentalPeriod: period,
+      rentalStartTime,
+      rental_start_time: rentalStartTime,
+      rentalEndTime,
+      rental_end_time: rentalEndTime,
+    },
+  })
   const requestedCoverage = trimmedString(selection.taxCoveragePromotionId ?? selection.tax_coverage_promotion_id)
   if (requestedCoverage && !options.sameDayBooking) {
     const error = 'The same-day booking promotion could not be verified. Refresh saved promotions.'

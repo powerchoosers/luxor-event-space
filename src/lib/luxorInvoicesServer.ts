@@ -469,6 +469,42 @@ export async function listLuxorProposalHistory(invoiceId: string, offsets: { act
   }
 }
 
+/** Read current proposal outcomes for the owner calendar without enabling a new schema surface. */
+export async function listLuxorProposalActivitiesForFamilies(familyIds: string[]) {
+  if (familyIds.length === 0) return []
+  if (!isLuxorProposalHistoryReady()) {
+    throw new Error('Proposal activity history is not enabled; pending proposal counts cannot be verified.')
+  }
+  const uniqueIds = [...new Set(familyIds.map((id) => id.trim()).filter((id) => /^[0-9a-f-]{36}$/i.test(id)))]
+  if (uniqueIds.length === 0) return []
+  const familyBatchSize = 100
+  const activityPageSize = 1000
+  const maximumFamilies = 1000
+  const maximumActivities = 100_000
+  if (uniqueIds.length > maximumFamilies) {
+    throw new Error('Too many proposal families to verify pending counts for this calendar response.')
+  }
+
+  const activities: Array<Record<string, unknown>> = []
+  for (let familyOffset = 0; familyOffset < uniqueIds.length; familyOffset += familyBatchSize) {
+    const familyBatch = uniqueIds.slice(familyOffset, familyOffset + familyBatchSize)
+    let activityOffset = 0
+    while (true) {
+      const page = await supabaseRest<Array<Record<string, unknown>>>(
+        `luxor_proposal_activity?select=id,invoice_id,proposal_family_id,event_type,occurred_at&proposal_family_id=in.(${familyBatch.join(',')})&order=occurred_at.asc,id.asc&limit=${activityPageSize}&offset=${activityOffset}`,
+      )
+      if (!Array.isArray(page)) throw new Error('Proposal activity history returned an incomplete response.')
+      if (activities.length + page.length > maximumActivities) {
+        throw new Error('Proposal activity history exceeded the calendar verification limit; pending counts are unavailable.')
+      }
+      activities.push(...page)
+      if (page.length < activityPageSize) break
+      activityOffset += page.length
+    }
+  }
+  return activities
+}
+
 export async function recordLuxorProposalActivity(input: {
   invoiceId: string
   eventType: 'edited'

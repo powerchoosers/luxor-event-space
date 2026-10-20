@@ -4,6 +4,7 @@ import { LuxorBooking, LuxorBookingStatus, LuxorContractStatus, LuxorPayment, Lu
 import { supabaseRest } from './supabaseRestServer'
 import { isWeekdayCustomRentalContext } from './luxorWeekdayRental'
 import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
+import { luxorAvailabilityConflicts } from './luxorAvailability'
 
 export type LuxorBookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -39,14 +40,21 @@ export async function getLuxorBookingByInvoice(invoiceId: string) {
   return booking ?? null
 }
 
-export async function findLuxorBookingConflicts(eventDate: string, excludeId?: string) {
+export async function findLuxorBookingConflicts(
+  eventDate: string,
+  excludeId?: string,
+  startTime?: string | null,
+  endTime?: string | null,
+  options: { blockWholeDate?: boolean; cleanupBufferMinutes?: number } = {},
+) {
   const filters = [
-    'select=id,client_name,event_date,start_time,end_time,status',
+    'select=id,client_name,event_date,start_time,end_time,status,inquiry_id,metadata',
     `event_date=eq.${encodeURIComponent(eventDate)}`,
     'status=in.(tentative,confirmed)',
   ]
   if (excludeId) filters.push(`id=neq.${encodeURIComponent(excludeId)}`)
-  return supabaseRest<LuxorBooking[]>(`luxor_bookings?${filters.join('&')}&limit=10`)
+  const bookings = await supabaseRest<LuxorBooking[]>(`luxor_bookings?${filters.join('&')}&limit=1000`)
+  return luxorAvailabilityConflicts(bookings, eventDate, startTime, endTime, options)
 }
 
 export async function listLuxorPaymentsByBooking(bookingId: string) {

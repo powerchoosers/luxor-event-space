@@ -1,0 +1,236 @@
+'use client'
+
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { PortalSelect } from './PortalUI'
+import { luxorAvailabilityStatusLabel, type LuxorAvailabilityCalendar, type LuxorAvailabilityDay } from '@/lib/luxorAvailability'
+import { luxorTodayKey } from '@/lib/luxorTourMetrics'
+
+type LuxorAvailabilityCalendarProps = {
+  availability: LuxorAvailabilityCalendar
+  selectedDate: string
+  onSelectDate: (date: string) => void
+  pendingCounts?: Record<string, number>
+  availabilityReady?: boolean
+  compact?: boolean
+}
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function isoDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function localDate(value: string) {
+  const parsed = value ? new Date(`${value}T12:00:00`) : new Date()
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+}
+
+function fullDateLabel(value: string) {
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(localDate(value))
+}
+
+function cellBackground(day?: LuxorAvailabilityDay) {
+  if (day?.status === 'fully-booked') return { background: '#bd852d' }
+  if (day?.status === 'am-booked') return { background: 'linear-gradient(90deg, #e6c376 0 50%, var(--portal-soft) 50% 100%)' }
+  if (day?.status === 'pm-booked') return { background: 'linear-gradient(90deg, var(--portal-soft) 0 50%, #e6c376 50% 100%)' }
+  return { background: 'var(--portal-soft)' }
+}
+
+function LegendMark({ status }: { status: LuxorAvailabilityDay['status'] }) {
+  return <span aria-hidden="true" className="h-4 w-4 shrink-0 rounded-full border border-[#caa24c]/35" style={cellBackground({ amBooked: status === 'am-booked' || status === 'fully-booked', pmBooked: status === 'pm-booked' || status === 'fully-booked', status, blocks: [] })} />
+}
+
+export function LuxorAvailabilityCalendar({
+  availability,
+  selectedDate,
+  onSelectDate,
+  pendingCounts,
+  availabilityReady = true,
+  compact = false,
+}: LuxorAvailabilityCalendarProps) {
+  const selected = useMemo(() => localDate(selectedDate), [selectedDate])
+  const [viewOverride, setViewOverride] = useState<{ selectedDate: string; date: Date } | null>(null)
+  const activeDate = viewOverride?.selectedDate === selectedDate ? viewOverride.date : selected
+  const setViewDate = (date: Date) => setViewOverride({ selectedDate, date })
+  const [monthYearOpen, setMonthYearOpen] = useState(false)
+  const monthYearRef = useRef<HTMLDivElement>(null)
+  const monthYearTriggerRef = useRef<HTMLButtonElement>(null)
+  const monthYearDialogRef = useRef<HTMLDivElement>(null)
+  const monthYearDialogTitleId = useId()
+  const activeYear = activeDate.getFullYear()
+  const activeMonth = activeDate.getMonth()
+
+  const closeMonthYear = useCallback(() => {
+    setMonthYearOpen(false)
+    window.requestAnimationFrame(() => monthYearTriggerRef.current?.focus())
+  }, [])
+
+  useEffect(() => {
+    if (!monthYearOpen) return
+    const focusFrame = window.requestAnimationFrame(() => {
+      const firstFocusable = monthYearDialogRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      firstFocusable?.focus()
+    })
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        closeMonthYear()
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const dialogFocusables = Array.from(monthYearDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) || [])
+      const portalOptions = Array.from(document.querySelectorAll<HTMLElement>(
+        '[data-portal-popover] [role="option"]:not([aria-disabled="true"])',
+      ))
+      const focusables = [...dialogFocusables, ...portalOptions].filter((element) => element.getClientRects().length > 0)
+      if (!focusables.length) {
+        event.preventDefault()
+        monthYearDialogRef.current?.focus()
+        return
+      }
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement
+      if (event.shiftKey && (active === first || !focusables.includes(active as HTMLElement))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (active === last || !focusables.includes(active as HTMLElement))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [closeMonthYear, monthYearOpen])
+
+  const years = useMemo(() => {
+    const thisYear = localDate(luxorTodayKey()).getFullYear()
+    const first = Math.min(thisYear - 2, activeYear)
+    const last = Math.max(thisYear + 8, activeYear)
+    return Array.from({ length: last - first + 1 }, (_, index) => String(first + index))
+  }, [activeYear])
+
+  const days = useMemo(() => {
+    const first = new Date(activeYear, activeMonth, 1)
+    const offset = first.getDay()
+    const count = new Date(activeYear, activeMonth + 1, 0).getDate()
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(activeYear, activeMonth, index - offset + 1)
+      return { date, key: isoDate(date), inMonth: index >= offset && index < offset + count }
+    })
+  }, [activeMonth, activeYear])
+
+  const moveMonth = (amount: number) => {
+    const current = activeDate
+    setViewDate(new Date(current.getFullYear(), current.getMonth() + amount, 1))
+  }
+  const selectToday = () => {
+    const date = luxorTodayKey()
+    const today = localDate(date)
+    setViewDate(new Date(today.getFullYear(), today.getMonth(), 1))
+    onSelectDate(date)
+    if (monthYearOpen) closeMonthYear()
+  }
+  const selectDay = (value: string) => {
+    const date = localDate(value)
+    if (date.getMonth() !== activeMonth || date.getFullYear() !== activeYear) {
+      setViewDate(new Date(date.getFullYear(), date.getMonth(), 1))
+    }
+    onSelectDate(value)
+    if (monthYearOpen) closeMonthYear()
+  }
+
+  return (
+    <section aria-label="Event date availability" className="min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3.5 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <button type="button" onClick={selectToday} className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+          <CalendarDays size={14} className="text-[#a8792f]" aria-hidden="true" /> Today
+        </button>
+        <div className="flex min-w-0 items-center gap-1">
+          <button type="button" aria-label="Previous month" onClick={() => moveMonth(-1)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+            <ChevronLeft size={17} aria-hidden="true" />
+          </button>
+          <div ref={monthYearRef} className="relative min-w-0 flex-1">
+            <button ref={monthYearTriggerRef} type="button" aria-haspopup="dialog" aria-expanded={monthYearOpen} onClick={() => setMonthYearOpen((open) => !open)} className="flex min-h-10 w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-transparent px-2 text-center font-serif text-base font-semibold text-[color:var(--portal-text)] transition hover:border-[color:var(--portal-border)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 sm:text-lg">
+              <span className="truncate">{MONTHS[activeMonth]} {activeYear}</span>
+              <ChevronDown size={15} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
+            </button>
+            {monthYearOpen ? (
+              <>
+                <button type="button" aria-label="Close month and year selector" onClick={closeMonthYear} className="fixed inset-0 z-40 bg-black/25 sm:bg-transparent" />
+                <div ref={monthYearDialogRef} role="dialog" aria-modal="true" aria-labelledby={monthYearDialogTitleId} tabIndex={-1} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeMonthYear() } }} className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-12 sm:w-[22rem] sm:rounded-xl sm:p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p id={monthYearDialogTitleId} className="text-xs font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Choose a month and year</p>
+                    <button type="button" onClick={closeMonthYear} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-[#8c6529] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">Done</button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="min-w-0 space-y-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Month</span>
+                      <PortalSelect value={String(activeMonth)} onChange={(value) => setViewDate(new Date(activeYear, Number(value), 1))} options={MONTHS.map((month, index) => ({ value: String(index), label: month }))} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" />
+                    </label>
+                    <label className="min-w-0 space-y-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Year</span>
+                      <PortalSelect value={String(activeYear)} onChange={(value) => setViewDate(new Date(Number(value), activeMonth, 1))} options={years.map((year) => ({ value: year, label: year }))} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" />
+                    </label>
+                  </div>
+                </div>
+              </>
+            ) : null}
+          </div>
+          <button type="button" aria-label="Next month" onClick={() => moveMonth(1)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+            <ChevronRight size={17} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {WEEKDAYS.map((day) => <span key={day} className="py-1 text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{day}</span>)}
+        {days.map(({ date, key, inMonth }) => {
+          const state = availability[key]
+          const selectedDay = key === selectedDate
+          const pending = pendingCounts?.[key] || 0
+          const status = availabilityReady ? luxorAvailabilityStatusLabel(state) : 'Availability loading'
+          const dateLabel = fullDateLabel(key)
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={selectedDay}
+              aria-label={`${dateLabel}, ${status}${pending ? `, ${pending} pending proposals` : ''}`}
+              onClick={() => selectDay(key)}
+              className={`relative mx-auto flex h-11 w-full min-w-0 items-center justify-center rounded-md text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)] transition focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60 sm:text-xs ${inMonth ? '' : 'opacity-45'}`}
+            >
+              <span className={`relative flex aspect-square w-full max-w-10 items-center justify-center rounded-full border border-[color:var(--portal-border)] text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)] transition sm:text-xs ${selectedDay ? 'ring-2 ring-[#b77d27] ring-offset-2 ring-offset-[color:var(--portal-card)]' : 'hover:border-[#caa24c]/50 hover:shadow-sm'}`} style={cellBackground(availabilityReady ? state : undefined)}>
+                {date.getDate()}
+                {pending > 0 ? <span title={`${pending} pending`} aria-hidden="true" className="absolute -right-1 -top-1 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full border border-[color:var(--portal-card)] bg-[#f3ead7] px-1 text-[8px] font-black leading-none text-[#6f4e1d] shadow-sm">{pending}</span> : null}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {!compact ? <p className="mt-3 min-h-4 text-center text-[10px] font-medium text-[color:var(--portal-muted)]" aria-live="polite">{selectedDate ? fullDateLabel(selectedDate) : 'Select an event date'}</p> : null}
+
+      <div aria-label="Availability legend" className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-t border-[color:var(--portal-border)] pt-3 text-[9px] font-medium text-[color:var(--portal-muted)] sm:gap-x-4 sm:text-[10px]">
+        <span className="inline-flex items-center gap-1.5"><LegendMark status="available" />Available</span>
+        <span className="inline-flex items-center gap-1.5"><LegendMark status="fully-booked" />Fully booked</span>
+        <span className="inline-flex items-center gap-1.5"><LegendMark status="am-booked" />AM slot booked</span>
+        <span className="inline-flex items-center gap-1.5"><LegendMark status="pm-booked" />PM slot booked</span>
+      </div>
+    </section>
+  )
+}

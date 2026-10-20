@@ -122,15 +122,24 @@ export async function POST(request: NextRequest) {
     if (leadEventId && !await getLuxorLeadEventForInquiry(leadEventId, proposal.inquiry_id)) {
       return NextResponse.json({ error: 'The selected event does not belong to this lead.' }, { status: 400 })
     }
-    const conflicts = await findLuxorBookingConflicts(eventDate)
+    const proposalTiming = proposalBookingTiming(context)
+    const requestedStart = proposalTiming.startTime
+    const requestedEnd = proposalTiming.endTime
+    const customSnapshot = context.weekday_custom_rental && typeof context.weekday_custom_rental === 'object' && !Array.isArray(context.weekday_custom_rental)
+      ? context.weekday_custom_rental as Record<string, unknown>
+      : null
+    const conflicts = await findLuxorBookingConflicts(eventDate, undefined, requestedStart, requestedEnd, {
+      blockWholeDate: customSnapshot?.booking_policy === 'one_per_date',
+      cleanupBufferMinutes: Number(customSnapshot?.cleanup_buffer_minutes) || 0,
+    })
     if (conflicts.length > 0) {
-      return NextResponse.json({ error: `That date already has an active booking for ${conflicts[0].client_name}. Review the calendar before continuing.`, conflicts }, { status: 409 })
+      const conflictSummaries = conflicts.map(({ id, client_name, event_date, start_time, end_time, status }) => ({ id, client_name, event_date, start_time, end_time, status }))
+      return NextResponse.json({ error: `That rental period overlaps an active booking for ${conflicts[0].client_name}. Review the calendar before continuing.`, conflicts: conflictSummaries }, { status: 409 })
     }
 
     const dueDate = new Date(`${eventDate}T12:00:00`)
     dueDate.setDate(dueDate.getDate() - finalPaymentDays)
     const contractTotal = Number(proposal.total || 0)
-    const proposalTiming = isWeekdayCustomRentalContext(context) ? proposalBookingTiming(context) : null
     const luxorServicesTotal = luxorCollectionAmounts(proposal).luxorServicesTotal
     const reservationPayment = paymentMode === 'pay_in_full'
       ? luxorServicesTotal
@@ -143,8 +152,8 @@ export async function POST(request: NextRequest) {
       client_name: proposal.client_name || body.client_name,
       event_type: typeof context.event_type === 'string' ? context.event_type : proposal.event_type || body.event_type,
       event_date: eventDate,
-      start_time: proposalTiming ? proposalTiming.startTime : typeof context.start_time === 'string' ? context.start_time : null,
-      end_time: proposalTiming ? proposalTiming.endTime : typeof context.end_time === 'string' ? context.end_time : null,
+      start_time: proposalTiming.startTime,
+      end_time: proposalTiming.endTime,
       guest_count: Number(context.expected_guest_count || body.guest_count || 0) || null,
       package_name: typeof context.package_name === 'string' ? context.package_name : body.package_name || null,
       status: 'tentative',
@@ -288,9 +297,24 @@ export async function PATCH(request: NextRequest) {
     const nextDate = updates.event_date === undefined ? existing.event_date : updates.event_date
     const nextStatus = updates.status === undefined ? existing.status : updates.status
     if (nextDate && (nextStatus === 'tentative' || nextStatus === 'confirmed')) {
-      const conflicts = await findLuxorBookingConflicts(nextDate, id)
+      const nextStartTime = updates.start_time === undefined ? existing.start_time : updates.start_time
+      const nextEndTime = updates.end_time === undefined ? existing.end_time : updates.end_time
+      const nextMetadata = updates.metadata && typeof updates.metadata === 'object' && !Array.isArray(updates.metadata)
+        ? updates.metadata as Record<string, unknown>
+        : existing.metadata
+      const nextProposalContext = nextMetadata?.final_proposal_context && typeof nextMetadata.final_proposal_context === 'object'
+        ? nextMetadata.final_proposal_context as Record<string, unknown>
+        : null
+      const customSnapshot = nextProposalContext?.weekday_custom_rental && typeof nextProposalContext.weekday_custom_rental === 'object'
+        ? nextProposalContext.weekday_custom_rental as Record<string, unknown>
+        : undefined
+      const conflicts = await findLuxorBookingConflicts(nextDate, id, nextStartTime, nextEndTime, {
+        blockWholeDate: customSnapshot?.booking_policy === 'one_per_date',
+        cleanupBufferMinutes: Number(customSnapshot?.cleanup_buffer_minutes) || 0,
+      })
       if (conflicts.length > 0) {
-        return NextResponse.json({ error: `That date already has an active booking for ${conflicts[0].client_name}. Review the calendar before continuing.`, conflicts }, { status: 409 })
+        const conflictSummaries = conflicts.map(({ id, client_name, event_date, start_time, end_time, status }) => ({ id, client_name, event_date, start_time, end_time, status }))
+        return NextResponse.json({ error: `That rental period overlaps an active booking for ${conflicts[0].client_name}. Review the calendar before continuing.`, conflicts: conflictSummaries }, { status: 409 })
       }
     }
 

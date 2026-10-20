@@ -4,11 +4,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
+import { LuxorAvailabilityCalendar } from '@/components/portal/LuxorAvailabilityCalendar'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
 import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
+import type { LuxorAvailabilityCalendar as LuxorAvailabilityMap } from '@/lib/luxorAvailability'
+import type { PendingProposalSummary } from '@/lib/luxorPendingProposals'
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
 import { getLuxorTourSection, luxorDateKey, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -18,6 +21,10 @@ type CalendarPayload = {
   slots: LuxorTourSlot[]
   bookings: (LuxorBooking & { paid_total?: number; balance_due?: number })[]
   tasks: LuxorTask[]
+  availability: LuxorAvailabilityMap
+  pendingProposals: PendingProposalSummary[]
+  pendingProposalCounts: Record<string, number>
+  pendingProposalsError?: string | null
 }
 
 const TOUR_STATUS_PRESENTATION: Record<LuxorTourSection, { label: string; tone: PortalStatusTone }> = {
@@ -52,10 +59,25 @@ function getCalendarBookingTone(status: string, eventDate: string | null, todayK
   return status === 'confirmed' ? 'green' : 'gold'
 }
 
+function calendarDateLabel(value: string) {
+  const date = new Date(`${value}T12:00:00`)
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+}
+
+function timeLabel(value?: string | null) {
+  if (!value) return null
+  const match = /^(\d{1,2}):(\d{2})/.exec(value)
+  if (!match) return value
+  const hour = Number(match[1])
+  const suffix = hour >= 12 ? 'PM' : 'AM'
+  return `${hour % 12 || 12}:${match[2]} ${suffix}`
+}
+
 export default function CalendarPage() {
   const [activeCalendar, setActiveCalendar] = useState<'tours' | 'events'>('tours')
   const [view, setView] = useState<PortalCalendarView>('month')
-  const [data, setData] = useState<CalendarPayload>({ tours: [], slots: [], bookings: [], tasks: [] })
+  const [data, setData] = useState<CalendarPayload>({ tours: [], slots: [], bookings: [], tasks: [], availability: {}, pendingProposals: [], pendingProposalCounts: {} })
+  const [selectedEventDate, setSelectedEventDate] = useState(() => luxorTodayKey())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -101,6 +123,8 @@ export default function CalendarPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_inquiries' }, scheduleRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_tour_slots' }, scheduleRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_bookings' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_invoices' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_proposal_activity' }, scheduleRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_tasks' }, scheduleRefresh)
       .subscribe((status) => {
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn(`Calendar realtime channel entered ${status}.`)
@@ -267,6 +291,11 @@ export default function CalendarPage() {
       } satisfies PortalCalendarItem))
   }, [busyId, data.bookings])
 
+  const selectedDateBookings = useMemo(() => data.bookings.filter((booking) => booking.event_date && luxorDateKey(booking.event_date) === selectedEventDate), [data.bookings, selectedEventDate])
+  const confirmedDateBookings = selectedDateBookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed')
+  const holdDateBookings = selectedDateBookings.filter((booking) => booking.status === 'tentative')
+  const pendingDateProposals = useMemo(() => data.pendingProposals.filter((proposal) => proposal.date === selectedEventDate), [data.pendingProposals, selectedEventDate])
+
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
       <PortalPageHeader
@@ -328,6 +357,71 @@ export default function CalendarPage() {
           onViewChange={setView}
           dayStatuses={tourDayStatuses}
         />
+      ) : view === 'month' ? (
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[color:var(--portal-muted)]">Availability shows confirmed event and hold conflicts. Sent proposals remain separate.</p>
+            <div role="group" aria-label="Booked events calendar view" className="flex flex-wrap gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
+              {(['month', 'week', 'day', 'schedule'] as PortalCalendarView[]).map((nextView) => (
+                <button key={nextView} type="button" aria-pressed={view === nextView} onClick={() => setView(nextView)} className={`min-h-9 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60 ${view === nextView ? 'bg-[#caa24c]/20 text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>
+                  {nextView}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {data.pendingProposalsError ? <p role="status" className="rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">Pending proposal counts could not be loaded. Availability is current.</p> : null}
+
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
+            <LuxorAvailabilityCalendar availability={data.availability} availabilityReady={!loading && !error} selectedDate={selectedEventDate} onSelectDate={setSelectedEventDate} pendingCounts={!error ? data.pendingProposalCounts : {}} />
+
+            <section aria-labelledby="selected-event-date-heading" className="min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+              <h2 id="selected-event-date-heading" className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">{calendarDateLabel(selectedEventDate)}</h2>
+
+              <div className="mt-5 space-y-3">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f]">Confirmed bookings</h3>
+                {confirmedDateBookings.length ? confirmedDateBookings.map((booking) => (
+                  <article key={booking.id} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3.5">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{booking.client_name || booking.event_type || 'Confirmed event'}</h4>
+                        <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{booking.event_type || 'Event'}{booking.guest_count ? ` · ${booking.guest_count} guests` : ''}</p>
+                        {booking.start_time || booking.end_time ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{timeLabel(booking.start_time) || 'Time TBD'}{booking.end_time ? ` – ${timeLabel(booking.end_time)}` : ''}</p> : null}
+                      </div>
+                      {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking`} className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-blue-500 hover:text-blue-400">Open booking <ExternalLink size={10} className="ml-1 inline" /></Link> : null}
+                    </div>
+                    <div className="mt-3 border-t border-[color:var(--portal-border)] pt-3">
+                      <EventControls booking={booking} busyId={busyId} onSendContract={sendContract} onContractAction={updateContractRequest} />
+                    </div>
+                  </article>
+                )) : <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-3 py-4 text-xs text-[color:var(--portal-muted)]">No confirmed bookings for this date.</p>}
+              </div>
+
+              {holdDateBookings.length ? <div className="mt-5 space-y-2">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Active holds</h3>
+                {holdDateBookings.map((booking) => <p key={booking.id} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)]"><span className="font-semibold">{booking.event_type || 'Event hold'}</span>{booking.start_time && booking.end_time ? ` · ${timeLabel(booking.start_time)} – ${timeLabel(booking.end_time)}` : ''} <PortalStatusBadge status="tentative" /></p>)}
+              </div> : null}
+
+              <div className="mt-5 space-y-3 border-t border-[color:var(--portal-border)] pt-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f]">Pending proposals</h3>
+                  {pendingDateProposals.length ? <span className="text-xs font-semibold text-[color:var(--portal-muted)]">{pendingDateProposals.length} pending</span> : null}
+                </div>
+                {data.pendingProposalsError ? <p role="status" className="rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-4 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">Pending proposal details could not be loaded.</p> : pendingDateProposals.length ? pendingDateProposals.map((proposal) => (
+                  <article key={proposal.id} className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.06] p-3.5">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-semibold text-[color:var(--portal-text)]">{proposal.title}</h4>
+                        <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Event date: {calendarDateLabel(proposal.date)} · {proposal.rentalPeriod} · {proposal.status} · sent {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(proposal.sentAt))}</p>
+                      </div>
+                      {proposal.href ? <Link href={proposal.href} className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-blue-500 hover:text-blue-400">Open proposal <ExternalLink size={10} className="ml-1 inline" /></Link> : null}
+                    </div>
+                  </article>
+                )) : <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-3 py-4 text-xs text-[color:var(--portal-muted)]">No pending proposals for this date.</p>}
+              </div>
+            </section>
+          </div>
+        </div>
       ) : (
         <PortalCalendar title="Booked events" items={eventItems} view={view} onViewChange={setView} />
       )}

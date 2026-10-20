@@ -159,6 +159,88 @@ export function proposalEventTiming(period: string, arrival?: string | null, end
   return { valid: true, error: undefined, additionalHours: (early + late) / 60, arrival: arrivalTime, end: endTime }
 }
 
+function rentalAxisMinutes(value: string) {
+  const clock = minutes(value)
+  if (clock === null) return null
+  return clock < 6 * 60 ? clock + 24 * 60 : clock
+}
+
+function rentalClockTime(value: number) {
+  const clock = ((value % (24 * 60)) + 24 * 60) % (24 * 60)
+  return `${String(Math.floor(clock / 60)).padStart(2, '0')}:${String(clock % 60).padStart(2, '0')}`
+}
+
+/**
+ * Resolve older fixed-period proposals that predate separate rental-access
+ * times. Their access covers at least the standard period and expands to
+ * include any already-selected guest time outside it.
+ */
+export function resolveFixedProposalRentalRange(
+  period: string,
+  rentalStart?: string | null,
+  rentalEnd?: string | null,
+  guestArrival?: string | null,
+  eventEnd?: string | null,
+) {
+  const hasStart = typeof rentalStart === 'string' && Boolean(rentalStart.trim())
+  const hasEnd = typeof rentalEnd === 'string' && Boolean(rentalEnd.trim())
+  if (hasStart || hasEnd) {
+    return { startTime: hasStart ? rentalStart!.trim() : '', endTime: hasEnd ? rentalEnd!.trim() : '' }
+  }
+
+  const window = RENTAL_WINDOWS[period as keyof typeof RENTAL_WINDOWS]
+  if (!window) return { startTime: '', endTime: '' }
+  const baseStart = rentalAxisMinutes(window.start)!
+  let baseEnd = rentalAxisMinutes(window.end)!
+  if (baseEnd <= baseStart) baseEnd += 24 * 60
+
+  const guestStart = guestArrival ? rentalAxisMinutes(guestArrival) : null
+  let guestFinish = eventEnd ? rentalAxisMinutes(eventEnd) : null
+  if (guestStart !== null && guestFinish !== null && guestFinish <= guestStart) guestFinish += 24 * 60
+
+  const start = Math.min(baseStart, guestStart ?? baseStart)
+  const end = Math.max(baseEnd, guestFinish ?? baseEnd)
+  return { startTime: rentalClockTime(start), endTime: rentalClockTime(end) }
+}
+
+/** Shared fixed-period validation for the editor, pricing calculation, and booking conversion. */
+export function validateFixedProposalRentalSchedule(
+  period: string,
+  rentalStart?: string | null,
+  rentalEnd?: string | null,
+  guestArrival?: string | null,
+  eventEnd?: string | null,
+) {
+  const fail = (error: string) => ({ valid: false as const, error, additionalHours: 0, arrival: rentalStart || '', end: rentalEnd || '' })
+  if (!rentalStart || !rentalEnd) return fail('Choose both rental access start and end times.')
+
+  const rental = proposalEventTiming(period, rentalStart, rentalEnd)
+  if (!rental.valid) return { ...rental, valid: false as const, additionalHours: 0 }
+  const window = RENTAL_WINDOWS[period as keyof typeof RENTAL_WINDOWS]
+  if (!window) return fail('Choose a valid fixed rental period.')
+
+  const rentalStartMinutes = rentalAxisMinutes(rental.arrival)
+  const rentalEndMinutes = rentalAxisMinutes(rental.end)
+  const standardStart = rentalAxisMinutes(window.start)!
+  let standardEnd = rentalAxisMinutes(window.end)!
+  if (standardEnd <= standardStart) standardEnd += 24 * 60
+  if (rentalStartMinutes === null || rentalEndMinutes === null) return fail('Rental access times are invalid.')
+  if (rentalEndMinutes - rentalStartMinutes < standardEnd - standardStart) {
+    const standardHours = (standardEnd - standardStart) / 60
+    return fail(`Rental access must include at least the standard ${standardHours}-hour ${period.replace('_', ' ')} period.`)
+  }
+
+  const guests = proposalEventTiming(period, guestArrival, eventEnd)
+  if (!guests.valid) return { ...guests, valid: false as const, additionalHours: 0 }
+  const guestStartMinutes = rentalAxisMinutes(guests.arrival)
+  const guestEndMinutes = rentalAxisMinutes(guests.end)
+  if (guestStartMinutes === null || guestEndMinutes === null) return fail('Guest arrival and event end times are invalid.')
+  if (guestStartMinutes < rentalStartMinutes) return fail('Guest arrival cannot be earlier than the selected rental start.')
+  if (guestEndMinutes > rentalEndMinutes) return fail('Event end cannot be later than the selected rental end.')
+
+  return { ...rental, valid: true as const, guestArrival: guests.arrival, eventEnd: guests.end }
+}
+
 export function luxorCalendarDate(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 }
