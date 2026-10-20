@@ -14,7 +14,7 @@ function planFrom(invoice: LuxorInvoice) {
 
 export async function listLuxorPaymentInstallments(bookingId: string) {
   if (!bookingId) return []
-  return supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=installment_order.asc&limit=24`)
+  return supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&status=neq.void&order=installment_order.asc&limit=24`)
 }
 
 async function updateScheduleState(invoiceId: string, state: 'ready' | 'review_required', bookingDate?: string, reason?: string) {
