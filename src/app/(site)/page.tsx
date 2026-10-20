@@ -16,7 +16,7 @@ const curatedPhotos = [
     caption: 'Grand Main Hall',
   },
   {
-    src: '/images/luxor-lounge/luxor-lounge-empty.png',
+    src: '/images/luxor-lounge/luxor-lounge-cocktail-event.jpg',
     alt: 'Luxor Cocktail Lounge',
     caption: 'Private Lounge',
   },
