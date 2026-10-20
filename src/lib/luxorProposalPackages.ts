@@ -26,6 +26,26 @@ export type LuxorProposalPackageSettings = {
   options: Record<LuxorProposalPackageTierId, LuxorProposalPackageOption>
 }
 
+const DEFAULT_CATALOG_INCLUSION_ALIASES: Record<string, string[]> = {
+  sofa_throne_chair: ['Sofa or throne chair'],
+  centerpieces: ['Centerpieces'],
+  silverware: ['Silverware'],
+  napkins: ['Napkins'],
+  uplighting: ['Uplighting'],
+  table_runners: ['Table runners'],
+  glasses: ['Glasses'],
+  arch_backdrop: ['Arch backdrop and/or shimmer wall'],
+  shimmer_wall: ['Arch backdrop and/or shimmer wall'],
+  led_sign: ['LED sign or custom vinyl'],
+  custom_vinyl: ['LED sign or custom vinyl'],
+  chafing_dishes: ['Chafing dishes'],
+  charger_plates: ['Charger plates'],
+  display_pedestal_set: ['Display pedestals'],
+  balloon_garland: ['Half balloon garland or floral arch'],
+  floral_arch: ['Half balloon garland or floral arch'],
+  digital_photobooth_4_hours: ['Digital photobooth for 4 hours'],
+}
+
 const ESSENTIALS_INCLUSIONS = [
   '%rental_hours%-hour venue rental',
   'Round tables, up to 20',
@@ -228,9 +248,47 @@ export function packageInclusionsForDisplay(
   option: LuxorProposalPackageOption,
   rentalHours: number,
   customizedAdditions: string[] = [],
+  decorCatalog?: Array<{ id: string; name: string; included_in_packages: string[] }>,
+  tableclothUpgradeSelected = false,
 ) {
   const hoursLabel = Number.isFinite(rentalHours) && rentalHours > 0 ? String(rentalHours) : 'Custom'
-  const items = option.inclusions.map((item) => item.replaceAll('%rental_hours%', hoursLabel))
+  const stopWords = new Set(['and', 'or', 'for', 'up', 'to', 'with', 'the', 'a', 'an', 'of'])
+  const packageWords = (value: string) => value.toLowerCase().match(/[a-z0-9]+/g)?.map((word) => {
+    if (word.endsWith('ies') && word.length > 4) return word.slice(0, -3) + 'y'
+    if (word.endsWith('s') && word.length > 4) return word.slice(0, -1)
+    return word
+  }).filter((word) => !stopWords.has(word)) || []
+  const referencesCatalogItem = (copy: string, name: string) => {
+    const normalizedCopy = copy.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    const normalizedName = name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    if (normalizedCopy === normalizedName || normalizedCopy.includes(normalizedName)) return true
+    const copyWords = new Set(packageWords(copy))
+    return packageWords(name).filter((word) => copyWords.has(word)).length >= 2
+  }
+  const configuredNames = decorCatalog?.flatMap((item) => [item.name, ...(DEFAULT_CATALOG_INCLUSION_ALIASES[item.id] || [])]).map((name) => name.trim()).filter(Boolean) || []
+  const items = option.inclusions
+    .map((item) => item.replaceAll('%rental_hours%', hoursLabel))
+    .filter((item) => {
+      const normalized = item.trim().toLowerCase()
+      if (decorCatalog && /tablecloth/.test(normalized)) return false
+      return !configuredNames.some((name) => referencesCatalogItem(item, name))
+    })
+  if (decorCatalog) {
+    const tableclothItem = decorCatalog.find((item) => item.id === 'tablecloths')
+    const tableclothIncluded = tableclothItem?.included_in_packages.includes(option.id) === true
+    items.push(tableclothIncluded || tableclothUpgradeSelected
+      ? 'Any color tablecloths, up to 2 colors.'
+      : 'Black or white tablecloths')
+    items.push(...decorCatalog
+      .filter((item) => item.id !== 'tablecloths' && item.included_in_packages.includes(option.id))
+      .map((item) => item.name))
+  }
   if (option.id === 'customized') items.push(...customizedAdditions)
-  return [...new Set(items)]
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = item.trim().toLocaleLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }

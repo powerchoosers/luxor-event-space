@@ -5,7 +5,8 @@ import { AlertTriangle, Check, ChevronDown, ExternalLink, RefreshCw, Save } from
 import { PortalButton, PortalSkeleton } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { catalogNumber, catalogValue, setCatalogValue, type PricingCatalog } from '@/lib/luxorPricingCatalog'
-import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
+import { LuxorDecorCatalogEditor } from '@/components/portal/LuxorDecorCatalogEditor'
+import { LUXOR_DECOR_CATALOG_KEY, readLuxorDecorCatalog, type LuxorDecorCatalogItem } from '@/lib/luxorDecorCatalogV2'
 import { updateLuxorCustomTimeWeekdayPricingV4 } from '@/lib/luxorCustomTimeRentalV4'
 import { getLuxorProposalPackageSettings, LUXOR_PROPOSAL_PACKAGE_IDS } from '@/lib/luxorProposalPackages'
 
@@ -54,22 +55,6 @@ const MONEY_GROUPS: FieldGroup[] = [
       ...[0, 1, 2].map((index) => ({ label: `Cleaning ${index === 0 ? '1–75' : index === 1 ? '76–150' : '151–200'} guests`, path: ['luxor_costs', 'required_fees', 'cleaning', 'retail', index, 'amount'] })),
       { label: 'Security rate', path: ['luxor_costs', 'required_fees', 'security', 'hourly_rate'], suffix: '/ guard / hour', step: '1' },
       { label: 'Refundable security deposit', path: ['luxor_costs', 'security_deposit', 'amount'] },
-    ],
-    subgroups: [
-      {
-        title: 'Decor packages',
-        description: 'The price covers the entire package, including all listed items. Choose one package per event.',
-        fields: OFFICIAL_DECOR_SERVICES.filter((service) => service.category === 'decor_packages').map((service) => ({
-          label: service.name, path: ['luxor_costs', 'official_decor', service.id, 'amount'], suffix: '/ package', step: '0.01',
-        })),
-      },
-      {
-        title: 'Decor add-ons',
-        description: 'Additional quantities are charged separately. Items already included with a package do not create extra charges. Marquee Letters have a 2-letter minimum.',
-        fields: OFFICIAL_DECOR_SERVICES.filter((service) => service.category === 'decor_add_ons').map((service) => ({
-          label: service.name, path: ['luxor_costs', 'official_decor', service.id, 'amount'], suffix: service.unit === 'letter' ? '/ letter' : '/ each', step: '0.01',
-        })),
-      },
     ],
   },
   {
@@ -159,6 +144,7 @@ export function ProposalPricingManager() {
 
   const dirty = useMemo(() => Boolean(record && draft && JSON.stringify(record.config) !== JSON.stringify(draft)), [draft, record])
   const update = (path: Array<string | number>, value: unknown) => setDraft((current) => current ? setCatalogValue(current, path, value) : current)
+  const decorCatalog = readLuxorDecorCatalog(draft, true)
   const toggleCustomTimeDay = (path: Array<string | number>, enabled: boolean) => setDraft((current) => {
     if (!current) return current
     let next = setCatalogValue(current, [...path, 'enabled'], enabled)
@@ -247,6 +233,8 @@ export function ProposalPricingManager() {
       </div>
 
       {error ? <div role="alert" className="flex gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-xs font-semibold text-red-700 dark:text-red-200"><AlertTriangle size={15} className="shrink-0" />{error}</div> : null}
+
+      <LuxorDecorCatalogEditor items={decorCatalog} onChange={(items: LuxorDecorCatalogItem[]) => update(['luxor_costs', LUXOR_DECOR_CATALOG_KEY], { schema_version: 1, items })} />
 
       <details open className="group overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-4 sm:px-6"><span><span className="block text-sm font-bold text-[color:var(--portal-text)]">Venue rental rates</span><span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">These are the rates guests see and the base venue amounts used in new proposals.</span></span><ChevronDown size={17} className="mt-1 shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>

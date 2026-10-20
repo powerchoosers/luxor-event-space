@@ -31,6 +31,7 @@ export type ProposalPackageServiceOption = {
   inclusions?: readonly string[]
   minimumQuantity?: number
   unit?: string
+  pricingUnit?: 'order' | 'set' | 'each' | 'letter' | 'arch'
   includedQuantity?: number
 }
 
@@ -294,7 +295,7 @@ export function ProposalPackageItemsPanel({
 
   return (
     <div className="space-y-5">
-      {showPackageSwitcher ? <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+  {showPackageSwitcher && !visibleServiceGroups.some(([category]) => normalized(category) === 'setuprentals') ? <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
         <div className="flex flex-col gap-2 border-b border-[color:var(--portal-border)] px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Package selection</p>
@@ -355,17 +356,21 @@ export function ProposalPackageItemsPanel({
                   {services.map((service, index) => {
                     const selected = selectedServiceIdsSet.has(service.id)
                     const required = service.required === true || lockedServiceIdsSet.has(service.id) || service.locked === true
-                    const includedInPackage = includedServiceIdsSet.has(service.id)
+                    const includedInPackage = includedServiceIdsSet.has(service.id) || Number(service.includedQuantity || 0) > 0
                     const covered = required || includedInPackage
                     const active = selected || includedInPackage
                     const quote = serviceQuotes?.[service.id]
                     const needsPricingReview = !required && (unavailableServiceIdsSet.has(service.id) || quote?.available === false || Boolean(service.officialDecorCategory && !quote))
-                    const canToggle = !required && !needsPricingReview && (selected || includedInPackage || addableServiceIdsSet.has(service.id))
+                    const selectedQuantity = Number(serviceQuantities?.[service.id] || 0)
+                    const hasPaidSelection = selectedQuantity > Number(service.includedQuantity || 0)
+                    const canToggle = !required && !needsPricingReview && (hasPaidSelection || (!includedInPackage && (selected || addableServiceIdsSet.has(service.id))))
                     const price = libraryPrice(service, calculatedLineItems, servicePrices)
-                    const serviceState = required ? 'Required' : service.serviceLevel === 'upgrade' ? 'Upgrade' : service.serviceLevel === 'basic' ? 'Basic' : selected ? 'Added' : 'Add'
+                    const serviceState = required ? 'Required' : includedInPackage && !hasPaidSelection ? 'Included' : service.serviceLevel === 'upgrade' ? 'Upgrade' : service.serviceLevel === 'basic' ? 'Basic' : selected ? 'Added' : 'Add'
                     const perGuestMath = quoteMath(quote)
                     const unitPrice = quote?.unitPrice ?? quote?.quoteBreakdown?.unitPrice ?? quote?.quoteBreakdown?.unit_price
-                    const displayPrice = service.officialDecorCategory === 'decor_add_ons' && typeof unitPrice === 'number'
+                    const displayPrice = includedInPackage
+                      ? 'INCLUDED'
+                      : service.officialDecorCategory === 'decor_add_ons' && typeof unitPrice === 'number'
                       ? `${formatMoney(unitPrice)} / ${service.unit || 'each'}`
                       : covered && price === 0
                       ? 'Included'
@@ -392,7 +397,7 @@ export function ProposalPackageItemsPanel({
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             {service.detail ? <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">{service.detail}</p> : null}
                             <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] ${service.required ? 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' : service.serviceLevel === 'upgrade' ? 'border-[#caa24c]/25 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{serviceState}</span>
-                            {includedInPackage ? <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-emerald-700 dark:text-emerald-300">Included in package</span> : null}
+                            {includedInPackage ? <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-emerald-700 dark:text-emerald-300">INCLUDED</span> : null}
                             {needsPricingReview ? <span className="inline-flex rounded-full border border-amber-500/25 bg-amber-500/8 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.09em] text-amber-800 dark:text-amber-200">Pricing rule needed</span> : null}
                             {perGuestMath ? <span className="basis-full text-[10px] leading-4 text-[color:var(--portal-muted)]">{perGuestMath}</span> : null}
                           </div>
@@ -405,15 +410,15 @@ export function ProposalPackageItemsPanel({
                           ) : null}
                           {service.officialDecorCategory === 'decor_add_ons' ? (
                             <div className="mt-2 space-y-2 text-xs leading-5 text-[color:var(--portal-muted)]">
-                              {service.includedQuantity ? <p>{service.includedQuantity} included with your decor package. Only additional quantities entered here are charged.</p> : null}
-                              {selected && onServiceQuantityChange ? (
+                              {service.includedQuantity ? <p>{service.includedQuantity} included with your package. Additional quantities are charged at the configured unit price.</p> : null}
+                              {(selected || includedInPackage) && onServiceQuantityChange && service.pricingUnit !== 'order' ? (
                                 <label className="flex flex-wrap items-center gap-2">
-                                  <span>{service.includedQuantity ? 'Additional quantity' : `Quantity (${service.unit || 'each'})`}</span>
-                                  <input type="number" min={service.minimumQuantity || 1} step={1} value={serviceQuantities?.[service.id] ?? service.minimumQuantity ?? 1}
-                                    aria-label={`${service.name} ${service.includedQuantity ? 'additional quantity' : 'quantity'}`}
-                                    onChange={(event) => { const value = Number(event.target.value); if (Number.isSafeInteger(value) && value >= (service.minimumQuantity || 1)) onServiceQuantityChange(service.id, value) }}
+                                  <span>Total quantity ({service.unit || 'each'})</span>
+                                  <input type="number" min={Math.max(service.includedQuantity || 0, service.minimumQuantity || 1)} step={1} value={serviceQuantities?.[service.id] ?? Math.max(service.includedQuantity || 0, service.minimumQuantity || 1)}
+                                    aria-label={`${service.name} total quantity`}
+                                    onChange={(event) => { const value = Number(event.target.value); if (Number.isSafeInteger(value) && value >= Math.max(service.includedQuantity || 0, service.minimumQuantity || 1)) onServiceQuantityChange(service.id, value) }}
                                     className="w-20 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-1.5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/15" />
-                                  {typeof unitPrice === 'number' ? <span>{formatMoney((serviceQuantities?.[service.id] ?? service.minimumQuantity ?? 1) * unitPrice)}</span> : null}
+                                  {typeof unitPrice === 'number' ? <span>Line total {formatMoney(Math.max(0, ((serviceQuantities?.[service.id] ?? Math.max(service.includedQuantity || 0, service.minimumQuantity || 1)) - (service.includedQuantity || 0)) * unitPrice))}</span> : null}
                                 </label>
                               ) : null}
                               {(service.minimumQuantity || 1) > 1 ? <p>Minimum {service.minimumQuantity} {service.unit}s.</p> : null}
@@ -436,6 +441,16 @@ export function ProposalPackageItemsPanel({
                     )
                   })}
                 </div>
+                {showPackageSwitcher && normalized(category) === 'setuprentals' ? <section aria-label="Package Selection" className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c]">Package Selection</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">{displayedPackages.filter((pkg) => pkg.id !== 'customized').map((pkg) => {
+                    const active = normalized(pkg.id) === normalized(selectedPackageId)
+                    return <button key={pkg.id} type="button" onClick={() => onSelectPackage?.(pkg.id)} aria-pressed={active} className={`min-h-24 rounded-lg border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${active ? 'border-[#caa24c] bg-[#caa24c]/10' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 hover:border-[#caa24c]/40'}`}>
+                      <span className="block text-xs font-bold text-[color:var(--portal-text)]">{pkg.name}</span>
+                      {pricingReady && typeof pkg.finalEventPrice === 'number' ? <span className="mt-1 block font-mono text-xs font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(pkg.finalEventPrice)}</span> : <PortalSkeleton className="mt-2 h-4 w-20 rounded" />}
+                    </button>
+                  })}</div>
+                </section> : null}
               </section>
             )) : (
               <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-4 py-8 text-center text-sm text-[color:var(--portal-muted)]">No services match “{search}”.</div>

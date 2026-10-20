@@ -19,11 +19,13 @@ import {
 } from '@/lib/luxorProposalPricingServer'
 import {
   calculateLuxorProposal,
+  withLuxorProposalPricingPolicyVersion,
   type LuxorProposalPricingConfig,
   type LuxorProposalSelection,
 } from '@/lib/luxorProposalPricing'
 import { catalogNumber, catalogValue } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
+import { LUXOR_DECOR_CATALOG_KEY, validateLuxorDecorCatalog } from '@/lib/luxorDecorCatalogV2'
 import { validateWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
 import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 import { getLuxorCustomTimeRentalPolicyV4, validateLuxorCustomTimeRentalV4Config } from '@/lib/luxorCustomTimeRentalV4'
@@ -93,7 +95,10 @@ export async function POST(request: NextRequest) {
     const promotion = await resolveLuxorProposalPromotion(selection as LuxorProposalSelection, existing)
     const originalCreatedAt = await resolveLuxorOriginalProposalCreatedAt(existing)
     const sameDayBooking = await resolveLuxorSameDayBooking(selection as LuxorProposalSelection, existing, originalCreatedAt)
-    const calculation = calculateLuxorProposal(selection as LuxorProposalSelection, pricing.config, { promotion, sameDayBooking })
+    const savedPolicyVersion = Number(existing?.proposal_context?.proposal_pricing_policy_version)
+    const pricingPolicyVersion = existing ? (savedPolicyVersion >= 4 ? 4 : 3) : 4
+    const policySelection = withLuxorProposalPricingPolicyVersion(selection as LuxorProposalSelection, pricingPolicyVersion)
+    const calculation = calculateLuxorProposal(policySelection, pricing.config, { promotion, sameDayBooking })
     const customTimeV4Ready = process.env.LUXOR_CUSTOM_TIME_V4_READY === 'true'
       && process.env.LUXOR_CUSTOM_TIME_V4_BOOKING_GUARD_READY === 'true'
     const customPolicy = historicalLegacyCustomTime
@@ -152,6 +157,8 @@ export async function PATCH(request: NextRequest) {
     ]
     const luxorCosts = object(config.luxor_costs) || config
     const structuralErrors: string[] = []
+    const decorCatalog = catalogValue(luxorCosts, LUXOR_DECOR_CATALOG_KEY)
+    structuralErrors.push(...validateLuxorDecorCatalog(decorCatalog))
     const packageSettings = catalogValue(luxorCosts, 'package_selection_v1')
     if (packageSettings !== undefined) structuralErrors.push(...validateLuxorProposalPackageSettings(packageSettings))
     structuralErrors.push(...validateWeekdayCustomRentalPolicy(config))

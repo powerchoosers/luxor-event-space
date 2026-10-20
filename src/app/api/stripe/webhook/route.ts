@@ -17,6 +17,7 @@ import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import { recordLuxorSameDayPayment, recordLuxorSameDayScheduledPayment, stripeSuccessfulPaymentEvidence, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { syncLuxorPaymentInstallments, usesFirstDepositScheduleAnchor } from '@/lib/luxorPaymentInstallmentsServer'
 
 function escapeNoticeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
@@ -243,7 +244,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
         booked_at: reservationConfirmed ? booking.booked_at || paidAt : booking.booked_at,
         metadata: {
           ...booking.metadata,
-          ...(depositCovered ? { deposit_paid_at: paidAt } : {}),
+          ...(depositCovered ? { deposit_paid_at: booking.metadata?.deposit_paid_at || paidAt } : {}),
           ...(kind === 'deposit' && depositCovered ? {
             security_deposit_collected_at: paidAt,
             security_deposit_held_at: paidAt,
@@ -268,6 +269,9 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
           metadata: { ...inquiry?.metadata, latest_payment_at: paidAt, latest_paid_invoice_id: invoice.id } }) : null
       if (guardedFinalization && !guardedFinalization.applied) return
       const updatedBooking = guardedFinalization?.booking || await updateLuxorBooking(booking.id, bookingPatch)
+      if (kind === 'deposit' && depositCovered && updatedBooking && masterInvoice && usesFirstDepositScheduleAnchor(masterInvoice)) {
+        await syncLuxorPaymentInstallments({ booking: updatedBooking, invoice: masterInvoice })
+      }
       if (reservationConfirmed && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
         await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
           .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))

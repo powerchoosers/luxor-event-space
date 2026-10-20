@@ -40,11 +40,19 @@ function iso(date: Date) { return date.toISOString().slice(0, 10) }
 function parseDate(value: string) {
   const match = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null
   if (!match) return null
-  const date = new Date(`${value}T12:00:00Z`)
-  return Number.isNaN(date.getTime()) ? null : date
+  const date = new Date(value + 'T12:00:00Z')
+  return Number.isNaN(date.getTime()) || iso(date) !== value ? null : date
 }
 function daysBetween(start: Date, end: Date) { return Math.floor((end.getTime() - start.getTime()) / 86400000) }
 function addDays(value: Date, days: number) { const next = new Date(value); next.setUTCDate(next.getUTCDate() + days); return next }
+
+function addMonthsClamped(anchor: Date, monthOffset: number) {
+  const year = anchor.getUTCFullYear()
+  const month = anchor.getUTCMonth() + monthOffset
+  const firstOfTargetMonth = new Date(Date.UTC(year, month, 1, 12))
+  const lastDay = new Date(Date.UTC(firstOfTargetMonth.getUTCFullYear(), firstOfTargetMonth.getUTCMonth() + 1, 0, 12)).getUTCDate()
+  return new Date(Date.UTC(firstOfTargetMonth.getUTCFullYear(), firstOfTargetMonth.getUTCMonth(), Math.min(anchor.getUTCDate(), lastDay), 12))
+}
 
 export function finalPaymentDate(eventDate: string) {
   const event = parseDate(eventDate)
@@ -72,10 +80,21 @@ function validCadence(value: unknown): value is LuxorPaymentCadence {
   return value === 'evenly_spaced' || value === 'biweekly' || value === 'monthly'
 }
 
-function cadencePaymentCount(days: number, cadence: LuxorPaymentCadence) {
+function cadenceDates(booking: Date, deadline: Date, cadence: LuxorPaymentCadence) {
   if (cadence === 'evenly_spaced') return null
-  const interval = cadence === 'biweekly' ? 14 : 30
-  return Math.min(MAXIMUM_PAYMENT_COUNT, Math.max(MINIMUM_PAYMENT_COUNT, Math.ceil(days / interval) + 1))
+  const dates = [booking]
+  let index = 1
+  while (dates.length < MAXIMUM_PAYMENT_COUNT - 1) {
+    const next = cadence === 'biweekly' ? addDays(booking, index * 14) : addMonthsClamped(booking, index)
+    if (next.getTime() >= deadline.getTime()) break
+    dates.push(next)
+    index += 1
+  }
+  const nextDate = cadence === 'biweekly' ? addDays(booking, index * 14) : addMonthsClamped(booking, index)
+  const clipped = nextDate.getTime() < deadline.getTime()
+  if (dates[dates.length - 1].getTime() !== deadline.getTime()) dates.push(deadline)
+  if (dates.length > MAXIMUM_PAYMENT_COUNT) dates.splice(MAXIMUM_PAYMENT_COUNT - 1, dates.length - MAXIMUM_PAYMENT_COUNT)
+  return { dates, clipped }
 }
 
 function paymentDate(booking: Date, deadline: Date, index: number, count: number) {
@@ -113,14 +132,18 @@ export function calculateLuxorPaymentSchedule(input: {
   const eventTotal = Math.max(0, money(input.eventServicesTotal))
   const total = money(venueTotal + eventTotal)
   const available = availablePaymentCounts(input.bookingDate, input.eventDate)
-  const spanDays = daysBetween(booking, deadline)
+  if (!available.length) return null
   const cadence = validCadence(input.paymentCadence) ? input.paymentCadence : 'evenly_spaced'
   const requested = Number(input.paymentCount)
   const requestedCount = Number.isInteger(requested) && requested >= MINIMUM_PAYMENT_COUNT && requested <= MAXIMUM_PAYMENT_COUNT ? requested : 4
-  const cadenceCount = cadencePaymentCount(spanDays, cadence)
-  const count = cadenceCount ?? requestedCount
-  const selectedCount = available.includes(count) ? count : available[available.length - 1]
+  const generatedCadence = cadenceDates(booking, deadline, cadence)
+  const count = generatedCadence?.dates.length ?? requestedCount
+  const selectedCount = generatedCadence
+    ? generatedCadence.dates.length
+    : available.includes(count) ? count : available[available.length - 1]
   if (!selectedCount) return null
+  const dates = generatedCadence?.dates
+    || Array.from({ length: selectedCount }, (_, index) => parseDate(paymentDate(booking, deadline, index, selectedCount)) as Date)
 
   const venueCents = cents(venueTotal)
   const eventCents = cents(eventTotal)
@@ -134,7 +157,7 @@ export function calculateLuxorPaymentSchedule(input: {
   const addRow = (row: Omit<LuxorPaymentScheduleRow, 'installment_order' | 'due_at'>, order: number) => rows.push({
     ...row,
     installment_order: order,
-    due_at: paymentDate(booking, deadline, order - 1, selectedCount),
+    due_at: iso(dates[order - 1]),
   })
 
   addRow({
@@ -181,19 +204,24 @@ export function calculateLuxorPaymentSchedule(input: {
     rows,
     available_counts: available,
     warnings: [
-      ...(selectedCount !== count ? [`${count} payments cannot fit before the 60-day deadline; ${selectedCount} payments selected instead.`] : []),
+      ...(generatedCadence?.clipped ? [(cadence === 'biweekly' ? 'Biweekly' : 'Monthly') + ' payments reached the 24-payment limit; the final residual payment remains due by the 60-day deadline.'] : []),
+      ...(!generatedCadence && selectedCount !== count ? [count + ' payments cannot fit before the 60-day deadline; ' + selectedCount + ' payments selected instead.'] : []),
       ...(hasNegotiatedBookingPayment && cents(requestedBookingPayment) > venueCents ? ['The negotiated booking payment was capped at the Venue Services balance.'] : []),
     ],
   }
 }
 
-export function paymentPlanFromSchedule(schedule: LuxorPaymentSchedule): LuxorProposalPaymentPlan {
+export function paymentPlanFromSchedule(
+  schedule: LuxorPaymentSchedule,
+  scheduleAnchorPolicy?: LuxorProposalPaymentPlan['schedule_anchor_policy'],
+): LuxorProposalPaymentPlan {
   return {
     mode: 'deposit_and_balance',
     booking_payment_percent: schedule.venue_services_total > 0 ? money(schedule.booking_payment / schedule.venue_services_total * 100) : 0,
     final_payment_due_days_before_event: 60,
     payment_count: schedule.payment_count,
     payment_cadence: schedule.payment_cadence,
+    ...(scheduleAnchorPolicy ? { schedule_anchor_policy: scheduleAnchorPolicy } : {}),
     ...(schedule.booking_payment !== Math.min(schedule.venue_services_total, Math.max(schedule.venue_services_total * 0.25, 750)) ? { booking_payment_amount: schedule.booking_payment } : {}),
     booking_date: schedule.booking_date,
     final_payment_due_date: schedule.final_payment_due_date,

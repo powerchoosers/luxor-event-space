@@ -344,6 +344,8 @@ export type LuxorProposalPaymentPlan = {
   payment_count?: number
   /** How the payment dates are spaced before the final-payment deadline. */
   payment_cadence?: 'evenly_spaced' | 'biweekly' | 'monthly'
+  /** New proposal schedule dates re-anchor once to the first confirmed booking payment. */
+  schedule_anchor_policy?: 'proposal_date_v1' | 'first_deposit_paid_at_v1'
   /** Owner-approved booking payment that replaces the calculated default. */
   booking_payment_amount?: number
   /** The method Luxor plans to collect first; card uses Stripe, the others are recorded manually. */
@@ -368,6 +370,7 @@ export type LuxorProposalPaymentPlan = {
 
 export type LuxorProposalContext = {
   version: number
+  proposal_pricing_policy_version?: number
   pricing_config_version?: number
   package_id?: string
   package_name?: string

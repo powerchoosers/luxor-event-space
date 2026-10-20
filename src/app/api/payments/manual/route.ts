@@ -22,6 +22,7 @@ import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import { recordLuxorSameDayPayment, recordLuxorSameDayScheduledPayment, sameDayTermsFingerprint, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { syncLuxorPaymentInstallments, usesFirstDepositScheduleAnchor } from '@/lib/luxorPaymentInstallmentsServer'
 
 type ManualPaymentKind = 'deposit' | 'final' | 'security_deposit'
 
@@ -344,7 +345,7 @@ export async function POST(request: NextRequest) {
         security_deposit_status: 'held',
         metadata: {
           ...booking.metadata,
-          deposit_paid_at: actualPaidAt,
+          deposit_paid_at: booking.metadata?.deposit_paid_at || actualPaidAt,
           security_deposit_collected_at: now,
           security_deposit_held_at: now,
           security_deposit_payment_invoice_id: invoice.id,
@@ -368,6 +369,10 @@ export async function POST(request: NextRequest) {
       { status: 'booked', pipeline_stage: kind === 'deposit' ? 'planning' : luxorOnlyCollection ? 'final_payment' : 'event', metadata: { ...inquiry?.metadata, latest_payment_at: actualPaidAt, latest_paid_invoice_id: invoice.id } }) : null
     if (guardedFinalization && !guardedFinalization.applied) return NextResponse.json({ payment, reviewRequired: true, booking: guardedFinalization.booking, message: 'Receipt preserved. The booking was closed or changed; owner review is required.' }, { status: 202 })
     const updatedBooking = guardedFinalization?.booking || await updateLuxorBooking(booking.id, bookingPatch)
+
+    if (kind === 'deposit' && amount > MONEY_EPSILON && updatedBooking && usesFirstDepositScheduleAnchor(masterInvoice)) {
+      await syncLuxorPaymentInstallments({ booking: updatedBooking, invoice: masterInvoice })
+    }
 
     if (kind === 'deposit' && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
       await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })

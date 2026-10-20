@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, isLuxorProposalHistoryReady, updateLuxorProposalAndRecordEditActivity, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorCatalogItem } from '@/lib/luxorServiceCatalog'
-import { calculateLuxorProposal, type LuxorProposalSelection } from '@/lib/luxorProposalPricing'
+import { calculateLuxorProposal, type LuxorProposalSelection, withLuxorProposalPricingPolicyVersion } from '@/lib/luxorProposalPricing'
 import { getDefaultLuxorProposalPricing, getLuxorProposalPricingForInvoice, hasFrozenLegacyCustomTimeProposal, LuxorPromotionSelectionError, resolveLuxorProposalPromotion, resolveLuxorSameDayBooking, resolveLuxorOriginalProposalCreatedAt, assertLuxorWeekdayRentalSelection } from '@/lib/luxorProposalPricingServer'
 import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
@@ -238,10 +238,13 @@ async function calculateServerProposal(selection: LuxorProposalSelection, existi
   let promotion: Awaited<ReturnType<typeof resolveLuxorProposalPromotion>>
   try {
     pricingRecord = await getLuxorProposalPricingForInvoice(existing)
-    assertLuxorWeekdayRentalSelection(selection, pricingRecord.config, true, hasFrozenLegacyCustomTimeProposal(existing))
-    promotion = await resolveLuxorProposalPromotion(selection, existing)
-    const sameDayBooking = await resolveLuxorSameDayBooking(selection, existing, originalCreatedAt)
-    calculation = calculateLuxorProposal(selection, pricingRecord.config, { promotion, sameDayBooking })
+    const savedPolicyVersion = Number(existing?.proposal_context?.proposal_pricing_policy_version)
+    const pricingPolicyVersion = existing ? (savedPolicyVersion >= 4 ? 4 : 3) : 4
+    const policySelection = withLuxorProposalPricingPolicyVersion(selection, pricingPolicyVersion)
+    assertLuxorWeekdayRentalSelection(policySelection, pricingRecord.config, true, hasFrozenLegacyCustomTimeProposal(existing))
+    promotion = await resolveLuxorProposalPromotion(policySelection, existing)
+    const sameDayBooking = await resolveLuxorSameDayBooking(policySelection, existing, originalCreatedAt)
+    calculation = calculateLuxorProposal(policySelection, pricingRecord.config, { promotion, sameDayBooking })
   } catch (error) {
     if (error instanceof LuxorPromotionSelectionError || error instanceof LuxorWeekdayRentalError) throw error
     throw new ProposalPricingConfigurationError()
