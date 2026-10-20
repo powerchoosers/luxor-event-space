@@ -12,6 +12,37 @@ function planFrom(invoice: LuxorInvoice) {
   return { context, plan: context.payment_plan as Record<string, unknown> | null | undefined }
 }
 
+export async function listLuxorPaymentInstallments(bookingId: string) {
+  if (!bookingId) return []
+  return supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=installment_order.asc&limit=24`)
+}
+
+async function updateScheduleState(invoiceId: string, state: 'ready' | 'review_required', bookingDate?: string, reason?: string) {
+  const [invoice] = await supabaseRest<LuxorInvoice[]>(`luxor_invoices?select=*&id=eq.${encodeURIComponent(invoiceId)}&limit=1`)
+  if (!invoice) return
+  const context = (invoice.proposal_context || {}) as Record<string, unknown>
+  const rawPlan = context.payment_plan && typeof context.payment_plan === 'object' ? context.payment_plan as Record<string, unknown> : null
+  if (rawPlan?.schedule_anchor_policy !== FIRST_DEPOSIT_SCHEDULE_POLICY) return
+  const nextPlan: Record<string, unknown> = { ...rawPlan, schedule_status: state }
+  if (bookingDate) nextPlan.booking_date = bookingDate
+  if (state === 'review_required' && reason) nextPlan.schedule_review_reason = reason
+  else delete nextPlan.schedule_review_reason
+  const rawSelection = context.pricing_selection && typeof context.pricing_selection === 'object' ? context.pricing_selection as Record<string, unknown> : {}
+  const rawSelectedPlan = rawSelection.paymentPlan && typeof rawSelection.paymentPlan === 'object' ? rawSelection.paymentPlan as Record<string, unknown> : {}
+  await supabaseRest<LuxorInvoice[]>(`luxor_invoices?id=eq.${encodeURIComponent(invoice.id)}&updated_at=eq.${encodeURIComponent(invoice.updated_at)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      proposal_context: {
+        ...context,
+        payment_plan: nextPlan,
+        pricing_selection: { ...rawSelection, paymentPlan: { ...rawSelectedPlan, ...nextPlan } },
+      },
+      updated_at: new Date().toISOString(),
+    }),
+  })
+}
+
 export function usesFirstDepositScheduleAnchor(invoice: LuxorInvoice) {
   return planFrom(invoice).plan?.schedule_anchor_policy === FIRST_DEPOSIT_SCHEDULE_POLICY
 }
@@ -20,10 +51,11 @@ export function usesFirstDepositScheduleAnchor(invoice: LuxorInvoice) {
 export async function syncLuxorPaymentInstallments(input: { booking: LuxorBooking; invoice: LuxorInvoice }) {
   const { context, plan } = planFrom(input.invoice)
   const eventDate = typeof context.event_date === 'string' ? context.event_date : input.booking.event_date
-  const existing = await supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?select=*&booking_id=eq.${encodeURIComponent(input.booking.id)}&order=installment_order.asc`)
+  const existing = await listLuxorPaymentInstallments(input.booking.id)
   const persistedAnchor = existing.find((item) => item.metadata?.schedule_anchor_policy === FIRST_DEPOSIT_SCHEDULE_POLICY)?.metadata?.schedule_anchor_date
   const depositPaidAt = typeof input.booking.metadata?.deposit_paid_at === 'string' ? input.booking.metadata.deposit_paid_at : null
   const firstDepositSchedule = usesFirstDepositScheduleAnchor(input.invoice)
+  const hasConfirmedDepositAnchor = Boolean(depositPaidAt || typeof persistedAnchor === 'string')
   if (firstDepositSchedule && !depositPaidAt && typeof persistedAnchor !== 'string') return []
   if (plan?.mode === 'pay_in_full') return []
   const anchorTimestamp = depositPaidAt
@@ -40,10 +72,15 @@ export async function syncLuxorPaymentInstallments(input: { booking: LuxorBookin
   const bookingPaymentAmount = plan && typeof plan === 'object' && Number.isFinite(Number(plan.booking_payment_amount))
     ? Number(plan.booking_payment_amount)
     : undefined
-  if (!eventDate || !Number.isFinite(venue) || !Number.isFinite(event)) return []
+  if (!eventDate || !Number.isFinite(venue) || !Number.isFinite(event)) {
+    if (firstDepositSchedule && hasConfirmedDepositAnchor) await updateScheduleState(input.invoice.id, 'review_required', bookingDate || undefined, 'invalid_schedule_inputs')
+    return []
+  }
   const schedule = calculateLuxorPaymentSchedule({ eventDate, bookingDate, venueServicesTotal: scheduledVenue, eventServicesTotal: event, paymentCount: count, paymentCadence: cadence, bookingPaymentAmount })
-  if (!schedule) return []
-  if (!bookingDate) return []
+  if (!schedule || !bookingDate) {
+    if (firstDepositSchedule && hasConfirmedDepositAnchor) await updateScheduleState(input.invoice.id, 'review_required', bookingDate || undefined, 'deadline_window')
+    return []
+  }
   const rows: LuxorPaymentInstallment[] = []
   for (const row of schedule.rows) {
     const current = existing.find((item) => item.installment_order === row.installment_order && item.status !== 'void')
@@ -96,17 +133,24 @@ export async function syncLuxorPaymentInstallments(input: { booking: LuxorBookin
           payment_bucket: savedBucket === 'event' ? 'event' as const : savedBucket === 'venue' ? 'venue' as const : scheduled.payment_bucket,
         }
       })
-      const nextPlan: Record<string, unknown> = { ...latestPlan, ...scheduledPlan, schedule_rows: rowsForContext }
+      const nextPlan: Record<string, unknown> = { ...latestPlan, ...scheduledPlan, schedule_rows: rowsForContext, schedule_status: 'ready' }
+      delete nextPlan.schedule_review_reason
       const nextPricingSelection = latestContext.pricing_selection && typeof latestContext.pricing_selection === 'object'
         ? latestContext.pricing_selection as Record<string, unknown>
         : {}
       const currentRows = Array.isArray(latestPlan.schedule_rows) ? latestPlan.schedule_rows : []
       const sameRows = JSON.stringify(currentRows) === JSON.stringify(rowsForContext)
-      if (!sameRows || latestPlan.booking_date !== bookingDate || latestPlan.payment_count !== schedule.payment_count) {
+      if (!sameRows || latestPlan.booking_date !== bookingDate || latestPlan.payment_count !== schedule.payment_count || latestPlan.schedule_status !== 'ready' || latestPlan.schedule_review_reason) {
         const nextContext = {
           ...latestContext,
           payment_plan: nextPlan as unknown as LuxorProposalPaymentPlan,
-          pricing_selection: { ...nextPricingSelection, paymentPlan: nextPlan },
+        pricing_selection: {
+          ...nextPricingSelection,
+          paymentPlan: {
+            ...(nextPricingSelection.paymentPlan && typeof nextPricingSelection.paymentPlan === 'object' ? nextPricingSelection.paymentPlan as Record<string, unknown> : {}),
+            ...nextPlan,
+          },
+        },
         }
         await supabaseRest<LuxorInvoice[]>(`luxor_invoices?id=eq.${encodeURIComponent(freshInvoice.id)}&updated_at=eq.${encodeURIComponent(freshInvoice.updated_at)}`, {
           method: 'PATCH',

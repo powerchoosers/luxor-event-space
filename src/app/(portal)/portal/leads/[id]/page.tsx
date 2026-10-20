@@ -431,6 +431,7 @@ export default function LeadDetailPage({
   const initializedEventPreferenceRef = useRef(false)
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [paymentInstallments, setPaymentInstallments] = useState<LuxorPaymentInstallment[]>([])
+  const [paymentInstallmentRefresh, setPaymentInstallmentRefresh] = useState(0)
   const [tourEmailJobs, setTourEmailJobs] = useState<LuxorEmailJob[]>([])
   const [correctEmailResendOptions, setCorrectEmailResendOptions] = useState<CorrectEmailResendOption[]>([])
   const [correctEmailResendSuggestedId, setCorrectEmailResendSuggestedId] = useState<string | null>(null)
@@ -920,7 +921,7 @@ export default function LeadDetailPage({
       .then((rows) => { if (!cancelled) setPaymentInstallments(Array.isArray(rows) ? rows : []) })
       .catch(() => { if (!cancelled) setPaymentInstallments([]) })
     return () => { cancelled = true }
-  }, [currentProposalBooking?.id])
+  }, [currentProposalBooking?.id, paymentInstallmentRefresh])
   const lifecycleBooking = currentProposalInvoice ? currentProposalBooking : latestBooking
   const activeEventForDisplay = useMemo(() => {
     if (!lead) return null
@@ -3510,6 +3511,7 @@ export default function LeadDetailPage({
       }
       if (!paymentRes.ok) throw new Error(paymentPayload.error || 'Failed to record payment.')
       await fetchAllData(false)
+      setPaymentInstallmentRefresh((revision) => revision + 1)
       setSameDayReceipt(null)
       if (paymentPayload.reviewRequired) { notify({ title: 'Payment received — review required', description: paymentPayload.message || 'Please do not collect another payment. The reservation is pending owner review.', variant: 'info' }); return }
       if (paymentPayload.alreadyPaid) {
@@ -6631,7 +6633,8 @@ export default function LeadDetailPage({
                       refundableSecurityDeposit={refundableSecurityDepositAmount}
                       paymentPlan={paymentPlan && typeof paymentPlan === 'object' ? paymentPlan : null}
                       eventDate={eventDate}
-                      bookingDate={agreementBooking?.created_at}
+                      bookingDate={typeof paymentPlan?.booking_date === 'string' ? paymentPlan.booking_date : agreementBooking?.created_at?.slice(0, 10)}
+                      depositPaid={Boolean(agreementBooking?.metadata?.deposit_paid_at)}
                       paymentCount={paymentCount}
                       installments={paymentInstallments}
                     />

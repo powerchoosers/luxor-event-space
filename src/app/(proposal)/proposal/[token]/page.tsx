@@ -17,6 +17,9 @@ import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 import { sameDayBookingPromotion, sameDayBookingRequiresRevision, withoutExpiredSameDayCoverage } from '@/lib/luxorSameDayBooking'
 import { SameDayBookingNotice } from '@/components/proposal/SameDayBookingNotice'
 import { formatLuxorCustomRentalPriceBreakdown } from '@/lib/luxorCustomRentalSnapshot'
+import { listLuxorPaymentInstallments } from '@/lib/luxorPaymentInstallmentsServer'
+import { getLuxorSavedPaymentSchedule } from '@/lib/luxorSavedPaymentSchedule'
+import { SavedPaymentSchedule } from '@/components/proposal/SavedPaymentSchedule'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +48,8 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
   const context = (invoice.proposal_context && typeof invoice.proposal_context === 'object'
     ? invoice.proposal_context
     : {}) as Record<string, unknown>
+  const paymentInstallments = booking ? await listLuxorPaymentInstallments(booking.id) : []
+  const savedPaymentSchedule = getLuxorSavedPaymentSchedule({ invoice, booking, installments: paymentInstallments })
   const deliverySnapshot = context.delivery_snapshot && typeof context.delivery_snapshot === 'object'
     ? context.delivery_snapshot as Record<string, unknown>
     : null
@@ -207,6 +212,8 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
               <div className="flex items-end justify-between gap-5 py-4"><dt className="text-xs font-black uppercase tracking-[0.16em] text-[#f1d27a]">Final Event Price</dt><dd className="font-mono text-2xl font-black text-[#f1d27a]">{money(finalPrice)}</dd></div>
             </dl>
           </section>
+
+          <SavedPaymentSchedule schedule={savedPaymentSchedule} />
 
           {pricingSummary.vendorEstimateLines.length ? <section className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
             <div className="border-b border-white/10 px-5 py-4 sm:px-6"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f1d27a]">Preferred Vendor Collection</p><p className="mt-1 text-xs leading-5 text-zinc-400">Planning estimates only. These services are not Luxor charges and are not included in the Final Event Price.</p></div>

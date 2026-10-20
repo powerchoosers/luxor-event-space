@@ -13,6 +13,8 @@ import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import { getLuxorAgreementClientEmailStatus } from '@/lib/luxorTransactionalNoticeServer'
 import { sameDayBookingPromotion, sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
 import { SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
+import { listLuxorPaymentInstallments } from '@/lib/luxorPaymentInstallmentsServer'
+import { getLuxorSavedPaymentSchedule } from '@/lib/luxorSavedPaymentSchedule'
 
 function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>) {
   if (!signature) return null
@@ -84,6 +86,18 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
   }
 }
 
+async function publicSchedule(signature: NonNullable<Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>>) {
+  const booking = await getLuxorBooking(signature.booking_id)
+  if (!booking) return {}
+  const invoice = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
+  if (!invoice) return {}
+  const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
+  if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost' || inquiry?.is_test) return {}
+  const installments = await listLuxorPaymentInstallments(booking.id)
+  const paymentSchedule = getLuxorSavedPaymentSchedule({ invoice, booking, installments })
+  return paymentSchedule ? { payment_schedule: paymentSchedule } : {}
+}
+
 export async function GET(request: NextRequest) {
   try {
     const token = request.nextUrl.searchParams.get('token') || ''
@@ -147,7 +161,7 @@ export async function GET(request: NextRequest) {
 
     const relatedBooking = await getLuxorBooking(responseSignature.booking_id)
     const relatedInvoice = relatedBooking?.invoice_id ? await getInvoice(relatedBooking.invoice_id) : null
-    return NextResponse.json({ ...publicSignature(responseSignature), same_day_booking: sameDayBookingPromotion(relatedInvoice), payment_blocked: relatedInvoice ? sameDayBookingRequiresRevision(relatedInvoice) : false, ...await publicPayment(responseSignature), status: responseSignature.status })
+    return NextResponse.json({ ...publicSignature(responseSignature), same_day_booking: sameDayBookingPromotion(relatedInvoice), payment_blocked: relatedInvoice ? sameDayBookingRequiresRevision(relatedInvoice) : false, ...await publicSchedule(responseSignature), ...await publicPayment(responseSignature), status: responseSignature.status })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load signature request.'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -209,7 +223,7 @@ export async function POST(request: NextRequest) {
         .catch((notificationError) => console.error('Booking confirmation was saved, but portal notification failed:', notificationError))
     }
 
-    return NextResponse.json({ ...publicSignature(signature), ...await publicPayment(signature) })
+    return NextResponse.json({ ...publicSignature(signature), ...await publicSchedule(signature), ...await publicPayment(signature) })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to submit signature.'
     return NextResponse.json({ error: message }, { status: 500 })

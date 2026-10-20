@@ -285,6 +285,28 @@ export async function POST(request: NextRequest) {
         { status: 'booked', pipeline_stage: kind === 'deposit' ? 'planning' : 'event' }) : null
       if (guardedFinalization && !guardedFinalization.applied) return NextResponse.json({ alreadyPaid: true, reviewRequired: true, booking: guardedFinalization.booking, message: 'Receipt preserved. The booking was closed or changed; owner review is required.' }, { status: 202 })
       const updatedBooking = guardedFinalization?.booking || await updateLuxorBooking(booking.id, bookingUpdate)
+      if (kind === 'deposit' && usesFirstDepositScheduleAnchor(masterInvoice)) {
+        const firstRecordedDepositPaidAt = existingPayments
+          .map((payment) => payment.paid_at)
+          .filter((paidAt): paidAt is string => typeof paidAt === 'string' && Number.isFinite(Date.parse(paidAt)))
+          .sort((left, right) => Date.parse(left) - Date.parse(right))[0]
+        const scheduleBooking = updatedBooking || booking
+        const firstDepositPaidAt = scheduleBooking.metadata?.deposit_paid_at
+          || booking.metadata?.deposit_paid_at
+          || firstRecordedDepositPaidAt
+        if (firstDepositPaidAt) {
+          await syncLuxorPaymentInstallments({
+            booking: {
+              ...scheduleBooking,
+              metadata: {
+                ...scheduleBooking.metadata,
+                deposit_paid_at: scheduleBooking.metadata?.deposit_paid_at || firstDepositPaidAt,
+              },
+            },
+            invoice: masterInvoice,
+          })
+        }
+      }
       if (kind === 'deposit' && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
         await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
           .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))

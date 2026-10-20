@@ -698,7 +698,7 @@ function dateRateGroup(eventDate: string) {
   return 'monday_thursday'
 }
 
-function planFromSelection(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig): LuxorProposalPaymentPlan | null {
+function planFromSelection(selection: LuxorProposalSelection, config: LuxorProposalPricingConfig, policyVersion = 3): LuxorProposalPaymentPlan | null {
   const plan = record(selection.paymentPlan || selection.payment_plan)
   if (!plan) return null
   const paymentCount = numberValue(plan.payment_count ?? plan.paymentCount)
@@ -712,7 +712,31 @@ function planFromSelection(selection: LuxorProposalSelection, config: LuxorPropo
   const anchorPolicy = plan.schedule_anchor_policy === 'proposal_date_v1' || plan.schedule_anchor_policy === 'first_deposit_paid_at_v1'
     ? plan.schedule_anchor_policy
     : undefined
-  if (paymentCount !== undefined && Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24) {
+  const scheduleStatus = plan.schedule_status === 'ready' || plan.schedule_status === 'review_required' ? plan.schedule_status : undefined
+  const scheduleReviewReason = typeof plan.schedule_review_reason === 'string' ? plan.schedule_review_reason : undefined
+  const scheduleRows = Array.isArray(plan.schedule_rows)
+    ? plan.schedule_rows.flatMap((value) => {
+      const row = record(value)
+      if (!row || !Number.isInteger(Number(row.installment_order)) || typeof row.label !== 'string' ||
+        !Number.isFinite(Number(row.amount)) || typeof row.due_at !== 'string' ||
+        (row.payment_bucket !== 'venue' && row.payment_bucket !== 'event' && row.payment_bucket !== 'security_deposit')) return []
+      const paymentBucket: NonNullable<LuxorProposalPaymentPlan['schedule_rows']>[number]['payment_bucket'] = row.payment_bucket
+      const status = row.status === 'scheduled' || row.status === 'sent' || row.status === 'partial' || row.status === 'paid' || row.status === 'void'
+        ? row.status as NonNullable<NonNullable<LuxorProposalPaymentPlan['schedule_rows']>[number]['status']>
+        : undefined
+      return [{
+        installment_order: Number(row.installment_order),
+        label: row.label,
+        ...(typeof row.description === 'string' ? { description: row.description } : {}),
+        amount: Number(row.amount),
+        due_at: row.due_at,
+        payment_bucket: paymentBucket,
+        ...(status ? { status } : {}),
+      }]
+    })
+    : undefined
+  const validPaymentCount = paymentCount !== undefined && Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24
+  if (validPaymentCount && policyVersion >= 4) {
     return {
       mode: 'deposit_and_balance',
       booking_payment_percent: 25,
@@ -721,13 +745,16 @@ function planFromSelection(selection: LuxorProposalSelection, config: LuxorPropo
       payment_cadence: paymentCadence,
       ...(bookingDate ? { booking_date: bookingDate } : {}),
       ...(anchorPolicy ? { schedule_anchor_policy: anchorPolicy } : {}),
+      ...(scheduleStatus ? { schedule_status: scheduleStatus } : {}),
+      ...(scheduleReviewReason ? { schedule_review_reason: scheduleReviewReason } : {}),
+      ...(scheduleRows ? { schedule_rows: scheduleRows } : {}),
       ...(bookingPaymentAmount !== undefined && bookingPaymentAmount >= 0.5 ? { booking_payment_amount: rounded(bookingPaymentAmount) } : {}),
       ...(preferredPaymentMethod ? { preferred_payment_method: preferredPaymentMethod } : {}),
     }
   }
   const mode = plan.mode === 'pay_in_full' || plan.mode === 'deposit_and_balance' ? plan.mode : null
-  const percentage = numberValue(plan.booking_payment_percent ?? plan.bookingPaymentPercent)
-  const finalDays = numberValue(plan.final_payment_due_days_before_event ?? plan.finalPaymentDueDaysBeforeEvent)
+  const percentage = numberValue(plan.booking_payment_percent ?? plan.bookingPaymentPercent) ?? (validPaymentCount ? 25 : undefined)
+  const finalDays = numberValue(plan.final_payment_due_days_before_event ?? plan.finalPaymentDueDaysBeforeEvent) ?? (validPaymentCount ? 60 : undefined)
   if (!mode || percentage === undefined || percentage < 0 || percentage > 100 ||
     finalDays === undefined || !Number.isInteger(finalDays) || finalDays < 0 ||
     (mode === 'deposit_and_balance' && percentage <= 0)) return null
@@ -735,8 +762,12 @@ function planFromSelection(selection: LuxorProposalSelection, config: LuxorPropo
     mode,
     booking_payment_percent: mode === 'pay_in_full' ? 100 : rounded(percentage),
     final_payment_due_days_before_event: finalDays,
+    ...(validPaymentCount ? { payment_count: paymentCount, payment_cadence: paymentCadence } : {}),
     ...(bookingDate ? { booking_date: bookingDate } : {}),
     ...(anchorPolicy ? { schedule_anchor_policy: anchorPolicy } : {}),
+    ...(scheduleStatus ? { schedule_status: scheduleStatus } : {}),
+    ...(scheduleReviewReason ? { schedule_review_reason: scheduleReviewReason } : {}),
+    ...(scheduleRows ? { schedule_rows: scheduleRows } : {}),
     ...(bookingPaymentAmount !== undefined && bookingPaymentAmount >= 0.5 ? { booking_payment_amount: rounded(bookingPaymentAmount) } : {}),
     ...(preferredPaymentMethod ? { preferred_payment_method: preferredPaymentMethod } : {}),
   }
@@ -1653,7 +1684,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   const taxRate = requestedTaxRate === null ? 0 : requestedTaxRate ?? configuredTaxRate ?? 0
   if (configuredTaxRate === null) errors.push(CONFIGURATION_ERROR)
   const securityDeposit = readNumber(luxor, 'security_deposit', 'amount') || 750
-  const paymentPlan = planFromSelection(selection, config)
+  const paymentPlan = planFromSelection(selection, config, proposalPricingPolicyVersion)
   const amountDueFor = (eventPrice: number | null) => {
     if (eventPrice === null || !paymentPlan) return null
     if (paymentPlan.mode === 'pay_in_full') return eventPrice
@@ -1821,14 +1852,14 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
       bookingPaymentAmount: paymentPlan.booking_payment_amount,
     })
     : null
-  const finalPaymentPlan = previewPaymentSchedule
+  const finalPaymentPlan = proposalPricingPolicyVersion >= 4 && previewPaymentSchedule
     ? {
       ...paymentPlan!,
-      ...paymentPlanFromSchedule(previewPaymentSchedule, proposalPricingPolicyVersion >= 4 ? 'first_deposit_paid_at_v1' : paymentPlan?.schedule_anchor_policy),
+      ...paymentPlanFromSchedule(previewPaymentSchedule, 'first_deposit_paid_at_v1'),
       ...(paymentPlan?.preferred_payment_method ? { preferred_payment_method: paymentPlan.preferred_payment_method } : {}),
     }
     : paymentPlan
-  const paymentScheduleInvalid = Boolean(paymentPlan && paymentPlan.mode !== 'pay_in_full' && !previewPaymentSchedule)
+  const paymentScheduleInvalid = Boolean(proposalPricingPolicyVersion >= 4 && paymentPlan && paymentPlan.mode !== 'pay_in_full' && !previewPaymentSchedule)
   const selectedIds = selectedProposalAddOns(selection)
   const quoteErrors: string[] = []
   const selectedByGroup = new Map<ServiceChoiceGroup, string>()

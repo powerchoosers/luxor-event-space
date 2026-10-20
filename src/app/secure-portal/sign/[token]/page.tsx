@@ -21,6 +21,8 @@ import {
   Type,
 } from 'lucide-react'
 import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
+import type { LuxorSavedPaymentSchedule } from '@/lib/luxorSavedPaymentSchedule'
+import { SavedPaymentSchedule } from '@/components/proposal/SavedPaymentSchedule'
 import { SameDayBookingNotice } from '@/components/proposal/SameDayBookingNotice'
 import type { LuxorSameDayBookingSnapshot } from '@/lib/luxorSameDayBooking'
 import { LUXOR_LEGACY_CONTRACT_SIGNATURE_PLACEMENT, type LuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
@@ -36,6 +38,7 @@ const ContractPdfViewer = dynamic(() => import('./ContractPdfViewer'), {
 
 type SignatureMode = 'type' | 'draw'
 type PublicLuxorSignatureRequest = LuxorSignatureRequest & {
+  payment_schedule?: Exclude<LuxorSavedPaymentSchedule, null>
   signature_placement?: LuxorContractSignaturePlacement
   payment_email_status?: 'sent' | 'pending' | 'failed' | 'unknown'
   payment_url?: string
@@ -610,6 +613,7 @@ export default function SignaturePage() {
                   </div>
                 </div>
                 {signature.same_day_booking ? <div className="mt-5 border-y border-[#ded5c8] py-4 text-[#6f665b]"><SameDayBookingNotice benefit={signature.same_day_booking} completed={signature.same_day_completed} review={signature.payment_review_required} /></div> : null}
+                <SavedPaymentSchedule schedule={signature.payment_schedule || null} tone="light" />
                 {signature.payment_options && !signature.payment_blocked ? <SignaturePaymentChoice options={signature.payment_options} /> : null}
               </div>
               <div className="shrink-0 border-t border-[#ded5c8] bg-[#eee8df] p-4 sm:p-5">
@@ -653,6 +657,7 @@ export default function SignaturePage() {
                 </p>
 
                 {signature.same_day_booking ? <div className="mt-5 border-y border-[#ded5c8] py-4 text-[#6f665b]"><SameDayBookingNotice benefit={signature.same_day_booking} /></div> : null}
+                <SavedPaymentSchedule schedule={signature.payment_schedule || null} tone="light" />
                 <label className="mt-6 block text-xs font-semibold text-[#554b41]" htmlFor="legal-name">Full legal name</label>
                 <input
                   id="legal-name"

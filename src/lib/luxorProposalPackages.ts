@@ -248,7 +248,7 @@ export function packageInclusionsForDisplay(
   option: LuxorProposalPackageOption,
   rentalHours: number,
   customizedAdditions: string[] = [],
-  decorCatalog?: Array<{ id: string; name: string; included_in_packages: string[] }>,
+  decorCatalog?: Array<{ id: string; name: string; included_in_packages: string[]; active?: boolean }>,
   tableclothUpgradeSelected = false,
 ) {
   const hoursLabel = Number.isFinite(rentalHours) && rentalHours > 0 ? String(rentalHours) : 'Custom'
@@ -266,6 +266,7 @@ export function packageInclusionsForDisplay(
     return packageWords(name).filter((word) => copyWords.has(word)).length >= 2
   }
   const configuredNames = decorCatalog?.flatMap((item) => [item.name, ...(DEFAULT_CATALOG_INCLUSION_ALIASES[item.id] || [])]).map((name) => name.trim()).filter(Boolean) || []
+  const activeDecorCatalog = decorCatalog?.filter((item) => item.active !== false) || []
   const items = option.inclusions
     .map((item) => item.replaceAll('%rental_hours%', hoursLabel))
     .filter((item) => {
@@ -274,12 +275,12 @@ export function packageInclusionsForDisplay(
       return !configuredNames.some((name) => referencesCatalogItem(item, name))
     })
   if (decorCatalog) {
-    const tableclothItem = decorCatalog.find((item) => item.id === 'tablecloths')
+    const tableclothItem = activeDecorCatalog.find((item) => item.id === 'tablecloths')
     const tableclothIncluded = tableclothItem?.included_in_packages.includes(option.id) === true
     items.push(tableclothIncluded || tableclothUpgradeSelected
       ? 'Any color tablecloths, up to 2 colors.'
       : 'Black or white tablecloths')
-    items.push(...decorCatalog
+    items.push(...activeDecorCatalog
       .filter((item) => item.id !== 'tablecloths' && item.included_in_packages.includes(option.id))
       .map((item) => item.name))
   }

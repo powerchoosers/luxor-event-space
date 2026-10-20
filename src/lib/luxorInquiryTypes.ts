@@ -366,6 +366,9 @@ export type LuxorProposalPaymentPlan = {
     payment_bucket: 'venue' | 'event' | 'security_deposit'
     status?: 'scheduled' | 'sent' | 'partial' | 'paid' | 'void'
   }>
+  /** Current V4 schedule reconciliation state after first deposit. */
+  schedule_status?: 'ready' | 'review_required'
+  schedule_review_reason?: string
 }
 
 export type LuxorProposalContext = {
