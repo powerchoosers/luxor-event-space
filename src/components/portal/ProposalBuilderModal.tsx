@@ -13,6 +13,7 @@ import {
   Check,
   ChevronDown,
   ClipboardList,
+  DoorOpen,
   Eye,
   FileText,
   Handshake,
@@ -36,7 +37,6 @@ import { SAME_DAY_BOOKING_CODE, SAME_DAY_BOOKING_TERMS, SAME_DAY_CARD_CUTOFF_TER
 import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakdown, getWeekdayCustomRentalPolicy, getWeekdayCustomRentalSnapshot, isWeekdayCustomRentalDate, validateWeekdayCustomRentalSchedule, validateWeekdayCustomRentalTiming, type LuxorWeekdayCustomRentalPolicy } from '@/lib/luxorWeekdayRental'
 import { formatLuxorCustomTimeRentalPriceBreakdownV4, getLuxorCustomTimeRentalSnapshotV4, validateLuxorCustomTimeScheduleV4, type LuxorCustomTimeRentalPolicyV4 } from '@/lib/luxorCustomTimeRentalV4'
 import { LuxorAvailabilityCalendar } from '@/components/portal/LuxorAvailabilityCalendar'
-import { LuxorTimeRangeTimeline, timeAtMinutes } from '@/components/portal/LuxorTimeRangeTimeline'
 import { isLuxorAvailabilityRangeOpen, type LuxorAvailabilityCalendar as LuxorAvailabilityMap } from '@/lib/luxorAvailability'
 
 function findInitialCustomRentalRange(
@@ -53,18 +53,78 @@ function findInitialCustomRentalRange(
     const end = start + duration
     if (end > 25 * 60) break
     if (options.resetWindowBlocked && start < 17 * 60 && end > 15 * 60) continue
-    const startTime = timeAtMinutes(start)
-    const endTime = timeAtMinutes(end)
+    const startTime = clockFromScheduleMinutes(start)
+    const endTime = clockFromScheduleMinutes(end)
     if (isLuxorAvailabilityRangeOpen(availability, date, startTime, endTime, options)) return { startTime, endTime }
   }
   return null
 }
 
-function timelineTimeMinutes(value: string) {
-  if (!/^\d{2}:\d{2}$/.test(value)) return Number.POSITIVE_INFINITY
-  const [hour, minute] = value.split(':').map(Number)
-  const clock = hour * 60 + minute
-  return clock < 6 * 60 ? clock + 24 * 60 : clock
+function clockFromScheduleMinutes(value: number) {
+  const clock = ((value % (24 * 60)) + (24 * 60)) % (24 * 60)
+  return `${String(Math.floor(clock / 60)).padStart(2, '0')}:${String(clock % 60).padStart(2, '0')}`
+}
+
+function isWholeHourTime(value: string) {
+  return /^(?:[01]\d|2[0-3]):00$/.test(value) || value === '24:00'
+}
+
+function shiftClockByHour(value: string, direction: -1 | 1) {
+  if (!isWholeHourTime(value)) return null
+  const hour = value === '24:00' ? 0 : Number(value.slice(0, 2))
+  return `${String((hour + direction + 24) % 24).padStart(2, '0')}:00`
+}
+
+function formatDurationMinutes(value: number | null) {
+  if (value === null || !Number.isFinite(value) || value <= 0) return '—'
+  const hours = Math.floor(value / 60)
+  const minutes = value % 60
+  if (!minutes) return `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+  if (!hours) return `${minutes} minutes`
+  return `${hours} hr ${minutes} min`
+}
+
+function formatTimeRange(startTime: string, endTime: string, startsNextDay: boolean, endsNextDay: boolean) {
+  if (!startTime || !endTime) return 'Set both times'
+  const prefix = startsNextDay ? 'Next day · ' : ''
+  const suffix = endsNextDay && !startsNextDay ? ' · ends next day' : ''
+  return `${prefix}${formatCatalogTime(startTime)} – ${formatCatalogTime(endTime)}${suffix}`
+}
+
+function ProposalHourControl({
+  label,
+  value,
+  onStep,
+  canStep,
+  stepReason,
+}: {
+  label: string
+  value: string
+  onStep: (direction: -1 | 1) => void
+  canStep: (direction: -1 | 1) => boolean
+  stepReason: (direction: -1 | 1) => string | null
+}) {
+  const wholeHour = isWholeHourTime(value)
+  const display = value ? formatCatalogTime(value) : 'Choose a time'
+  const legacyTimeReason = 'This saved time includes minutes. It is preserved; hourly controls are disabled until an approved on-hour time is selected.'
+  const buttonClass = 'flex min-h-14 w-14 items-center justify-center border border-[#caa24c]/30 bg-[#caa24c]/10 text-2xl font-semibold text-[#8c6529] transition hover:bg-[#caa24c]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/55 disabled:cursor-not-allowed disabled:opacity-40 dark:text-[#f1d27a]'
+
+  return (
+    <div className="min-w-0 space-y-2">
+      <p className="text-center text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{label}</p>
+      <div className="grid min-h-14 grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+        <button type="button" aria-label={`Decrease ${label.toLowerCase()} by one hour`} title={!wholeHour ? legacyTimeReason : stepReason(-1) || 'Decrease by exactly one hour'} disabled={!wholeHour || !canStep(-1)} onClick={() => onStep(-1)} className={`${buttonClass} border-y-0 border-l-0`}>
+          <span aria-hidden="true">−</span>
+        </button>
+        <output aria-live="polite" aria-label={`${label}: ${display}`} className="flex min-w-0 items-center justify-center px-2 text-center text-xl font-semibold tracking-tight text-[color:var(--portal-text)] sm:text-2xl">
+          <span className="truncate">{display}</span>
+        </output>
+        <button type="button" aria-label={`Increase ${label.toLowerCase()} by one hour`} title={!wholeHour ? legacyTimeReason : stepReason(1) || 'Increase by exactly one hour'} disabled={!wholeHour || !canStep(1)} onClick={() => onStep(1)} className={`${buttonClass} border-y-0 border-r-0`}>
+          <span aria-hidden="true">+</span>
+        </button>
+      </div>
+    </div>
+  )
 }
 
 type ProposalSubmitAction = 'save' | 'email' | 'in_person'
@@ -923,6 +983,10 @@ export function ProposalBuilderModal({
     ? customTimesSelected ? asString(effectiveContext.event_end_time ?? effectiveContext.eventEndTime) || '' : ''
     : typeof savedEventEndTime === 'string' ? savedEventEndTime : RENTAL_WINDOWS[rentalPeriod].end
   const rentalAccess = asRecord(calculation?.rental_access)
+  const eventSecurityTiming = useMemo(
+    () => proposalSecurityDuration(eventDateValue, guestArrivalTime, eventEndTime),
+    [eventDateValue, guestArrivalTime, eventEndTime],
+  )
   const timeValidation = useMemo(
     () => {
       const rentalTiming = isCustomRental
@@ -931,22 +995,26 @@ export function ProposalBuilderModal({
           : validateWeekdayCustomRentalSchedule(eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, weekdayPolicy)
         : validateFixedProposalRentalSchedule(rentalPeriod, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime)
       if (!rentalTiming.valid) return rentalTiming
-      const securityTiming = proposalSecurityDuration(eventDateValue, guestArrivalTime, eventEndTime)
-      return securityTiming.valid ? rentalTiming : { valid: false, error: securityTiming.error }
+      return eventSecurityTiming.valid ? rentalTiming : { valid: false, error: eventSecurityTiming.error }
     },
-    [eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, isCustomRental, rentalPeriod, weekdayPolicy, customTimeV4Enabled, customTimeV4Policy]
+    [eventDateValue, rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime, isCustomRental, rentalPeriod, weekdayPolicy, customTimeV4Enabled, customTimeV4Policy, eventSecurityTiming]
   )
-  const rentalBounds = isCustomRental ? null : getRentalPeriodBounds(rentalPeriod, rentalAccess)
   const currentRentalRange = luxorScheduleMinutes(rentalStartTime, rentalEndTime)
-  const timelineStepMinutes = isCustomRental
-    ? customTimeV4Enabled ? 60 : weekdayPolicy?.time_increment_minutes || 60
-    : 60
-  const customMinimumMinutes = Math.max(timelineStepMinutes, Math.ceil((customTimeV4Policy?.minimum_hours || weekdayPolicy?.minimum_hours || 1) * 60 / timelineStepMinutes) * timelineStepMinutes)
-  const fixedMinimumMinutes = Math.max(timelineStepMinutes, rentalBounds ? rentalBounds.endMinutes - rentalBounds.startMinutes : 60)
-  const timelineMinimumMinutes = isCustomRental ? customMinimumMinutes : fixedMinimumMinutes
-  const timelineMaximumMinutes = isCustomRental ? 19 * 60 : rentalPeriod === 'morning' ? 15 * 60 - 6 * 60 : rentalPeriod === 'evening' ? 25 * 60 - 17 * 60 : 19 * 60
-  const timelineMinimumClock = isCustomRental ? 6 * 60 : rentalPeriod === 'evening' ? 17 * 60 : 6 * 60
-  const timelineMaximumClock = isCustomRental ? 25 * 60 : rentalPeriod === 'morning' ? 15 * 60 : 25 * 60
+  const venueAccessDurationMinutes = currentRentalRange ? currentRentalRange.end - currentRentalRange.start : null
+  const venueAccessRangeLabel = currentRentalRange
+    ? formatTimeRange(rentalStartTime, rentalEndTime, currentRentalRange.start >= 24 * 60, currentRentalRange.end >= 24 * 60)
+    : 'Set both times'
+  const eventDurationMinutes = eventSecurityTiming.valid ? eventSecurityTiming.durationMinutes : null
+  const eventRangeLabel = eventSecurityTiming.valid
+    ? formatTimeRange(
+      guestArrivalTime,
+      eventEndTime,
+      eventSecurityTiming.arrivalLocal.slice(0, 10) !== eventDateValue,
+      eventSecurityTiming.eventEndLocal.slice(0, 10) !== eventDateValue,
+    )
+    : 'Set valid arrival and end times'
+  const hasLegacyOffHourTime = [rentalStartTime, rentalEndTime, guestArrivalTime, eventEndTime]
+    .some((value) => Boolean(value) && !isWholeHourTime(value))
   const customAvailabilityPolicy = customTimeV4Policy || weekdayPolicy
   const availabilityOptions = isCustomRental
     ? { blockWholeDate: customAvailabilityPolicy?.booking_policy === 'one_per_date', cleanupBufferMinutes: customAvailabilityPolicy?.cleanup_buffer_minutes || 0 }
@@ -976,17 +1044,6 @@ export function ProposalBuilderModal({
       && availabilityStatus === 'ready'
       && isLuxorAvailabilityRangeOpen(availability, eventDateValue, rentalStartTime, rentalEndTime, availabilityOptions),
   )
-  const selectedRentalDurationMinutes = currentRentalRange ? currentRentalRange.end - currentRentalRange.start : 0
-  const durationOptions = useMemo(() => {
-    const maxDuration = Math.max(timelineMinimumMinutes, timelineMaximumMinutes)
-    const options: Array<{ value: string; label: string }> = []
-    for (let minutes = timelineMinimumMinutes; minutes <= maxDuration; minutes += timelineStepMinutes) {
-      const hours = minutes / 60
-      const label = Number.isInteger(hours) ? `${hours} ${hours === 1 ? 'hour' : 'hours'}` : `${hours} hours`
-      options.push({ value: String(minutes), label })
-    }
-    return options
-  }, [timelineMaximumMinutes, timelineMinimumMinutes, timelineStepMinutes])
 
   const handleRentalPeriodChange = (newPeriod: string) => {
     if (newPeriod === 'custom') {
@@ -1036,25 +1093,49 @@ export function ProposalBuilderModal({
     return security.valid ? check : { valid: false, error: security.error }
   }
 
-  const handleRentalRangeChange = (start: string, end: string) => {
-    const range = luxorScheduleMinutes(start, end)
-    if (!range || !eventDateValue || availabilityStatus !== 'ready') return
+  type TimeEndpoint = 'start' | 'end'
+  const accessStepError = (endpoint: TimeEndpoint, direction: -1 | 1) => {
+    if (!eventDateValue) return 'Choose an event date before adjusting venue access.'
+    if (availabilityStatus !== 'ready') return 'Confirm current booking availability before adjusting venue access.'
+    const value = endpoint === 'start' ? rentalStartTime : rentalEndTime
+    const candidate = shiftClockByHour(value, direction)
+    if (!candidate) return 'This saved time includes minutes. Choose a rental period to apply its approved on-hour defaults before adjusting it.'
+    const start = endpoint === 'start' ? candidate : rentalStartTime
+    const end = endpoint === 'end' ? candidate : rentalEndTime
+    if (!luxorScheduleMinutes(start, end)) return 'Venue access must stay within Luxor hours, from 6:00 AM to 1:00 AM the following day.'
+    const timing = validateNextTiming(start, end, guestArrivalTime, eventEndTime)
+    if (!timing.valid) return timing.error || 'This change conflicts with the selected rental rules or guest times.'
     if (!isLuxorAvailabilityRangeOpen(availability, eventDateValue, start, end, availabilityOptions)) {
-      setValidationMessage('That rental period overlaps an active booking. Choose an open time range.')
+      return 'This venue access change overlaps a confirmed booking or hold.'
+    }
+    return null
+  }
+
+  const guestStepError = (endpoint: TimeEndpoint, direction: -1 | 1) => {
+    if (!eventDateValue) return 'Choose an event date before adjusting guest times.'
+    const value = endpoint === 'start' ? guestArrivalTime : eventEndTime
+    const candidate = shiftClockByHour(value, direction)
+    if (!candidate) return 'This saved time includes minutes and is preserved. Hourly controls require an on-hour time.'
+    const arrival = endpoint === 'start' ? candidate : guestArrivalTime
+    const end = endpoint === 'end' ? candidate : eventEndTime
+    const timing = validateNextTiming(rentalStartTime, rentalEndTime, arrival, end)
+    return timing.valid ? null : timing.error || 'This change conflicts with the venue access or event timing rules.'
+  }
+
+  const canAdjustAccess = (endpoint: TimeEndpoint, direction: -1 | 1) => accessStepError(endpoint, direction) === null
+  const canAdjustGuests = (endpoint: TimeEndpoint, direction: -1 | 1) => guestStepError(endpoint, direction) === null
+
+  const handleAccessTimeStep = (endpoint: TimeEndpoint, direction: -1 | 1) => {
+    const error = accessStepError(endpoint, direction)
+    if (error) {
+      setValidationMessage(error)
       return
     }
-    const previousRange = currentRentalRange
-    let nextArrival = guestArrivalTime
-    let nextEventEnd = eventEndTime
-    const arrivalMinutes = timelineTimeMinutes(nextArrival)
-    const eventEndMinutes = timelineTimeMinutes(nextEventEnd)
-    if (!nextArrival || arrivalMinutes < range.start || (previousRange && arrivalMinutes === previousRange.start)) nextArrival = start
-    if (!nextEventEnd || eventEndMinutes > range.end || (previousRange && eventEndMinutes === previousRange.end)) nextEventEnd = end
-    const check = validateNextTiming(start, end, nextArrival, nextEventEnd)
-    if (!check.valid) {
-      setValidationMessage(check.error || 'Choose a valid event schedule within this rental period.')
-      return
-    }
+    const value = endpoint === 'start' ? rentalStartTime : rentalEndTime
+    const candidate = shiftClockByHour(value, direction)
+    if (!candidate) return
+    const start = endpoint === 'start' ? candidate : rentalStartTime
+    const end = endpoint === 'end' ? candidate : rentalEndTime
     const nextSelection = { ...(effectiveContext.pricing_selection || {}) }
     if (isCustomRental) {
       delete nextSelection.securityHours
@@ -1066,30 +1147,23 @@ export function ProposalBuilderModal({
       rental_end_time: end,
       start_time: start,
       end_time: end,
-      guest_arrival_time: nextArrival,
-      guestArrivalTime: nextArrival,
-      event_end_time: nextEventEnd,
-      eventEndTime: nextEventEnd,
       ...(isCustomRental ? { weekday_custom_rental: undefined, pricing_selection: nextSelection } : {}),
     })
     setValidationMessage(null)
   }
 
-  const handleRentalDurationChange = (value: string) => {
-    const duration = Number(value)
-    if (!currentRentalRange || !Number.isFinite(duration) || duration <= 0) return
-    const start = Math.max(timelineMinimumClock, Math.min(currentRentalRange.start, timelineMaximumClock - duration))
-    const end = start + duration
-    handleRentalRangeChange(timeAtMinutes(start), timeAtMinutes(end))
-  }
-
-  const handleGuestRangeChange = (start: string, end: string) => {
-    const check = validateNextTiming(rentalStartTime, rentalEndTime, start, end)
-    if (!check.valid) {
-      setValidationMessage(check.error || 'Choose a valid guest arrival and event end time.')
+  const handleGuestTimeStep = (endpoint: TimeEndpoint, direction: -1 | 1) => {
+    const error = guestStepError(endpoint, direction)
+    if (error) {
+      setValidationMessage(error)
       return
     }
-    updateProposalContext({ guest_arrival_time: start, guestArrivalTime: start, event_end_time: end, eventEndTime: end })
+    const value = endpoint === 'start' ? guestArrivalTime : eventEndTime
+    const candidate = shiftClockByHour(value, direction)
+    if (!candidate) return
+    updateProposalContext(endpoint === 'start'
+      ? { guest_arrival_time: candidate, guestArrivalTime: candidate }
+      : { event_end_time: candidate, eventEndTime: candidate })
     setValidationMessage(null)
   }
   const selectedServiceIds = useMemo(() => selectedServiceIdsFrom(effectiveContext, items), [effectiveContext, items])
@@ -1907,42 +1981,73 @@ export function ProposalBuilderModal({
                   <section className="min-w-0 space-y-4 border-t border-[color:var(--portal-border)] pt-4" aria-label="Rental period and event timing">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8c6529] dark:text-[#f1d27a]">Rental period</p>
-                      <div className="mt-2 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                        <div className={`grid ${customWeekdayEnabled ? 'grid-cols-4' : 'grid-cols-3'} rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1`} role="group" aria-label="Choose rental period">
-                          {[
-                            { value: 'morning', label: 'AM', title: formatEventAccess('morning', 'morning', rentalAccess) },
-                            { value: 'evening', label: 'PM', title: formatEventAccess('evening', 'evening', rentalAccess) },
-                            ...(customWeekdayEnabled ? [{ value: 'custom', label: 'Custom', title: 'Custom rental period' }] : []),
-                            { value: 'full_day', label: 'Full day', title: formatEventAccess('full_day', 'full_day', rentalAccess) },
-                          ].map((option) => {
-                            const active = option.value === rentalPeriod
-                            const available = getPeriodAvailability(option.value)
-                            const disabled = availabilityStatus !== 'ready' || !eventDateValue || (!available && !active)
-                            return <button key={option.value} type="button" aria-pressed={active} aria-label={`${option.title}${available ? ', available' : ', unavailable'}`} disabled={disabled} onClick={() => handleRentalPeriodChange(option.value)} className={`min-h-10 min-w-0 rounded-lg px-1.5 text-[10px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/55 disabled:cursor-not-allowed disabled:opacity-45 sm:px-2 ${active ? 'bg-[#b98a3e] text-white shadow-sm' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]'}`}>{option.label}</button>
-                          })}
-                        </div>
-                        <label className="min-w-0 space-y-1">
-                          <span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Rental hours</span>
-                          <PortalSelect value={selectedRentalDurationMinutes ? String(selectedRentalDurationMinutes) : ''} onChange={handleRentalDurationChange} options={[
-                            ...(selectedRentalDurationMinutes && !durationOptions.some((option) => option.value === String(selectedRentalDurationMinutes)) ? [{ value: String(selectedRentalDurationMinutes), label: `${selectedRentalDurationMinutes / 60} hours` }] : []),
-                            ...durationOptions,
-                          ]} className="w-full" buttonClassName="min-h-10 px-2.5 text-sm font-semibold normal-case tracking-normal" />
-                        </label>
+                      <div className="mt-2 grid min-w-0 grid-cols-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1" role="group" aria-label="Choose rental period">
+                        {[
+                          { value: 'morning', label: 'AM', title: formatEventAccess('morning', 'morning', rentalAccess) },
+                          { value: 'evening', label: 'PM', title: formatEventAccess('evening', 'evening', rentalAccess) },
+                          { value: 'full_day', label: 'Full Day', title: formatEventAccess('full_day', 'full_day', rentalAccess) },
+                          { value: 'custom', label: 'Custom', title: customWeekdayEnabled ? 'Custom rental period' : 'Custom access is available only when saved rental rules allow it' },
+                        ].map((option) => {
+                          const active = option.value === rentalPeriod
+                          const available = getPeriodAvailability(option.value)
+                          const configured = option.value !== 'custom' || customWeekdayEnabled
+                          const disabled = availabilityStatus !== 'ready' || !eventDateValue || !configured || (!available && !active)
+                          const availabilityLabel = !configured ? 'not enabled by saved rental rules' : available ? 'available' : 'unavailable'
+                          return <button key={option.value} type="button" aria-pressed={active} aria-label={`${option.title}, ${availabilityLabel}`} disabled={disabled} onClick={() => handleRentalPeriodChange(option.value)} className={`min-h-10 min-w-0 rounded-lg px-1.5 text-[10px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/55 disabled:cursor-not-allowed disabled:opacity-45 sm:px-2 ${active ? 'bg-[#b98a3e] text-white shadow-sm' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]'}`}>{option.label}</button>
+                        })}
                       </div>
+                      <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">AM, PM, and Full Day use their saved rental windows. Custom access is available only when the saved rental rules permit it.</p>
                     </div>
 
-                    <LuxorTimeRangeTimeline title="Rental access timeline" startTime={rentalStartTime} endTime={rentalEndTime} startLabel="Rental start time" endLabel="Rental end time" onChange={handleRentalRangeChange} scrollKey={`${eventDateValue}-${rentalPeriod}-rental`} stepMinutes={timelineStepMinutes} minMinutes={timelineMinimumClock} maxMinutes={timelineMaximumClock} minRangeMinutes={timelineMinimumMinutes} disabled={!currentRentalPeriodAvailable || availabilityStatus !== 'ready'} helper={isCustomRental ? `Choose an available range of at least ${customAvailabilityPolicy?.minimum_hours || 1} hours. Saved rental rules determine the actual price.` : 'The selected range adjusts venue access. Guest arrival and event end remain independently editable below.'} />
+                    <section aria-label="Venue access time" className="min-w-0 space-y-4 rounded-2xl border border-sky-400/35 bg-sky-500/[0.055] p-4 sm:p-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-300"><DoorOpen size={19} aria-hidden="true" /></span>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-black uppercase tracking-[0.1em] text-[color:var(--portal-text)]">Venue Access Time</h4>
+                            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">When you can access the venue for setup and breakdown.</p>
+                          </div>
+                        </div>
+                        <div className="min-w-44 rounded-xl border border-sky-400/20 bg-sky-500/[0.07] px-4 py-3 sm:text-right">
+                          <p className="text-[9px] font-black uppercase tracking-[0.12em] text-sky-800 dark:text-sky-300">Total venue access</p>
+                          <p className="mt-1 text-xl font-semibold text-[color:var(--portal-text)]">{formatDurationMinutes(venueAccessDurationMinutes)}</p>
+                          <p className="mt-0.5 text-xs font-medium text-[color:var(--portal-muted)]">{venueAccessRangeLabel}</p>
+                        </div>
+                      </div>
+                      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                        <ProposalHourControl label="Access start time" value={rentalStartTime} onStep={(direction) => handleAccessTimeStep('start', direction)} canStep={(direction) => canAdjustAccess('start', direction)} stepReason={(direction) => accessStepError('start', direction)} />
+                        <ProposalHourControl label="Access end time" value={rentalEndTime} onStep={(direction) => handleAccessTimeStep('end', direction)} canStep={(direction) => canAdjustAccess('end', direction)} stepReason={(direction) => accessStepError('end', direction)} />
+                      </div>
+                      {isCustomRental && weekdayPolicy && timeValidation.valid && 'durationMinutes' in timeValidation ? <p role="status" className="text-xs font-semibold text-[color:var(--portal-text)]">{formatWeekdayCustomRentalDuration(timeValidation.durationMinutes)} venue access — minimum {formatMoney(weekdayPolicy.minimum_price)} covers the first {weekdayPolicy.minimum_hours} billed hours; additional hours are {formatMoney(weekdayPolicy.additional_hour_rate)} each. Current rental price: {formatMoney(asNumber(selectedContext.rental_total) ?? weekdayPolicy.minimum_price)}.</p> : null}
+                      {!isCustomRental && timeValidation.valid && 'additionalHours' in timeValidation && timeValidation.additionalHours > 0 ? <p role="status" className="text-xs leading-5 text-[color:var(--portal-muted)]">Additional rental time: {timeValidation.additionalHours} hour(s). {pricingStatus === 'ready' ? formatMoney(asNumber(selectedContext.additional_rental_charge) || 0) + ' added at the saved hourly rate.' : 'Updating the additional-hour charge.'}</p> : null}
+                      {!currentRentalPeriodAvailable && eventDateValue && availabilityStatus === 'ready' ? <p role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/8 p-2.5 text-xs text-amber-900 dark:text-amber-100">This venue access window overlaps an active booking or is not available under the saved rental rules.</p> : null}
+                      <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Adjustments follow Luxor’s 6:00 AM–1:00 AM hours, the selected rental policy, and the booked-events calendar.</p>
+                    </section>
 
-                    {!currentRentalPeriodAvailable && eventDateValue && availabilityStatus === 'ready' ? <p role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/8 p-2.5 text-xs text-amber-900 dark:text-amber-100">This rental period overlaps an active booking or is not available under the saved rental rules.</p> : null}
-                    {isCustomRental && weekdayPolicy && timeValidation.valid && 'durationMinutes' in timeValidation ? <p role="status" className="text-xs font-semibold text-[color:var(--portal-text)]">{formatWeekdayCustomRentalDuration(timeValidation.durationMinutes)} venue access — minimum {formatMoney(weekdayPolicy.minimum_price)} covers the first {weekdayPolicy.minimum_hours} billed hours; additional hours are {formatMoney(weekdayPolicy.additional_hour_rate)} each. Current rental price: {formatMoney(asNumber(selectedContext.rental_total) ?? weekdayPolicy.minimum_price)}.</p> : null}
-                    {!isCustomRental && timeValidation.valid && 'additionalHours' in timeValidation && timeValidation.additionalHours > 0 ? <p role="status" className="text-xs leading-5 text-[color:var(--portal-muted)]">Additional rental time: {timeValidation.additionalHours} hour(s). {pricingStatus === 'ready' ? formatMoney(asNumber(selectedContext.additional_rental_charge) || 0) + ' added at the saved hourly rate.' : 'Updating the additional-hour charge.'}</p> : null}
+                    <section aria-label="Guest arrival and event end" className="min-w-0 space-y-4 rounded-2xl border border-[#caa24c]/25 bg-[color:var(--portal-soft)] p-4 sm:p-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]"><Users size={19} aria-hidden="true" /></span>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-black uppercase tracking-[0.1em] text-[color:var(--portal-text)]">Guest Arrival &amp; Event End</h4>
+                            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Set when guests arrive and when the event ends.</p>
+                          </div>
+                        </div>
+                        <div className="min-w-44 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/[0.07] px-4 py-3 sm:text-right">
+                          <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[#8c6529] dark:text-[#f1d27a]">Event duration</p>
+                          <p className="mt-1 text-xl font-semibold text-[color:var(--portal-text)]">{formatDurationMinutes(eventDurationMinutes)}</p>
+                          <p className="mt-0.5 text-xs font-medium text-[color:var(--portal-muted)]">{eventRangeLabel}</p>
+                        </div>
+                      </div>
+                      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                        <ProposalHourControl label="Guest arrival time" value={guestArrivalTime} onStep={(direction) => handleGuestTimeStep('start', direction)} canStep={(direction) => canAdjustGuests('start', direction)} stepReason={(direction) => guestStepError('start', direction)} />
+                        <ProposalHourControl label="Event end time" value={eventEndTime} onStep={(direction) => handleGuestTimeStep('end', direction)} canStep={(direction) => canAdjustGuests('end', direction)} stepReason={(direction) => guestStepError('end', direction)} />
+                      </div>
+                      <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Guest times must stay within venue access and occur in chronological order. Security hours use this event duration.</p>
+                    </section>
+
+                    {hasLegacyOffHourTime ? <p role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/8 p-2.5 text-xs leading-5 text-amber-900 dark:text-amber-100">Saved times that include minutes are preserved as recorded. Their hourly controls stay disabled; choose a rental period to apply its approved on-hour defaults.</p> : null}
                     {!timeValidation.valid ? <p role="alert" className="flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-300"><AlertCircle size={14} className="shrink-0" />{timeValidation.error}</p> : null}
-
-                    <div className="border-t border-[color:var(--portal-border)] pt-4">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8c6529] dark:text-[#f1d27a]">Guest arrival &amp; event end time</h4>
-                      <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">Set when guests arrive and when the event ends. Added hours follow Luxor’s current extension rules.</p>
-                      <div className="mt-3"><LuxorTimeRangeTimeline title="Guest arrival and event end" startTime={guestArrivalTime} endTime={eventEndTime} startLabel="Guest arrival time" endLabel="Event end time" onChange={handleGuestRangeChange} scrollKey={`${eventDateValue}-${rentalPeriod}-guest`} stepMinutes={timelineStepMinutes} minMinutes={isCustomRental ? timelineTimeMinutes(rentalStartTime) : timelineMinimumClock} maxMinutes={isCustomRental ? timelineTimeMinutes(rentalEndTime) : timelineMaximumClock} minRangeMinutes={timelineStepMinutes} disabled={!currentRentalPeriodAvailable || availabilityStatus !== 'ready'} helper="Move either endpoint or the highlighted range. Keyboard arrows adjust a focused endpoint." /></div>
-                    </div>
                     {availabilityStatus === 'error' ? <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">Confirm availability before continuing.</p> : null}
                   </section>
                 </div>
