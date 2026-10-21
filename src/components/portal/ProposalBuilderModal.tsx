@@ -304,6 +304,8 @@ type ProposalBuilderModalProps = {
   pricingEndpoint?: string
   /** Active permanent test run; keeps this production builder on an isolated save/publish path. */
   testRunId?: string | null
+  /** Published test artifacts are read-only; calculations remain available for preview. */
+  testProposalReadOnly?: boolean
   notes: string
   onNotesChange: (value: string) => void
   /** An owner must explicitly configure the tax treatment for each final proposal. */
@@ -809,6 +811,7 @@ export function ProposalBuilderModal({
   onCalculationChange,
   pricingEndpoint = '/api/proposal-pricing',
   testRunId = null,
+  testProposalReadOnly = false,
   notes,
   onNotesChange,
   taxRate,
@@ -1803,6 +1806,7 @@ export function ProposalBuilderModal({
   const isCalculating = pricingStatus === 'loading'
   const hasFinalPrice = pricingStatus === 'ready' && !selectedPackageNeedsReview && typeof finalEventPrice === 'number' && finalEventPrice >= 0
   const canPublish = Boolean(eventDateValue && guestCount > 0 && Number.isInteger(guestCount) && (guestCount <= LUXOR_MAX_GUESTS || isPreservedSavedGuestCount) && availabilityStatus === 'ready' && currentRentalPeriodAvailable && timeValidation.valid && hasFinalPrice && pricingErrors.length === 0 && publicationErrors.length === 0 && !paymentPlanRequired)
+  const missingPriceInputs = [!eventDateValue ? 'event date' : '', guestCount < 1 ? 'guest count' : ''].filter(Boolean)
   const reviewTogether = !testRunId && presentationMode === 'in_person'
   const publishDisabled = submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount
   const publishTitle = hasUnmigratedLegacyDiscount
@@ -1988,6 +1992,7 @@ export function ProposalBuilderModal({
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 1 of 6</p>
                 <h3 className="mt-1 font-serif text-2xl font-semibold sm:text-3xl">Start with the facts that set the price.</h3>
                 <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">The date, rental period, guest count, promotion, tax treatment, and selected services are the only inputs that shape this proposal. The final price comes from Luxor’s pricing rules.</p>
+                {missingPriceInputs.length ? <p role="status" className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-4 py-3 text-xs leading-5 text-amber-900 dark:text-amber-100">Choose the {missingPriceInputs.join(' and ')} to load package prices and availability{testRunId ? ' (the tour date does not set the event date)' : ''}.</p> : null}
               </div>
 
               <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
@@ -2188,6 +2193,13 @@ export function ProposalBuilderModal({
                 </div>
               ) : null}
 
+              {missingPriceInputs.length ? <div role="status" className="flex flex-col gap-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-4 text-sm leading-6 text-amber-900 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+                <p>Add the {missingPriceInputs.join(' and ')} in Step 1 to calculate the current package prices.</p>
+                <button type="button" onClick={() => { setStepIndex(0); setValidationMessage(null) }} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg border border-amber-700/20 px-3 text-[10px] font-black uppercase tracking-[0.1em]">Go to Details</button>
+              </div> : null}
+
+              {testProposalReadOnly ? <div role="note" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-xs leading-5 text-[color:var(--portal-muted)]">This Test Lead proposal is already published. You can adjust details to preview current prices, but this run cannot save or send another proposal.</div> : null}
+
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {packageCards.map((packageOption) => {
                   const active = packageOption.id === packageTierId
@@ -2284,10 +2296,11 @@ export function ProposalBuilderModal({
                   <div className="max-w-2xl">
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8c6529] dark:text-[#f1d27a]">Client email</p>
                     <h4 id="proposal-breakdown-email-title" className="mt-1 font-serif text-xl font-semibold">Email Proposal Breakdown</h4>
-                    <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Send the four-package comparison and selected package details. Book Now opens the selected package’s secure proposal page. This email does not create a booking or collect payment.</p>
+                    <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Preview the four-package comparison and selected package details. Book Now opens the selected package’s secure proposal page. This email does not create a booking or collect payment.</p>
                   </div>
-                  {testRunId ? <span className="shrink-0 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-[10px] font-bold text-amber-900 dark:text-amber-100">Unavailable in isolated test mode</span> : null}
+                  {testRunId ? <span className="shrink-0 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-[10px] font-bold text-amber-900 dark:text-amber-100">Preview available · sending disabled</span> : null}
                 </div>
+                {testRunId ? <p className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">The isolated Test Lead can load prices and preview this email. Email delivery remains disabled in test mode.</p> : null}
                 <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
                   <label className="block min-w-0 space-y-1.5">
                     <span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Recipient email</span>
@@ -2477,7 +2490,7 @@ export function ProposalBuilderModal({
                 paymentCadence={paymentPlanDraft?.payment_cadence ?? 'evenly_spaced'}
                 bookingPaymentAmount={paymentPlanDraft?.booking_payment_amount ?? asNumber(selectedContext.booking_payment_default)}
                 preferredPaymentMethod={paymentPlanDraft?.preferred_payment_method ?? 'card'}
-                editable
+                editable={!testProposalReadOnly}
                 onPaymentPlanChange={(patch) => updatePaymentPlan({ mode: 'deposit_and_balance', booking_payment_percent: 25, final_payment_due_days_before_event: 60, ...patch })}
               />}
 
@@ -2710,8 +2723,8 @@ export function ProposalBuilderModal({
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             {stepIndex > 0 ? <button type="button" onClick={retreat} disabled={submitting || publicationPending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:opacity-40"><ArrowLeft size={14} /> Back</button> : null}
             {stepIndex < STEPS.length - 1 ? <button type="button" onClick={advance} disabled={submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] disabled:opacity-40">{continueLabel} <ArrowRight size={14} className="!text-white" /></button> : <>
-              <button type="button" onClick={() => onSubmit('save')} disabled={submitting || publicationPending || hasUnmigratedLegacyDiscount} title={hasUnmigratedLegacyDiscount ? 'Save the legacy adjustment as a promotion first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-40"><Eye size={14} /> Save draft</button>
-              <button type="button" onClick={() => onSubmit(reviewTogether ? 'in_person' : 'email')} disabled={submitting || (!publicationPending && publishDisabled)} title={publishTitle} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:!text-[color:var(--portal-muted)] disabled:shadow-none disabled:[&>svg]:!text-[color:var(--portal-muted)]">{reviewTogether ? <Users size={14} /> : <Mail size={14} />}{submitting ? reviewTogether ? 'Preparing…' : 'Publishing…' : reviewTogether ? 'Begin client handoff' : 'Publish & email final proposal'}</button>
+              <button type="button" onClick={() => onSubmit('save')} disabled={submitting || publicationPending || hasUnmigratedLegacyDiscount || testProposalReadOnly} title={testProposalReadOnly ? 'This published test proposal is read-only.' : hasUnmigratedLegacyDiscount ? 'Save the legacy adjustment as a promotion first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)] transition hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-40"><Eye size={14} /> Save draft</button>
+              <button type="button" onClick={() => onSubmit(reviewTogether ? 'in_person' : 'email')} disabled={submitting || testProposalReadOnly || (!publicationPending && publishDisabled)} title={testProposalReadOnly ? 'This published test proposal is read-only.' : publishTitle} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-[0.12em] !text-white shadow-lg shadow-[#b98a3e]/15 transition hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:!text-[color:var(--portal-muted)] disabled:shadow-none disabled:[&>svg]:!text-[color:var(--portal-muted)]">{reviewTogether ? <Users size={14} /> : <Mail size={14} />}{submitting ? reviewTogether ? 'Preparing…' : 'Publishing…' : reviewTogether ? 'Begin client handoff' : 'Publish & email final proposal'}</button>
             </>}
           </div>
         </footer>

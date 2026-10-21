@@ -112,6 +112,7 @@ import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext } fr
 import { findProposalLeadEvent, getLeadClientProposals, getProposalCardState, getProposalWorkflowDisplayState, getSavedProposalPricingSummary } from '@/lib/luxorProposalCard'
 import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
+import { DEFAULT_NEW_PROPOSAL_PAYMENT_PLAN } from '@/lib/luxorPaymentSchedule'
 import {
   hasCancellableTour,
   LeadLifecycleActionSheet,
@@ -454,6 +455,7 @@ export default function LeadDetailPage({
 
   const [lead, setLead] = useState<LuxorInquiry | null>(null)
   const [activeTestRunId, setActiveTestRunId] = useState<string | null>(null)
+  const [testProposalReadOnly, setTestProposalReadOnly] = useState(false)
   const [loadingTestRun, setLoadingTestRun] = useState(false)
   const activeTestRunRequestRef = useRef<string | null>(null)
   const [notes, setNotes] = useState<LuxorNote[]>([])
@@ -2433,6 +2435,7 @@ export default function LeadDetailPage({
       package_name: String(savedContext?.package_name || packageId.replace('_', ' ')),
       ...savedContext,
       pricing_selection: { ...savedSelection },
+      ...(!invoice && !savedContext?.payment_plan ? { payment_plan: { ...DEFAULT_NEW_PROPOSAL_PAYMENT_PLAN } } : {}),
     }
     setProposalContext(nextContext)
     setSelectedProposalPackageId(packageId)
@@ -2490,6 +2493,7 @@ export default function LeadDetailPage({
 
   const openProposalBuilder = async (invoice?: LuxorInvoice | null) => {
     if (!lead || !isLuxorTestInquiry(lead)) {
+      setTestProposalReadOnly(false)
       initializeProposalBuilder(invoice)
       return
     }
@@ -2504,10 +2508,8 @@ export default function LeadDetailPage({
       const payload = await response.json().catch(() => ({})) as { artifact?: { status?: string; revision?: number; details?: { invoice?: unknown } | null }; error?: string }
       if (!response.ok) throw new Error(payload.error || 'The test proposal could not be loaded.')
       setTestProposalRevision(payload.artifact?.revision ?? 0)
-      if (payload.artifact?.status === 'sent') {
-        notify({ title: 'Test proposal already published', description: 'The proposal is preserved in this run. Open a new Test Lead run to draft another proposal.', variant: 'success' })
-        return
-      }
+      const artifactStatus = payload.artifact?.status
+      setTestProposalReadOnly(Boolean(artifactStatus && !['simulated', 'drafted'].includes(artifactStatus)))
       const savedInvoice = payload.artifact?.details?.invoice
       initializeProposalBuilder(savedInvoice && typeof savedInvoice === 'object' ? savedInvoice as LuxorInvoice : null)
     } catch (error) {
@@ -2528,10 +2530,8 @@ export default function LeadDetailPage({
         const payload = await response.json().catch(() => ({})) as { artifact?: { status?: string; revision?: number; details?: { invoice?: unknown } | null }; error?: string }
         if (!response.ok) throw new Error(payload.error || 'The test proposal could not be loaded.')
         setTestProposalRevision(payload.artifact?.revision ?? 0)
-        if (payload.artifact?.status === 'sent') {
-          notify({ title: 'Test proposal already published', description: 'The proposal and prepared email are preserved in this run’s history. No signing, booking, or payment action is available.', variant: 'success' })
-          return
-        }
+        const artifactStatus = payload.artifact?.status
+        setTestProposalReadOnly(Boolean(artifactStatus && !['simulated', 'drafted'].includes(artifactStatus)))
         const savedInvoice = payload.artifact?.details?.invoice
         if (savedInvoice && typeof savedInvoice === 'object') openProposalBuilder(savedInvoice as LuxorInvoice)
         else openProposalBuilder()
@@ -9037,6 +9037,7 @@ export default function LeadDetailPage({
         onCalculationChange={handleProposalCalculationChange}
         pricingEndpoint="/api/proposal-pricing"
         testRunId={isLuxorTestInquiry(lead) ? activeTestRunId : null}
+        testProposalReadOnly={testProposalReadOnly}
         notes={invoiceNotes}
         onNotesChange={setInvoiceNotes}
         taxRate={invoiceTaxRate}

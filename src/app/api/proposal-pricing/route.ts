@@ -78,9 +78,10 @@ export async function POST(request: NextRequest) {
       const [artifact] = await supabaseRest<Array<{ status: string; details: Record<string, unknown> }>>(
         `luxor_test_run_artifacts?select=status,details&test_run_id=eq.${encodeURIComponent(testRunId)}&artifact_type=eq.proposal&limit=1`,
       )
-      if (artifact && !['simulated', 'drafted'].includes(artifact.status)) {
-        return NextResponse.json({ error: 'This test proposal is already published.' }, { status: 409 })
-      }
+      // This endpoint only calculates prices and has no write side effects.
+      // Let an accepted/published test snapshot be recalculated for preview;
+      // save and publish actions remain fenced by luxorTestProposalServer and
+      // the run-scoped RPC.
       const invoice = object(artifact?.details?.invoice)
       if (invoice) existingTestInvoice = invoice as unknown as LuxorInvoice
     }

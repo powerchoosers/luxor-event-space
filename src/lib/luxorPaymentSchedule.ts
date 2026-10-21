@@ -2,6 +2,16 @@ import type { LuxorProposalPaymentPlan } from './luxorInquiryTypes'
 
 export type LuxorPaymentCadence = 'evenly_spaced' | 'biweekly' | 'monthly'
 
+/** Initial editable plan for new proposals; saved plans always take precedence. */
+export const DEFAULT_NEW_PROPOSAL_PAYMENT_PLAN = {
+  mode: 'deposit_and_balance',
+  booking_payment_percent: 25,
+  final_payment_due_days_before_event: 60,
+  payment_count: 4,
+  payment_cadence: 'monthly',
+  preferred_payment_method: 'card',
+} as const satisfies Partial<LuxorProposalPaymentPlan>
+
 export type LuxorPaymentScheduleRow = {
   installment_order: number
   label: string
