@@ -20,7 +20,6 @@ function EmailsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
-  const [readerOpen, setReaderOpen] = useState(Boolean(searchParams?.get('messageId')))
   const [sharedMailboxes, setSharedMailboxes] = useState<LuxorSharedMailbox[]>([])
   const [mailboxDrawerOpen, setMailboxDrawerOpen] = useState(false)
 
@@ -52,12 +51,13 @@ function EmailsPageContent() {
   }, [])
 
   return (
-    <PortalPageFrame className="h-full flex-1 min-h-0 overflow-clip">
-      <div className={readerOpen ? 'hidden xl:block' : ''}>
+    <PortalPageFrame className="h-full flex-1 min-h-0 overflow-clip !gap-2 sm:!gap-4">
+      <div>
         <PortalPageHeader
           icon={<Mail size={18} />}
           title="Emails"
           mobileActionsInline
+          titleClassName="whitespace-nowrap text-[1.875rem] sm:text-3xl"
           actions={
             <div className="flex items-center gap-2">
             <PortalButton
@@ -86,7 +86,6 @@ function EmailsPageContent() {
           key={activeMailbox?.key || 'all'}
           inquiries={inquiries}
           initialMessageId={searchParams?.get('messageId') || undefined}
-          onReaderOpenChange={setReaderOpen}
           mailboxEmail={activeMailbox?.address}
           mailboxName={activeMailbox?.label}
           sharedMailboxes={sharedMailboxes}

@@ -28,6 +28,7 @@ export function PortalPageHeader({
   description,
   actions,
   mobileActionsInline = false,
+  titleClassName,
 }: {
   icon?: React.ReactNode
   title: string
@@ -35,6 +36,7 @@ export function PortalPageHeader({
   description?: string
   actions?: React.ReactNode
   mobileActionsInline?: boolean
+  titleClassName?: string
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -65,7 +67,7 @@ export function PortalPageHeader({
             </button>
           ) : null}
           {icon ? <span className="shrink-0 text-[#caa24c]">{icon}</span> : null}
-          <h1 className={`font-serif font-semibold leading-tight text-[color:var(--portal-text)] ${mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-3xl' : 'text-2xl sm:text-3xl'}`}>{title}</h1>
+          <h1 className={`font-serif font-semibold leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-3xl' : 'text-2xl sm:text-3xl')}`}>{title}</h1>
           {titleAccessory}
         </div>
         {description ? <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p> : null}

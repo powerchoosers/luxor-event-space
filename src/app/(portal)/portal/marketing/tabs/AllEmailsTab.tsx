@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Inbox,
   Folder,
   ArrowLeft,
   Send,
@@ -22,13 +21,9 @@ import {
   Loader2,
   FilePenLine,
   X,
-  PanelLeftClose,
-  PanelLeftOpen,
   Maximize2,
   Minimize2,
   MoreVertical,
-  SlidersHorizontal,
-  ChevronDown,
   Download,
   FileText,
   Eye,
@@ -38,7 +33,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import dynamic from 'next/dynamic'
-import { PortalCloseButton, PortalContactAvatar, PortalPagination } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalContactAvatar } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import type { LuxorSharedMailbox } from '@/lib/luxorSharedMailboxes'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
@@ -184,12 +179,11 @@ async function requestMailbox(input: LuxorMailboxPageRequest, signal: AbortSigna
 
 type ActiveFolder = string
 
-const PANEL_TRANSITION = { duration: 0.32, ease: [0.23, 1, 0.32, 1] as const }
+const MAILBOX_PAGE_SIZE = 20
 
 interface AllEmailsTabProps {
   inquiries?: LuxorInquiry[]
   initialMessageId?: string
-  onReaderOpenChange?: (open: boolean) => void
   mailboxEmail?: string
   mailboxName?: string
   sharedMailboxes: LuxorSharedMailbox[]
@@ -199,7 +193,7 @@ interface AllEmailsTabProps {
   onMailboxChange: (key: string) => void
 }
 
-export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenChange, mailboxEmail, mailboxName,
+export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, mailboxName,
   sharedMailboxes, activeMailboxKey, mailboxDrawerOpen, onMailboxDrawerOpenChange, onMailboxChange }: AllEmailsTabProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -208,20 +202,19 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
   const threadScrollRef = useRef<HTMLDivElement | null>(null)
   const readerMenuRef = useRef<HTMLDivElement | null>(null)
+  const mailboxListRef = useRef<HTMLDivElement | null>(null)
   const [messages, setMessages] = useState<EmailMessageItem[]>([])
+  const messagesRef = useRef<EmailMessageItem[]>([])
   const [folderCatalog, setFolderCatalog] = useState<LuxorMailFolder[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
 
   // Active navigation & filters
   const [activeFolder, changeActiveFolder] = useState<ActiveFolder>('inbox')
   const [searchQuery, changeSearchQuery] = useState('')
-
-  // Pagination
-  const PAGE_SIZE = 25
-  const [currentPage, setCurrentPage] = useState(1)
-  const setActiveFolder = (folder: string) => { changeActiveFolder(folder); setCurrentPage(1) }
-  const setSearchQuery = (query: string) => { changeSearchQuery(query); setCurrentPage(1) }
 
   // Selected email detail state
   const [selectedId, setSelectedId] = useState<string | null>(initialMessageId || null)
@@ -250,11 +243,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
   const [viewMode, setViewMode] = useState<'html' | 'text'>('html')
   const [viewportWidth, setViewportWidth] = useState<'full' | 'tablet' | 'mobile'>('full')
   const [blockExternalImages, setBlockExternalImages] = useState(false)
-  const [folderPaneOpen, setFolderPaneOpen] = useState(true)
-  const [folderFilterOpen, setFolderFilterOpen] = useState(false)
-  const [wideViewport, setWideViewport] = useState(false)
-  const folderFilterRef = useRef<HTMLElement | null>(null)
-  const folderFilterTriggerRef = useRef<HTMLButtonElement | null>(null)
   const mailboxDrawerRef = useRef<HTMLElement | null>(null)
   const [readerExpanded, setReaderExpanded] = useState(false)
   const [readerMenuOpen, setReaderMenuOpen] = useState(false)
@@ -269,10 +257,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
   const [portalTheme, setPortalTheme] = useState<'light' | 'dark'>('dark')
 
   useEffect(() => {
-    onReaderOpenChange?.(compactReaderOpen)
-  }, [compactReaderOpen, onReaderOpenChange])
-
-  useEffect(() => {
     const syncTheme = () => setPortalTheme(document.body.dataset.portalTheme === 'light' ? 'light' : 'dark')
     syncTheme()
     const observer = new MutationObserver(syncTheme)
@@ -281,23 +265,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
   }, [])
 
   useEffect(() => {
-    const media = window.matchMedia('(min-width: 1280px)')
-    const syncViewport = () => setWideViewport(media.matches)
-    syncViewport()
-    media.addEventListener('change', syncViewport)
-    return () => media.removeEventListener('change', syncViewport)
-  }, [])
-
-  useEffect(() => {
-    if (!mailboxDrawerOpen && !folderFilterOpen) return
+    if (!mailboxDrawerOpen) return
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const isDrawer = mailboxDrawerOpen
-    const dialog = isDrawer ? mailboxDrawerRef.current : folderFilterRef.current
-    const trigger = isDrawer ? null : folderFilterTriggerRef.current
-    const close = () => {
-      if (isDrawer) onMailboxDrawerOpenChange(false)
-      else setFolderFilterOpen(false)
-    }
+    const dialog = mailboxDrawerRef.current
+    const close = () => onMailboxDrawerOpenChange(false)
     const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
     ) || []).filter((element) => element.getClientRects().length > 0)
@@ -309,8 +280,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
         close()
         return
       }
-      const trapFocus = isDrawer || !window.matchMedia('(min-width: 1280px)').matches
-      if (!trapFocus || event.key !== 'Tab') return
+      if (event.key !== 'Tab') return
       const items = focusable()
       if (!items.length) { event.preventDefault(); dialog?.focus(); return }
       if (event.shiftKey && document.activeElement === items[0]) {
@@ -321,48 +291,101 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
     }
     const handleFocus = (event: FocusEvent) => {
       if (!dialog || !(event.target instanceof Node) || dialog.contains(event.target)) return
-      if (isDrawer || !window.matchMedia('(min-width: 1280px)').matches) (focusable()[0] || dialog).focus()
-    }
-    const handleOutsidePointer = (event: PointerEvent) => {
-      if (isDrawer || !dialog || !(event.target instanceof Node)) return
-      if (!dialog.contains(event.target) && !trigger?.contains(event.target)) setFolderFilterOpen(false)
+      (focusable()[0] || dialog).focus()
     }
     document.addEventListener('keydown', handleKeyDown)
     document.addEventListener('focusin', handleFocus)
-    document.addEventListener('pointerdown', handleOutsidePointer)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
       document.removeEventListener('focusin', handleFocus)
-      document.removeEventListener('pointerdown', handleOutsidePointer)
       window.requestAnimationFrame(() => {
-        if (trigger) trigger.focus()
-        else previousFocus?.focus()
+        previousFocus?.focus()
       })
     }
-  }, [mailboxDrawerOpen, folderFilterOpen, onMailboxDrawerOpenChange])
+  }, [mailboxDrawerOpen, onMailboxDrawerOpenChange])
 
   const pageSnapshot = useRef<{ key: string; value: string | null }>({ key: '', value: null })
-  const pageRequest = useRef<AbortController | null>(null)
+  const activePage = useRef(0)
+  const mailboxRequest = useRef<{ key: string; page: number; controller: AbortController } | null>(null)
+  const mailboxKey = JSON.stringify([activeFolder, searchQuery.trim(), mailboxEmail || ''])
+  const mailboxKeyRef = useRef(mailboxKey)
+  mailboxKeyRef.current = mailboxKey
   const [pageResult, setPageResult] = useState<LuxorMailboxPageResult<EmailMessageItem> | null>(null)
+
+  const resetMailboxPages = () => {
+    mailboxRequest.current?.controller.abort()
+    mailboxRequest.current = null
+    pageSnapshot.current = { key: '', value: null }
+    activePage.current = 0
+    messagesRef.current = []
+    mailboxListRef.current?.scrollTo({ top: 0 })
+    setMessages([])
+    setPageResult(null)
+    setHasMore(true)
+    setLoadMoreError(null)
+    setError(null)
+    setLoading(true)
+    setLoadingMore(false)
+  }
+
+  const setActiveFolder = (folder: string) => {
+    if (folder === activeFolder) return
+    resetMailboxPages()
+    changeActiveFolder(folder)
+  }
+
+  const setSearchQuery = (query: string) => {
+    if (query === searchQuery) return
+    resetMailboxPages()
+    changeSearchQuery(query)
+  }
+
   const loadEmails = useCallback(async (force = false) => {
-    pageRequest.current?.abort()
-    const controller = new AbortController()
-    pageRequest.current = controller
     const key = JSON.stringify([activeFolder, searchQuery.trim(), mailboxEmail || ''])
-    if (force || pageSnapshot.current.key !== key) pageSnapshot.current = { key, value: null }
+    const previousPageCount = pageSnapshot.current.key === key ? Math.max(1, activePage.current) : 1
+    const pagesToLoad = force ? previousPageCount : 1
+    const queryChanged = pageSnapshot.current.key !== key
+    mailboxRequest.current?.controller.abort()
+    const controller = new AbortController()
+    const request = { key, page: 1, controller }
+    mailboxRequest.current = request
+    if (queryChanged) {
+      pageSnapshot.current = { key, value: null }
+      activePage.current = 0
+      messagesRef.current = []
+      setMessages([])
+      setPageResult(null)
+      setHasMore(true)
+      setLoadMoreError(null)
+    } else if (force) {
+      pageSnapshot.current = { key, value: null }
+    }
     setLoading(true)
     setError(null)
     try {
-      const result = await requestMailbox({ folder: activeFolder, query: searchQuery, page: currentPage,
-        pageSize: PAGE_SIZE, snapshot: pageSnapshot.current.value, starred: [], email: mailboxEmail }, controller.signal)
-      if (controller.signal.aborted) return
-      pageSnapshot.current = { key, value: result.snapshot }
+      let snapshot: string | null = null
+      let result: LuxorMailboxPageResult<EmailMessageItem> | null = null
+      const refreshedMessages = new Map<string, EmailMessageItem>()
+      for (let page = 1; page <= pagesToLoad; page += 1) {
+        result = await requestMailbox({ folder: activeFolder, query: searchQuery, page,
+          pageSize: MAILBOX_PAGE_SIZE, snapshot, starred: [], email: mailboxEmail }, controller.signal)
+        if (controller.signal.aborted || mailboxRequest.current !== request) return
+        if (page === 1) snapshot = result.snapshot
+        result.messages.forEach((message) => refreshedMessages.set(messageKey(message), message))
+        if (result.messages.length === 0 || result.page * MAILBOX_PAGE_SIZE >= result.total) break
+      }
+      if (controller.signal.aborted || mailboxRequest.current !== request || !result) return
+      const nextMessages = [...refreshedMessages.values()]
+      pageSnapshot.current = { key, value: snapshot }
+      activePage.current = result.page
       setPageResult(result)
-      setMessages(result.messages)
-      setStarredIds(new Set(result.starredIds || result.messages.filter((message) => message.isStarred).map((message) => message.id)))
+      messagesRef.current = nextMessages
+      setMessages(nextMessages)
+      setStarredIds(new Set(result.starredIds || nextMessages.filter((message) => message.isStarred).map((message) => message.id)))
       setFolderCatalog(result.folders)
-      if (result.page !== currentPage) setCurrentPage(result.page)
-      const latest = new Map(result.messages.map(message => [message.id, message]))
+      setHasMore(result.messages.length > 0 && result.page * MAILBOX_PAGE_SIZE < result.total)
+      setLoadMoreError(null)
+      const latest = new Map(nextMessages.map(message => [message.id, message]))
       const updateState = (detail: EmailMessageItem) => {
         const summary = latest.get(detail.id)
         return summary && detail.id.startsWith('mail-')
@@ -371,19 +394,84 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
       }
       for (const [cacheKey, detail] of messageDetailCache) messageDetailCache.set(cacheKey, updateState(detail))
       setMessageDetail(current => current ? updateState(current) : current)
-    } catch {
-      if (!controller.signal.aborted) setError('The mailbox could not load this page. Please retry.')
+    } catch (requestError) {
+      if (!controller.signal.aborted && mailboxRequest.current === request) {
+        setError(requestError instanceof Error ? requestError.message : 'The mailbox could not load this page. Please retry.')
+      }
     } finally {
-      if (!controller.signal.aborted) setLoading(false)
+      if (mailboxRequest.current === request) {
+        mailboxRequest.current = null
+        setLoading(false)
+        setLoadingMore(false)
+      }
     }
-  }, [activeFolder, searchQuery, currentPage, mailboxEmail])
+  }, [activeFolder, searchQuery, mailboxEmail])
+
+  const loadNextPage = useCallback(async () => {
+    const key = JSON.stringify([activeFolder, searchQuery.trim(), mailboxEmail || ''])
+    if (!hasMore || loading || loadingMore || mailboxRequest.current || pageSnapshot.current.key !== key || !pageSnapshot.current.value) return
+    const page = activePage.current + 1
+    const controller = new AbortController()
+    const request = { key, page, controller }
+    mailboxRequest.current = request
+    setLoadingMore(true)
+    setLoadMoreError(null)
+    try {
+      const result = await requestMailbox({ folder: activeFolder, query: searchQuery, page,
+        pageSize: MAILBOX_PAGE_SIZE, snapshot: pageSnapshot.current.value, starred: [], email: mailboxEmail }, controller.signal)
+      if (controller.signal.aborted || mailboxRequest.current !== request || mailboxKeyRef.current !== key) return
+      const known = new Set(messagesRef.current.map(messageKey))
+      const appended = result.messages.filter((message) => !known.has(messageKey(message)))
+      const nextMessages = [...messagesRef.current, ...appended]
+      messagesRef.current = nextMessages
+      setMessages(nextMessages)
+      setPageResult(result)
+      setStarredIds(new Set(result.starredIds || nextMessages.filter((message) => message.isStarred).map((message) => message.id)))
+      setFolderCatalog(result.folders)
+      activePage.current = result.page
+      pageSnapshot.current = { key, value: result.snapshot }
+      setHasMore(result.messages.length > 0 && result.page * MAILBOX_PAGE_SIZE < result.total)
+      const latest = new Map(nextMessages.map((message) => [message.id, message]))
+      const updateState = (detail: EmailMessageItem) => {
+        const summary = latest.get(detail.id)
+        return summary && detail.id.startsWith('mail-')
+          ? { ...detail, isRead: summary.isRead, deliveryStatus: summary.deliveryStatus, deliveryError: summary.deliveryError }
+          : detail
+      }
+      for (const [cacheKey, detail] of messageDetailCache) messageDetailCache.set(cacheKey, updateState(detail))
+      setMessageDetail((current) => current ? updateState(current) : current)
+    } catch (requestError) {
+      if (!controller.signal.aborted && mailboxRequest.current === request) {
+        setLoadMoreError(requestError instanceof Error ? requestError.message : 'More messages could not load. Please retry.')
+      }
+    } finally {
+      if (mailboxRequest.current === request) {
+        mailboxRequest.current = null
+        setLoadingMore(false)
+      }
+    }
+  }, [activeFolder, searchQuery, mailboxEmail, hasMore, loading, loadingMore])
 
   useEffect(() => {
     // Search is server-side across all saved mail; debounce typing and abort
     // obsolete page requests so a slow response cannot replace newer results.
     const timer = window.setTimeout(() => { void loadEmails() }, 200)
-    return () => { window.clearTimeout(timer); pageRequest.current?.abort() }
+    return () => {
+      window.clearTimeout(timer)
+      mailboxRequest.current?.controller.abort()
+    }
   }, [loadEmails])
+
+  useEffect(() => {
+    const root = mailboxListRef.current
+    const sentinel = root?.querySelector<HTMLElement>('[data-mailbox-list-end]')
+    if (!root || !sentinel || !hasMore || loading || loadingMore || loadMoreError || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadNextPage()
+    }, { root, rootMargin: '280px 0px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [hasMore, loading, loadingMore, loadMoreError, messages.length, loadNextPage])
 
   useEffect(() => {
     const nextInitialMessageId = initialMessageId || null
@@ -438,7 +526,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Read state could not be saved.')
       const apply = (message: EmailMessageItem) => message.id === id ? { ...message, isRead: result.isRead } : message
-      setMessages((current) => current.map(apply))
+      setMessages((current) => {
+        const next = current.map(apply)
+        messagesRef.current = next
+        return next
+      })
       setMessageDetail((current) => current ? apply(current) : current)
       for (const [key, detail] of messageDetailCache) if (detail.id === id) messageDetailCache.set(key, apply(detail))
     } catch (error) {
@@ -684,8 +776,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
   }
 
   const totalItems = pageResult?.total || 0
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
-  const pagedMessages = messages
 
   // Matched inquiry for currently selected email
   const currentInquiry = useMemo(() => {
@@ -711,13 +801,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
         : folder.value === 'campaigns' ? stats.campaignCount
           : folder.value === 'starred' ? stats.starredCount
             : pageResult?.folderCounts[folder.value] ?? folder.count ?? 0
-  const quickFolders = [
-    { value: 'inbox', label: 'Inbox' },
-    { value: 'all', label: 'All mail' },
-    { value: 'starred', label: 'Starred' },
-    { value: 'sent', label: 'Sent' },
-  ]
-
   // Print selected email
   const handlePrint = () => {
     window.print()
@@ -823,7 +906,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
           <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] px-5 py-4">
             <div className="min-w-0">
               <p id="mailbox-drawer-title" className="font-serif text-lg tracking-[0.2em] text-[#a8792f] dark:text-[#f1d27a]">LUXOR</p>
-              <p className="mt-1 truncate text-[11px] text-[color:var(--portal-muted)]">{mailboxEmail || 'booking@luxoratlaspalmas.com'}</p>
+              <p className="mt-1 truncate text-[11px] text-[color:var(--portal-muted)]" title={mailboxEmail || 'booking@luxoratlaspalmas.com'}>
+                {mailboxName ? `${mailboxName} · ${mailboxEmail}` : mailboxEmail || 'booking@luxoratlaspalmas.com'}
+              </p>
             </div>
             <PortalCloseButton onClick={() => onMailboxDrawerOpenChange(false)} aria-label="Close mailbox navigation" />
           </div>
@@ -848,104 +933,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
           </div>
         </aside>
       </> : null}
-      <div className="portal-surface flex min-h-0 flex-1 w-full overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)] shadow-sm sm:rounded-2xl">
-      {/* PANE 1: Mailbox Folders & Navigation */}
-      <AnimatePresence initial={false}>
-      {folderPaneOpen && !readerExpanded && <motion.div
-        key="mailbox-folders"
-        initial={{ width: 0, opacity: 0, x: -12 }}
-        animate={{ width: 'var(--folder-pane-width)', opacity: 1, x: 0 }}
-        exit={{ width: 0, opacity: 0, x: -12 }}
-        transition={PANEL_TRANSITION}
-        className="w-52 [--folder-pane-width:13rem] shrink-0 border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 flex-col overflow-hidden hidden xl:flex rounded-l-2xl"
-      >
-        {/* Scrollable folder list area */}
-        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar p-4">
-          {/* Mailbox Navigation List */}
-          <div className="space-y-1">
-            <div className="mb-2 flex items-center justify-between gap-3 px-3">
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-faint)]">Folders</p>
-              <button
-                type="button"
-                onClick={() => setFolderPaneOpen(false)}
-                className="rounded-lg bg-transparent p-1.5 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
-                title="Collapse mailbox folders"
-                aria-label="Collapse mailbox folders"
-              >
-                <PanelLeftClose size={14} />
-              </button>
-            </div>
-            
-            <FolderNavItem
-              icon={<Inbox size={15} />}
-              label="Inbox"
-              count={stats.inboxCount}
-              active={activeFolder === 'inbox'}
-              onClick={() => setActiveFolder('inbox')}
-            />
-            <FolderNavItem
-              icon={<Send size={15} />}
-              label="Sent & outbox"
-              count={stats.sentCount}
-              active={activeFolder === 'sent'}
-              onClick={() => setActiveFolder('sent')}
-            />
-            <FolderNavItem
-              icon={<Mail size={15} />}
-              label="All Mail"
-              count={stats.total}
-              active={activeFolder === 'all'}
-              onClick={() => setActiveFolder('all')}
-            />
-            <FolderNavItem
-              icon={<Megaphone size={15} />}
-              label="Campaign Blasts"
-              count={stats.campaignCount}
-              active={activeFolder === 'campaigns'}
-              onClick={() => setActiveFolder('campaigns')}
-            />
-            <FolderNavItem
-              icon={<Star size={15} />}
-              label="Starred"
-              count={stats.starredCount}
-              active={activeFolder === 'starred'}
-              onClick={() => setActiveFolder('starred')}
-            />
-            {additionalFolders.map((folder) => (
-              <FolderNavItem key={folder.value} icon={<Folder size={15} />} label={folder.label}
-                count={folder.count} active={activeFolder === folder.value}
-                onClick={() => setActiveFolder(folder.value)} />
-            ))}
-          </div>
-        </div>
-
-        {/* Pinned Sync & Mailbox Footer */}
-        <div className="shrink-0 p-4 pt-3 border-t border-[color:var(--portal-border)] space-y-3">
-          <Link href="/portal/email-tools" className="flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
-            <FileText size={14} className="text-[#a8792f] dark:text-[#f1d27a]" /> Email Tools
-          </Link>
-          <div className="flex items-center justify-between text-[10px] font-mono text-[color:var(--portal-muted)]">
-            <span>Mailbox</span>
-            <button
-              type="button"
-              onClick={() => void loadEmails(true)}
-              disabled={loading}
-              className="p-1 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors"
-              title="Refresh messages"
-            >
-              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-            </button>
-          </div>
-          <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 p-2.5 text-[10px]">
-            <p className="font-bold text-[color:var(--portal-text)] truncate">{mailboxEmail || 'booking@luxoratlaspalmas.com'}</p>
-            <p className="text-[color:var(--portal-muted)] font-mono text-[9px] mt-0.5">
-              {loading ? 'Loading mailbox…' : error ? 'Mailbox refresh needs attention' : `${mailboxName || 'Saved mailbox'} · Supabase`}
-            </p>
-          </div>
-        </div>
-      </motion.div>}
-      </AnimatePresence>
-
+      <div className="flex min-h-0 flex-1 w-full overflow-hidden bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)]">
       {/* PANE 2: Message Threads List */}
       <AnimatePresence initial={false}>
       {!readerExpanded && <motion.div
@@ -953,96 +941,59 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
         initial={{ width: 0, opacity: 0, x: -12 }}
         animate={{ width: 'var(--message-list-width)', opacity: 1, x: 0 }}
         exit={{ width: 0, opacity: 0, x: -12 }}
-        transition={PANEL_TRANSITION}
+        transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
         className={`min-h-0 min-w-0 w-full [--message-list-width:100%] lg:w-80 lg:[--message-list-width:20rem] xl:w-96 xl:[--message-list-width:24rem] shrink-0 lg:border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex-col overflow-hidden ${compactReaderOpen ? 'hidden lg:flex' : 'flex'}`}
       >
-        {/* Search & Header */}
-        <div className="shrink-0 space-y-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-3 sm:px-4">
-          <div className="flex items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search size={15} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-faint)]" />
-              <input
-                type="search"
-                aria-label="Search saved email"
-                value={searchQuery}
-                maxLength={200}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search mail"
-                className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 pl-9 pr-3 text-sm text-[color:var(--portal-text)] outline-none transition-colors focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/15 placeholder:text-[color:var(--portal-faint)]"
-              />
-            </div>
-            <div className="relative shrink-0">
-              <button ref={folderFilterTriggerRef} type="button" onClick={() => { setFolderFilterOpen((open) => !open); onMailboxDrawerOpenChange(false) }}
-                aria-label="Filter folders" aria-haspopup="dialog" aria-expanded={folderFilterOpen}
-                className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${folderFilterOpen ? 'border-[#caa24c]/45 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
-                <SlidersHorizontal size={15} aria-hidden="true" /><ChevronDown size={13} aria-hidden="true" />
-              </button>
-              {folderFilterOpen ? <>
-                <button type="button" className="fixed inset-0 z-40 cursor-default bg-black/35 xl:hidden" aria-label="Close folder filters" onClick={() => setFolderFilterOpen(false)} />
-                <section ref={folderFilterRef} role="dialog" aria-modal={wideViewport ? undefined : 'true'} aria-labelledby="email-filter-title" tabIndex={-1}
-                  className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 max-h-[min(74dvh,560px)] overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-2xl xl:absolute xl:inset-x-auto xl:bottom-auto xl:right-0 xl:top-full xl:mt-2 xl:max-h-[min(72dvh,560px)] xl:w-[21rem]">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div><h3 id="email-filter-title" className="text-sm font-semibold text-[color:var(--portal-text)]">Folders and categories</h3><p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Choose a saved mailbox view.</p></div>
-                    <PortalCloseButton onClick={() => setFolderFilterOpen(false)} aria-label="Close folder filters" />
-                  </div>
-                  <div className="space-y-1">
-                    {folderOptions.map((folder) => <button key={folder.value} type="button" aria-pressed={activeFolder === folder.value}
-                      onClick={() => { setActiveFolder(folder.value); setFolderFilterOpen(false) }}
-                      className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${activeFolder === folder.value ? 'bg-[#caa24c]/12 font-semibold text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}>
-                      <span className="flex min-w-0 items-center gap-3"><Folder size={15} className="shrink-0 text-[color:var(--portal-muted)]" /><span className="truncate">{folder.label}</span></span>
-                      <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">{folderCount(folder).toLocaleString()}</span>
-                    </button>)}
-                  </div>
-                </section>
-              </> : null}
-            </div>
+        <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 sm:px-4">
+          <div className="relative">
+            <Search size={17} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-faint)]" />
+            <input
+              type="search"
+              aria-label="Search saved email"
+              value={searchQuery}
+              maxLength={200}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search mail"
+              className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 pl-10 pr-3 text-base text-[color:var(--portal-text)] outline-none transition-colors focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/15 placeholder:text-[color:var(--portal-faint)]"
+            />
           </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto portal-scrollbar pb-0.5" aria-label="Quick email filters">
-            {quickFolders.map((folder) => <button key={folder.value} type="button" aria-pressed={activeFolder === folder.value}
-              onClick={() => setActiveFolder(folder.value)}
-              className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${activeFolder === folder.value ? 'border-[#caa24c]/45 bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
-              {folder.label}
-            </button>)}
-          </div>
-          <div className="flex items-center justify-between gap-3 px-1">
-            <div className="flex min-w-0 items-center gap-2">
-              {!folderPaneOpen && <button type="button" onClick={() => setFolderPaneOpen(true)} className="hidden shrink-0 rounded-lg p-1.5 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] xl:inline-flex" title="Show folders" aria-label="Show folders"><PanelLeftOpen size={14} /></button>}
-              <h3 className="truncate text-xs font-semibold text-[color:var(--portal-text)]" title={activeFolderLabel}>{activeFolderLabel}</h3>
-              <span className="shrink-0 text-[10px] tabular-nums text-[color:var(--portal-muted)]">{totalItems.toLocaleString()}</span>
+          <div className="mt-2 flex min-h-9 items-center justify-between gap-3 px-1">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <h3 className="truncate text-sm font-semibold text-[color:var(--portal-text)]" title={activeFolderLabel}>{activeFolderLabel}</h3>
+              <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">{totalItems.toLocaleString()}</span>
             </div>
-            <button type="button" onClick={() => void loadEmails(true)} disabled={loading} aria-label="Refresh messages" title="Refresh messages"
+            <button type="button" onClick={() => void loadEmails(true)} disabled={loading || loadingMore} aria-label="Refresh messages" title="Refresh messages"
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
         </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]">
-          {loading ? (
-            <div className="p-4 space-y-3">
+        <div ref={mailboxListRef} aria-busy={loading || loadingMore} className="min-h-0 flex-1 overflow-y-auto overscroll-contain portal-scrollbar divide-y divide-[color:var(--portal-border)]">
+          {loading && messages.length === 0 ? (
+            <div className="divide-y divide-[color:var(--portal-border)]" aria-label="Loading messages">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="p-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="h-3 w-28 rounded luxor-skeleton" />
-                    <div className="h-2.5 w-12 rounded luxor-skeleton" />
+                <div key={i} className="flex min-h-[5.25rem] items-center gap-3 px-3 py-3 sm:px-4">
+                  <div className="h-10 w-10 shrink-0 rounded-full luxor-skeleton" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex items-center justify-between gap-3"><div className="h-4 w-32 rounded luxor-skeleton" /><div className="h-3 w-12 rounded luxor-skeleton" /></div>
+                    <div className="h-4 w-3/4 rounded luxor-skeleton" />
+                    <div className="h-3 w-full rounded luxor-skeleton" />
                   </div>
-                  <div className="h-3.5 w-48 rounded luxor-skeleton" />
-                  <div className="h-2.5 w-full rounded luxor-skeleton" />
+                  <div className="h-10 w-10 shrink-0 rounded-full luxor-skeleton" />
                 </div>
               ))}
             </div>
-          ) : error ? (
-            <div className="p-6 text-center">
-              <p className="text-xs text-rose-400 leading-relaxed">{error}</p>
-              <button type="button" onClick={() => void loadEmails()} className="mt-3 min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs text-[color:var(--portal-text)]">Retry page</button>
+          ) : error && messages.length === 0 ? (
+            <div role="alert" className="p-6 text-center">
+              <p className="text-sm leading-relaxed text-rose-500 dark:text-rose-300">{error}</p>
+              <button type="button" onClick={() => void loadEmails()} className="mt-3 min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 text-sm text-[color:var(--portal-text)]">Retry messages</button>
             </div>
           ) : messages.length === 0 ? (
-            <div className="py-12 px-6 text-center text-xs text-[color:var(--portal-muted)]">
-              No emails match the selected filters or search terms.
+            <div className="px-6 py-12 text-center text-sm text-[color:var(--portal-muted)]">
+              No emails match the selected folder or search.
             </div>
           ) : (
-            pagedMessages.map((msg) => {
+            messages.map((msg) => {
               const isSelected = messageKey(msg) === selectedMessageKey
               const isStarred = starredIds.has(msg.id)
               const isRead = Boolean(msg.isRead) || readIds.has(msg.id) || msg.direction !== 'incoming'
@@ -1052,16 +1003,16 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
               const isOpenable = !msg.id.startsWith('event-')
               const primaryRow = (
                 <>
-                  <PortalContactAvatar name={sender} size="sm" className="shrink-0" />
+                  <PortalContactAvatar name={sender} size="lg" className="shrink-0 text-base" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       {!isRead ? <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-[#caa24c]" /> : <span className="h-2 w-2 shrink-0" />}
                       {!isRead ? <span className="sr-only">Unread</span> : null}
-                      <span className={`min-w-0 flex-1 truncate text-xs ${isRead ? 'font-medium text-[color:var(--portal-muted)]' : 'font-bold text-[color:var(--portal-text)]'}`}>{sender}</span>
-                      <time className="shrink-0 text-[10px] tabular-nums text-[color:var(--portal-muted)]">{formatEmailDate(msg.receivedAt)}</time>
+                      <span className={`min-w-0 flex-1 truncate text-[18px] leading-6 lg:text-sm ${isRead ? 'font-medium text-[color:var(--portal-muted)]' : 'font-bold text-[color:var(--portal-text)]'}`}>{sender}</span>
+                      <time className="shrink-0 whitespace-nowrap text-sm tabular-nums leading-5 text-[color:var(--portal-muted)] lg:text-xs">{formatEmailDate(msg.receivedAt)}</time>
                     </span>
-                    <span className={`mt-0.5 block truncate text-xs ${isSelected ? 'font-semibold text-[color:var(--portal-text)]' : 'font-medium text-[color:var(--portal-text)]'}`}>{subject}</span>
-                    <span className="mt-0.5 block truncate text-[11px] leading-4 text-[color:var(--portal-muted)]">{decodeHtmlEntities(msg.summary) || 'No preview available.'}</span>
+                    <span className={`mt-0.5 block truncate text-[18px] leading-6 lg:text-sm ${isSelected ? 'font-semibold text-[color:var(--portal-text)]' : 'font-medium text-[color:var(--portal-text)]'}`}>{subject}</span>
+                    <span className="mt-0.5 block truncate text-base leading-5 text-[color:var(--portal-muted)] lg:text-xs">{decodeHtmlEntities(msg.summary) || 'No preview available.'}</span>
                     {msg.direction === 'outgoing' && msg.deliveryStatus ? <span className="mt-1 inline-flex text-[10px] text-[color:var(--portal-muted)]">{luxorMailDeliveryLabel(msg.deliveryStatus)}</span> : null}
                   </span>
                 </>
@@ -1069,11 +1020,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
 
               return (
                 <article key={messageKey(msg)} data-read={isRead ? 'true' : 'false'}
-                  className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 border-b border-[color:var(--portal-border)] px-3 py-2.5 transition-colors sm:px-4 ${isSelected ? 'bg-[#caa24c]/[0.08] shadow-[inset_3px_0_0_#caa24c]' : 'hover:bg-[color:var(--portal-soft)]/55'}`}>
+                  className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 transition-colors sm:px-4 ${isSelected ? 'bg-[#caa24c]/[0.08] shadow-[inset_3px_0_0_#caa24c]' : 'hover:bg-[color:var(--portal-soft)]/55'}`}>
                   {isOpenable ? <button type="button" onClick={() => selectMessage(msg)} aria-label={`Open conversation: ${subject}`}
                     aria-current={isSelected ? 'true' : undefined}
-                    className="flex min-h-[4.5rem] min-w-0 items-center gap-3 rounded-lg pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]">{primaryRow}</button>
-                    : <div aria-label={`${subject}, message details unavailable`} className="flex min-h-[4.5rem] min-w-0 items-center gap-3 rounded-lg pr-1 text-left">{primaryRow}</div>}
+                    className="flex min-h-[4.75rem] min-w-0 items-center gap-3 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]">{primaryRow}</button>
+                    : <div aria-label={`${subject}, message details unavailable`} className="flex min-h-[4.75rem] min-w-0 items-center gap-3 pr-1 text-left">{primaryRow}</div>}
                   <div className="flex shrink-0 flex-col items-center gap-1">
                     {isCanonical ? <button type="button" onClick={(event) => void toggleStar(msg.id, event)} disabled={savingStarIds.has(msg.id)}
                       aria-label={isStarred ? 'Remove star' : 'Star message'} aria-pressed={isStarred}
@@ -1089,21 +1040,29 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, onReaderOpenCha
               )
             })
           )}
+          {error && messages.length > 0 ? (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-4 py-3 text-sm text-[color:var(--portal-muted)]">
+              <span>{error}</span>
+              <button type="button" onClick={() => void loadEmails(true)} className="min-h-10 shrink-0 rounded-lg border border-[color:var(--portal-border)] px-3 font-medium text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">Retry refresh</button>
+            </div>
+          ) : null}
+          {loadingMore ? (
+            <div role="status" aria-live="polite" className="flex items-center justify-center gap-2 px-4 py-4 text-sm text-[color:var(--portal-muted)]">
+              <Loader2 size={15} className="animate-spin text-[#a8792f] dark:text-[#f1d27a]" /> Loading more messages
+            </div>
+          ) : null}
+          {loadMoreError ? (
+            <div role="alert" className="flex flex-wrap items-center justify-center gap-3 px-4 py-4 text-sm text-[color:var(--portal-muted)]">
+              <span>{loadMoreError}</span>
+              <button type="button" onClick={() => void loadNextPage()} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 font-medium text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">Retry</button>
+            </div>
+          ) : null}
+          {!loading && !loadingMore && !hasMore && messages.length > 0 ? (
+            <p role="status" className="px-4 py-4 text-center text-xs text-[color:var(--portal-muted)]">You’re all caught up.</p>
+          ) : null}
+          <div data-mailbox-list-end className="h-px w-full" aria-hidden="true" />
         </div>
 
-        {/* Pinned Pagination Bar */}
-        {totalPages > 1 && (
-          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-            <span className="shrink-0 whitespace-nowrap text-[10px] font-mono text-[color:var(--portal-muted)]">
-              {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalItems)} of {totalItems.toLocaleString()}
-            </span>
-            <PortalPagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
-        )}
       </motion.div>}
       </AnimatePresence>
 
@@ -1737,42 +1696,6 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   const pageText = portalTheme === 'light' ? '#18181b' : '#eee9df'
   const quoteText = portalTheme === 'light' ? '#52525b' : '#b8b0a3'
   return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow:hidden}*{box-sizing:border-box;max-width:100%}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:24px;color:${pageText};background:${pageBackground};font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:${quoteText}}table{width:100%!important;max-width:100%!important}td,th{max-width:100%!important}pre{white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:768px){body{padding:16px;font-size:15px;line-height:1.55}}</style></head><body>${content}</body></html>`
-}
-
-function FolderNavItem({
-  icon,
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode
-  label: string
-  count: number
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      title={label}
-      className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold transition-all cursor-pointer ${
-        active
-          ? 'bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/30'
-          : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
-      }`}
-    >
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span className={`shrink-0 ${active ? 'text-[#caa24c]' : 'text-[color:var(--portal-muted)]'}`}>{icon}</span>
-        <span className="truncate">{label}</span>
-      </div>
-      <span className={`text-[10px] font-mono rounded-full px-2 py-0.5 ${active ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] border border-[color:var(--portal-border)]'}`}>
-        {count}
-      </span>
-    </button>
-  )
 }
 
 function DrawerNavItem({
