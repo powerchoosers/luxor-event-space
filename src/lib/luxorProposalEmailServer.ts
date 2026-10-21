@@ -46,6 +46,10 @@ export type LuxorProposalPricingSummary = {
   eventDate: string | null
   expectedGuestCount: number | null
   eventAccess: string | null
+  /** Actual venue rental access window, separate from guest/security timing. */
+  rentalStartTime?: string | null
+  rentalEndTime?: string | null
+  rentalHours?: number | null
   guestArrivalTime?: string | null
   eventEndTime?: string | null
   weekdayCustomRental: LuxorCustomRentalSnapshot | null
@@ -304,14 +308,19 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
   const vendorPricingDisclaimer = asText(context.vendor_pricing_disclaimer)
     ?? asText(preferredVendorSnapshot?.disclaimer)
 
+  const v4CustomRental = weekdayCustomRental?.version === 4 ? weekdayCustomRental : null
+
   return {
     packageName: asText(context.package_name),
     packageInclusions: [...new Set(packageInclusions)],
     eventDate: weekdayCustomRental?.event_date ?? asText(context.event_date),
     expectedGuestCount: asMoney(context.expected_guest_count),
     eventAccess: asText(context.event_access),
-    guestArrivalTime: weekdayCustomRental?.start_time ?? asText(context.guest_arrival_time) ?? asText(context.guestArrivalTime),
-    eventEndTime: weekdayCustomRental?.end_time ?? asText(context.event_end_time) ?? asText(context.eventEndTime),
+    rentalStartTime: weekdayCustomRental?.start_time ?? asText(context.rental_start_time) ?? asText(context.start_time),
+    rentalEndTime: weekdayCustomRental?.end_time ?? asText(context.rental_end_time) ?? asText(context.end_time),
+    rentalHours: weekdayCustomRental?.duration_hours ?? asMoney(context.rental_hours),
+    guestArrivalTime: v4CustomRental?.guest_arrival_at.slice(11, 16) ?? asText(context.guest_arrival_time) ?? asText(context.guestArrivalTime),
+    eventEndTime: v4CustomRental?.event_end_at.slice(11, 16) ?? asText(context.event_end_time) ?? asText(context.eventEndTime),
     weekdayCustomRental,
     lines: serviceItems
       .filter((item) => !item.id?.startsWith('package-inclusions-'))
@@ -333,6 +342,42 @@ export function getLuxorProposalPricingSummary(invoice: LuxorInvoice): LuxorProp
     estimatedOverallInvestment,
     vendorPricingDisclaimer,
   }
+}
+
+function timeMinutes(value: string | null | undefined) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value || '')
+  if (!match) return null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  return hours <= 23 && minutes <= 59 ? hours * 60 + minutes : null
+}
+
+function nextDaySuffix(start: string | null | undefined, end: string | null | undefined) {
+  const startMinutes = timeMinutes(start)
+  const endMinutes = timeMinutes(end)
+  return startMinutes !== null && endMinutes !== null && endMinutes < startMinutes ? ' (next day)' : ''
+}
+
+/** Uses the frozen rental fields for venue access and keeps guest timing separate. */
+export function formatLuxorProposalTimeDetails(summary: LuxorProposalPricingSummary) {
+  const details: string[] = []
+  if (summary.rentalStartTime && summary.rentalEndTime) {
+    const duration = summary.rentalHours === null || summary.rentalHours === undefined
+      ? ''
+      : ` · ${displayQuantity(summary.rentalHours)} hour${summary.rentalHours === 1 ? '' : 's'}`
+    details.push(`Venue access: ${formatCatalogTime(summary.rentalStartTime)}–${formatCatalogTime(summary.rentalEndTime)}${nextDaySuffix(summary.rentalStartTime, summary.rentalEndTime)}${duration}`)
+  } else if (summary.rentalStartTime) {
+    details.push(`Venue access starts: ${formatCatalogTime(summary.rentalStartTime)}`)
+  } else if (summary.rentalEndTime) {
+    details.push(`Venue access ends: ${formatCatalogTime(summary.rentalEndTime)}`)
+  } else if (summary.eventAccess) {
+    // Older snapshots may only contain this combined schedule field. Keep it
+    // visible without claiming it is the venue rental window.
+    details.push(`Event schedule: ${summary.eventAccess}`)
+  }
+  if (summary.guestArrivalTime) details.push(`Guest arrival: ${formatCatalogTime(summary.guestArrivalTime)}`)
+  if (summary.eventEndTime) details.push(`Event end: ${formatCatalogTime(summary.eventEndTime)}${nextDaySuffix(summary.guestArrivalTime || summary.rentalStartTime, summary.eventEndTime)}`)
+  return details
 }
 
 function escapeHtml(value: string) {
@@ -467,9 +512,7 @@ export function buildLuxorProposalEmail(input: { invoice: LuxorInvoice; inquiry:
   const eventDetails = [
     proposalEventDate ? displayEventDate(proposalEventDate) : null,
     summary.expectedGuestCount === null ? null : `${displayQuantity(summary.expectedGuestCount)} guests`,
-    summary.guestArrivalTime ? `${summary.weekdayCustomRental ? 'Rental start time' : 'Guest arrival'}: ${formatCatalogTime(summary.guestArrivalTime)}` : null,
-    summary.eventEndTime ? `${summary.weekdayCustomRental ? 'Rental end time' : 'Event end'}: ${formatCatalogTime(summary.eventEndTime)}${summary.weekdayCustomRental && Number(summary.eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}` : null,
-    summary.eventAccess ? `Venue access: ${summary.eventAccess}` : null,
+    ...formatLuxorProposalTimeDetails(summary),
     summary.weekdayCustomRental ? `Venue rental: ${formatLuxorCustomRentalPriceBreakdown(summary.weekdayCustomRental)}` : null,
   ].filter(Boolean).join(' | ')
   return {
