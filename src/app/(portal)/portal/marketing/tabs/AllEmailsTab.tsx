@@ -5,6 +5,7 @@ import {
   Folder,
   ArrowLeft,
   Send,
+  Reply,
   Megaphone,
   Star,
   Search,
@@ -34,6 +35,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { PortalCloseButton, PortalContactAvatar } from '@/components/portal/PortalUI'
+import { EmailRichTextEditor } from '@/components/portal/EmailRichTextEditor'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import type { LuxorSharedMailbox } from '@/lib/luxorSharedMailboxes'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
@@ -238,6 +240,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const replyDelivery = useRef<{ fingerprint: string; key: string } | null>(null)
   const [replyStatus, setReplyStatus] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
+  const [replyPreviewOpen, setReplyPreviewOpen] = useState(false)
 
   // Reader pane controls
   const [viewMode, setViewMode] = useState<'html' | 'text'>('html')
@@ -254,15 +257,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [savingStarIds, setSavingStarIds] = useState<Set<string>>(() => new Set())
   const [starErrors, setStarErrors] = useState<Record<string, string>>({})
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set())
-  const [portalTheme, setPortalTheme] = useState<'light' | 'dark'>('dark')
-
-  useEffect(() => {
-    const syncTheme = () => setPortalTheme(document.body.dataset.portalTheme === 'light' ? 'light' : 'dark')
-    syncTheme()
-    const observer = new MutationObserver(syncTheme)
-    observer.observe(document.body, { attributes: true, attributeFilter: ['data-portal-theme'] })
-    return () => observer.disconnect()
-  }, [])
 
   useEffect(() => {
     if (!mailboxDrawerOpen) return
@@ -665,7 +659,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       })
       const data = await response.json() as { draft?: string; error?: string }
       if (!response.ok || !data.draft) throw new Error(data.error || 'Elena could not draft a reply.')
-      setReplyText(data.draft)
+      setReplyText(plainTextToEmailHtml(data.draft))
       setReplyStatus('Elena drafted this from the full conversation and client record. Review it before sending.')
     } catch (error) {
       setReplyStatus(error instanceof Error ? error.message : 'Elena could not draft a reply.')
@@ -713,6 +707,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       setReplyInstruction('')
       setReplyStatus(null)
       setReplyOpen(false)
+      setReplyPreviewOpen(false)
     } catch (error) {
       setReplyStatus(error instanceof Error ? error.message : 'Reply could not be sent.')
     } finally {
@@ -870,6 +865,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     setThread(message.threadId ? threadCache.get(message.threadId) || null : null)
     setThreadError(null)
     setReplyOpen(false)
+    setReplyPreviewOpen(false)
     setReaderMenuOpen(false)
     setReplyText('')
     setReplyInstruction('')
@@ -1067,87 +1063,15 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       </AnimatePresence>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
-      <div className={`min-h-0 min-w-0 flex-1 overflow-hidden bg-[color:var(--portal-card)] flex-col ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}>
-        <div className="shrink-0 border-b border-[color:var(--portal-border)] px-2 py-1.5 lg:hidden">
-          <button type="button" onClick={closeReader} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
-            <ArrowLeft size={18} /> Back to inbox
+      <div className={`min-h-0 min-w-0 flex-1 overflow-hidden bg-white flex-col ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}>
+        <div className="flex min-h-11 shrink-0 items-center justify-between border-b border-[#e8e2d9] bg-white px-2 py-1.5 sm:px-4">
+          <button type="button" onClick={closeReader} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm font-medium text-zinc-700 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
+            <ArrowLeft size={17} /> Back to inbox
           </button>
-        </div>
-        <AnimatePresence mode="wait" initial={false}>
-        {detailError ? (
-          <motion.div key={`error:${selectedId}`} role="alert" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-            <Mail size={28} className="text-[color:var(--portal-muted)]" />
-            <h2 className="font-semibold text-[color:var(--portal-text)]">Email body unavailable</h2>
-            <p className="max-w-md text-sm text-[color:var(--portal-muted)]">{detailError}</p>
-            <button type="button" onClick={() => setDetailRetry((value) => value + 1)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-sm hover:bg-[color:var(--portal-soft)]"><RefreshCw size={15} /> Retry loading email</button>
-          </motion.div>
-        ) : loadingDetail ? (
-          <motion.div
-            key={`loading:${selectedMessageKey || selectedId || 'email'}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduceMotion ? 0.08 : 0.16 }}
-            className="flex-1 flex flex-col p-8 space-y-6"
-            aria-label="Loading email"
-          >
-            <div className="space-y-3 border-b border-[color:var(--portal-border)] pb-6">
-              <div className="h-6 w-3/4 rounded-lg luxor-skeleton" />
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full luxor-skeleton" />
-                <div className="space-y-1.5 min-w-0 flex-1">
-                  <div className="h-3.5 w-36 rounded luxor-skeleton" />
-                  <div className="h-2.5 w-48 rounded luxor-skeleton" />
-                </div>
-              </div>
-            </div>
-            <div className="space-y-3 pt-2">
-              <div className="h-3.5 w-full rounded luxor-skeleton" />
-              <div className="h-3.5 w-11/12 rounded luxor-skeleton" />
-              <div className="h-3.5 w-4/5 rounded luxor-skeleton" />
-              <div className="h-3.5 w-full rounded luxor-skeleton" />
-            </div>
-          </motion.div>
-        ) : selectedId && messageDetail ? (
-          <motion.div
-            key={selectedMessageKey || detailCacheKey(messageDetail.id, messageDetail.folderId)}
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 12 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -8 }}
-            transition={{ duration: reduceMotion ? 0.1 : 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            {/* Email Header Bar */}
-            <div className="shrink-0 space-y-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/30 px-4 pb-3 pt-2 sm:space-y-4 sm:p-6">
-              <div className="flex items-start justify-between gap-3 sm:gap-4">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <DirectionBadge direction={messageDetail.direction} />
-                    {messageDetail.direction === 'outgoing' && messageDetail.deliveryStatus && (
-                      <span className="text-[10px] text-[color:var(--portal-muted)]">{luxorMailDeliveryLabel(messageDetail.deliveryStatus)}</span>
-                    )}
-                    {messageDetail.category && (
-                      <span className="text-[9px] font-mono uppercase bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] px-2 py-0.5 rounded border border-[color:var(--portal-border)]">
-                        {messageDetail.category}
-                      </span>
-                    )}
-                  </div>
-                  <h2 className="text-base font-bold leading-snug text-[color:var(--portal-text)] sm:text-lg sm:leading-tight">{decodeHtmlEntities(messageDetail.subject)}</h2>
-                  {messageDetail.folderPath && (
-                    <p className="mt-1 break-words text-xs text-[color:var(--portal-muted)]">Folder: {messageDetail.folderPath}</p>
-                  )}
-                </div>
-
-                {/* Main Action Buttons */}
+          <div className="flex min-w-0 items-center gap-1">
+            <span className="max-w-28 truncate pr-1 text-[10px] text-zinc-500 sm:hidden">{mailboxName || 'Luxor Email'}</span>
+            {selectedId && messageDetail ? (
                 <div className="flex shrink-0 items-center gap-1">
-                  {messageDetail.direction === 'incoming' ? <button
-                    type="button"
-                    onClick={() => setReplyOpen(true)}
-                    className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-[#caa24c] text-xs font-bold uppercase tracking-widest text-white shadow-xs transition-all hover:bg-[#d4b060] sm:h-auto sm:w-auto sm:gap-2 sm:px-4 sm:py-2"
-                    aria-label="Reply to email"
-                  >
-                    <Send size={14} /> <span className="hidden sm:inline">Reply</span>
-                  </button> : null}
                   <button
                     type="button"
                     onClick={() => {
@@ -1284,6 +1208,67 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                     </AnimatePresence>
                   </div>
                 </div>
+            ) : null}
+          </div>
+        </div>
+        <AnimatePresence mode="wait" initial={false}>
+        {detailError ? (
+          <motion.div key={`error:${selectedId}`} role="alert" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+            <Mail size={28} className="text-[color:var(--portal-muted)]" />
+            <h2 className="font-semibold text-[color:var(--portal-text)]">Email body unavailable</h2>
+            <p className="max-w-md text-sm text-[color:var(--portal-muted)]">{detailError}</p>
+            <button type="button" onClick={() => setDetailRetry((value) => value + 1)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-sm hover:bg-[color:var(--portal-soft)]"><RefreshCw size={15} /> Retry loading email</button>
+          </motion.div>
+        ) : loadingDetail ? (
+          <motion.div
+            key={`loading:${selectedMessageKey || selectedId || 'email'}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0.08 : 0.16 }}
+            className="flex-1 flex flex-col p-8 space-y-6"
+            aria-label="Loading email"
+          >
+            <div className="space-y-3 border-b border-[color:var(--portal-border)] pb-6">
+              <div className="h-6 w-3/4 rounded-lg luxor-skeleton" />
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full luxor-skeleton" />
+                <div className="space-y-1.5 min-w-0 flex-1">
+                  <div className="h-3.5 w-36 rounded luxor-skeleton" />
+                  <div className="h-2.5 w-48 rounded luxor-skeleton" />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3 pt-2">
+              <div className="h-3.5 w-full rounded luxor-skeleton" />
+              <div className="h-3.5 w-11/12 rounded luxor-skeleton" />
+              <div className="h-3.5 w-4/5 rounded luxor-skeleton" />
+              <div className="h-3.5 w-full rounded luxor-skeleton" />
+            </div>
+          </motion.div>
+        ) : selectedId && messageDetail ? (
+          <motion.div
+            key={selectedMessageKey || detailCacheKey(messageDetail.id, messageDetail.folderId)}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -8 }}
+            transition={{ duration: reduceMotion ? 0.1 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            {/* Email Header Bar */}
+            <div className="shrink-0 space-y-2 border-b border-[#e8e2d9] bg-white px-4 pb-3 pt-3 sm:px-6 sm:pb-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="break-words text-lg font-semibold leading-snug text-zinc-900 sm:text-[23px] sm:leading-7">{decodeHtmlEntities(messageDetail.subject)}</h2>
+                  {messageDetail.direction === 'outgoing' && messageDetail.deliveryStatus ? (
+                    <p className="mt-1 text-[11px] text-zinc-500">{luxorMailDeliveryLabel(messageDetail.deliveryStatus)}</p>
+                  ) : null}
+                  {messageDetail.folderPath && (
+                    <p className="mt-1 truncate text-[11px] text-zinc-500">Folder: {messageDetail.folderPath}</p>
+                  )}
+                </div>
+
+
               </div>
 
               {/* Sender / Recipient & Matched Lead Row */}
@@ -1293,36 +1278,39 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               {messageDetail.deliveryError && (
                 <p role="status" className="text-xs text-[color:var(--portal-text)]">{messageDetail.deliveryError}</p>
               )}
-              <div className="flex items-start justify-between gap-3 border-t border-[color:var(--portal-border)] pt-3 sm:items-center sm:gap-4">
+              <div className="flex items-center justify-between gap-3 border-t border-[#eee9e0] pt-2.5 sm:gap-4">
                 <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-                  <PortalContactAvatar name={mailboxLabel(messageDetail.from, inquiryByEmail)} size="md" />
+                  <PortalContactAvatar name={mailboxLabel(messageDetail.from, inquiryByEmail)} size="lg" className="!h-11 !w-11" />
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
-                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]" title={messageDetail.from}>{mailboxLabel(messageDetail.from, inquiryByEmail)}</p>
+                      <p className="truncate text-sm font-semibold text-zinc-900" title={messageDetail.from}>{mailboxLabel(messageDetail.from, inquiryByEmail)}</p>
                       {currentInquiry && (
                         <Link
                           href={`/portal/leads/${currentInquiry.id}`}
-                          className="hidden items-center gap-1 rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#a8792f] hover:bg-[#caa24c]/20 dark:text-[#f1d27a] sm:inline-flex"
+                          className="hidden items-center gap-1 text-[10px] font-medium text-[#a8792f] hover:underline sm:inline-flex"
                         >
                           View Lead File <ExternalLink size={10} />
                         </Link>
                       )}
                     </div>
-                    <p className="mt-0.5 truncate font-mono text-[9px] text-[color:var(--portal-muted)] sm:text-[10px]">
+                    <p className="mt-0.5 truncate text-[11px] text-zinc-500">
                       To: {mailboxLabel(messageDetail.to, inquiryByEmail, 'Client')} {selectedCcLabel ? `| CC: ${selectedCcLabel}` : ''}
                     </p>
                   </div>
                 </div>
 
-                <div className="max-w-24 shrink-0 text-right font-mono text-[9px] leading-4 text-[color:var(--portal-muted)] sm:max-w-none sm:text-[10px]">
-                  <p>{formatEmailDateDetailed(messageDetail.receivedAt)}</p>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="max-w-32 text-right text-[10px] leading-4 text-zinc-500 sm:max-w-none sm:text-[11px]">
+                    <p>{formatEmailDateDetailed(messageDetail.receivedAt)}</p>
+                  </div>
+                  {messageDetail.direction !== 'campaign' ? <button type="button" onClick={() => setReplyOpen(true)} aria-label="Reply to email" className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#a8792f] transition-colors hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Send size={16} /></button> : null}
                 </div>
               </div>
 
             </div>
 
             {/* Scrollable email thread — grows to fill, reply pinned below */}
-            <div ref={threadScrollRef} data-email-thread-scroll className="portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-soft)]/20 p-2 [overflow-anchor:none] sm:p-4 lg:p-5">
+            <div ref={threadScrollRef} data-email-thread-scroll className="portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-white p-2 [overflow-anchor:none] sm:px-6 sm:py-4 lg:px-8">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {loadingThread && !thread && (
                   <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">
@@ -1342,19 +1330,29 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                     </button>
                   </div>
                 )}
-                {(thread?.messages?.length ? thread.messages : [messageDetail]).map((message, index, all) => (
+                {(thread?.messages || []).filter((message) => message.id !== messageDetail.id).map((message, index) => (
                   <ThreadMessage
-                    key={`${messageKey(message)}:${index}:${message.id === selectedId || index === all.length - 1 ? 'open' : 'closed'}`}
+                    key={`${messageKey(message)}:${index}:closed`}
                     message={message}
-                    expanded={message.id === selectedId || index === all.length - 1}
+                    expanded={false}
                     viewMode={viewMode}
                     blockExternalImages={blockExternalImages}
-                    portalTheme={portalTheme}
                     inquiryByEmail={inquiryByEmail}
                     onOpenAttachment={openAttachmentPreview}
                     openingAttachment={openingAttachment}
                   />
                 ))}
+                <ThreadMessage
+                  key={`selected:${messageKey(messageDetail)}`}
+                  message={messageDetail}
+                  expanded
+                  currentMessage
+                  viewMode={viewMode}
+                  blockExternalImages={blockExternalImages}
+                  inquiryByEmail={inquiryByEmail}
+                  onOpenAttachment={openAttachmentPreview}
+                  openingAttachment={openingAttachment}
+                />
 
                 <AnimatePresence initial={false}>
                   {messageDetail.direction !== 'campaign' && replyOpen && (
@@ -1365,65 +1363,73 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.99 }}
                       transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
-                      className="overflow-hidden rounded-2xl border border-[#caa24c]/25 bg-[color:var(--portal-card)] shadow-sm"
+                      className="overflow-hidden rounded-xl border border-[#e8e2d9] bg-white shadow-sm"
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[#caa24c]/6 px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#caa24c] text-white"><Send size={12} className="text-white" /></span>
-                          <div>
-                            <p className="text-xs font-bold text-[color:var(--portal-text)]">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}</p>
-                            <p className="mt-0.5 text-[9px] text-[color:var(--portal-muted)]">Your reply will become the newest message in this conversation.</p>
-                          </div>
-                        </div>
+                      <div className="flex items-center justify-between gap-3 border-b border-[#eee9e0] px-3 py-2.5 sm:px-4">
+                        <p className="min-w-0 truncate text-xs font-semibold text-zinc-800">To: {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)} <span className="font-normal text-zinc-500">{thread?.clientEmail || (messageDetail.direction === 'incoming' ? firstMailboxEmail(messageDetail.from) : firstMailboxEmail(messageDetail.to))}</span></p>
                         <div className="flex items-center gap-3">
                           {currentInquiry && (
                             <Link href={`/portal/leads/${currentInquiry.id}`} className="text-[9px] font-bold uppercase tracking-wider text-[#a8792f] hover:underline dark:text-[#f1d27a]">
                               View client file
                             </Link>
                           )}
-                          <button type="button" onClick={() => setReplyOpen(false)} className="rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close reply composer">
+                          <button type="button" onClick={() => { setReplyOpen(false); setReplyPreviewOpen(false) }} className="rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close reply composer">
                             <X size={14} />
                           </button>
                         </div>
                       </div>
 
-                      <div className="space-y-3 p-4">
-                        <div className="flex flex-col gap-2 sm:flex-row">
+                      <div className="flex min-h-[360px] flex-col gap-2.5 p-3 sm:min-h-[400px] sm:p-4">
+                        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                           <input
                             value={replyInstruction}
                             onChange={(event) => setReplyInstruction(event.target.value)}
-                            placeholder="Optional direction for Elena..."
-                            className="min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50"
+                            placeholder="Optional direction for Elena"
+                            className="min-h-10 min-w-0 flex-1 rounded-lg border border-[#e8e2d9] bg-white px-3 text-xs text-zinc-800 outline-none placeholder:text-zinc-400 focus:border-[#caa24c]/50"
                           />
                           <button
                             type="button"
                             onClick={() => void draftWithElena()}
                             disabled={draftingReply || loadingThread}
-                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] hover:bg-[#caa24c]/20 disabled:opacity-50 dark:text-[#f1d27a]"
+                            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#e8e2d9] px-3 text-xs font-medium text-[#a8792f] hover:bg-[#f8f5ef] disabled:opacity-50"
                           >
                             {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <FilePenLine size={13} />}
                             Draft with Elena
                           </button>
                         </div>
-                        <textarea
-                          value={replyText}
-                          onChange={(event) => setReplyText(event.target.value)}
-                          rows={5}
-                          autoFocus
-                          placeholder="Write your reply..."
-                          className="w-full resize-y rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50"
-                        />
+                        {replyPreviewOpen ? (
+                          <iframe
+                            title="Reply preview"
+                            srcDoc={buildEmailReplyPreviewDocument(replyText)}
+                            sandbox="allow-popups"
+                            className="min-h-[11rem] flex-1 rounded-lg border border-[#e8e2d9] bg-white"
+                          />
+                        ) : (
+                          <EmailRichTextEditor
+                            value={replyText}
+                            onChange={setReplyText}
+                            autoFocus
+                            placeholder="Write your message…"
+                            ariaLabel="Write your reply"
+                            className="min-h-[280px]"
+                          />
+                        )}
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <p className="min-h-4 text-[10px] text-[color:var(--portal-muted)]">{replyStatus}</p>
-                          <button
-                            type="button"
-                            onClick={() => void sendInlineReply()}
-                            disabled={sendingReply || !replyText.trim()}
-                            className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-[#d4b060] disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {sendingReply ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                            {sendingReply ? 'Sending' : 'Send reply'}
-                          </button>
+                          <p role={replyStatus ? 'status' : undefined} className="min-h-4 min-w-0 flex-1 text-[10px] text-zinc-500">{replyStatus}</p>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button type="button" onClick={() => setReplyPreviewOpen((open) => !open)} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-medium text-zinc-600 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                              <Eye size={14} /> {replyPreviewOpen ? 'Back to editor' : 'Preview'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void sendInlineReply()}
+                              disabled={sendingReply || !replyText.trim()}
+                              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#b98a3d] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {sendingReply ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                              {sendingReply ? 'Sending' : 'Send reply'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </motion.div>
@@ -1431,6 +1437,18 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 </AnimatePresence>
               </div>
             </div>
+
+            {messageDetail.direction !== 'campaign' && !replyOpen ? <div className="shrink-0 border-t border-[#e8e2d9] bg-white px-3 py-2 sm:px-6">
+              <button type="button" onClick={() => setReplyOpen(true)} aria-label="Open reply editor" className="flex min-h-11 w-full items-center gap-3 rounded-full border border-[#e8e2d9] bg-[#fffdf9] px-3 text-left text-sm text-zinc-500 shadow-sm hover:border-[#d8c8a8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                <Reply size={17} className="shrink-0 text-zinc-500" />
+                <span className="min-w-0 flex-1 truncate">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}…</span>
+                <Send size={17} className="shrink-0 text-[#caa24c]" />
+              </button>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setReplyOpen(true)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-xs font-medium text-zinc-600 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Reply size={15} /> Reply</button>
+                <button type="button" onClick={() => setReaderMenuOpen((open) => !open)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-xs font-medium text-zinc-600 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><MoreVertical size={15} /> More options</button>
+              </div>
+            </div> : null}
 
           </motion.div>
         ) : (
@@ -1507,18 +1525,18 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 function ThreadMessage({
   message,
   expanded: initiallyExpanded,
+  currentMessage = false,
   viewMode,
   blockExternalImages,
-  portalTheme,
   inquiryByEmail,
   onOpenAttachment,
   openingAttachment,
 }: {
   message: EmailMessageItem
   expanded: boolean
+  currentMessage?: boolean
   viewMode: 'html' | 'text'
   blockExternalImages: boolean
-  portalTheme: 'light' | 'dark'
   inquiryByEmail: Map<string, LuxorInquiry>
   onOpenAttachment: (attachment: EmailAttachment, message: EmailMessageItem) => void
   openingAttachment: string | null
@@ -1528,7 +1546,7 @@ function ThreadMessage({
   const [frameHeight, setFrameHeight] = useState(260)
   const frameObserverRef = useRef<ResizeObserver | null>(null)
   const frameInteractionCleanupRef = useRef<(() => void) | null>(null)
-  const html = useMemo(() => buildMessageDocument(message, blockExternalImages, portalTheme), [message, blockExternalImages, portalTheme])
+  const html = useMemo(() => buildMessageDocument(message, blockExternalImages), [message, blockExternalImages])
   const ccLabel = message.cc ? mailboxLabel(message.cc, inquiryByEmail, '') : ''
 
   const resizeFrame = (frame: HTMLIFrameElement) => {
@@ -1593,8 +1611,8 @@ function ThreadMessage({
   }, [])
 
   return (
-    <article className={`overflow-hidden rounded-xl border transition-colors sm:rounded-2xl ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}>
-      <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full cursor-pointer items-center gap-2.5 p-3 text-left sm:gap-3 sm:p-4">
+    <article className={currentMessage ? 'w-full bg-white' : `overflow-hidden rounded-xl border transition-colors sm:rounded-2xl ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}>
+      {!currentMessage && <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full cursor-pointer items-center gap-2.5 p-3 text-left sm:gap-3 sm:p-4">
         <PortalContactAvatar name={mailboxLabel(message.from, inquiryByEmail)} size="md" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
@@ -1606,7 +1624,7 @@ function ThreadMessage({
           </div>
           <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{expanded ? `To ${mailboxLabel(message.to, inquiryByEmail, 'Client')}${ccLabel ? ` · CC ${ccLabel}` : ''}` : decodeHtmlEntities(message.summary || message.subject)}</p>
         </div>
-      </button>
+      </button>}
       <AnimatePresence initial={false}>
       {expanded && (
         <motion.div
@@ -1615,7 +1633,7 @@ function ThreadMessage({
           animate={{ height: 'auto', opacity: 1 }}
           exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
           transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
-          className="overflow-hidden border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"
+          className={currentMessage ? 'bg-white' : 'overflow-hidden border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]'}
           style={{ willChange: 'height, opacity' }}
         >
           {viewMode === 'html' ? (
@@ -1687,15 +1705,16 @@ function EngagementIndicators({ engagement }: { engagement?: EmailMessageItem['e
   )
 }
 
-function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean, portalTheme: 'light' | 'dark') {
+function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean) {
   let content = stripTrackingPixels(message.htmlContent || message.content || `<p>${escapeHtml(message.summary || 'No message body available.')}</p>`)
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }
-  const pageBackground = portalTheme === 'light' ? '#ffffff' : '#0c0b0a'
-  const pageText = portalTheme === 'light' ? '#18181b' : '#eee9df'
-  const quoteText = portalTheme === 'light' ? '#52525b' : '#b8b0a3'
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow:hidden}*{box-sizing:border-box;max-width:100%}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:24px;color:${pageText};background:${pageBackground};font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:${quoteText}}table{width:100%!important;max-width:100%!important}td,th{max-width:100%!important}pre{white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:768px){body{padding:16px;font-size:15px;line-height:1.55}}</style></head><body>${content}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;background:#fff}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:0;color:#18181b;background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:768px){body{font-size:15px;line-height:1.55}}</style></head><body>${content}</body></html>`
+}
+
+function buildEmailReplyPreviewDocument(html: string) {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;max-width:100%;margin:0;background:#fff}*{box-sizing:border-box}body{padding:16px;color:#27272a;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;line-height:1.6;overflow-wrap:anywhere}img,svg,video{max-width:100%!important;height:auto!important}table{max-width:100%}</style></head><body>${html}</body></html>`
 }
 
 function DrawerNavItem({
@@ -1723,14 +1742,6 @@ function DrawerNavItem({
       </span>
       {count !== undefined ? <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">{count.toLocaleString()}</span> : null}
     </button>
-  )
-}
-
-function DirectionBadge({ direction }: { direction?: 'incoming' | 'outgoing' | 'campaign' }) {
-  return (
-    <span className="shrink-0 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">
-      {direction === 'incoming' ? 'Received' : direction === 'campaign' ? 'Blast' : 'Outgoing'}
-    </span>
   )
 }
 
@@ -1764,4 +1775,8 @@ function escapeHtml(str: string) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+function plainTextToEmailHtml(str: string) {
+  return escapeHtml(str).replace(/\r\n?|\n/g, '<br>')
 }

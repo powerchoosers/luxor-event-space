@@ -6,28 +6,21 @@ import {
   Mail,
   Send,
   Maximize2,
-  AlertCircle,
   Eye,
   Pencil,
   Sparkles,
   ExternalLink,
   Minus,
   Plus,
-  Bold,
-  Italic,
-  Underline,
-  List,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  Link,
-  Image as ImageIcon,
+  MoreVertical,
+  ChevronDown,
   Check,
   CheckCircle
 } from 'lucide-react'
 import { PortalSelect, PortalCloseButton } from '@/components/portal/PortalUI'
+import { EmailRichTextEditor } from '@/components/portal/EmailRichTextEditor'
 import { LuxorInquiry, LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
-import { EMAIL_TEMPLATES, EmailBlock, EmailTemplate } from '@/app/(portal)/portal/marketing/emailTemplates'
+import { EMAIL_TEMPLATES, EmailBlock } from '@/app/(portal)/portal/marketing/emailTemplates'
 import { renderEmailToHtml } from '@/app/(portal)/portal/marketing/EmailBuilder/emailRenderer'
 import { BrandAssetPicker } from './BrandAssetPicker'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
@@ -56,6 +49,27 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   const [isClosing, setIsClosing] = useState(false)
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit')
   const [canSplitCompose, setCanSplitCompose] = useState(false)
+  const [trackingMenuOpen, setTrackingMenuOpen] = useState(false)
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(false)
+  const [visualViewportMetrics, setVisualViewportMetrics] = useState<{ height: number; top: number } | null>(null)
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    const updateViewport = () => setVisualViewportMetrics({
+      height: viewport?.height || window.innerHeight,
+      top: viewport?.offsetTop || 0,
+    })
+    updateViewport()
+    viewport?.addEventListener('resize', updateViewport)
+    viewport?.addEventListener('scroll', updateViewport)
+    window.addEventListener('resize', updateViewport)
+    return () => {
+      viewport?.removeEventListener('resize', updateViewport)
+      viewport?.removeEventListener('scroll', updateViewport)
+      window.removeEventListener('resize', updateViewport)
+    }
+  }, [])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 1024px)')
@@ -124,47 +138,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
-  // Rich Text Editor Ref, Selection States & Cmd Helpers
-  const editorRef = React.useRef<HTMLDivElement>(null)
-  const [savedSelectionRange, setSavedSelectionRange] = useState<Range | null>(null)
-
-  const syncEditorValue = () => {
-    if (editorRef.current) {
-      setBodyText(editorRef.current.innerHTML)
-    }
-  }
-
-  const saveSelection = () => {
-    const sel = window.getSelection()
-    if (sel && sel.rangeCount > 0) {
-      setSavedSelectionRange(sel.getRangeAt(0))
-    }
-  }
-
-  const restoreSelection = () => {
-    if (savedSelectionRange) {
-      const sel = window.getSelection()
-      if (sel) {
-        sel.removeAllRanges()
-        sel.addRange(savedSelectionRange)
-      }
-    }
-  }
-
-  const execCmd = (command: string, value: string = '') => {
-    document.execCommand(command, false, value)
-    editorRef.current?.focus()
-    syncEditorValue()
-  }
-
-  const handleLinkPrompt = () => {
-    const url = prompt('Enter link URL (e.g. https://...):')
-    if (url) {
-      execCmd('createLink', url)
-    }
-  }
-
-  // Brand Asset Picker States & Helpers
+  // Brand Asset Picker for saved marketing-template image blocks.
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null)
   const [activeBlockField, setActiveBlockField] = useState<string | null>(null)
@@ -175,21 +149,8 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
     setAssetPickerOpen(true)
   }
 
-  const triggerInlineAssetPicker = () => {
-    saveSelection()
-    setActiveBlockId('inline')
-    setActiveBlockField('imageUrl')
-    setAssetPickerOpen(true)
-  }
-
   const handleAssetSelect = (url: string) => {
-    if (activeBlockId === 'inline') {
-      editorRef.current?.focus()
-      restoreSelection()
-      const imgHtml = `<img src="${url}" style="max-width: 100%; height: auto; border-radius: 6px; margin: 10px 0; display: block; border: 1px solid rgba(202, 162, 76, 0.15);" alt="Luxor Inline Asset" />`
-      document.execCommand('insertHTML', false, imgHtml)
-      syncEditorValue()
-    } else if (activeBlockId && activeBlockField) {
+    if (activeBlockId && activeBlockField) {
       handleBlockFieldChange(activeBlockId, activeBlockField, url)
     }
     setAssetPickerOpen(false)
@@ -243,9 +204,6 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
     }
     setSubject('')
     setBodyText('')
-    if (editorRef.current) {
-      editorRef.current.innerHTML = ''
-    }
     setSelectedTemplateId('regular')
     setTemplateBlocks([])
     setErrorMsg(null)
@@ -372,8 +330,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
     return () => clearTimeout(timer)
   }, [compiledHtml, activeTab])
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSend = async () => {
     if (!toAddress.trim()) {
       setErrorMsg('Please enter a recipient email address.')
       return
@@ -438,19 +395,16 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
 
   // Portrait tablets use one focused workspace at a time. The split editor and
   // preview needs a desktop-width canvas to keep both surfaces useful.
-  const showSplitPreview = isExpanded && canSplitCompose
+  const showSplitPreview = isExpanded && canSplitCompose && activeTab === 'edit'
 
   // Class definitions based on minimized / expanded states
   const drawerClasses = `
-    fixed right-2 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-50 sm:right-4 lg:right-6 lg:bottom-0
-    flex flex-col
-    bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] rounded-t-2xl shadow-2xl backdrop-blur-xl
-    transition-[width,height] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]
-    ${isMinimized
-      ? 'h-12 w-[min(380px,calc(100vw-1rem))]'
-      : isExpanded
-        ? 'h-[calc(100dvh-6.75rem-env(safe-area-inset-bottom))] w-[calc(100vw-1rem)] sm:w-[min(960px,calc(100vw-2rem))] lg:h-[calc(100dvh-2rem)]'
-        : 'h-[min(600px,calc(100dvh-6.75rem-env(safe-area-inset-bottom)))] w-[calc(100vw-1rem)] sm:w-[min(540px,calc(100vw-2rem))] lg:h-[min(600px,calc(100dvh-1rem))]'}
+    fixed inset-x-0 top-[var(--email-compose-top,0px)] h-[var(--email-compose-height,100dvh)] z-50 flex flex-col overflow-hidden bg-[color:var(--portal-card)] shadow-2xl
+    pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
+    sm:inset-auto sm:right-4 sm:top-1/2 sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(760px,calc(100vw-2rem))] sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:border-[color:var(--portal-border)]
+    lg:right-6 lg:w-[min(820px,calc(100vw-3rem))]
+    ${isMinimized ? 'sm:h-12' : ''}
+    ${isExpanded ? 'sm:h-[calc(100dvh-2rem)] sm:w-[min(1100px,calc(100vw-2rem))]' : ''}
   `
 
   return (
@@ -462,74 +416,82 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
       onAnimationComplete={() => {
         if (isClosing) onClose()
       }}
+      style={{
+        '--email-compose-height': visualViewportMetrics ? `${visualViewportMetrics.height}px` : '100dvh',
+        '--email-compose-top': visualViewportMetrics ? `${visualViewportMetrics.top}px` : '0px',
+      } as React.CSSProperties}
       className={drawerClasses}
     >
       {/* Header Bar */}
-      <div className="relative flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2">
-        <button
-          type="button"
-          onClick={() => setIsMinimized((minimized) => !minimized)}
-          aria-label={isMinimized ? 'Restore email composer' : 'Minimize email composer'}
-          className="absolute inset-0 z-0 cursor-pointer rounded-t-2xl transition-colors hover:bg-[color:var(--portal-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45"
-        />
-        <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2">
-          <Mail size={14} className="text-[#caa24c]" />
-          <span className="truncate text-xs font-black uppercase tracking-wider text-[color:var(--portal-text)]">
-            {isMinimized ? `Draft to ${lead?.full_name || toAddress || 'Client'}` : 'New Message'}
-          </span>
+      <div className="relative z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <PortalCloseButton onClick={requestClose} aria-label="Close composer" />
+          {isMinimized && <button type="button" onClick={() => setIsMinimized(false)} aria-label="Restore composer" className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]"><Maximize2 size={15} /></button>}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{isMinimized ? `Draft to ${lead?.full_name || toAddress || 'Client'}` : 'New Message'}</p>
+          </div>
         </div>
-        <div className="relative z-10 flex items-center gap-1">
+        {!isMinimized && <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {!isMinimized && (
             <button
               type="button"
               onClick={() => setIsExpanded(!isExpanded)}
-              title={isExpanded ? 'Exit Full Screen' : 'Full Screen'}
-              className="rounded-lg p-1.5 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
+              aria-label={isExpanded ? 'Restore composer size' : 'Expand composer'}
+              title={isExpanded ? 'Restore size' : 'Expand'}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
             >
-              <Maximize2 size={13} />
+              <Maximize2 size={15} />
             </button>
           )}
-
-          <PortalCloseButton onClick={requestClose} aria-label="Close drawer" />
-        </div>
+          <button type="button" onClick={() => void handleSend()} disabled={isSending} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition-colors hover:bg-[#d4b060] disabled:cursor-wait disabled:opacity-50">
+            <Send size={14} /> {isSending ? 'Sending' : 'Send'}
+          </button>
+          <div className="relative">
+            <button type="button" aria-label="More compose options" aria-expanded={moreMenuOpen} onClick={() => setMoreMenuOpen((open) => !open)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+              <MoreVertical size={16} />
+            </button>
+            {moreMenuOpen && <div role="menu" className="absolute right-0 top-full z-[70] mt-1 w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 shadow-xl">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Sender details</p>
+              <p className="mt-2 text-xs font-semibold text-[color:var(--portal-text)]">{fromName}{senderRole ? ` · ${senderRole}` : ''}</p>
+              <p className="mt-0.5 break-all text-[11px] text-[color:var(--portal-muted)]">{fromAddress}</p>
+              {senderPhone ? <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">{senderPhone}</p> : null}
+              <div className="my-2 border-t border-[color:var(--portal-border)]" />
+              <button type="button" role="menuitem" onClick={() => { setIsMinimized(true); setMoreMenuOpen(false) }} className="min-h-10 w-full rounded-lg px-2 text-left text-xs text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Minimize composer</button>
+            </div>}
+          </div>
+        </div>}
       </div>
 
       {/* Main Drawer Body (Hidden if minimized) */}
       {!isMinimized && (
-        <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           {/* Main Edit Form */}
-          <div className={`flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto p-3 portal-scrollbar sm:p-4 ${showSplitPreview || activeTab === 'edit' ? '' : 'hidden'}`}>
+          <div className={`flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain p-3 sm:p-4 ${showSplitPreview || activeTab === 'edit' ? '' : 'hidden'}`}>
             {/* Senders and Recipients */}
-            <div className="grid shrink-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">From Name</label>
-                <input
-                  type="text"
-                  value={fromName}
-                  readOnly
-                  title="Sender identity is managed in Settings"
-                  className="w-full cursor-default rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none"
-                />
+            <div className="flex shrink-0 items-center gap-2.5 border-b border-[color:var(--portal-border)] pb-2">
+              <span className="w-10 shrink-0 text-xs text-[color:var(--portal-muted)]">From:</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-[color:var(--portal-text)]">{fromName}{senderRole ? ` · ${senderRole}` : ''}</p>
+                <p className="truncate text-[11px] text-[color:var(--portal-muted)]">{fromAddress}</p>
               </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">From Address</label>
-                <PortalSelect
-                  value={fromAddress}
-                  options={ALLOWED_SENDERS}
-                  onChange={setFromAddress}
-                />
-              </div>
+              <PortalSelect
+                value={fromAddress}
+                options={ALLOWED_SENDERS}
+                onChange={setFromAddress}
+                aria-label="Choose sender account"
+                buttonClassName="min-h-10 max-w-36 normal-case tracking-normal sm:max-w-44"
+              />
             </div>
 
-            <div className="grid shrink-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2">
-              <div className="space-y-1 relative">
+            <div className="flex shrink-0 items-center gap-3">
+              <div className="relative min-w-0 flex-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">To (Client)</label>
+                  <label className="text-xs text-[color:var(--portal-muted)]">To:</label>
                   {!lead && (
                     <button
                       type="button"
                       onClick={() => setShowDirectory(!showDirectory)}
-                      className="text-[9px] font-bold uppercase tracking-wider text-[#caa24c] hover:text-[#d4b060] transition-colors cursor-pointer"
+                      className="min-h-9 px-2 text-[10px] font-semibold text-[#a8792f] hover:text-[#d4b060] transition-colors cursor-pointer dark:text-[#dfbd68]"
                     >
                       {showDirectory ? 'Hide Directory' : 'Browse Directory'}
                     </button>
@@ -540,7 +502,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
                     type="text"
                     readOnly
                     value={`${lead.full_name} <${lead.email || ''}>`}
-                    className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none"
+                    className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-3 text-sm text-[color:var(--portal-text)] outline-none"
                   />
                 ) : (
                   <div className="relative font-sans">
@@ -553,7 +515,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
                         setToAddress(e.target.value)
                         setShowClientDropdown(true)
                       }}
-                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)]"
+                      className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)]"
                     />
                     {showClientDropdown && toAddress.trim().length > 0 && (
                       <>
@@ -599,16 +561,6 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
                     )}
                   </div>
                 )}
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center">
-                  <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Template Type</label>
-                </div>
-                <PortalSelect
-                  value={selectedTemplateId}
-                  options={templateOptions}
-                  onChange={handleTemplateChange}
-                />
               </div>
             </div>
 
@@ -707,143 +659,63 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
             )}
 
             {/* Subject */}
-            <div className="space-y-1 shrink-0">
-              <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Subject</label>
+            <div className="flex shrink-0 items-center gap-3 border-b border-[color:var(--portal-border)] pb-2">
+              <label htmlFor="compose-email-subject" className="w-10 shrink-0 text-xs text-[color:var(--portal-muted)]">Subject:</label>
               <input
+                id="compose-email-subject"
                 type="text"
-                placeholder="Enter email subject line..."
+                placeholder="Enter subject..."
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs font-bold text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)]"
+                className="min-h-10 min-w-0 flex-1 bg-transparent text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
               />
             </div>
 
-            {/* Editor Workspace */}
-            <div className="flex min-h-[250px] flex-1 flex-col space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Message Content</label>
-                {/* Visual tabs on standard sizing */}
-                {!showSplitPreview && (
-                  <div className="flex rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('edit')}
-                      className={`inline-flex items-center gap-1.5 rounded px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider transition-colors ${
-                        activeTab === 'edit' ? 'bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                      }`}
-                    >
-                      <Pencil size={10} /> Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('preview')}
-                      className={`inline-flex items-center gap-1.5 rounded px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider transition-colors ${
-                        activeTab === 'preview' ? 'bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                      }`}
-                    >
-                      <Eye size={10} /> Preview
-                    </button>
-                  </div>
-                )}
+            <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 px-2 py-1.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="hidden shrink-0 items-center gap-1.5 text-[11px] font-semibold text-[color:var(--portal-muted)] sm:inline-flex"><Mail size={14} className="text-[#a8792f] dark:text-[#f1d27a]" /> Insert template</span>
+                <PortalSelect
+                  value={selectedTemplateId}
+                  options={templateOptions}
+                  onChange={handleTemplateChange}
+                  aria-label="Insert email template"
+                  buttonClassName="min-h-9 max-w-[min(52vw,15rem)] justify-between normal-case tracking-normal text-xs font-medium"
+                />
               </div>
-
-              {selectedTemplateId === 'regular' ? (
-                // Regular Rich-Text Editor
-                <div className="flex-1 flex flex-col min-h-0 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] rounded-lg overflow-hidden focus-within:border-[#caa24c]/40 transition-colors">
-                  {/* Editor Toolbar */}
-                  <div className="flex flex-wrap items-center gap-1 bg-[color:var(--portal-soft)] border-b border-[color:var(--portal-border)] px-3 py-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => execCmd('bold')}
-                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                      title="Bold (Ctrl+B)"
-                    >
-                      <Bold size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => execCmd('italic')}
-                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                      title="Italic (Ctrl+I)"
-                    >
-                      <Italic size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => execCmd('underline')}
-                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                      title="Underline (Ctrl+U)"
-                    >
-                      <Underline size={13} />
-                    </button>
-                    <span className="h-4 w-px bg-[color:var(--portal-border)] mx-1" />
-                    <button
-                      type="button"
-                      onClick={() => execCmd('insertUnorderedList')}
-                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                      title="Bullet List"
-                    >
-                      <List size={13} />
-                    </button>
-                    <span className="h-4 w-px bg-[color:var(--portal-border)] mx-1" />
-                    <button
-                      type="button"
-                      onClick={() => execCmd('justifyLeft')}
-                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                      title="Align Left"
-                    >
-                      <AlignLeft size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => execCmd('justifyCenter')}
-                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                      title="Align Center"
-                    >
-                      <AlignCenter size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => execCmd('justifyRight')}
-                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                      title="Align Right"
-                    >
-                      <AlignRight size={13} />
-                    </button>
-                    <span className="h-4 w-px bg-[color:var(--portal-border)] mx-1" />
-                    <button
-                      type="button"
-                      onClick={handleLinkPrompt}
-                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                      title="Insert Link"
-                    >
-                      <Link size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={triggerInlineAssetPicker}
-                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors cursor-pointer"
-                      title="Insert Brand Asset Image"
-                    >
-                      <ImageIcon size={13} />
-                    </button>
-                  </div>
-                  {/* ContentEditable Container */}
-                  <div className="flex-1 overflow-y-auto portal-scrollbar p-3 relative">
-                    <div
-                      ref={editorRef}
-                      contentEditable
-                      onInput={syncEditorValue}
-                      onBlur={syncEditorValue}
-                      className="min-h-[160px] h-full w-full outline-none text-xs leading-relaxed text-[color:var(--portal-text)] relative select-text"
-                    />
-                    {!bodyText && (
-                      <div className="absolute left-3 top-3 pointer-events-none text-xs text-[color:var(--portal-faint)] leading-relaxed max-w-[90%] select-none">
-                        Write your email content here. Format it, add bullet points, or insert inline images using the toolbar above...
-                      </div>
-                    )}
-                  </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <div className="relative">
+                  <button type="button" aria-expanded={trackingMenuOpen} onClick={() => setTrackingMenuOpen((open) => !open)} className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                    <Eye size={14} /> <span>Tracking</span><ChevronDown size={12} />
+                  </button>
+                  {trackingMenuOpen && <div role="menu" className="absolute right-0 top-full z-[70] mt-1 w-60 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 shadow-xl">
+                    <label className="flex min-h-10 cursor-pointer items-center gap-2.5 text-xs font-medium text-[color:var(--portal-text)]">
+                      <input type="checkbox" checked={track} onChange={(event) => setTrack(event.target.checked)} className="h-4 w-4 accent-[#caa24c]" />
+                      Track opens &amp; clicks
+                    </label>
+                    <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">When enabled, opens and clicks are recorded for this email.</p>
+                  </div>}
                 </div>
+                <div className="relative">
+                  <button type="button" aria-expanded={moreOptionsOpen} onClick={() => setMoreOptionsOpen((open) => !open)} className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                    <MoreVertical size={14} /> <span className="hidden sm:inline">More</span>
+                  </button>
+                  {moreOptionsOpen && <div role="menu" className="absolute right-0 top-full z-[70] mt-1 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl">
+                    {!lead && <button type="button" role="menuitem" onClick={() => { setShowDirectory(true); setMoreOptionsOpen(false) }} className="min-h-10 w-full rounded-lg px-2.5 text-left text-xs text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Open contacts directory</button>}
+                    <button type="button" role="menuitem" onClick={() => { setIsMinimized(true); setMoreOptionsOpen(false) }} className="min-h-10 w-full rounded-lg px-2.5 text-left text-xs text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Minimize composer</button>
+                  </div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Editor Workspace */}
+            <div className="flex min-h-0 flex-1 flex-col">
+              {selectedTemplateId === 'regular' ? (
+                <EmailRichTextEditor
+                  value={bodyText}
+                  onChange={setBodyText}
+                  placeholder="Write your message…"
+                  ariaLabel="Write your message"
+                />
               ) : (
                 // Marketing Template Field Editor
                 <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3 scrollbar-thin">
@@ -1167,52 +1039,20 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         </div>
       )}
 
-      {/* Action Footer (Hidden if minimized) */}
       {!isMinimized && (
-        <div className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 min-[480px]:flex-row min-[480px]:items-center min-[480px]:justify-between sm:p-4">
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={track}
-                onChange={(e) => setTrack(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-[color:var(--portal-border)] bg-[color:var(--portal-card)] accent-[#caa24c] outline-none"
-              />
-              <span className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors">
-                Track Opens & Clicks
-              </span>
-            </label>
+        <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 sm:px-4">
+          <div className="min-w-0 flex-1">
+            {errorMsg ? <p role="alert" className="truncate text-xs text-rose-600 dark:text-rose-300">{errorMsg}</p>
+              : successMsg ? <p role="status" className="truncate text-xs text-emerald-700 dark:text-emerald-300">{successMsg}</p>
+                : null}
           </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 min-[480px]:justify-end min-[480px]:gap-3">
-            {errorMsg && (
-              <div className="flex items-center gap-1 text-red-400 text-[10px] font-semibold bg-red-950/20 border border-red-900/35 rounded px-2.5 py-1 max-w-[240px] truncate">
-                <AlertCircle size={11} className="shrink-0" />
-                <span>{errorMsg}</span>
-              </div>
-            )}
-            {successMsg && (
-              <div className="flex items-center gap-1 text-emerald-400 text-[10px] font-semibold bg-emerald-950/20 border border-emerald-900/35 rounded px-2.5 py-1">
-                <span>{successMsg}</span>
-              </div>
-            )}
-
-            <button
-              type="button"
-              disabled={isSending}
-              onClick={handleSend}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-white shadow-md transition-all hover:bg-[#dfbd68] disabled:opacity-40 cursor-pointer"
-            >
-              {isSending ? (
-                <span className="text-white font-bold">Delivering...</span>
-              ) : (
-                <>
-                  <Send size={12} className="text-white" />
-                  <span className="text-white font-bold">Send Email</span>
-                </>
-              )}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab((tab) => tab === 'edit' ? 'preview' : 'edit')}
+            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
+          >
+            <Eye size={15} /> {activeTab === 'edit' ? 'Preview' : 'Back to editor'}
+          </button>
         </div>
       )}
       <AnimatePresence>
