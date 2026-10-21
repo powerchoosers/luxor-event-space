@@ -22,6 +22,8 @@ import {
   Loader2,
   FilePenLine,
   X,
+  Menu,
+  SquarePen,
   Maximize2,
   Minimize2,
   MoreVertical,
@@ -190,13 +192,14 @@ interface AllEmailsTabProps {
   mailboxName?: string
   sharedMailboxes: LuxorSharedMailbox[]
   activeMailboxKey: string
+  onReaderOpenChange: (open: boolean) => void
   mailboxDrawerOpen: boolean
   onMailboxDrawerOpenChange: (open: boolean) => void
   onMailboxChange: (key: string) => void
 }
 
 export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, mailboxName,
-  sharedMailboxes, activeMailboxKey, mailboxDrawerOpen, onMailboxDrawerOpenChange, onMailboxChange }: AllEmailsTabProps) {
+  sharedMailboxes, activeMailboxKey, onReaderOpenChange, mailboxDrawerOpen, onMailboxDrawerOpenChange, onMailboxChange }: AllEmailsTabProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const reduceMotion = useReducedMotion()
@@ -215,11 +218,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
 
   // Active navigation & filters
-  const [activeFolder, changeActiveFolder] = useState<ActiveFolder>('inbox')
-  const [searchQuery, changeSearchQuery] = useState('')
+  const [activeFolder, changeActiveFolder] = useState<ActiveFolder>(() => searchParams?.get('folder') || 'inbox')
+  const [searchQuery, changeSearchQuery] = useState(() => searchParams?.get('q') || '')
 
   // Selected email detail state
   const [selectedId, setSelectedId] = useState<string | null>(initialMessageId || null)
+  const readerOpenedFromList = useRef(false)
   const [selectedMessageKey, setSelectedMessageKey] = useState<string | null>(null)
   const [messageDetail, setMessageDetail] = useState<EmailMessageItem | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -257,6 +261,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [savingStarIds, setSavingStarIds] = useState<Set<string>>(() => new Set())
   const [starErrors, setStarErrors] = useState<Record<string, string>>({})
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    onReaderOpenChange(Boolean(initialMessageId || compactReaderOpen))
+  }, [compactReaderOpen, initialMessageId, onReaderOpenChange])
 
   useEffect(() => {
     if (!mailboxDrawerOpen) return
@@ -306,7 +314,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   mailboxKeyRef.current = mailboxKey
   const [pageResult, setPageResult] = useState<LuxorMailboxPageResult<EmailMessageItem> | null>(null)
 
-  const resetMailboxPages = () => {
+  const resetMailboxPages = useCallback(() => {
     mailboxRequest.current?.controller.abort()
     mailboxRequest.current = null
     pageSnapshot.current = { key: '', value: null }
@@ -320,18 +328,45 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     setError(null)
     setLoading(true)
     setLoadingMore(false)
+  }, [])
+
+  const updateListContextUrl = (folder: string, query: string) => {
+    const params = new URLSearchParams(searchParams?.toString() || '')
+    if (folder === 'inbox') params.delete('folder')
+    else params.set('folder', folder)
+    if (query) params.set('q', query)
+    else params.delete('q')
+    params.delete('listScroll')
+    const href = params.toString() ? `/portal/emails?${params.toString()}` : '/portal/emails'
+    window.history.replaceState(null, '', href)
   }
+
+  const routeFolder = searchParams?.get('folder') || 'inbox'
+  const routeSearchQuery = searchParams?.get('q') || ''
+  const routeContextKey = JSON.stringify([routeFolder, routeSearchQuery])
+  const lastRouteContextKey = useRef(routeContextKey)
+
+  useEffect(() => {
+    if (lastRouteContextKey.current === routeContextKey) return
+    lastRouteContextKey.current = routeContextKey
+    if (routeFolder === activeFolder && routeSearchQuery === searchQuery) return
+    resetMailboxPages()
+    changeActiveFolder(routeFolder)
+    changeSearchQuery(routeSearchQuery)
+  }, [activeFolder, resetMailboxPages, routeContextKey, routeFolder, routeSearchQuery, searchQuery])
 
   const setActiveFolder = (folder: string) => {
     if (folder === activeFolder) return
     resetMailboxPages()
     changeActiveFolder(folder)
+    updateListContextUrl(folder, searchQuery)
   }
 
   const setSearchQuery = (query: string) => {
     if (query === searchQuery) return
     resetMailboxPages()
     changeSearchQuery(query)
+    updateListContextUrl(activeFolder, query)
   }
 
   const loadEmails = useCallback(async (force = false) => {
@@ -466,6 +501,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [hasMore, loading, loadingMore, loadMoreError, messages.length, loadNextPage])
+
+  const savedListScrollParam = searchParams?.get('listScroll') || ''
+  useEffect(() => {
+    const savedScroll = Number(savedListScrollParam || 0)
+    const list = mailboxListRef.current
+    if (compactReaderOpen || loading || !list || !Number.isFinite(savedScroll) || savedScroll <= 0) return
+    list.scrollTo({ top: savedScroll })
+  }, [compactReaderOpen, loading, savedListScrollParam])
 
   useEffect(() => {
     const nextInitialMessageId = initialMessageId || null
@@ -871,8 +914,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     setReplyInstruction('')
     setReplyStatus(null)
     const currentMessageId = searchParams?.get('messageId') || ''
+    if (!currentMessageId) readerOpenedFromList.current = true
     if (currentMessageId !== message.id) {
       const params = new URLSearchParams(searchParams?.toString() || '')
+      if (activeFolder === 'inbox') params.delete('folder')
+      else params.set('folder', activeFolder)
+      if (searchQuery) params.set('q', searchQuery)
+      else params.delete('q')
+      params.set('listScroll', String(Math.round(mailboxListRef.current?.scrollTop || 0)))
       params.set('messageId', message.id)
       const href = `/portal/emails?${params.toString()}`
       if (currentMessageId) router.replace(href, { scroll: false })
@@ -881,9 +930,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }
 
   const closeReader = () => {
+    if (readerOpenedFromList.current && searchParams?.get('messageId')) {
+      router.back()
+      return
+    }
     setCompactReaderOpen(false)
     setReaderExpanded(false)
     setReaderMenuOpen(false)
+    readerOpenedFromList.current = false
     if (searchParams?.get('messageId')) {
       const params = new URLSearchParams(searchParams.toString())
       params.delete('messageId')
@@ -929,6 +983,38 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           </div>
         </aside>
       </> : null}
+      {!compactReaderOpen ? <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 lg:hidden">
+        <button
+          type="button"
+          onClick={() => onMailboxDrawerOpenChange(true)}
+          aria-label="Open mailbox navigation"
+          title="Open mailbox navigation"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]"
+        >
+          <Menu size={19} aria-hidden="true" />
+        </button>
+        <div className="relative min-w-0 flex-1">
+          <Search size={17} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-faint)]" />
+          <input
+            type="search"
+            aria-label="Search saved email"
+            value={searchQuery}
+            maxLength={200}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search mail"
+            className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 pl-10 pr-3 text-base text-[color:var(--portal-text)] outline-none transition-colors focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/15 placeholder:text-[color:var(--portal-faint)]"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email'))}
+          aria-label="Compose email"
+          title="Compose email"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] focus-visible:ring-offset-2"
+        >
+          <SquarePen size={19} aria-hidden="true" />
+        </button>
+      </div> : null}
       <div className="flex min-h-0 flex-1 w-full overflow-hidden bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)]">
       {/* PANE 2: Message Threads List */}
       <AnimatePresence initial={false}>
@@ -941,7 +1027,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         className={`min-h-0 min-w-0 w-full [--message-list-width:100%] lg:w-80 lg:[--message-list-width:20rem] xl:w-96 xl:[--message-list-width:24rem] shrink-0 lg:border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex-col overflow-hidden ${compactReaderOpen ? 'hidden lg:flex' : 'flex'}`}
       >
         <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 sm:px-4">
-          <div className="relative">
+          <div className="relative hidden lg:block">
             <Search size={17} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-faint)]" />
             <input
               type="search"
@@ -1065,8 +1151,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
       <div className={`min-h-0 min-w-0 flex-1 overflow-hidden bg-white flex-col ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}>
         <div className="flex min-h-11 shrink-0 items-center justify-between border-b border-[#e8e2d9] bg-white px-2 py-1.5 sm:px-4">
-          <button type="button" onClick={closeReader} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm font-medium text-zinc-700 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
-            <ArrowLeft size={17} /> Back to inbox
+          <button type="button" onClick={closeReader} aria-label="Back to email list" title="Back to email list" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-zinc-700 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
+            <ArrowLeft size={17} aria-hidden="true" /> <span className="hidden lg:inline">Back to list</span>
           </button>
           <div className="flex min-w-0 items-center gap-1">
             <span className="max-w-28 truncate pr-1 text-[10px] text-zinc-500 sm:hidden">{mailboxName || 'Luxor Email'}</span>

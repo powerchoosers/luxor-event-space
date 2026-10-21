@@ -22,6 +22,7 @@ function EmailsPageContent() {
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
   const [sharedMailboxes, setSharedMailboxes] = useState<LuxorSharedMailbox[]>([])
   const [mailboxDrawerOpen, setMailboxDrawerOpen] = useState(false)
+  const [readerOpen, setReaderOpen] = useState(Boolean(searchParams?.get('messageId')))
 
   const requestedMailbox = searchParams?.get('mailbox') || 'all'
   const activeMailbox = useMemo(
@@ -52,22 +53,23 @@ function EmailsPageContent() {
 
   return (
     <PortalPageFrame className="h-full flex-1 min-h-0 overflow-clip !gap-2 sm:!gap-4">
-      <div>
+      <div className="hidden lg:block">
         <PortalPageHeader
           icon={<Mail size={18} />}
           title="Emails"
           mobileActionsInline
+          hideBackButton={readerOpen}
           titleClassName="whitespace-nowrap text-[1.875rem] sm:text-3xl"
           actions={
             <div className="flex items-center gap-2">
-            <PortalButton
+            {!readerOpen ? <PortalButton
               variant="secondary"
               className="min-h-11 min-w-11 justify-center px-3"
               aria-label="Open mailbox navigation"
               onClick={() => setMailboxDrawerOpen(true)}
             >
               <Menu size={16} aria-hidden="true" />
-            </PortalButton>
+            </PortalButton> : null}
             <PortalButton
               variant="primary"
               className="min-h-11 whitespace-nowrap"
@@ -90,6 +92,7 @@ function EmailsPageContent() {
           mailboxName={activeMailbox?.label}
           sharedMailboxes={sharedMailboxes}
           activeMailboxKey={activeMailbox?.key || 'all'}
+          onReaderOpenChange={setReaderOpen}
           mailboxDrawerOpen={mailboxDrawerOpen}
           onMailboxDrawerOpenChange={setMailboxDrawerOpen}
           onMailboxChange={(mailbox) => router.push(mailbox === 'all' ? '/portal/emails' : `/portal/emails?mailbox=${encodeURIComponent(mailbox)}`)}

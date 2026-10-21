@@ -28,6 +28,7 @@ export function PortalPageHeader({
   description,
   actions,
   mobileActionsInline = false,
+  hideBackButton = false,
   titleClassName,
 }: {
   icon?: React.ReactNode
@@ -36,6 +37,7 @@ export function PortalPageHeader({
   description?: string
   actions?: React.ReactNode
   mobileActionsInline?: boolean
+  hideBackButton?: boolean
   titleClassName?: string
 }) {
   const router = useRouter()
@@ -55,7 +57,7 @@ export function PortalPageHeader({
     <div className={`flex shrink-0 gap-3 ${mobileActionsInline ? 'flex-wrap items-center justify-between gap-x-2 sm:flex-nowrap sm:gap-3' : 'flex-col md:flex-row md:items-start md:justify-between'}`}>
       <div className={`${description ? 'space-y-1.5' : ''} ${mobileActionsInline ? 'min-w-0 shrink-0' : ''}`}>
         <div className={`flex items-center ${mobileActionsInline ? 'gap-2 sm:gap-3' : 'gap-3'}`}>
-          {canGoBack ? (
+          {canGoBack && !hideBackButton ? (
             <button
               type="button"
               onClick={goBack}

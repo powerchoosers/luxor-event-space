@@ -400,7 +400,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   // Class definitions based on minimized / expanded states
   const drawerClasses = `
     fixed inset-x-0 top-[var(--email-compose-top,0px)] h-[var(--email-compose-height,100dvh)] z-50 flex flex-col overflow-hidden bg-[color:var(--portal-card)] shadow-2xl
-    pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
+    pt-[env(safe-area-inset-top)] sm:pt-0 ${isMinimized ? '' : 'pb-[env(safe-area-inset-bottom)] sm:pb-0'}
     sm:inset-auto sm:right-4 sm:top-1/2 sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(760px,calc(100vw-2rem))] sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:border-[color:var(--portal-border)]
     lg:right-6 lg:w-[min(820px,calc(100vw-3rem))]
     ${isMinimized ? 'sm:h-12' : ''}
@@ -417,13 +417,13 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         if (isClosing) onClose()
       }}
       style={{
-        '--email-compose-height': visualViewportMetrics ? `${visualViewportMetrics.height}px` : '100dvh',
+        '--email-compose-height': isMinimized ? 'calc(3.5rem + env(safe-area-inset-top))' : visualViewportMetrics ? `${visualViewportMetrics.height}px` : '100dvh',
         '--email-compose-top': visualViewportMetrics ? `${visualViewportMetrics.top}px` : '0px',
       } as React.CSSProperties}
       className={drawerClasses}
     >
       {/* Header Bar */}
-      <div className="relative z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 sm:px-4">
+      <div className={`relative z-20 flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 sm:px-4 ${isMinimized ? 'min-h-14 sm:min-h-12' : 'min-h-14'}`}>
         <div className="flex min-w-0 items-center gap-2">
           <PortalCloseButton onClick={requestClose} aria-label="Close composer" />
           {isMinimized && <button type="button" onClick={() => setIsMinimized(false)} aria-label="Restore composer" className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]"><Maximize2 size={15} /></button>}
