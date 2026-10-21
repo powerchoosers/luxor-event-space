@@ -6,5 +6,5 @@ export type LuxorMailboxPageRequest = {
 }
 export type LuxorMailboxPageResult<T> = {
   messages: T[]; folders: LuxorMailFolder[]; stats: LuxorMailboxStats; folderCounts: Record<string, number>
-  snapshot: string; page: number; pageSize: number; total: number
+  snapshot: string; page: number; pageSize: number; total: number; starredIds?: string[]
 }

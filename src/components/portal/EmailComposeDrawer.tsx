@@ -46,9 +46,10 @@ interface EmailComposeDrawerProps {
   onClose: () => void
   lead: LuxorInquiry | null
   onSuccess?: () => void
+  initialTemplateId?: string | null
 }
 
-export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailComposeDrawerProps) {
+export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTemplateId }: EmailComposeDrawerProps) {
   const reduceMotion = useReducedMotion()
   const [isMinimized, setIsMinimized] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -293,7 +294,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
   }, [customTemplates])
 
   // Handle template selection change
-  const handleTemplateChange = (val: string) => {
+  const handleTemplateChange = useCallback((val: string) => {
     setSelectedTemplateId(val)
     setErrorMsg(null)
 
@@ -318,7 +319,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
         setTemplateBlocks(JSON.parse(JSON.stringify(found.blocks)) as EmailBlock[])
       }
     }
-  }
+  }, [customTemplates])
+
+  useEffect(() => {
+    if (!isOpen || !initialTemplateId) return
+    if (initialTemplateId.startsWith('custom:') && !customTemplates.some((template) => `custom:${template.id}` === initialTemplateId)) return
+    if (initialTemplateId.startsWith('built-in:') && !EMAIL_TEMPLATES.some((template) => `built-in:${template.id}` === initialTemplateId)) return
+    handleTemplateChange(initialTemplateId)
+  }, [isOpen, initialTemplateId, customTemplates, handleTemplateChange])
 
   // Update specific field in a template block
   const handleBlockFieldChange = (blockId: string, field: string, value: string) => {
@@ -434,9 +442,9 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
   // Class definitions based on minimized / expanded states
   const drawerClasses = `
-    fixed right-2 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-50 sm:right-4 lg:right-6 lg:bottom-0
+    fixed right-2 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-50 sm:right-4 lg:right-6 lg:bottom-0
     flex flex-col
-    bg-[color:var(--portal-card)] border border-[#caa24c]/30 rounded-t-2xl shadow-2xl backdrop-blur-xl
+    bg-[color:var(--portal-card)] border border-[color:var(--portal-border)] rounded-t-2xl shadow-2xl backdrop-blur-xl
     transition-[width,height] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]
     ${isMinimized
       ? 'h-12 w-[min(380px,calc(100vw-1rem))]'
@@ -594,7 +602,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
               </div>
               <div className="space-y-1">
                 <div className="flex items-center">
-                  <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Template Type</label>
+                  <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Template Type</label>
                 </div>
                 <PortalSelect
                   value={selectedTemplateId}
@@ -606,17 +614,17 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
             {/* Collapsible Contacts Directory */}
             {!lead && showDirectory && (
-              <div className="border border-zinc-850 bg-black/25 rounded-xl p-3 space-y-2 shrink-0">
+              <div className="border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 rounded-xl p-3 space-y-2 shrink-0">
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-[9px] font-black uppercase tracking-widest text-[#caa24c]">Contacts Directory</h4>
-                    <p className="text-[8px] text-zinc-550">Search and click a contact to set the recipient.</p>
+                    <p className="text-[8px] text-[color:var(--portal-muted)]">Search and click a contact to set the recipient.</p>
                   </div>
                   {toAddress && (
                     <button
                       type="button"
                       onClick={() => setToAddress('')}
-                      className="text-[8px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                      className="text-[8px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                     >
                       Clear Recipient
                     </button>
@@ -629,17 +637,17 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                   value={directorySearch}
                   onChange={(e) => setDirectorySearch(e.target.value)}
                   placeholder="Search by name or email..."
-                  className="w-full rounded-lg border border-zinc-900 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-300 outline-none placeholder:text-zinc-650"
+                  className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
                 />
 
                 {/* Directory Scroll List */}
-                <div className="max-h-36 overflow-y-auto portal-scrollbar border border-zinc-900/60 bg-zinc-950/20 rounded-lg p-1 divide-y divide-zinc-900/40">
+                <div className="max-h-36 overflow-y-auto portal-scrollbar border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/35 rounded-lg p-1 divide-y divide-[color:var(--portal-border)]">
                   {allInquiries.filter(inq => {
                     const q = directorySearch.trim().toLowerCase()
                     if (!q) return true
                     return inq.full_name.toLowerCase().includes(q) || (inq.email && inq.email.toLowerCase().includes(q))
                   }).length === 0 ? (
-                    <div className="text-center py-4 text-xs text-zinc-600 italic">
+                    <div className="text-center py-4 text-xs text-[color:var(--portal-muted)] italic">
                       No contacts found matching &quot;{directorySearch}&quot;
                     </div>
                   ) : (
@@ -656,10 +664,10 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                             setToAddress(inq.email || '')
                             setShowClientDropdown(false)
                           }}
-                          className="group flex items-center py-1.5 px-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer transition-colors select-none"
+                          className="group flex items-center py-1.5 px-2 hover:bg-[color:var(--portal-soft)] rounded-lg cursor-pointer transition-colors select-none"
                         >
                           {/* Spotify-style hover index / checkmark */}
-                          <div className="w-8 flex-shrink-0 flex items-center justify-center font-mono text-[9px] text-zinc-550">
+                          <div className="w-8 flex-shrink-0 flex items-center justify-center font-mono text-[9px] text-[color:var(--portal-muted)]">
                             {isSelected ? (
                               <CheckCircle size={12} className="text-[#caa24c] fill-[#caa24c]/10" />
                             ) : (
@@ -674,18 +682,18 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
 
                           {/* Info */}
                           <div className="flex-1 min-w-0 ml-1">
-                            <p className={`text-[11px] font-bold transition-colors leading-tight ${isSelected ? 'text-[#f1d27a]' : 'text-zinc-200 group-hover:text-white'}`}>
+                            <p className={`text-[11px] font-bold transition-colors leading-tight ${isSelected ? 'text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)] group-hover:text-[color:var(--portal-text)]'}`}>
                               {inq.full_name}
                             </p>
-                            <p className="text-[9px] text-zinc-550 font-mono mt-0.5 truncate">{inq.email || 'No email registered'}</p>
+                            <p className="text-[9px] text-[color:var(--portal-muted)] font-mono mt-0.5 truncate">{inq.email || 'No email registered'}</p>
                           </div>
 
                           {/* Event Type Badge */}
                           {inq.event_type && (
                             <span className={`text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border shrink-0 ${
                               isSelected 
-                                ? 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#f1d27a]' 
-                                : 'border-zinc-900 bg-zinc-950 text-zinc-500'
+                                ? 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]'
+                                : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
                             }`}>
                               {inq.event_type}
                             </span>
@@ -713,15 +721,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
             {/* Editor Workspace */}
             <div className="flex min-h-[250px] flex-1 flex-col space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500">Message Content</label>
+                <label className="text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Message Content</label>
                 {/* Visual tabs on standard sizing */}
                 {!showSplitPreview && (
-                  <div className="flex rounded-lg border border-[color:var(--portal-border)] bg-black/20 p-0.5">
+                  <div className="flex rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-0.5">
                     <button
                       type="button"
                       onClick={() => setActiveTab('edit')}
                       className={`inline-flex items-center gap-1.5 rounded px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider transition-colors ${
-                        activeTab === 'edit' ? 'bg-[#caa24c]/20 text-[#f1d27a]' : 'text-zinc-500 hover:text-white'
+                        activeTab === 'edit' ? 'bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                       }`}
                     >
                       <Pencil size={10} /> Edit
@@ -730,7 +738,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                       type="button"
                       onClick={() => setActiveTab('preview')}
                       className={`inline-flex items-center gap-1.5 rounded px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider transition-colors ${
-                        activeTab === 'preview' ? 'bg-[#caa24c]/20 text-[#f1d27a]' : 'text-zinc-500 hover:text-white'
+                        activeTab === 'preview' ? 'bg-[#caa24c]/12 text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                       }`}
                     >
                       <Eye size={10} /> Preview
@@ -743,11 +751,11 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                 // Regular Rich-Text Editor
                 <div className="flex-1 flex flex-col min-h-0 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] rounded-lg overflow-hidden focus-within:border-[#caa24c]/40 transition-colors">
                   {/* Editor Toolbar */}
-                  <div className="flex flex-wrap items-center gap-1 bg-black/40 border-b border-[color:var(--portal-border)] px-3 py-1.5 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1 bg-[color:var(--portal-soft)] border-b border-[color:var(--portal-border)] px-3 py-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => execCmd('bold')}
-                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                       title="Bold (Ctrl+B)"
                     >
                       <Bold size={13} />
@@ -755,7 +763,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     <button
                       type="button"
                       onClick={() => execCmd('italic')}
-                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                       title="Italic (Ctrl+I)"
                     >
                       <Italic size={13} />
@@ -763,25 +771,25 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     <button
                       type="button"
                       onClick={() => execCmd('underline')}
-                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                       title="Underline (Ctrl+U)"
                     >
                       <Underline size={13} />
                     </button>
-                    <span className="h-4 w-px bg-zinc-800 mx-1" />
+                    <span className="h-4 w-px bg-[color:var(--portal-border)] mx-1" />
                     <button
                       type="button"
                       onClick={() => execCmd('insertUnorderedList')}
-                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                       title="Bullet List"
                     >
                       <List size={13} />
                     </button>
-                    <span className="h-4 w-px bg-zinc-800 mx-1" />
+                    <span className="h-4 w-px bg-[color:var(--portal-border)] mx-1" />
                     <button
                       type="button"
                       onClick={() => execCmd('justifyLeft')}
-                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                       title="Align Left"
                     >
                       <AlignLeft size={13} />
@@ -789,7 +797,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     <button
                       type="button"
                       onClick={() => execCmd('justifyCenter')}
-                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                       title="Align Center"
                     >
                       <AlignCenter size={13} />
@@ -797,16 +805,16 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     <button
                       type="button"
                       onClick={() => execCmd('justifyRight')}
-                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                       title="Align Right"
                     >
                       <AlignRight size={13} />
                     </button>
-                    <span className="h-4 w-px bg-zinc-800 mx-1" />
+                    <span className="h-4 w-px bg-[color:var(--portal-border)] mx-1" />
                     <button
                       type="button"
                       onClick={handleLinkPrompt}
-                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                       title="Insert Link"
                     >
                       <Link size={13} />
@@ -814,7 +822,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                     <button
                       type="button"
                       onClick={triggerInlineAssetPicker}
-                      className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-[#caa24c] transition-colors cursor-pointer"
+                      className="p-1.5 rounded hover:bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors cursor-pointer"
                       title="Insert Brand Asset Image"
                     >
                       <ImageIcon size={13} />
@@ -827,10 +835,10 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                       contentEditable
                       onInput={syncEditorValue}
                       onBlur={syncEditorValue}
-                      className="min-h-[160px] h-full w-full outline-none text-xs leading-relaxed text-zinc-300 relative select-text"
+                      className="min-h-[160px] h-full w-full outline-none text-xs leading-relaxed text-[color:var(--portal-text)] relative select-text"
                     />
                     {!bodyText && (
-                      <div className="absolute left-3 top-3 pointer-events-none text-xs text-zinc-650 leading-relaxed max-w-[90%] select-none">
+                      <div className="absolute left-3 top-3 pointer-events-none text-xs text-[color:var(--portal-faint)] leading-relaxed max-w-[90%] select-none">
                         Write your email content here. Format it, add bullet points, or insert inline images using the toolbar above...
                       </div>
                     )}
@@ -840,16 +848,16 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                 // Marketing Template Field Editor
                 <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3 scrollbar-thin">
                   {templateBlocks.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center p-8 text-center text-zinc-650 border border-dashed border-[color:var(--portal-border)] rounded-xl">
-                      <Sparkles size={24} className="text-zinc-700 animate-pulse mb-2" />
-                      <p className="text-xs font-semibold text-zinc-550">Template loaded. Edit values below.</p>
+                    <div className="flex flex-col items-center justify-center p-8 text-center text-[color:var(--portal-faint)] border border-dashed border-[color:var(--portal-border)] rounded-xl">
+                      <Sparkles size={24} className="text-[color:var(--portal-muted)] animate-pulse mb-2" />
+                      <p className="text-xs font-semibold text-[color:var(--portal-muted)]">Template loaded. Edit values below.</p>
                     </div>
                   ) : (
                     templateBlocks.map((block) => {
                       if (block.type === 'hero') {
                         return (
-                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-black/25 p-3.5 space-y-3">
-                            <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 p-3.5 space-y-3">
+                            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-1.5">
                               <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c]">Hero Block</span>
                             </div>
                             <div className="space-y-2">
@@ -858,14 +866,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                 placeholder="Headline"
                                 value={block.headline}
                                 onChange={(e) => handleBlockFieldChange(block.id, 'headline', e.target.value)}
-                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-white outline-none focus:border-[#caa24c]/40"
+                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                               />
                               <textarea
                                 placeholder="Subheadline"
                                 rows={2}
                                 value={block.subheadline}
                                 onChange={(e) => handleBlockFieldChange(block.id, 'subheadline', e.target.value)}
-                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/40"
+                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                               />
                               <div className="flex gap-2 items-center">
                                 <input
@@ -873,12 +881,12 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                   placeholder="Hero Background Image URL"
                                   value={block.backgroundImage || ''}
                                   onChange={(e) => handleBlockFieldChange(block.id, 'backgroundImage', e.target.value)}
-                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/40 font-mono"
+                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 font-mono"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => triggerAssetPicker(block.id, 'backgroundImage')}
-                                  className="shrink-0 flex items-center justify-center h-8 px-2.5 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-zinc-400 hover:text-white transition-colors cursor-pointer text-[10px] font-black uppercase tracking-wider"
+                                  className="shrink-0 flex items-center justify-center h-8 px-2.5 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer text-[10px] font-black uppercase tracking-wider"
                                 >
                                   Browse
                                 </button>
@@ -890,14 +898,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                     placeholder="CTA Button Label"
                                     value={block.ctaLabel}
                                     onChange={(e) => handleBlockFieldChange(block.id, 'ctaLabel', e.target.value)}
-                                    className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-white outline-none focus:border-[#caa24c]/40"
+                                    className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                                   />
                                   <input
                                     type="text"
                                     placeholder="CTA Button URL"
                                     value={block.ctaUrl}
                                     onChange={(e) => handleBlockFieldChange(block.id, 'ctaUrl', e.target.value)}
-                                    className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-zinc-400 outline-none focus:border-[#caa24c]/40 font-mono"
+                                    className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-[color:var(--portal-muted)] outline-none focus:border-[#caa24c]/40 font-mono"
                                   />
                                 </div>
                               )}
@@ -907,8 +915,8 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                       }
                       if (block.type === 'text') {
                         return (
-                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-black/25 p-3.5 space-y-2">
-                            <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 p-3.5 space-y-2">
+                            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-1.5">
                               <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c]">Text block</span>
                             </div>
                             <textarea
@@ -916,15 +924,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                               placeholder="Rich paragraph content..."
                               value={block.content}
                               onChange={(e) => handleBlockFieldChange(block.id, 'content', e.target.value)}
-                              className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] p-3 text-xs leading-relaxed text-zinc-300 outline-none focus:border-[#caa24c]/40"
+                              className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] p-3 text-xs leading-relaxed text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                             />
                           </div>
                         )
                       }
                       if (block.type === 'button') {
                         return (
-                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-black/25 p-3.5 space-y-2.5">
-                            <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 p-3.5 space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-1.5">
                               <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c]">Button block</span>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
@@ -933,14 +941,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                 placeholder="Label"
                                 value={block.label}
                                 onChange={(e) => handleBlockFieldChange(block.id, 'label', e.target.value)}
-                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-white outline-none focus:border-[#caa24c]/40"
+                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                               />
                               <input
                                 type="text"
                                 placeholder="URL"
                                 value={block.url}
                                 onChange={(e) => handleBlockFieldChange(block.id, 'url', e.target.value)}
-                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-zinc-400 outline-none focus:border-[#caa24c]/40 font-mono"
+                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-[color:var(--portal-muted)] outline-none focus:border-[#caa24c]/40 font-mono"
                               />
                             </div>
                           </div>
@@ -948,8 +956,8 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                       }
                       if (block.type === 'image_text') {
                         return (
-                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-black/25 p-3.5 space-y-2.5">
-                            <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 p-3.5 space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-1.5">
                               <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c]">Image + Text block</span>
                             </div>
                             <div className="space-y-2">
@@ -958,14 +966,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                 placeholder="Headline"
                                 value={block.headline}
                                 onChange={(e) => handleBlockFieldChange(block.id, 'headline', e.target.value)}
-                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-white outline-none focus:border-[#caa24c]/40"
+                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                               />
                               <textarea
                                 placeholder="Body copy"
                                 rows={3}
                                 value={block.body}
                                 onChange={(e) => handleBlockFieldChange(block.id, 'body', e.target.value)}
-                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/40"
+                                className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                               />
                               <div className="flex gap-2 items-center">
                                 <input
@@ -973,12 +981,12 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                   placeholder="Image URL"
                                   value={block.imageUrl || ''}
                                   onChange={(e) => handleBlockFieldChange(block.id, 'imageUrl', e.target.value)}
-                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/40 font-mono"
+                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 font-mono"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => triggerAssetPicker(block.id, 'imageUrl')}
-                                  className="shrink-0 flex items-center justify-center h-8 px-2.5 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-zinc-400 hover:text-white transition-colors cursor-pointer text-[10px] font-black uppercase tracking-wider"
+                                  className="shrink-0 flex items-center justify-center h-8 px-2.5 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer text-[10px] font-black uppercase tracking-wider"
                                 >
                                   Browse
                                 </button>
@@ -989,14 +997,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                   placeholder="CTA Label"
                                   value={block.ctaLabel}
                                   onChange={(e) => handleBlockFieldChange(block.id, 'ctaLabel', e.target.value)}
-                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-white outline-none focus:border-[#caa24c]/40"
+                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                                 />
                                 <input
                                   type="text"
                                   placeholder="CTA Link URL"
                                   value={block.ctaUrl}
                                   onChange={(e) => handleBlockFieldChange(block.id, 'ctaUrl', e.target.value)}
-                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-zinc-400 outline-none focus:border-[#caa24c]/40 font-mono"
+                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2.5 py-1 text-xs text-[color:var(--portal-muted)] outline-none focus:border-[#caa24c]/40 font-mono"
                                 />
                               </div>
                             </div>
@@ -1005,8 +1013,8 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                       }
                       if (block.type === 'two_column') {
                         return (
-                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-black/25 p-3.5 space-y-3">
-                            <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                          <div key={block.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 p-3.5 space-y-3">
+                            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-1.5">
                               <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c]">Two-column layout</span>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
@@ -1016,14 +1024,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                   placeholder="Left Headline"
                                   value={block.leftHeadline}
                                   onChange={(e) => handleBlockFieldChange(block.id, 'leftHeadline', e.target.value)}
-                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-1 text-xs text-white outline-none focus:border-[#caa24c]/40"
+                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-1 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                                 />
                                 <textarea
                                   placeholder="Left content..."
                                   rows={3}
                                   value={block.leftBody}
                                   onChange={(e) => handleBlockFieldChange(block.id, 'leftBody', e.target.value)}
-                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] p-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/40"
+                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] p-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                                 />
                               </div>
                               <div className="space-y-2">
@@ -1032,14 +1040,14 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess }: EmailCo
                                   placeholder="Right Headline"
                                   value={block.rightHeadline}
                                   onChange={(e) => handleBlockFieldChange(block.id, 'rightHeadline', e.target.value)}
-                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-1 text-xs text-white outline-none focus:border-[#caa24c]/40"
+                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-1 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                                 />
                                 <textarea
                                   placeholder="Right content..."
                                   rows={3}
                                   value={block.rightBody}
                                   onChange={(e) => handleBlockFieldChange(block.id, 'rightBody', e.target.value)}
-                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] p-2 text-xs text-zinc-300 outline-none focus:border-[#caa24c]/40"
+                                  className="w-full rounded bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] p-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40"
                                 />
                               </div>
                             </div>

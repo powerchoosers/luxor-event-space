@@ -1,10 +1,10 @@
 'use client'
 
 import React, { Suspense, useEffect, useMemo, useState } from 'react'
-import { FileText, Mail, Plus } from 'lucide-react'
+import { Mail, Menu, Plus } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AllEmailsTab } from '../marketing/tabs/AllEmailsTab'
-import { PortalAnimatedTabs, PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import type { LuxorSharedMailbox } from '@/lib/luxorSharedMailboxes'
 
@@ -22,6 +22,7 @@ function EmailsPageContent() {
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
   const [readerOpen, setReaderOpen] = useState(Boolean(searchParams?.get('messageId')))
   const [sharedMailboxes, setSharedMailboxes] = useState<LuxorSharedMailbox[]>([])
+  const [mailboxDrawerOpen, setMailboxDrawerOpen] = useState(false)
 
   const requestedMailbox = searchParams?.get('mailbox') || 'all'
   const activeMailbox = useMemo(
@@ -58,6 +59,15 @@ function EmailsPageContent() {
           title="Emails"
           mobileActionsInline
           actions={
+            <div className="flex items-center gap-2">
+            <PortalButton
+              variant="secondary"
+              className="min-h-11 min-w-11 justify-center px-3"
+              aria-label="Open mailbox navigation"
+              onClick={() => setMailboxDrawerOpen(true)}
+            >
+              <Menu size={16} aria-hidden="true" />
+            </PortalButton>
             <PortalButton
               variant="primary"
               className="min-h-11 whitespace-nowrap"
@@ -67,21 +77,10 @@ function EmailsPageContent() {
               <Plus size={13} aria-hidden="true" />
               <span>Compose<span className="hidden sm:inline"> Email</span></span>
             </PortalButton>
+            </div>
           }
         />
       </div>
-      {sharedMailboxes.length > 0 && !readerOpen ? (
-        <div className="mb-3 shrink-0 overflow-x-auto portal-scrollbar">
-          <PortalAnimatedTabs
-            tabs={[
-              { id: 'all', label: 'All email', icon: <Mail size={14} /> },
-              ...sharedMailboxes.map((mailbox) => ({ id: mailbox.key, label: mailbox.label, icon: <FileText size={14} /> })),
-            ]}
-            activeTab={activeMailbox?.key || 'all'}
-            onTabChange={(mailbox) => router.replace(mailbox === 'all' ? '/portal/emails' : `/portal/emails?mailbox=${encodeURIComponent(mailbox)}`)}
-          />
-        </div>
-      ) : null}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <AllEmailsTab
           key={activeMailbox?.key || 'all'}
@@ -90,6 +89,11 @@ function EmailsPageContent() {
           onReaderOpenChange={setReaderOpen}
           mailboxEmail={activeMailbox?.address}
           mailboxName={activeMailbox?.label}
+          sharedMailboxes={sharedMailboxes}
+          activeMailboxKey={activeMailbox?.key || 'all'}
+          mailboxDrawerOpen={mailboxDrawerOpen}
+          onMailboxDrawerOpenChange={setMailboxDrawerOpen}
+          onMailboxChange={(mailbox) => router.push(mailbox === 'all' ? '/portal/emails' : `/portal/emails?mailbox=${encodeURIComponent(mailbox)}`)}
         />
       </div>
     </PortalPageFrame>

@@ -233,6 +233,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     (!isMobileViewport && pathname === '/portal/leads') ||
     (isDesktopViewport && pathname === '/portal/events') ||
     pathname === '/portal/emails' ||
+    pathname === '/portal/email-tools' ||
     pathname === '/portal/messages' ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed)
@@ -487,10 +488,12 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   // Global Email Compose State & Event Listener
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [composeLead, setComposeLead] = useState<LuxorInquiry | null>(null)
+  const [composeTemplateId, setComposeTemplateId] = useState<string | null>(null)
 
   useEffect(() => {
     const handleComposeEvent = (e: Event) => {
-      const customEvent = e as CustomEvent<{ lead?: LuxorInquiry; email?: string }>
+      const customEvent = e as CustomEvent<{ lead?: LuxorInquiry; email?: string; templateId?: string }>
+      setComposeTemplateId(typeof customEvent.detail?.templateId === 'string' ? customEvent.detail.templateId : null)
       if (customEvent.detail?.lead) {
         setComposeLead(customEvent.detail.lead)
       } else if (customEvent.detail?.email) {
@@ -1168,8 +1171,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         {isComposeOpen && (
           <EmailComposeDrawer
             isOpen={isComposeOpen}
-            onClose={() => setIsComposeOpen(false)}
+            onClose={() => { setIsComposeOpen(false); setComposeTemplateId(null) }}
             lead={composeLead}
+            initialTemplateId={composeTemplateId}
           />
         )}
       </AnimatePresence>

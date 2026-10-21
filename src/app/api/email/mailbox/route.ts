@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
 import { parseLuxorMailboxPage, readLuxorMailboxPage } from '@/lib/luxorMailboxPageServer'
+import { listLuxorMailMessageStars } from '@/lib/luxorMailboxServer'
 import { findLuxorSharedMailboxByAddress } from '@/lib/luxorSharedMailboxes'
 
 export const runtime = 'nodejs'
@@ -25,6 +26,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This shared mailbox is restricted to portal admins.' }, { status: 403, headers })
     }
   }
-  try { return NextResponse.json(await readLuxorMailboxPage(input), { headers }) }
+  try {
+    const starred = await listLuxorMailMessageStars(session.email)
+    return NextResponse.json(await readLuxorMailboxPage({ ...input, starred }), { headers })
+  }
   catch { return NextResponse.json({ error: 'The mailbox could not load this page. Please retry.' }, { status: 503, headers }) }
 }

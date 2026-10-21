@@ -33,9 +33,11 @@ export async function readLuxorMailboxPage(input: LuxorMailboxPageRequest) {
   const catalog = new Map([...result.folders, ...released].map(folder => [folder.folder, {
     ...folder, folderId: folder.folderId || folder.folder, folderName: luxorMailFolderLabels[folder.folder] || folder.folderName,
   }]))
-  return { ...result, folders: [...catalog.values()], messages: result.messages.map(message => ({ ...message,
+  const starred = new Set(input.starred)
+  return { ...result, starredIds: input.starred, folders: [...catalog.values()], messages: result.messages.map(message => ({ ...message,
     subject: decodeHtmlEntities(message.subject) || '(No subject)', from: decodeHtmlEntities(message.from),
     to: decodeHtmlEntities(message.to), summary: decodeHtmlEntities(message.summary),
+    isStarred: starred.has(message.id),
     folderName: catalog.get(message.folder || '')?.folderName || message.folderName,
   })) }
 }
