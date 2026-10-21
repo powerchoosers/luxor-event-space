@@ -4386,7 +4386,6 @@ export default function LeadDetailPage({
 
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0">
-      {lead.is_test ? <LuxorTestLeadPanel leadId={lead.id} /> : null}
       {lead.is_test && !activeTestRunId ? <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3" role="status">
         <p className="text-xs text-[color:var(--portal-muted)]">{loadingTestRun ? 'Preparing the isolated Test Lead run…' : 'This lead needs an active isolated run before tours or proposals can be simulated.'}</p>
         {!loadingTestRun ? <button type="button" onClick={() => void ensureActiveTestRun(true)} className="min-h-10 rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white">Start or resume isolated run</button> : null}
@@ -4633,6 +4632,7 @@ export default function LeadDetailPage({
                 <MessageSquare size={15} />
               </button>
             )}
+            {lead.is_test ? <LuxorTestLeadPanel leadId={lead.id} /> : null}
             <div className="relative">
               <button
                 ref={actionsMenuTriggerRef}

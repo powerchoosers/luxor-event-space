@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { isLuxorNonRevenueTestInquiry, isLuxorTestInquiry, LUXOR_MAX_GUESTS, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
+import { isLuxorNonRevenueTestInquiry, isLuxorPermanentTestLead, isLuxorTestInquiry, LUXOR_MAX_GUESTS, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
@@ -83,7 +83,6 @@ import { useToast } from '@/components/portal/ToastProvider'
 import FollowUpsTab from '@/components/portal/FollowUpsTab'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { LuxorCrmRecordCard, LuxorCrmSecondaryAction, luxorCrmStatusTone } from '@/components/portal/LuxorCrmRecordCard'
-import { LuxorTestLeadPanel } from '@/components/portal/LuxorTestLeadPanel'
 
 const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -435,7 +434,7 @@ export default function LeadsPage() {
   const filteredLeads = useMemo(() => {
     const term = deferredSearchTerm.toLowerCase().trim()
     return leads.filter((lead) => {
-      if (isLuxorTestInquiry(lead)) return false
+      if (isLuxorPermanentTestLead(lead) || isLuxorTestInquiry(lead)) return false
       const matchesSearch =
         !term ||
         lead.full_name.toLowerCase().includes(term) ||
@@ -495,6 +494,7 @@ export default function LeadsPage() {
 
   // Computed Metrics
   const totalCount = sortedLeads.length
+  const permanentTestLead = leads.find(isLuxorPermanentTestLead) ?? null
   const newLeadsCount = useMemo(() => leads.filter((l) => l.status === 'new').length, [leads])
   const closedLostCount = useMemo(() => leads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length, [leads])
 
@@ -705,8 +705,6 @@ export default function LeadsPage() {
         {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} busyTourOutcomeIds={busyTourOutcomeIds} />}
         {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
 
-        {activeTab === 'pipeline' && leads.filter(isLuxorTestInquiry).map((lead) => <LuxorTestLeadPanel key={lead.id} leadId={lead.id} />)}
-
         {activeTab === 'pipeline' && (
           viewMode === 'list' || isMobileViewport ? (
         <PortalTableCard
@@ -785,6 +783,7 @@ export default function LeadsPage() {
               </tr>
             </PortalStickyThead>
             <tbody className="divide-y divide-[color:var(--portal-border)]">
+              {!loading && activeTab === 'pipeline' && permanentTestLead ? <PinnedTestLeadTableRow lead={permanentTestLead} /> : null}
               {loading ? (
                 <PortalTableSkeleton cols={8} rows={6} />
               ) : error ? (
@@ -940,6 +939,7 @@ export default function LeadsPage() {
           </div>
           <MobileLeadList
             leads={paginatedLeads}
+            testLead={activeTab === 'pipeline' ? permanentTestLead : null}
             startIndex={startIndex}
             selectedIds={bulkSelection}
             onToggle={bulkSelection.toggle}
@@ -1767,8 +1767,48 @@ function LeadsClientsTab({
     </PortalTableCard>
   )
 }
+function PinnedTestLeadTableRow({ lead }: { lead: LuxorInquiry }) {
+  const stageLabel = PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(lead))?.label || getPipelineStage(lead)
+
+  return (
+    <tr className="border-y border-[#caa24c]/25 bg-[#caa24c]/[0.045]">
+      <td className="px-4 py-3 text-center">
+        <span className="text-[9px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#f1d27a]">TEST</span>
+      </td>
+      <td className="px-4 py-3">
+        <Link href={`/portal/leads/${lead.id}`} className="flex items-center gap-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+          <PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="md" />
+          <span className="min-w-0">
+            <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[color:var(--portal-text)]">
+              {lead.full_name}
+              <span className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#8c6529] dark:text-[#f1d27a]">Test</span>
+            </span>
+            <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">{lead.email || 'Permanent isolated lead'}</span>
+          </span>
+        </Link>
+      </td>
+      <td className="px-6 py-3">
+        <span className="inline-flex min-h-9 items-center rounded-lg border border-[#caa24c]/25 bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)]">{stageLabel}</span>
+      </td>
+      <td className="px-6 py-3 text-xs text-[color:var(--portal-text)]">
+        <div className="font-semibold">{lead.event_type || 'Event not set'}</div>
+        <div className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">{lead.guest_count ? `${lead.guest_count} guests` : 'Guest count needed'}</div>
+      </td>
+      <td className="px-4 py-3 text-xs text-[color:var(--portal-muted)]">{getRequestedTourLanguage(lead) || '—'}</td>
+      <td className="px-6 py-3 text-xs text-[color:var(--portal-muted)]">{formatDate(lead.created_at)}</td>
+      <td className="px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]">Isolated test</td>
+      <td className="px-8 py-3 text-right">
+        <Link href={`/portal/leads/${lead.id}`} className="inline-flex h-9 items-center gap-2 rounded-md border border-[#caa24c]/25 bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:border-[#caa24c]/50" aria-label="Open permanent Test Lead">
+          <ExternalLink size={13} /> Open
+        </Link>
+      </td>
+    </tr>
+  )
+}
+
 function MobileLeadList({
   leads,
+  testLead,
   startIndex,
   selectedIds,
   onToggle,
@@ -1776,6 +1816,7 @@ function MobileLeadList({
   showPipelineStage,
 }: {
   leads: LuxorInquiry[]
+  testLead?: LuxorInquiry | null
   startIndex: number
   selectedIds: { isSelected: (id: string) => boolean }
   onToggle: (id: string) => void
@@ -1784,6 +1825,17 @@ function MobileLeadList({
 }) {
   return (
     <div className="divide-y divide-[color:var(--portal-border)] md:hidden">
+      {testLead ? (
+        <Link href={`/portal/leads/${testLead.id}`} className="flex min-w-0 items-center gap-3 border-b border-[#caa24c]/25 bg-[#caa24c]/[0.045] px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/50">
+          <span className="w-10 shrink-0 text-[9px] font-black uppercase tracking-[0.12em] text-[#a8792f] dark:text-[#f1d27a]">TEST</span>
+          <PortalContactAvatar name={testLead.full_name} avatarUrl={testLead.metadata?.avatar_url as string | null} size="sm" />
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[color:var(--portal-text)]">{testLead.full_name}<span className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#8c6529] dark:text-[#f1d27a]">Test</span></span>
+            <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">{testLead.email || 'Permanent isolated lead'} · {PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(testLead))?.label || getPipelineStage(testLead)}</span>
+          </span>
+          <ExternalLink size={14} className="shrink-0 text-[color:var(--portal-muted)]" />
+        </Link>
+      ) : null}
       {leads.length === 0 ? (
         <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No records matching search parameters.</div>
       ) : (

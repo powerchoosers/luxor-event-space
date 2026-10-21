@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
-import { History, RotateCcw, Settings2 } from 'lucide-react'
+import { FlaskConical, History, RotateCcw, Settings2, X } from 'lucide-react'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 
 type Payload = {
@@ -109,14 +108,14 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
         const started = await startResponse.json() as { leadId?: string; run?: { id?: string; status?: string }; error?: string }
         if (startResponse.ok && started.leadId === leadId && started.run?.id && started.run.status === 'in_progress') {
           window.dispatchEvent(new CustomEvent('luxor-test-run-ready', { detail: { runId: started.run.id } }))
-          nextRunNotice = `New isolated run ${started.run.id} is ready.`
+          nextRunNotice = 'A new isolated run is ready.'
         } else if (started.error) {
           nextRunNotice = started.error
         }
       } catch {
         nextRunNotice = 'The pipeline reset is complete. Start or resume a run before continuing.'
       }
-      setNotice(`Test run ${resetRun.id} reset. The permanent lead and history were preserved. ${nextRunNotice}`)
+      setNotice(`Test run reset. The permanent lead and history were preserved. ${nextRunNotice}`)
       await refresh()
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Unable to reset test pipeline.') }
     finally { setBusy(false) }
@@ -202,24 +201,22 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
   }
 
   return (
-    <section aria-label="Pinned test lead" className="mb-4 w-full rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm dark:border-amber-700 dark:bg-amber-950/25">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-amber-400 bg-amber-100 text-sm font-extrabold text-amber-900 dark:border-amber-600 dark:bg-amber-900/60 dark:text-amber-100">LT</div>
-          <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2"><h2 className="text-sm font-bold text-[color:var(--portal-text)]">{data?.lead?.full_name || 'Permanent Test Lead'}</h2><span className="rounded-full bg-sky-600 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white">Test</span><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${enabled ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200'}`}>{enabled ? 'Enabled' : 'Disabled'}</span></div>
-          <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Stage: {String(data?.lead?.pipeline_stage || data?.lead?.status || 'Inquiry')} · Current run: {activeRun ? `${activeRun.id} · ${activeRun.status}` : 'No active run'} · Test email recipient: {recipient || 'unconfirmed'}</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href={`/portal/leads/${leadId}`} className="inline-flex h-9 items-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)]">View Test Lead</Link>
-          {activeRun && simulatedTourComplete ? <Link href={`/portal/leads/${leadId}?testRunId=${encodeURIComponent(activeRun.id)}&createTestProposal=1`} className="inline-flex h-9 items-center rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white">{savedTestProposal?.status === 'drafted' ? 'Edit test proposal' : savedTestProposal?.status === 'sent' ? 'Published test proposal' : 'Create test proposal'}</Link> : null}
-          <button type="button" onClick={() => setView(view === 'history' ? null : 'history')} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)]"><History size={13} /> Test History</button>
-          <button type="button" onClick={() => setView(view === 'settings' ? null : 'settings')} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)]"><Settings2 size={13} /> Test Settings</button>
-          <button type="button" disabled={!resetRun || busy} onClick={() => void reset()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw size={13} /> Reset Pipeline</button>
-        </div>
+    <>
+      <div aria-label="Test lead tools" className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-[#caa24c]/45 bg-[#caa24c]/[0.06] p-1.5">
+        <span className="inline-flex h-9 items-center gap-1.5 px-2 text-[10px] font-black uppercase tracking-[0.15em] text-[#8c6529] dark:text-[#f1d27a]"><FlaskConical size={14} /> Test</span>
+        <button type="button" onClick={() => setView(view === 'history' ? null : 'history')} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)]"><History size={13} /> History</button>
+        <button type="button" onClick={() => setView(view === 'settings' ? null : 'settings')} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)]"><Settings2 size={13} /> Settings</button>
+        <button type="button" disabled={!resetRun || busy} onClick={() => void reset()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-500/25 bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-45 dark:text-rose-300"><RotateCcw size={13} /> Reset</button>
       </div>
-      {notice ? <p role="status" className="mt-3 text-xs text-[color:var(--portal-text)]">{notice}</p> : null}
+      {notice && !view ? <span role="status" className="max-w-xs text-xs text-[color:var(--portal-muted)]">{notice}</span> : null}
+      {view ? <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/50 p-3 backdrop-blur-sm sm:p-8">
+        <section aria-label={view === 'history' ? 'Test History' : 'Test Settings'} aria-modal="true" role="dialog" className="mx-auto flex max-h-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl">
+          <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6">
+            <h2 className="text-sm font-bold text-[color:var(--portal-text)]">{view === 'history' ? 'Test History' : 'Test Settings'}</h2>
+            <button type="button" onClick={() => setView(null)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)]" aria-label="Close test panel"><X size={16} /></button>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-5">
+      {notice ? <p role="status" className="mb-3 text-xs text-[color:var(--portal-text)]">{notice}</p> : null}
       {view === 'history' ? <div className="mt-4 space-y-4">
         <div className="overflow-x-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"><table className="w-full min-w-[1120px] text-left text-xs"><thead><tr className="border-b border-[color:var(--portal-border)] text-[color:var(--portal-muted)]"><th className="p-3">Run ID</th><th className="p-3">Source</th><th className="p-3">Submitted email</th><th className="p-3">Submitted phone</th><th className="p-3">Started</th><th className="p-3">Completed</th><th className="p-3">Reset</th><th className="p-3">Status</th><th className="p-3">Submitted details</th></tr></thead><tbody>{data?.runs.length ? data.runs.map((run) => <tr key={run.id} className="border-b border-[color:var(--portal-border)] last:border-0"><td className="p-3 font-mono">{run.id}</td><td className="p-3">{run.source}</td><td className="p-3">{String(run.submitted_email || '—')}</td><td className="p-3">{String(run.submitted_phone || '—')}</td><td className="p-3">{new Date(run.started_at).toLocaleString()}</td><td className="p-3">{run.completed_at ? new Date(run.completed_at).toLocaleString() : '—'}</td><td className="p-3">{run.reset_at ? new Date(run.reset_at).toLocaleString() : '—'}</td><td className="p-3">{run.status}</td><td className="p-3"><details><summary className="cursor-pointer text-sky-700 dark:text-sky-300">View details</summary><pre className="mt-2 max-w-sm whitespace-pre-wrap">{JSON.stringify(run.submitted_details || {}, null, 2)}</pre></details></td></tr>) : <tr><td colSpan={9} className="p-3 text-[color:var(--portal-muted)]">No test runs recorded.</td></tr>}</tbody></table><div className="flex items-center justify-between border-t border-[color:var(--portal-border)] p-3 text-xs text-[color:var(--portal-muted)]"><span>{data?.activity.length ?? 0} activity events on this page · Page {historyPage}</span><div className="flex gap-2"><button type="button" aria-label="Previous history page" disabled={historyPage <= 1} onClick={() => setHistoryPage((page) => Math.max(1, page - 1))} className="h-8 w-8 rounded-lg border border-[color:var(--portal-border)] disabled:opacity-40">‹</button><span className="self-center">{historyPage}</span><button type="button" aria-label="Next history page" disabled={!data?.hasMore} onClick={() => setHistoryPage((page) => page + 1)} className="h-8 w-8 rounded-lg border border-[color:var(--portal-border)] disabled:opacity-40">›</button></div></div></div>
         <div className="overflow-x-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"><h3 className="p-3 text-xs font-bold text-[color:var(--portal-text)]">Run activity and errors</h3><table className="w-full min-w-[800px] text-left text-xs"><thead><tr className="border-y border-[color:var(--portal-border)] text-[color:var(--portal-muted)]"><th className="p-3">Time</th><th className="p-3">Run</th><th className="p-3">Event</th><th className="p-3">Status</th><th className="p-3">Source</th><th className="p-3">Retry</th><th className="p-3">Details / error</th></tr></thead><tbody>{data?.activity.length ? data.activity.map((event) => <tr key={event.id} className="border-b border-[color:var(--portal-border)] last:border-0"><td className="p-3">{new Date(event.created_at).toLocaleString()}</td><td className="p-3 font-mono">{event.test_run_id || '—'}</td><td className="p-3">{event.event_type}</td><td className="p-3">{event.status || '—'}</td><td className="p-3">{event.source || '—'}</td><td className="p-3">{event.attempt ?? '—'}</td><td className="p-3"><span>{event.error_message || ''}</span><details><summary className="cursor-pointer text-sky-700 dark:text-sky-300">Details</summary><pre className="mt-2 max-w-sm whitespace-pre-wrap">{JSON.stringify(event.details || {}, null, 2)}</pre></details></td></tr>) : <tr><td colSpan={7} className="p-3 text-[color:var(--portal-muted)]">No activity recorded on this page.</td></tr>}</tbody></table></div>
@@ -252,6 +249,9 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
         <label className="flex items-start gap-2 text-xs font-semibold text-[color:var(--portal-text)] md:col-span-2"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="mt-0.5 accent-sky-700" /><span>Enable exact-match test submissions</span></label>
         <div className="flex flex-wrap gap-2 md:col-span-2"><button type="button" disabled={busy || (enabled && !data?.settings?.enabled && !confirmed)} onClick={() => void saveSettings()} className="h-10 rounded-lg bg-sky-700 px-4 text-xs font-bold text-white disabled:opacity-50">{busy ? 'Saving…' : enabled && !data?.settings?.enabled ? 'Enable test workflow' : 'Save settings'}</button><span className="self-center text-xs font-semibold text-[color:var(--portal-muted)]">{enabled ? 'Enabled' : 'Disabled by default'}</span><p className="basis-full text-[11px] text-[color:var(--portal-muted)]">Normalized phone: {data?.system?.normalizedPhone || '—'} · Inquiry, newsletter, and Elena contact routes use server-side matching; external integration health is not checked here.</p><p className="basis-full text-[11px] text-[color:var(--portal-muted)]">Mail provider configuration: {data?.system?.emailProvider || 'unavailable'} (configuration only; delivery health is not checked). Latest run: {latestRun ? `${latestRun.id} · ${latestRun.status}` : 'none'} · Current run: {activeRun?.id || 'none'} · Last reset: {lastReset ? new Date(lastReset).toLocaleString() : 'none'}. Exact-match public submissions can queue automatic test mail, and Send test queues mail explicitly; both deliver only to the verified inbox. SMS remains simulated.</p></div>
       </div> : null}
-    </section>
+          </div>
+        </section>
+      </div> : null}
+    </>
   )
 }

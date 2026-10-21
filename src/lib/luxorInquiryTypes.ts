@@ -160,6 +160,13 @@ export type LuxorInquiry = {
   follow_up_disposition_reason?: string | null
 }
 
+/** The one permanent isolated Test Lead shown in portal shortcuts. */
+export const LUXOR_PERMANENT_TEST_LEAD_ID = '00b264d6-a3fb-4ea3-9142-415f76385c39'
+
+export function isLuxorPermanentTestLead(inquiry: Pick<LuxorInquiry, 'id'> | null | undefined): boolean {
+  return inquiry?.id === LUXOR_PERMANENT_TEST_LEAD_ID
+}
+
 /** Test inquiries remain visible in the CRM for end-to-end checks, but never count as business KPI records. */
 export function isLuxorTestInquiry(inquiry: Pick<LuxorInquiry, 'is_test' | 'metadata'> | null | undefined): boolean {
   return inquiry?.is_test === true || inquiry?.metadata?.is_test_record === true
