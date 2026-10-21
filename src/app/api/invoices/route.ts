@@ -18,6 +18,7 @@ import { luxorCalendarDate, proposalValidThrough, proposalExpirationInstant } fr
 import type { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorProposalContext } from '@/lib/luxorInquiryTypes'
 import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
 import { assertLuxorSameDayRevisionSafe } from '@/lib/luxorSameDayBookingServer'
+import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
 
 const PRICING_CONFIGURATION_REQUIRED = 'Pricing configuration required — administrator review.'
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
@@ -27,6 +28,12 @@ type UnknownRecord = Record<string, unknown>
 class ProposalPricingConfigurationError extends Error {
   constructor() {
     super(PRICING_CONFIGURATION_REQUIRED)
+  }
+}
+
+class MissingProposalPackageTierError extends Error {
+  constructor() {
+    super('Choose Essentials, Signature, Luxor, or Customized before saving this proposal.')
   }
 }
 
@@ -236,17 +243,21 @@ async function calculateServerProposal(selection: LuxorProposalSelection, existi
   let pricingRecord: Awaited<ReturnType<typeof getDefaultLuxorProposalPricing>>
   let calculation: unknown
   let promotion: Awaited<ReturnType<typeof resolveLuxorProposalPromotion>>
+  const savedPolicyVersion = Number(existing?.proposal_context?.proposal_pricing_policy_version)
+  const pricingPolicyVersion = existing ? (savedPolicyVersion >= 4 ? 4 : 3) : 4
+  const rawPackageTier = selection.packageTierId ?? selection.package_tier_id ?? selection.luxorPackageId ?? selection.luxor_package_id
+  if (pricingPolicyVersion >= 4 && !normalizeLuxorProposalPackageTierId(rawPackageTier)) {
+    throw new MissingProposalPackageTierError()
+  }
   try {
     pricingRecord = await getLuxorProposalPricingForInvoice(existing)
-    const savedPolicyVersion = Number(existing?.proposal_context?.proposal_pricing_policy_version)
-    const pricingPolicyVersion = existing ? (savedPolicyVersion >= 4 ? 4 : 3) : 4
     const policySelection = withLuxorProposalPricingPolicyVersion(selection, pricingPolicyVersion)
     assertLuxorWeekdayRentalSelection(policySelection, pricingRecord.config, true, hasFrozenLegacyCustomTimeProposal(existing))
     promotion = await resolveLuxorProposalPromotion(policySelection, existing)
     const sameDayBooking = await resolveLuxorSameDayBooking(policySelection, existing, originalCreatedAt)
     calculation = calculateLuxorProposal(policySelection, pricingRecord.config, { promotion, sameDayBooking })
   } catch (error) {
-    if (error instanceof LuxorPromotionSelectionError || error instanceof LuxorWeekdayRentalError) throw error
+    if (error instanceof LuxorPromotionSelectionError || error instanceof LuxorWeekdayRentalError || error instanceof MissingProposalPackageTierError) throw error
     throw new ProposalPricingConfigurationError()
   }
 
@@ -580,6 +591,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(invoice, { status: 201 })
   } catch (error) {
     if (error instanceof LuxorWeekdayRentalError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof MissingProposalPackageTierError) return NextResponse.json({ error: error.message }, { status: 409 })
     if (error instanceof LuxorPromotionSelectionError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }
@@ -760,6 +772,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(updatedInvoice)
   } catch (error) {
     if (error instanceof LuxorWeekdayRentalError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof MissingProposalPackageTierError) return NextResponse.json({ error: error.message }, { status: 409 })
     if (error instanceof LuxorPromotionSelectionError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }

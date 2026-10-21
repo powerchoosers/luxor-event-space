@@ -111,6 +111,7 @@ import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext } from '@/lib/luxorProposalDuplicateContext'
 import { findProposalLeadEvent, getLeadClientProposals, getProposalCardState, getProposalWorkflowDisplayState, getSavedProposalPricingSummary } from '@/lib/luxorProposalCard'
 import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
+import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
 import {
   hasCancellableTour,
   LeadLifecycleActionSheet,
@@ -2672,11 +2673,33 @@ export default function LeadDetailPage({
             ? calculationSelection.custom_items
             : undefined
     const paymentPlan = asProposalRecord(context.payment_plan || calculationContext.payment_plan)
+    const rawPackageTier = contextSelection?.packageTierId !== undefined
+      ? contextSelection.packageTierId
+      : contextSelection?.package_tier_id !== undefined
+        ? contextSelection.package_tier_id
+        : context.package_tier_id !== undefined
+          ? context.package_tier_id
+          : calculationSelection?.packageTierId !== undefined
+            ? calculationSelection.packageTierId
+            : calculationSelection?.package_tier_id !== undefined
+              ? calculationSelection.package_tier_id
+              : calculationContext.package_tier_id
+    const packageTierId = normalizeLuxorProposalPackageTierId(rawPackageTier)
+    const proposalPricingPolicyVersion = asProposalNumber(
+      context.proposal_pricing_policy_version,
+      contextSelection?.proposal_pricing_policy_version,
+      calculationContext.proposal_pricing_policy_version,
+      calculationSelection?.proposal_pricing_policy_version,
+    )
+    if (proposalPricingPolicyVersion !== undefined && proposalPricingPolicyVersion >= 4 && !packageTierId) {
+      throw new Error('Choose Essentials, Signature, Luxor, or Customized before saving this proposal.')
+    }
     const promotionId = selectedProposalPromotionId
       || String(contextSelection?.promotionId || contextSelection?.promotion_id || calculationSelection?.promotionId || calculationSelection?.promotion_id || '').trim()
 
     return {
       packageId,
+      ...(packageTierId ? { packageTierId, package_tier_id: packageTierId } : {}),
       eventDate,
       guestCount,
       eventType: context.event_type || activeEventForDisplay?.event_type || lead?.event_type || null,
@@ -2692,6 +2715,7 @@ export default function LeadDetailPage({
       ...(promotionId ? { promotionId } : {}),
       taxCoveragePromotionId: contextSelection?.taxCoveragePromotionId ?? contextSelection?.tax_coverage_promotion_id ?? null,
       taxRate: invoiceTaxRate.trim() === '' ? null : Math.max(0, Number(invoiceTaxRate) || 0),
+      ...(proposalPricingPolicyVersion !== undefined ? { proposalPricingPolicyVersion } : {}),
       ...(customItems ? { customItems } : {}),
       ...(paymentPlan ? { paymentPlan } : {}),
     }

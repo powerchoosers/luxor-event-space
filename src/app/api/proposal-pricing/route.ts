@@ -23,6 +23,7 @@ import {
   type LuxorProposalPricingConfig,
   type LuxorProposalSelection,
 } from '@/lib/luxorProposalPricing'
+import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
 import { catalogNumber, catalogValue } from '@/lib/luxorPricingCatalog'
 import { OFFICIAL_DECOR_SERVICES } from '@/lib/luxorDecorCatalog'
 import { LUXOR_DECOR_CATALOG_KEY, validateLuxorDecorCatalog } from '@/lib/luxorDecorCatalogV2'
@@ -97,6 +98,13 @@ export async function POST(request: NextRequest) {
     const sameDayBooking = await resolveLuxorSameDayBooking(selection as LuxorProposalSelection, existing, originalCreatedAt)
     const savedPolicyVersion = Number(existing?.proposal_context?.proposal_pricing_policy_version)
     const pricingPolicyVersion = existing ? (savedPolicyVersion >= 4 ? 4 : 3) : 4
+    const packageTier = (selection as LuxorProposalSelection).packageTierId
+      ?? (selection as LuxorProposalSelection).package_tier_id
+      ?? (selection as LuxorProposalSelection).luxorPackageId
+      ?? (selection as LuxorProposalSelection).luxor_package_id
+    if (pricingPolicyVersion >= 4 && !normalizeLuxorProposalPackageTierId(packageTier)) {
+      return NextResponse.json({ error: 'Choose Essentials, Signature, Luxor, or Customized to calculate this proposal.' }, { status: 409 })
+    }
     const policySelection = withLuxorProposalPricingPolicyVersion(selection as LuxorProposalSelection, pricingPolicyVersion)
     const calculation = calculateLuxorProposal(policySelection, pricing.config, { promotion, sameDayBooking })
     const customTimeV4Ready = process.env.LUXOR_CUSTOM_TIME_V4_READY === 'true'

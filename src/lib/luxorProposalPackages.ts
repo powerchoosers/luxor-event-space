@@ -3,6 +3,13 @@ export const LUXOR_PACKAGE_SELECTION_SCHEMA_VERSION = 1
 export const LUXOR_PROPOSAL_PACKAGE_IDS = ['essentials', 'signature', 'luxor', 'customized'] as const
 export type LuxorProposalPackageTierId = typeof LUXOR_PROPOSAL_PACKAGE_IDS[number]
 
+export function normalizeLuxorProposalPackageTierId(value: unknown): LuxorProposalPackageTierId | null {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  return (LUXOR_PROPOSAL_PACKAGE_IDS as readonly string[]).includes(normalized)
+    ? normalized as LuxorProposalPackageTierId
+    : null
+}
+
 export type LuxorProposalPackagePriceTier = {
   min_guests: number
   max_guests: number
