@@ -675,8 +675,13 @@ export async function createLuxorEmailJob(data: {
   subject: string
   body: string
   scheduledFor?: string
+  /** Manual sends may record a terminal receipt without exposing it to workers. */
+  status?: 'queued' | 'sent' | 'failed'
+  sentAt?: string
+  lastError?: string | null
   metadata?: Record<string, unknown>
 }) {
+  const status = data.status || 'queued'
   const [created] = await supabaseRest<LuxorEmailJob[]>('luxor_email_jobs?select=*', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
@@ -685,11 +690,13 @@ export async function createLuxorEmailJob(data: {
       booking_id: data.bookingId || null,
       signature_request_id: data.signatureRequestId || null,
       job_type: data.jobType,
-      status: 'queued',
+      status,
       recipient_email: data.recipientEmail,
       subject: data.subject,
       body: data.body,
       scheduled_for: data.scheduledFor || new Date().toISOString(),
+      ...(status === 'sent' ? { sent_at: data.sentAt || new Date().toISOString() } : {}),
+      ...(data.lastError ? { last_error: data.lastError } : {}),
       metadata: data.metadata || {},
     }),
   })

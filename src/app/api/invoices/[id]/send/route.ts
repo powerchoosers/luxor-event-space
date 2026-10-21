@@ -570,7 +570,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       let updated = preparedInvoice
       if (!hasConfirmedDelivery) {
-      const job = await createLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking?.id || null, jobType: 'booking_package', recipientEmail: email.recipient, subject: email.subject, body: `Your Luxor final proposal is ready: ${email.reviewUrl}`, scheduledFor: now, metadata: { manual: true, requestedBy: session.email, flow_stage: 'final_proposal', proposal_version: preparedInvoice.proposal_version || 1, price_locked_at: preparedInvoice.price_locked_at, review_url: email.reviewUrl, attachment_filename: deliverySnapshot.proposal_email.attachment_filename, rendered_at: deliverySnapshot.proposal_email.rendered_at } })
+      const emailJob = {
+        inquiryId: inquiry.id,
+        bookingId: booking?.id || null,
+        jobType: 'booking_package' as const,
+        recipientEmail: email.recipient,
+        subject: email.subject,
+        body: `Your Luxor final proposal is ready: ${email.reviewUrl}`,
+        scheduledFor: now,
+        metadata: { manual: true, requestedBy: session.email, flow_stage: 'final_proposal', proposal_version: preparedInvoice.proposal_version || 1, price_locked_at: preparedInvoice.price_locked_at, review_url: email.reviewUrl, attachment_filename: deliverySnapshot.proposal_email.attachment_filename, rendered_at: deliverySnapshot.proposal_email.rendered_at },
+      }
+      let providerAccepted = false
       try {
         const ownsDelivery = await finishLuxorProposalPublication(preparedInvoice.id, attemptId, 'sending')
         if (!ownsDelivery) throw new Error('The proposal changed before delivery. Retry to recover its current state.')
@@ -579,6 +589,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
         publicationState = 'delivery_unconfirmed'
         const receipt = await sendLuxorZohoEmail({ idempotencyKey: sendReservation?.idempotency_key || `final-proposal/${preparedInvoice.id}/${preparedInvoice.proposal_version || 1}`, metadata: sendReservation ? { proposal_send_attempt_id: sendReservation.attempt_id, proposal_number: sendReservation.proposal_number } : undefined, to: email.recipient, subject: email.subject, content: email.html, from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Event Space', attachments: [{ filename: deliverySnapshot.proposal_email.attachment_filename, content: pdf, contentType: 'application/pdf' }] })
+        providerAccepted = true
+        // This is a history receipt for the direct PDF send, not a second queued
+        // delivery. Only create it after the provider accepts the actual email.
+        await createLuxorEmailJob({ ...emailJob, status: 'sent', sentAt: now }).catch((error) => {
+          console.error('Final proposal was delivered, but its email-job receipt could not be created:', error)
+        })
         const providerMessageId = 'providerMessageId' in receipt && typeof receipt.providerMessageId === 'string'
           ? receipt.providerMessageId
           : 'messageId' in receipt && typeof receipt.messageId === 'string' ? receipt.messageId : null
@@ -612,14 +628,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
         publicationState = 'failed'
       } catch (error) {
-        await updateLuxorEmailJob(job.id, { status: 'failed', last_error: error instanceof Error ? error.message : 'Email send failed.' })
+        if (!providerAccepted) {
+          const lastError = error instanceof Error ? error.message : 'Email send failed.'
+          await createLuxorEmailJob({ ...emailJob, status: 'failed', lastError }).catch((ledgerError) => {
+            console.error('Final proposal email failed, but its failure record could not be created:', ledgerError)
+          })
+        }
         throw error
       }
-      // The invoice receipt is the client-facing source of truth. A mail-job
-      // ledger hiccup must not turn a confirmed delivery into a retry prompt.
-      await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: now }).catch((error) => {
-        console.error('Final proposal was delivered, but the email-job receipt could not be updated:', error)
-      })
       }
       if (hasConfirmedDelivery && sendReservation) {
         // The invoice receipt is durable before history completion. Recover it
