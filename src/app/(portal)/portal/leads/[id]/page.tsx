@@ -308,12 +308,50 @@ function getProposalDeliveryState(invoice: LuxorInvoice | null) {
   return typeof proposalEmail?.delivery_state === 'string' ? proposalEmail.delivery_state : null
 }
 
+function isProposalBreakdownInvoice(invoice: LuxorInvoice | null) {
+  const proposalContext = asProposalRecord(invoice?.proposal_context)
+  return proposalContext?.proposal_record_type === 'proposal_breakdown'
+}
+
+function hasIndividualProposalHandoff(invoice: LuxorInvoice | null) {
+  const deliverySnapshot = asProposalRecord(invoice?.proposal_context?.delivery_snapshot)
+  const inPerson = asProposalRecord(deliverySnapshot?.in_person)
+  return inPerson?.handoff_state === 'ready'
+}
+
 function hasPublishedFinalProposal(invoice: LuxorInvoice | null) {
+  if (isProposalBreakdownInvoice(invoice)) {
+    return getProposalDeliveryState(invoice) === 'delivered' || hasIndividualProposalHandoff(invoice)
+  }
+
   return Boolean(
     invoice?.proposal_sent_at ||
     invoice?.status === 'sent' ||
     getProposalDeliveryState(invoice) === 'delivered',
   )
+}
+
+function getPublishedFinalProposalSentAt(invoice: LuxorInvoice | null) {
+  if (!invoice) return null
+
+  if (isProposalBreakdownInvoice(invoice)) {
+    if (getProposalDeliveryState(invoice) === 'delivered') {
+      const deliverySnapshot = asProposalRecord(invoice.proposal_context?.delivery_snapshot)
+      const proposalEmail = asProposalRecord(deliverySnapshot?.proposal_email)
+      return typeof proposalEmail?.delivery_sent_at === 'string'
+        ? proposalEmail.delivery_sent_at
+        : invoice.updated_at || invoice.proposal_sent_at || null
+    }
+    return hasIndividualProposalHandoff(invoice) ? invoice.proposal_sent_at || (invoice.status === 'sent' ? invoice.updated_at : null) : null
+  }
+
+  if (invoice.proposal_sent_at) return invoice.proposal_sent_at
+  if (getProposalDeliveryState(invoice) === 'delivered') {
+    const deliverySnapshot = asProposalRecord(invoice.proposal_context?.delivery_snapshot)
+    const proposalEmail = asProposalRecord(deliverySnapshot?.proposal_email)
+    return typeof proposalEmail?.delivery_sent_at === 'string' ? proposalEmail.delivery_sent_at : invoice.updated_at || null
+  }
+  return invoice.status === 'sent' ? invoice.updated_at : null
 }
 
 function EventTypeIcon({ eventType }: { eventType: string | null }) {
@@ -511,9 +549,11 @@ export default function LeadDetailPage({
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
   const invoiceSubmitBusy = useRef(false)
   const invoiceCreationRequest = useRef<string | null>(null)
+  const breakdownCreationRequest = useRef<string | null>(null)
   const savedPublicationInvoice = useRef<LuxorInvoice | null>(null)
   const [invoiceSubmissionError, setInvoiceSubmissionError] = useState<string | null>(null)
   const [publicationPending, setPublicationPending] = useState(false)
+  const [breakdownPublished, setBreakdownPublished] = useState(false)
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
   const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<LuxorInvoice | null>(null)
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<LuxorInvoice | null>(null)
@@ -878,9 +918,9 @@ export default function LeadDetailPage({
     [eventBookingIds, eventInvoiceIds, payments, selectedLeadEvent],
   )
   const latestBooking = useMemo(() => getMostRecentBooking(eventBookings), [eventBookings])
-  // Always anchor proposal/contract UI to the newest final proposal in the
-  // active lead workflow. A lead can have an older completed booking, and that
-  // record must never make a newer proposal look signed or delivered.
+  // Always anchor proposal/contract UI to the newest saved event proposal in
+  // the active lead workflow. A lead can have an older completed booking, and
+  // that record must never make a newer proposal look signed or delivered.
   const currentProposalInvoice = useMemo(
     // An accepted proposal can temporarily have no booking or event link
     // while the acceptance workflow finishes. Include all lead invoices so
@@ -2357,9 +2397,11 @@ export default function LeadDetailPage({
   const initializeProposalBuilder = (invoice?: LuxorInvoice | null) => {
     if (invoiceSubmitBusy.current) return
     invoiceCreationRequest.current = crypto.randomUUID()
+    breakdownCreationRequest.current = null
     savedPublicationInvoice.current = null
     setInvoiceSubmissionError(null)
     setPublicationPending(false)
+    setBreakdownPublished(false)
     proposalEditorOpenRef.current = true
     setEditingInvoiceId(invoice?.id || null)
     const sourceEvent = invoice ? findProposalLeadEvent(invoice, leadEvents, bookings) : selectedLeadEvent
@@ -2721,7 +2763,30 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleCreateInvoice = async (action: 'save' | 'email' | 'in_person') => {
+  const handleSendProposalBreakdown = async (invoice: LuxorInvoice, recipientEmail: string) => {
+    const response = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/breakdown-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipientEmail }),
+    })
+    const payload = await response.json().catch(() => ({})) as { invoice?: LuxorInvoice; reviewUrl?: string; alreadyCompleted?: boolean; error?: string }
+    if (!response.ok || !payload.invoice || !payload.reviewUrl) {
+      throw new Error(payload.error || 'The Proposal Breakdown email could not be confirmed. Retry to recover its saved result.')
+    }
+    savedPublicationInvoice.current = payload.invoice
+    setInvoices((previous) => [payload.invoice!, ...previous.filter((item) => item.id !== payload.invoice!.id)])
+    setPublicationPending(true)
+    setBreakdownPublished(true)
+    setInvoiceSubmissionError(null)
+    void fetchAllData(false)
+    notify({
+      title: payload.alreadyCompleted ? 'Proposal Breakdown already sent' : 'Proposal Breakdown sent',
+      description: 'The selected package and private Book Now link are saved. Continue to the final step if you also want to email the individual proposal.',
+      variant: 'success',
+    })
+  }
+
+  const handleCreateInvoice = async (action: 'save' | 'email' | 'in_person' | 'breakdown', details?: { recipientEmail?: string }) => {
     if (!lead || invoiceSubmitBusy.current) return
     invoiceSubmitBusy.current = true
     setSubmittingInvoice(true)
@@ -2729,6 +2794,7 @@ export default function LeadDetailPage({
     let handoffWindow: Window | null = null
     try {
       if (isLuxorTestInquiry(lead)) {
+        if (action === 'breakdown') throw new Error('Proposal Breakdown email delivery is disabled for isolated Test Leads. Use the preview only.')
         if (!activeTestRunId) throw new Error('Start or resume the isolated Test Lead run before saving this proposal.')
         if (action === 'in_person') throw new Error('In-person handoff and signing are blocked for the permanent test lead.')
         if (!invoiceDueDate) throw new Error('Choose when this proposal offer expires before saving it.')
@@ -2759,6 +2825,10 @@ export default function LeadDetailPage({
       }
       if (action === 'in_person') handoffWindow = window.open('about:blank', 'luxor-client-handoff')
       if (savedPublicationInvoice.current) {
+        if (action === 'breakdown') {
+          await handleSendProposalBreakdown(savedPublicationInvoice.current, String(details?.recipientEmail || lead.email || ''))
+          return
+        }
         if (action === 'in_person') await prepareClientProposalHandoff(savedPublicationInvoice.current, handoffWindow)
         else await handleSendFinalProposal(savedPublicationInvoice.current, true)
         setIsInvoiceModalOpen(false)
@@ -2779,6 +2849,9 @@ export default function LeadDetailPage({
         || editingInvoice.proposal_sent_at
         || editingInvoice.status === 'sent'
       ))
+      if (action === 'breakdown' && createRevision) {
+        throw new Error('Use the final proposal action to publish revised pricing through the existing revision flow.')
+      }
       const updateExistingDraft = Boolean(editingInvoice && !createRevision)
       const proposalSelection = buildProposalSelection()
       const selectedPackage = proposalCalculation?.packages?.find((candidate) => (
@@ -2794,7 +2867,11 @@ export default function LeadDetailPage({
         method: updateExistingDraft ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(updateExistingDraft && editingInvoiceId ? { id: editingInvoiceId } : { creation_request_id: invoiceCreationRequest.current ||= crypto.randomUUID() }),
+          ...(updateExistingDraft && editingInvoiceId
+            ? { id: editingInvoiceId }
+            : action === 'breakdown'
+              ? { creation_request_id: breakdownCreationRequest.current ||= crypto.randomUUID() }
+              : { creation_request_id: invoiceCreationRequest.current ||= crypto.randomUUID() }),
           ...(createRevision && editingInvoice ? { supersedes_invoice_id: editingInvoice.id } : {}),
           client_name: lead.full_name,
           event_type: proposalContext?.event_type || activeEventForDisplay?.event_type || lead.event_type || 'Event Booking',
@@ -2804,6 +2881,7 @@ export default function LeadDetailPage({
           due_date: invoiceDueDate || null,
           offer_expires_at: offerExpiresAt,
           proposal_selection: proposalSelection,
+          ...(action === 'breakdown' ? { proposal_record_type: 'proposal_breakdown' } : {}),
           inquiry_id: id,
           lead_event_id: proposalLeadEventId,
           notes: invoiceNotes || null,
@@ -2821,11 +2899,15 @@ export default function LeadDetailPage({
         setPublicationPending(true)
       }
       // Optional dossier summaries cannot turn a successful save into a duplicate retry.
-      if ((selectedLeadEvent?.id || null) === proposalLeadEventId) {
+      if (action !== 'breakdown' && (selectedLeadEvent?.id || null) === proposalLeadEventId) {
         await (selectedLeadEvent
           ? handleEventMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) })
           : handleMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) }))
           .catch(error => console.error('Proposal saved; dossier summary refresh failed:', error))
+      }
+      if (action === 'breakdown') {
+        await handleSendProposalBreakdown(invoice, String(details?.recipientEmail || lead.email || ''))
+        return
       }
       if (action === 'email') await handleSendFinalProposal(invoice, true)
       if (action === 'in_person') await prepareClientProposalHandoff(invoice, handoffWindow)
@@ -3816,15 +3898,8 @@ export default function LeadDetailPage({
     proposalInPersonDelivery && typeof proposalInPersonDelivery === 'object' && !Array.isArray(proposalInPersonDelivery)
     && (proposalInPersonDelivery as Record<string, unknown>).handoff_state === 'ready',
   )
-  const proposalDeliveryConfirmed = proposalDeliveryState === 'delivered'
   const proposalDeliveryPrepared = proposalDeliveryState === 'prepared'
-  const proposalSentAt = proposalInvoice?.proposal_sent_at || (proposalDeliveryConfirmed ? (
-    proposalDeliveryEmail && typeof proposalDeliveryEmail === 'object' && !Array.isArray(proposalDeliveryEmail)
-      ? typeof (proposalDeliveryEmail as Record<string, unknown>).delivery_sent_at === 'string'
-        ? (proposalDeliveryEmail as Record<string, unknown>).delivery_sent_at as string
-        : proposalInvoice?.updated_at || null
-      : proposalInvoice?.updated_at || null
-  ) : null) || (proposalInvoice?.status === 'sent' ? proposalInvoice.updated_at : null)
+  const proposalSentAt = getPublishedFinalProposalSentAt(proposalInvoice)
   const proposalAcceptedAt = proposalInvoice?.proposal_accepted_at || null
   const proposalViewedAt = proposalInvoice?.proposal_viewed_at || null
   const agreementDeliveryJob = agreementBooking
@@ -7882,6 +7957,22 @@ export default function LeadDetailPage({
                   const shownPeriod = custom
                     ? `Custom time${rentalStart && rentalEnd ? ` · ${formatProposalClock(rentalStart)}-${formatProposalClock(rentalEnd)}${nextDayEnd ? ' (next day)' : ''}` : ''}`
                     : `${period.replaceAll('_', ' ')} rental${fixedWindow ? ` · ${fixedWindow}` : ''}`
+                  const proposalContextRecord = asProposalRecord(proposal.proposal_context) || {}
+                  const proposalDeliverySnapshot = asProposalRecord(proposalContextRecord.delivery_snapshot) || {}
+                  const breakdownDelivery = asProposalRecord(proposalDeliverySnapshot.proposal_breakdown_email)
+                  const individualProposalDelivery = asProposalRecord(proposalDeliverySnapshot.proposal_email)
+                  const individualProposalSent = individualProposalDelivery?.delivery_state === 'delivered'
+                  const breakdownAttemptId = typeof breakdownDelivery?.proposal_send_attempt_id === 'string' ? breakdownDelivery.proposal_send_attempt_id : null
+                  const breakdownAttempt = breakdownAttemptId
+                    ? (proposalHistory[proposal.id]?.sendAttempts || []).find((attempt) => attempt.id === breakdownAttemptId) || null
+                    : null
+                  const publicationAttempt = asProposalRecord(proposalContextRecord.publication_attempt)
+                  const breakdownDeliveryStatus = breakdownDelivery?.delivery_state === 'delivered'
+                    ? 'sent'
+                    : breakdownAttempt?.state
+                      || (publicationAttempt?.id === breakdownAttemptId ? String(publicationAttempt.state || 'preparing') : null)
+                      || (breakdownDelivery ? 'status unavailable' : null)
+                  const isProposalBreakdown = proposalContextRecord.proposal_record_type === 'proposal_breakdown'
                   const proposalActivities = (proposalHistory[proposal.id]?.activities || []).filter((activity) => activity.invoice_id === proposal.id)
                   const proposalActivityTypes = new Set(proposalActivities.map((activity) => activity.event_type))
                   const proposalBooking = bookings.find((booking) => booking.invoice_id === proposal.id || booking.id === proposal.booking_id) || null
@@ -7916,9 +8007,11 @@ export default function LeadDetailPage({
                         : lifecycleStatus === 'Sending'
                           ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
                           : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
-                  const proposalLabel = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
-                    ? `Proposal${proposal.proposal_number === 1 ? '' : ` #${proposal.proposal_number}`}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
-                    : proposalHasBeenPublished ? 'Existing proposal' : 'Draft proposal'
+                  const proposalLabel = isProposalBreakdown
+                    ? 'Proposal Breakdown'
+                    : Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
+                      ? `Proposal${proposal.proposal_number === 1 ? '' : ` #${proposal.proposal_number}`}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
+                      : proposalHasBeenPublished ? 'Existing proposal' : 'Draft proposal'
                   const proposalIdentifier = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
                     ? `#${proposal.proposal_number}`
                     : proposal.id
@@ -7944,7 +8037,7 @@ export default function LeadDetailPage({
                   const latestProposalPayment = [...paidProposalPayments].sort((a, b) => Date.parse(b.paid_at || b.updated_at) - Date.parse(a.paid_at || a.updated_at))[0]
                   const paidPaymentInvoice = paymentInvoices.find((invoice) => invoice.status === 'paid')
                   const proposalMilestones: Array<[string, string, string | null, string]> = [
-                    ['sent', 'Proposal sent', latestSentAt, 'Not sent yet'],
+                    ['sent', isProposalBreakdown ? 'Proposal Breakdown email sent' : 'Proposal sent', isProposalBreakdown ? (typeof breakdownDelivery?.delivery_sent_at === 'string' ? breakdownDelivery.delivery_sent_at : null) : latestSentAt, 'Not sent yet'],
                     ['viewed', 'Proposal viewed', latestView, 'Not yet viewed'],
                     ['accepted', 'Proposal accepted', proposal.proposal_accepted_at || acceptedActivity?.occurred_at || null, hasAcceptanceEvidence && !proposal.proposal_accepted_at && !acceptedActivity ? 'Signed agreement recorded; acceptance timestamp unavailable' : hasAcceptanceEvidence && !proposal.proposal_accepted_at ? 'Acceptance recorded in proposal history' : 'Not yet accepted'],
                     ['agreement', 'Agreement signed', proposalBooking?.contract_status === 'signed' ? proposalBooking.contract_signed_at || proposalBooking.updated_at : null, proposalBooking?.contract_status === 'viewed' ? 'Opened; awaiting signature' : 'Not yet signed'],
@@ -8005,14 +8098,27 @@ export default function LeadDetailPage({
                       </section>
                       <section id={`proposal-activity-${proposal.id}`} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 scroll-mt-24" aria-label="Proposal activity">
                         <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Delivery & activity</h4><div className="flex items-center gap-2"><span className="text-[9px] text-[color:var(--portal-muted)]">{proposalActivityTypes.size} events</span><button type="button" onClick={showProposalHistory} className="min-h-9 rounded-md border border-[color:var(--portal-border)] px-2.5 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/50">View activity</button></div></div>
+                        {isProposalBreakdown ? <div className="mt-3 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[10px]">
+                          <p className="font-semibold capitalize text-[color:var(--portal-text)]">Proposal Breakdown email · {(breakdownDeliveryStatus || 'not sent').replaceAll('_', ' ')}</p>
+                          <p className="mt-1 text-[color:var(--portal-muted)]">
+                            {typeof breakdownDelivery?.recipient_email === 'string' ? `${breakdownDelivery.recipient_email} · ` : ''}
+                            {typeof breakdownDelivery?.delivery_sent_at === 'string'
+                              ? `Sent ${formatVenueDateTime(breakdownDelivery.delivery_sent_at)}`
+                              : breakdownAttempt?.started_at ? `Started ${formatVenueDateTime(breakdownAttempt.started_at)}` : 'No email has been sent.'}
+                          </p>
+                          {breakdownAttempt?.failure_reason ? <p className="mt-1 text-red-700 dark:text-red-300">{breakdownAttempt.failure_reason}</p> : null}
+                        </div> : null}
                         <ol className="mt-2 space-y-2 border-l border-[color:var(--portal-border)] pl-3 text-[10px]">
                           {proposalMilestones.map(([key, label, occurredAt, emptyText]) => <li key={key} className="relative"><span className="absolute -left-[17px] top-1 h-2 w-2 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"/><p className="font-semibold text-[color:var(--portal-text)]">{label}</p><p className="mt-0.5 text-[color:var(--portal-muted)]">{occurredAt ? formatVenueDateTime(occurredAt) : emptyText}</p></li>)}
                         </ol>
                       </section>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <button type="button" onClick={() => openProposalDeliveryPreview(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Eye size={12} /> View proposal</button>
-                      {proposalCardState.canResend ? <button type="button" onClick={() => void handleSendFinalProposal(proposal, false, true)} disabled={!lead.email || sendingInvoiceId === proposal.id} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === proposal.id ? 'Sending…' : 'Resend proposal'}</button> : null}
+                      <button type="button" onClick={() => openProposalDeliveryPreview(proposal)} disabled={isProposalBreakdown && typeof breakdownDelivery?.html !== 'string'} title={isProposalBreakdown && typeof breakdownDelivery?.html !== 'string' ? 'Send the breakdown email before it can be reviewed here.' : undefined} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-45"><Eye size={12} /> {isProposalBreakdown ? 'View breakdown email' : 'View proposal'}</button>
+                      {proposalCardState.canResend ? <button type="button" onClick={() => {
+                        if (isProposalBreakdown && !individualProposalSent) void handleSendFinalProposal(proposal, false, false)
+                        else void handleSendFinalProposal(proposal, false, true)
+                      }} disabled={!lead.email || sendingInvoiceId === proposal.id} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === proposal.id ? 'Sending…' : isProposalBreakdown ? individualProposalSent ? 'Resend individual proposal' : 'Send individual proposal' : 'Resend proposal'}</button> : null}
                       {proposalCardState.canDuplicate ? <button type="button" onClick={() => duplicateProposalDraft(proposal)} aria-label={`Duplicate ${proposalLabel} to a new draft`} title="Starts a new draft from these saved event selections. Review the current price and discount before saving." className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Copy size={12} /> Duplicate</button> : null}
                       {proposalCardState.canEditDraft || proposalCardState.canRevise ? <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> {proposalCardState.canRevise ? 'Revise proposal' : 'Edit draft'}</button> : null}
                       <div className="relative">
@@ -8040,7 +8146,7 @@ export default function LeadDetailPage({
                       <summary className="min-h-11 cursor-pointer px-3 py-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Proposal activity and send history</summary>
                       <div className="space-y-3 border-t border-[color:var(--portal-border)] px-3 py-3">
                         {proposalHistory[proposal.id].sendAttempts.map((attempt) => <div key={attempt.id} className="rounded-md bg-[color:var(--portal-soft)] px-3 py-2 text-[10px]">
-                          <p className="font-semibold capitalize text-[color:var(--portal-text)]">{attempt.channel === 'email' ? 'Email' : 'In-person handoff'} {attempt.state.replaceAll('_', ' ')}{attempt.recipient_email ? ` · ${attempt.recipient_email}` : ''}</p>
+                          <p className="font-semibold capitalize text-[color:var(--portal-text)]">{attempt.id === breakdownAttemptId ? 'Proposal Breakdown email' : attempt.channel === 'email' ? 'Email' : 'In-person handoff'} {attempt.state.replaceAll('_', ' ')}{attempt.recipient_email ? ` · ${attempt.recipient_email}` : ''}</p>
                           <p className="mt-1 text-[color:var(--portal-muted)]">Started {formatVenueDateTime(attempt.started_at)}{attempt.sent_at ? ` · Sent ${formatVenueDateTime(attempt.sent_at)}` : ''}{attempt.delivery_confirmed_at ? ` · Delivered ${formatVenueDateTime(attempt.delivery_confirmed_at)}` : ''}</p>
                           {attempt.failure_reason ? <p className="mt-1 text-red-700 dark:text-red-300">{attempt.failure_reason}</p> : null}
                         </div>)}
@@ -8938,7 +9044,13 @@ export default function LeadDetailPage({
         submitting={submittingInvoice}
         submissionError={invoiceSubmissionError}
         publicationPending={publicationPending}
-        onSubmit={(action) => void handleCreateInvoice(action)}
+        breakdownPublished={breakdownPublished}
+        breakdownRetryAvailable={Boolean(
+          publicationPending
+          && !breakdownPublished
+          && savedPublicationInvoice.current?.proposal_context?.proposal_record_type === 'proposal_breakdown'
+        )}
+        onSubmit={(action, details) => void handleCreateInvoice(action, details)}
       />
 
       {layoutDesignerOpen ? <EventLayoutDesigner
@@ -9474,10 +9586,10 @@ function LeadLifecycleRail({
   const eventDate = parseLocalCalendarDate(lead.target_date)
   const formattedEventDate = eventDate ? eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
 
-  const proposalSentDate = latestInvoice?.proposal_sent_at || (latestInvoice?.status === 'sent' ? latestInvoice.updated_at : null)
+  const proposalSentDate = getPublishedFinalProposalSentAt(latestInvoice)
   const formattedProposalSentDate = proposalSentDate
     ? new Date(proposalSentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : lead.status === 'proposal_sent' || lead.status === 'booked'
+    : (lead.status === 'proposal_sent' && !isProposalBreakdownInvoice(latestInvoice)) || lead.status === 'booked'
       ? new Date(lead.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : ''
 
@@ -9511,7 +9623,7 @@ function LeadLifecycleRail({
         subtext:
           proposalAccepted
             ? 'Accepted'
-            : hasPublishedFinalProposal(latestInvoice) || lead.status === 'proposal_sent'
+            : hasPublishedFinalProposal(latestInvoice) || (lead.status === 'proposal_sent' && !isProposalBreakdownInvoice(latestInvoice))
               ? formattedProposalSentDate || ''
               : '',
       }
@@ -10401,7 +10513,8 @@ function getLeadLifecycleSteps(lead: LuxorInquiry, latestBooking: LuxorBooking |
   const hasTourBeenCompleted = lead.tour_attendance_status === 'attended'
   const tourHasFinalOutcome = ['attended', 'no_show', 'cancelled'].includes(lead.tour_attendance_status || '')
   const hasProposalStepBeenReached = hasProposalOrContractWorkflow || lead.status === 'booked' || ['contract', 'deposit', 'planning', 'final_payment', 'event', 'closing'].includes(lead.pipeline_stage || '')
-  const proposalIsActive = !hasProposalOrContractWorkflow && (lead.pipeline_stage === 'proposal' || lead.status === 'proposal_sent')
+  const leadStatusReflectsFinalProposal = lead.status === 'proposal_sent' && !isProposalBreakdownInvoice(currentProposal)
+  const proposalIsActive = !hasProposalOrContractWorkflow && (lead.pipeline_stage === 'proposal' || leadStatusReflectsFinalProposal)
   const bookingMetadata = latestBooking?.metadata || {}
   const isLegacyComplete = latestBooking?.status === 'completed'
   const bookingPaymentCollected = Boolean(bookingMetadata.deposit_paid_at) || Boolean(bookingMetadata.deposit_paid_before_booking)

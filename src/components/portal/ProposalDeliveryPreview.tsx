@@ -41,13 +41,16 @@ export function ProposalDeliveryPreview({
   const tabId = useId()
 
   const invoiceId = invoice?.id || null
+  const isBreakdown = invoice?.proposal_context?.proposal_record_type === 'proposal_breakdown'
   const isPublished = invoice?.status === 'sent'
   const isFrozen = isPublished && Boolean(invoice?.price_locked_at)
   const isLegacyPublished = isPublished && !isFrozen
   const hasExactEmailSnapshot = emailPreview?.exact === true
   const preparedDelivery = emailPreview?.deliveryState === 'prepared'
   const attachmentLabel = invoice
-    ? isFrozen
+    ? isBreakdown
+      ? null
+      : isFrozen
       ? `Luxor-Final-Proposal-${invoice.id.slice(0, 8)}.pdf`
       : isLegacyPublished
         ? `Historical document ${invoice.id.slice(0, 8).toUpperCase()}`
@@ -61,7 +64,7 @@ export function ProposalDeliveryPreview({
     setLoadingEmail(true)
     setEmailError(null)
     try {
-      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/email-preview?mode=proposal`, {
+      const response = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/email-preview?mode=${isBreakdown ? 'proposal_breakdown' : 'proposal'}`, {
         cache: 'no-store',
         signal,
       })
@@ -91,7 +94,7 @@ export function ProposalDeliveryPreview({
     // Reload only when the selected saved proposal changes. The function uses
     // that invoice id deliberately and must not loop when preview state updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoiceId, initialTab])
+  }, [invoiceId, initialTab, isBreakdown])
 
   const changeTab = (nextTab: PreviewTab) => setActiveTab(nextTab)
   const handleTabKeys = (event: React.KeyboardEvent<HTMLButtonElement>, current: PreviewTab) => {
@@ -113,9 +116,15 @@ export function ProposalDeliveryPreview({
                     <ShieldCheck size={12} /> {isFrozen ? 'Locked proposal version' : isPublished ? 'Published proposal version' : 'Saved draft version'}
                   </span>
                 </div>
-                <h3 className="mt-1 truncate font-serif text-xl font-semibold sm:text-2xl">Review the client&apos;s email and attached proposal.</h3>
+                <h3 className="mt-1 truncate font-serif text-xl font-semibold sm:text-2xl">{isBreakdown ? 'Review the Proposal Breakdown email.' : 'Review the client&apos;s email and attached proposal.'}</h3>
                 <p className="mt-1 max-w-3xl text-[11px] leading-5 text-[color:var(--portal-muted)]">
-                  {isFrozen && hasExactEmailSnapshot
+                  {isBreakdown && hasExactEmailSnapshot
+                    ? 'This is the stored Proposal Breakdown email delivered to the client.'
+                    : isBreakdown && preparedDelivery
+                      ? 'This saved Proposal Breakdown email is ready to retry; the original recipient, comparison, and selected-package link are preserved.'
+                      : isBreakdown
+                        ? 'This is the saved Proposal Breakdown email. Nothing sends from this preview.'
+                        : isFrozen && hasExactEmailSnapshot
                     ? 'These are the stored email and attached PDF delivered with this locked proposal version.'
                     : isFrozen && preparedDelivery
                     ? 'This locked proposal is ready to retry. Its private link and delivery payload are saved, but email delivery has not been confirmed yet.'
@@ -127,16 +136,16 @@ export function ProposalDeliveryPreview({
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {downloadUrl ? <a href={downloadUrl} className="hidden min-h-9 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition hover:border-[#caa24c]/40 hover:text-[#8c6529] dark:hover:text-[#f1d27a] sm:inline-flex"><Download size={13} /> Download PDF</a> : null}
+                {!isBreakdown && downloadUrl ? <a href={downloadUrl} className="hidden min-h-9 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition hover:border-[#caa24c]/40 hover:text-[#8c6529] dark:hover:text-[#f1d27a] sm:inline-flex"><Download size={13} /> Download PDF</a> : null}
                 <PortalCloseButton onClick={onClose} aria-label="Close client delivery preview" />
               </div>
             </div>
             <div className="mt-4 flex flex-col gap-3 border-t border-[color:var(--portal-border)] pt-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 space-y-1">
                 <p className="truncate text-[11px] text-[color:var(--portal-muted)]"><span className="mr-1 font-black uppercase tracking-[0.12em] text-[9px]">To</span>{' '}{emailPreview?.recipient || clientEmail || 'Client email required before publishing'}</p>
-                <p className="truncate text-[10px] text-[color:var(--portal-muted)]"><span className="mr-1 font-black uppercase tracking-[0.12em] text-[8px]">Attachment</span>{' '}{emailPreview?.attachmentFileName || attachmentLabel}</p>
+                {!isBreakdown ? <p className="truncate text-[10px] text-[color:var(--portal-muted)]"><span className="mr-1 font-black uppercase tracking-[0.12em] text-[8px]">Attachment</span>{' '}{emailPreview?.attachmentFileName || attachmentLabel}</p> : null}
               </div>
-              <div className="inline-flex w-fit rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1" role="tablist" aria-label="Client delivery formats">
+              {!isBreakdown ? <div className="inline-flex w-fit rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1" role="tablist" aria-label="Client delivery formats">
                 <button
                   id={`${tabId}-email-tab`}
                   type="button"
@@ -163,7 +172,7 @@ export function ProposalDeliveryPreview({
                 >
                   <FileText size={13} /> Attached PDF
                 </button>
-              </div>
+              </div> : <p className="text-[9px] font-black uppercase tracking-widest text-[#8c6529]">Email only · no attachment</p>}
             </div>
           </header>
 
@@ -174,7 +183,7 @@ export function ProposalDeliveryPreview({
             </aside>
           ) : null}
 
-          {activeTab === 'email' ? (
+          {isBreakdown || activeTab === 'email' ? (
             <section id={`${tabId}-email-panel`} role="tabpanel" aria-labelledby={`${tabId}-email-tab`} className="min-h-0 flex-1 overflow-auto bg-[color:var(--portal-soft)] p-3 sm:p-5">
               <div className="mx-auto max-w-[760px] overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-white shadow-[0_14px_36px_rgba(31,25,18,0.12)]">
                 <div className="flex items-start justify-between gap-4 border-b border-[#ddd6c9] bg-[#fbfaf7] px-4 py-3 text-[#241f19] sm:px-5">

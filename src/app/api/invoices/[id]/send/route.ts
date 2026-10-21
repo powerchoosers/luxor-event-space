@@ -24,6 +24,7 @@ import { assertLuxorWeekdayRentalPublication } from '@/lib/luxorProposalPricingS
 import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 import { LuxorProposalBookingTimingError } from '@/lib/luxorProposalBookingTiming'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { getLuxorActiveProposalDeliveryVariant } from '@/lib/luxorProposalDeliveryReceipt'
 
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
 
@@ -337,6 +338,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const previousDelivery = invoice.proposal_context?.delivery_snapshot as Record<string, Record<string, unknown>> | undefined
       const previousEmail = previousDelivery?.proposal_email
       const priorAttempt = invoice.proposal_context?.publication_attempt as { id?: string; state?: string; started_at?: string } | undefined
+      const activeDeliveryVariant = getLuxorActiveProposalDeliveryVariant(invoice.proposal_context)
+      if (['preparing', 'sending', 'delivery_unconfirmed'].includes(priorAttempt?.state || '') && activeDeliveryVariant !== 'proposal_email') {
+        return NextResponse.json({ error: 'A Proposal Breakdown email is still being recovered. Retry this final proposal after its delivery status is resolved.' }, { status: 409 })
+      }
       const hasConfirmedDeliveryReceipt = previousEmail?.delivery_state === 'delivered' && typeof previousEmail.delivery_sent_at === 'string' && body.resend !== true
       const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
       // Repeated actions return the original receipt and link; never resend or regress an accepted booking.
@@ -371,6 +376,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: 'Proposal history is not available yet. The existing offer was not resent.' }, { status: 503 })
       }
       if (sendReservation) {
+        if (sendReservation.attempt_id !== attemptId && getLuxorActiveProposalDeliveryVariant(invoice.proposal_context) !== 'proposal_email') {
+          return NextResponse.json({ error: 'Another email format is already being recovered for this proposal. No second message was sent.' }, { status: 409 })
+        }
         // A retry after a crash may discover a reservation created by the
         // earlier request. Continue using its original ID and idempotency key.
         attemptId = sendReservation.attempt_id

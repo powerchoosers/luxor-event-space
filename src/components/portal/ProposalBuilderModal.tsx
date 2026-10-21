@@ -38,6 +38,7 @@ import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakd
 import { formatLuxorCustomTimeRentalPriceBreakdownV4, getLuxorCustomTimeRentalSnapshotV4, validateLuxorCustomTimeScheduleV4, type LuxorCustomTimeRentalPolicyV4 } from '@/lib/luxorCustomTimeRentalV4'
 import { LuxorAvailabilityCalendar } from '@/components/portal/LuxorAvailabilityCalendar'
 import { isLuxorAvailabilityRangeOpen, type LuxorAvailabilityCalendar as LuxorAvailabilityMap } from '@/lib/luxorAvailability'
+import { buildLuxorProposalBreakdownEmail, luxorProposalBreakdownHasCompletePrices } from '@/lib/luxorProposalBreakdownEmail'
 
 function findInitialCustomRentalRange(
   availability: LuxorAvailabilityMap,
@@ -127,7 +128,7 @@ function ProposalHourControl({
   )
 }
 
-type ProposalSubmitAction = 'save' | 'email' | 'in_person'
+type ProposalSubmitAction = 'save' | 'email' | 'in_person' | 'breakdown'
 type ProposalPresentationMode = 'email' | 'in_person'
 
 type ProposalPackageId = 'rent_only'
@@ -311,7 +312,9 @@ type ProposalBuilderModalProps = {
   submitting: boolean
   submissionError?: string | null
   publicationPending?: boolean
-  onSubmit: (action: ProposalSubmitAction) => void
+  breakdownPublished?: boolean
+  breakdownRetryAvailable?: boolean
+  onSubmit: (action: ProposalSubmitAction, details?: { recipientEmail?: string }) => void
 }
 
 const PACKAGE_OPTIONS: Array<{
@@ -813,6 +816,8 @@ export function ProposalBuilderModal({
   submitting,
   submissionError,
   publicationPending = false,
+  breakdownPublished = false,
+  breakdownRetryAvailable = false,
   onSubmit,
 }: ProposalBuilderModalProps) {
   const [stepIndex, setStepIndex] = useState(0)
@@ -823,6 +828,9 @@ export function ProposalBuilderModal({
   const [pricingStatus, setPricingStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [calculation, setCalculation] = useState<ProposalPricingCalculation | null>(null)
+  const [breakdownRecipient, setBreakdownRecipient] = useState(clientEmail || '')
+  const [breakdownPhone, setBreakdownPhone] = useState<string | null>(null)
+  const [breakdownPreviewOpen, setBreakdownPreviewOpen] = useState(false)
   const [weekdayPolicy, setWeekdayPolicy] = useState<LuxorWeekdayCustomRentalPolicy | null>(null)
   const [customTimeV4Policy, setCustomTimeV4Policy] = useState<LuxorCustomTimeRentalPolicyV4 | null>(null)
   const [pricingClock, setPricingClock] = useState(0)
@@ -873,6 +881,18 @@ export function ProposalBuilderModal({
     if (!isOpen) return
     void loadPromotions()
   }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    setBreakdownRecipient(clientEmail || '')
+    setBreakdownPreviewOpen(false)
+    let active = true
+    void fetch('/api/public/phone-number', { cache: 'no-store' })
+      .then(async (response) => response.ok ? response.json() as Promise<{ phoneNumber?: string | null }> : null)
+      .then((result) => { if (active) setBreakdownPhone(result?.phoneNumber || null) })
+      .catch(() => { if (active) setBreakdownPhone(null) })
+    return () => { active = false }
+  }, [clientEmail, isOpen])
 
   const effectiveContext = localContext
   const selectedPackage = 'rent_only'
@@ -1686,6 +1706,30 @@ export function ProposalBuilderModal({
       || calculatedPackages.find((candidate) => candidate.id === 'luxor_venue_proposal')
   const selectedTierOption = packageTierOptions.find((option) => option.id === packageTierId)
   const selectedContext = calculation?.context || effectiveContext
+  const breakdownPriceReady = Boolean(calculation?.packageOptions && calculation.packages
+    && luxorProposalBreakdownHasCompletePrices(calculation.packageOptions, calculation.packages))
+  const breakdownPreview = useMemo(() => {
+    if (!selectedCalculatedPackage || !selectedTierOption || !calculation?.packages?.length || !calculation.packageOptions?.length
+      || !luxorProposalBreakdownHasCompletePrices(calculation.packageOptions, calculation.packages)) return null
+    return buildLuxorProposalBreakdownEmail({
+      recipientName: clientName,
+      eventType: editableEventType || 'Event',
+      eventDate: eventDateValue || '',
+      guestCount: Number(guestCount) || 0,
+      // `event_access` is a legacy guest-arrival/end summary. Venue access is
+      // the rental window and must come from the distinct rental endpoints.
+      venueAccess: venueAccessRangeLabel,
+      guestArrival: guestArrivalTime ? formatCatalogTime(guestArrivalTime) : '',
+      eventEnd: eventEndTime ? `${formatCatalogTime(eventEndTime)}${isCustomRental && Number(eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}` : '',
+      selectedPackageId: packageTierId as LuxorProposalPackageOption['id'],
+      packageOptions: calculation.packageOptions,
+      packages: calculation.packages,
+      selectedPackage: selectedCalculatedPackage,
+      addOnQuotes: (calculation.addOnQuotes || []) as NonNullable<Parameters<typeof buildLuxorProposalBreakdownEmail>[0]['addOnQuotes']>,
+      phoneNumber: breakdownPhone,
+      bookingUrl: null,
+    })
+  }, [breakdownPhone, calculation, clientName, editableEventType, eventDateValue, eventEndTime, guestArrivalTime, guestCount, isCustomRental, packageTierId, rentalPeriod, selectedCalculatedPackage, selectedTierOption, venueAccessRangeLabel])
   const customRentalSnapshot = getWeekdayCustomRentalSnapshot(selectedContext.weekday_custom_rental)
   const customTimeV4Snapshot = getLuxorCustomTimeRentalSnapshotV4(selectedContext.weekday_custom_rental)
   const validThrough = asString(selectedContext.valid_through) || proposalValidThrough(asString(selectedContext.proposal_created_on) || luxorCalendarDate(), selectedPromotion)
@@ -2235,6 +2279,30 @@ export function ProposalBuilderModal({
                 </div>
               ) : null}
 
+              <section aria-labelledby="proposal-breakdown-email-title" className="rounded-2xl border border-[#caa24c]/30 bg-[color:var(--portal-card)] p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8c6529] dark:text-[#f1d27a]">Client email</p>
+                    <h4 id="proposal-breakdown-email-title" className="mt-1 font-serif text-xl font-semibold">Email Proposal Breakdown</h4>
+                    <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Send the four-package comparison and selected package details. Book Now opens the selected package’s secure proposal page. This email does not create a booking or collect payment.</p>
+                  </div>
+                  {testRunId ? <span className="shrink-0 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-[10px] font-bold text-amber-900 dark:text-amber-100">Unavailable in isolated test mode</span> : null}
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+                  <label className="block min-w-0 space-y-1.5">
+                    <span className="text-[9px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-muted)]">Recipient email</span>
+                    <input type="email" autoComplete="email" value={breakdownRecipient} onChange={(event) => setBreakdownRecipient(event.target.value)} disabled={submitting || Boolean(testRunId)} className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12 disabled:opacity-50" />
+                  </label>
+                  <button type="button" onClick={() => setBreakdownPreviewOpen((open) => !open)} disabled={!breakdownPreview || submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-text)] transition hover:border-[#caa24c]/40 disabled:cursor-not-allowed disabled:opacity-45"><Eye size={14} />{breakdownPreviewOpen ? 'Hide preview' : 'Preview email'}</button>
+                  <button type="button" onClick={() => onSubmit('breakdown', { recipientEmail: breakdownRecipient.trim() })} disabled={submitting || (publicationPending && !breakdownRetryAvailable) || Boolean(testRunId) || Boolean(supersedesInvoiceId) || !breakdownPreview || (!publicationPending && !canPublish) || hasUnmigratedLegacyDiscount || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(breakdownRecipient.trim())} title={testRunId ? 'Breakdown delivery is disabled for isolated test leads.' : supersedesInvoiceId ? 'Use the final proposal action for revisions so the prior offer is replaced through the existing revision flow.' : paymentPlanRequired ? 'Set the payment plan in Step 5, then return here.' : !canPublish ? publicationErrors[0] || 'Complete the required event details and pricing first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45"><Mail size={14} />{submitting ? 'Sending…' : breakdownRetryAvailable ? 'Retry Breakdown' : breakdownPublished ? 'Breakdown sent' : 'Send Breakdown'}</button>
+                </div>
+                {breakdownPublished ? <p role="status" className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/7 px-3 py-2 text-xs leading-5 text-emerald-900 dark:text-emerald-100">Proposal Breakdown sent and saved. Continue to the final step if you also want to email the individual proposal.</p> : null}
+                {supersedesInvoiceId ? <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/7 px-3 py-2 text-xs leading-5 text-amber-900 dark:text-amber-100">For revised pricing, publish the updated proposal from the final step so the existing offer stays active until the normal revision flow replaces it.</p> : null}
+                {paymentPlanRequired && !pricingErrors.length ? <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/7 px-3 py-2 text-xs leading-5 text-amber-900 dark:text-amber-100">Complete the owner-approved payment plan in Step 5, then return here to publish and email the breakdown.</p> : null}
+                {breakdownPreviewOpen && breakdownPreview ? <div className="mt-4 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-white"><iframe title="Proposal Breakdown email preview" srcDoc={breakdownPreview.html} sandbox="" className="h-[680px] w-full border-0 sm:h-[760px]" /></div> : null}
+                {!breakdownPriceReady && pricingStatus === 'ready' ? <p className="mt-3 text-xs text-amber-900 dark:text-amber-100">The package comparison is unavailable until every package has a current calculated price.</p> : null}
+              </section>
+
               {paymentPlanRequired && !pricingErrors.length ? (
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/7 p-4 text-sm leading-6 text-amber-900 dark:text-amber-100">
                   <p className="font-bold">Package prices are ready.</p>
@@ -2626,9 +2694,13 @@ export function ProposalBuilderModal({
           </motion.div>
           </AnimatePresence>
         </fieldset>
+        {stepIndex === 2 && publicationPending ? <div role={submissionError ? 'alert' : 'status'} className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-[color:var(--portal-text)] sm:px-6">
+          <p>{submissionError || (breakdownPublished ? 'Proposal Breakdown sent and saved. Continue to Step 6 to email the individual proposal if you want that separate message.' : 'This Proposal Breakdown is saved. Retry delivery with the same saved terms.')}</p>
+          {breakdownRetryAvailable && !breakdownPublished ? <button type="button" onClick={() => onSubmit('breakdown', { recipientEmail: breakdownRecipient.trim() })} disabled={submitting} className="mt-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white disabled:cursor-not-allowed disabled:opacity-45"><Mail size={13} />{submitting ? 'Retrying…' : 'Retry Breakdown Email'}</button> : null}
+        </div> : null}
         {stepIndex === 5 && (submissionError || publishTitle || publicationPending) ? <div role={submissionError ? 'alert' : 'status'} className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-3 text-sm text-[color:var(--portal-text)]">
           {submissionError || (!publicationPending && publishTitle)}
-          {publicationPending ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">This proposal has been saved. Retry delivery using these saved terms, or close the builder to review it in Documents.</p> : null}
+          {publicationPending ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{breakdownPublished ? 'Proposal Breakdown was sent and saved. Send the individual proposal here if you want that separate email too.' : 'This proposal has been saved. Retry delivery using these saved terms, or close the builder to review it in Documents.'}</p> : null}
         </div> : null}
 
         <footer className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">

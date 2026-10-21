@@ -23,10 +23,12 @@ function text(value: unknown) {
  * when a lead name or address is corrected later: the delivery preview must
  * show what was sent, not a freshly personalized approximation.
  */
-function proposalEmailDeliverySnapshot(invoice: Awaited<ReturnType<typeof getInvoice>>) {
+function proposalEmailDeliverySnapshot(invoice: Awaited<ReturnType<typeof getInvoice>>, variant: 'proposal_email' | 'proposal_breakdown_email' = 'proposal_email') {
   const context = record(invoice?.proposal_context)
   const delivery = record(context?.delivery_snapshot ?? context?.deliverySnapshot ?? context?.proposal_delivery)
-  const email = record(delivery?.proposal_email ?? delivery?.proposalEmail ?? delivery?.email)
+  const email = record(variant === 'proposal_breakdown_email'
+    ? delivery?.proposal_breakdown_email
+    : delivery?.proposal_email ?? delivery?.proposalEmail ?? delivery?.email)
   if (!email) return null
   return {
     recipient: text(email.recipient_email ?? email.recipientEmail ?? email.to),
@@ -49,13 +51,34 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
     if (!inquiry) return NextResponse.json({ error: 'Lead record not found.' }, { status: 404 })
     const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
-    const mode = request.nextUrl.searchParams.get('mode') === 'proposal_contract' ? 'proposal_contract' : 'proposal'
+    const requestedMode = request.nextUrl.searchParams.get('mode')
+    const mode = requestedMode === 'proposal_contract' || requestedMode === 'proposal_breakdown' ? requestedMode : 'proposal'
     const snapshot = invoice.status === 'sent'
       ? (invoice.price_locked_at ? 'frozen' : 'published')
       : 'draft'
     const attachmentFileName = invoice.invoice_kind === 'event'
       ? `Luxor-Final-Proposal-${invoice.id.slice(0, 8)}.pdf`
       : `Luxor-Invoice-${invoice.id.slice(0, 8)}.pdf`
+    if (mode === 'proposal_breakdown') {
+      if (invoice.invoice_kind !== 'event' || invoice.proposal_context?.proposal_record_type !== 'proposal_breakdown') {
+        return NextResponse.json({ error: 'This record is not a Proposal Breakdown.' }, { status: 409 })
+      }
+      const delivery = proposalEmailDeliverySnapshot(invoice, 'proposal_breakdown_email')
+      if (!delivery?.subject || !delivery.html) {
+        return NextResponse.json({ error: 'No saved Proposal Breakdown email is available yet. Open the builder preview before sending.' }, { status: 409 })
+      }
+      return NextResponse.json({
+        mode,
+        recipient: delivery.recipient || inquiry.email,
+        attachmentFileName: null,
+        snapshot,
+        exact: delivery.deliveryState === 'delivered',
+        deliveryState: delivery.deliveryState,
+        deliverySentAt: delivery.deliverySentAt,
+        subject: delivery.subject,
+        html: delivery.html,
+      })
+    }
     if (mode === 'proposal') {
       const reviewUrl = `${origin}/proposal/${invoice.public_token || `preview-${invoice.id}`}`
       const delivery = proposalEmailDeliverySnapshot(invoice)

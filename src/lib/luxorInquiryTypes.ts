@@ -433,6 +433,8 @@ export type LuxorProposalContext = {
   calculation_errors?: string[]
   /** Items that must be completed before a calculated draft can be published. */
   publication_errors?: string[]
+  /** Server-owned list label and delivery variant for a package comparison email. */
+  proposal_record_type?: 'proposal_breakdown'
   [key: string]: unknown
 }
 

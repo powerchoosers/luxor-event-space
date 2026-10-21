@@ -4,7 +4,7 @@ import { LuxorInvoice, LuxorInvoiceKind, LuxorInvoiceLineItem, LuxorInvoiceStatu
 import { roundLuxorMoney } from './luxorOffer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
 import { luxorCollectionAmounts } from './luxorPaymentOwnership'
-import { getLuxorProposalDeliveryReceipt } from './luxorProposalDeliveryReceipt'
+import { getLuxorProposalDeliveryReceipts, type LuxorProposalDeliveryVariant } from './luxorProposalDeliveryReceipt'
 import { finishLuxorProposalPublicationAndFetchFreshInvoice } from './luxorProposalPublicationReconciliation'
 import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
 
@@ -191,7 +191,7 @@ export async function createInvoice(data: {
 }
 
 /** Compare-and-swap protects one proposal across double clicks and concurrent tabs. */
-export async function claimLuxorProposalPublication(invoice: LuxorInvoice, attemptId: string) {
+export async function claimLuxorProposalPublication(invoice: LuxorInvoice, attemptId: string, variant: LuxorProposalDeliveryVariant = 'proposal_email') {
   const now = new Date().toISOString()
   const [claimed] = await supabaseRest<LuxorInvoice[]>(
     `luxor_invoices?select=*&id=eq.${encodeURIComponent(invoice.id)}&updated_at=eq.${encodeURIComponent(invoice.updated_at)}`,
@@ -200,7 +200,7 @@ export async function claimLuxorProposalPublication(invoice: LuxorInvoice, attem
       body: JSON.stringify({
         public_token: invoice.public_token || crypto.randomUUID(),
         price_locked_at: invoice.price_locked_at || now,
-        proposal_context: { ...invoice.proposal_context, publication_attempt: { id: attemptId, state: 'preparing', started_at: now } },
+        proposal_context: { ...invoice.proposal_context, publication_attempt: { id: attemptId, variant, state: 'preparing', started_at: now } },
       }),
     },
   )
@@ -387,25 +387,30 @@ export async function completeLuxorProposalSend(attemptId: string, providerMessa
 /** Reconcile an invoice receipt saved before the append-only send history write. */
 export async function reconcileLuxorProposalDeliveryReceipt(invoice: LuxorInvoice) {
   if (!isLuxorProposalHistoryReady()) return invoice
-  const receipt = getLuxorProposalDeliveryReceipt(invoice.proposal_context)
-  if (!receipt) return invoice
+  const receipts = getLuxorProposalDeliveryReceipts(invoice.proposal_context)
+  if (!receipts.length) return invoice
 
-  const completed = await completeLuxorProposalSend(
-    receipt.proposalSendAttemptId,
-    receipt.providerMessageId,
-    receipt.sentAt,
-  )
-  if (!completed) throw new Error('The saved delivery receipt could not be reconciled with proposal history.')
-  const publicationAttempt = invoice.proposal_context?.publication_attempt as { id?: string; state?: string } | undefined
-  if (publicationAttempt?.id === receipt.proposalSendAttemptId && publicationAttempt.state !== 'completed') {
-    return finishLuxorProposalPublicationAndFetchFreshInvoice<LuxorInvoice>(
-      invoice.id,
-      publicationAttempt.id,
-      finishLuxorProposalPublication,
-      getInvoice,
+  let current = invoice
+  for (const receipt of receipts) {
+    const completed = await completeLuxorProposalSend(
+      receipt.proposalSendAttemptId,
+      receipt.providerMessageId,
+      receipt.sentAt,
     )
+    if (!completed) throw new Error('The saved delivery receipt could not be reconciled with proposal history.')
+    const publicationAttempt = current.proposal_context?.publication_attempt as { id?: string; state?: string } | undefined
+    if (publicationAttempt?.id === receipt.proposalSendAttemptId && publicationAttempt.state !== 'completed') {
+      current = await finishLuxorProposalPublicationAndFetchFreshInvoice<LuxorInvoice>(
+        current.id,
+        publicationAttempt.id,
+        finishLuxorProposalPublication,
+        getInvoice,
+      )
+    } else {
+      current = await getInvoice(current.id) || completed
+    }
   }
-  return completed
+  return current
 }
 
 export async function markLuxorProposalSendAttemptSending(attemptId: string) {

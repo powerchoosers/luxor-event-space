@@ -411,6 +411,9 @@ export async function POST(request: NextRequest) {
     const leadEventId = stringValue(body.lead_event_id)
     const selection = proposalSelectionFrom(body)
     const requestedInvoiceKind = declaredInvoiceKind(body.invoice_kind)
+    const proposalRecordType = body.proposal_record_type === undefined
+      ? null
+      : body.proposal_record_type === 'proposal_breakdown' ? 'proposal_breakdown' : 'invalid'
     const explicitlyRequestsFinalProposal = body.invoice_kind === 'event' ||
       body.final_proposal === true ||
       body.is_final_proposal === true ||
@@ -423,6 +426,9 @@ export async function POST(request: NextRequest) {
     }
     if (!requestedInvoiceKind) {
       return NextResponse.json({ error: 'invoice_kind must be event, deposit, final_balance, or security_deposit.' }, { status: 400 })
+    }
+    if (proposalRecordType === 'invalid' || (proposalRecordType && (!selection || requestedInvoiceKind !== 'event'))) {
+      return NextResponse.json({ error: 'A Proposal Breakdown must be saved as a selected event proposal.' }, { status: 400 })
     }
     if (inquiryId) {
       const inquiry = await getLuxorInquiry(inquiryId)
@@ -452,7 +458,7 @@ export async function POST(request: NextRequest) {
       const requestId = stringValue(body.creation_request_id)
       const requestFingerprint = createHash('sha256').update(JSON.stringify({
         selection, inquiryId, leadEventId, description: stringValue(body.description),
-        notes: stringValue(body.notes), supersedes: stringValue(body.supersedes_invoice_id),
+        notes: stringValue(body.notes), supersedes: stringValue(body.supersedes_invoice_id), proposalRecordType,
       })).digest('hex')
       if (requestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {
         return NextResponse.json({ error: 'Invalid proposal save request.' }, { status: 400 })
@@ -502,12 +508,16 @@ export async function POST(request: NextRequest) {
         notes: stringValue(body.notes),
         invoice_kind: 'event',
         ...(calculated.proposalContext.same_day_booking ? { original_proposal_created_at: String(calculated.proposalContext.original_proposal_created_at), same_day_booking_status: 'pending' as const } : {}),
-        proposal_context: { ...calculated.proposalContext, ...(requestId ? { creation_request_fingerprint: requestFingerprint } : {}) },
+        proposal_context: {
+          ...calculated.proposalContext,
+          ...(proposalRecordType ? { proposal_record_type: proposalRecordType } : {}),
+          ...(requestId ? { creation_request_fingerprint: requestFingerprint } : {}),
+        },
         supersedes_invoice_id: revision.supersedesInvoiceId,
         proposal_version: revision.proposalVersion,
       })
 
-      if (invoice.inquiry_id) {
+      if (invoice.inquiry_id && proposalRecordType !== 'proposal_breakdown') {
         try {
           const inquiry = await getLuxorInquiry(invoice.inquiry_id)
           if (inquiry) await queueInvoiceReminderTexts(invoice, { phone: inquiry.phone, name: inquiry.full_name })
@@ -628,11 +638,18 @@ export async function PATCH(request: NextRequest) {
     }
 
     const isEventInvoice = existing.invoice_kind === 'event'
+    const requestedBreakdownRecord = body.proposal_record_type === 'proposal_breakdown'
+    if (body.proposal_record_type !== undefined && !requestedBreakdownRecord) {
+      return NextResponse.json({ error: 'Unsupported proposal record type.' }, { status: 400 })
+    }
     if (isEventInvoice && (existing.status === 'sent' || Boolean(existing.price_locked_at) || Boolean(existing.proposal_accepted_at) || Boolean(existing.proposal_sent_at))) {
       return NextResponse.json({ error: 'This final proposal is already published. Create a revised proposal instead of changing this version.' }, { status: 409 })
     }
 
     let selection = proposalSelectionFrom(body)
+    if (requestedBreakdownRecord && (!selection || !isEventInvoice)) {
+      return NextResponse.json({ error: 'A Proposal Breakdown must be saved from a selected event proposal.' }, { status: 400 })
+    }
     if (selection && isEventInvoice) {
       selection = preserveLegacyDraftAdjustment(selection, existing)
     }
@@ -678,7 +695,12 @@ export async function PATCH(request: NextRequest) {
       updates.discount_value = calculated.discount.value
       updates.promotion_id = calculated.promotion?.id ?? null
       updates.promotion_snapshot = calculated.promotion ?? {}
-      updates.proposal_context = calculated.proposalContext
+      updates.proposal_context = {
+        ...calculated.proposalContext,
+        ...(requestedBreakdownRecord || existing.proposal_context?.proposal_record_type === 'proposal_breakdown'
+          ? { proposal_record_type: 'proposal_breakdown' as const }
+          : {}),
+      }
       updates.due_date = String(calculated.proposalContext.valid_through)
       updates.offer_expires_at = proposalExpirationInstant(updates.due_date)
     } else {
@@ -752,7 +774,7 @@ export async function PATCH(request: NextRequest) {
         }
       }
     }
-    if (updatedInvoice?.inquiry_id) {
+    if (updatedInvoice?.inquiry_id && updatedInvoice.proposal_context?.proposal_record_type !== 'proposal_breakdown') {
       try {
         const inquiry = await getLuxorInquiry(updatedInvoice.inquiry_id)
         if (inquiry) {
