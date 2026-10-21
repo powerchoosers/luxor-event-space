@@ -1389,7 +1389,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                   <div className="max-w-32 text-right text-[10px] leading-4 text-zinc-500 sm:max-w-none sm:text-[11px]">
                     <p>{formatEmailDateDetailed(messageDetail.receivedAt)}</p>
                   </div>
-                  {messageDetail.direction !== 'campaign' ? <button type="button" onClick={() => setReplyOpen(true)} aria-label="Reply to email" className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#a8792f] transition-colors hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Send size={16} /></button> : null}
                 </div>
               </div>
 
@@ -1530,10 +1529,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 <span className="min-w-0 flex-1 truncate">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}…</span>
                 <Send size={17} className="shrink-0 text-[#caa24c]" />
               </button>
-              <div className="mt-1 grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => setReplyOpen(true)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-xs font-medium text-zinc-600 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Reply size={15} /> Reply</button>
-                <button type="button" onClick={() => setReaderMenuOpen((open) => !open)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-xs font-medium text-zinc-600 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><MoreVertical size={15} /> More options</button>
-              </div>
             </div> : null}
 
           </motion.div>
