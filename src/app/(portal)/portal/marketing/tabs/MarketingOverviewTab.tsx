@@ -1,429 +1,307 @@
 'use client'
 
 import React from 'react'
-import {
-  ArrowUpRight,
-  CalendarClock,
-  Mail,
-  MailOpen,
-  MousePointerClick,
-  Plus,
-  UserPlus,
-  Users,
-} from 'lucide-react'
-import { PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
-import { isLuxorNonRevenueTestInquiry, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { ArrowUpRight, CalendarClock, MailPlus, Users, Workflow } from 'lucide-react'
+import { PortalSelect } from '@/components/portal/PortalUI'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
-import type { Campaign, MarketingActivityEvent, MarketingList, MarketingTab } from '../page'
+import type { MarketingOverviewData } from '@/lib/luxorMarketingOverview'
+import type { MarketingTab } from '../page'
 
-interface MarketingOverviewTabProps {
-  inquiries: LuxorInquiry[]
-  campaigns: Campaign[]
-  activityEvents: MarketingActivityEvent[]
-  marketingLists?: MarketingList[]
-  loading: boolean
+type MarketingOverviewTabProps = {
   onTabChange: (tab: MarketingTab) => void
-  onAddContactClick: () => void
+  onCreateCampaign: () => void
 }
 
-export function MarketingOverviewTab({
-  inquiries,
-  campaigns,
-  activityEvents,
-  marketingLists = [],
-  loading,
-  onTabChange,
-  onAddContactClick,
-}: MarketingOverviewTabProps) {
-  const [nowTime] = React.useState(() => Date.now())
-  const [rangeDays, setRangeDays] = React.useState('7')
-  const selectedRangeDays = Number(rangeDays)
-  const oneWeekAgo = nowTime - 7 * 24 * 60 * 60 * 1000
+export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: MarketingOverviewTabProps) {
+  const [rangeDays, setRangeDays] = React.useState<'7' | '30' | '90'>('30')
+  const [data, setData] = React.useState<MarketingOverviewData | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [retryVersion, setRetryVersion] = React.useState(0)
 
-  const allMembers = React.useMemo(
-    () => marketingLists.flatMap((list) => list.members.map((member) => ({ ...member, listName: list.name }))),
-    [marketingLists],
-  )
-  const totalSubscribers = React.useMemo(
-    () => new Set(allMembers.map((member) => member.email.trim().toLowerCase()).filter(Boolean)).size,
-    [allMembers],
-  )
-  const newSubscribersThisWeek = React.useMemo(
-    () => new Set(
-      allMembers
-        .filter((member) => member.created_at && new Date(member.created_at).getTime() >= oneWeekAgo)
-        .map((member) => member.email.trim().toLowerCase()),
-    ).size,
-    [allMembers, oneWeekAgo],
-  )
-  const recentSubscribers = React.useMemo(
-    () => [...allMembers]
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-      .slice(0, 5),
-    [allMembers],
-  )
+  React.useEffect(() => {
+    let active = true
+    setLoading(true)
+    setError(null)
+    setData(null)
 
-  const grandOpeningRsvps = React.useMemo(
-    () => inquiries
-      .filter(isGrandOpeningRsvp)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-    [inquiries],
-  )
-  const attendingRsvps = grandOpeningRsvps.filter((inquiry) => inquiry.rsvp_status === 'attending').length
-  const recordedGuests = grandOpeningRsvps.reduce((sum, inquiry) => sum + Number(inquiry.attendee_count || 0), 0)
-  const businessInquiries = inquiries.filter((inquiry) => !isLuxorNonRevenueTestInquiry(inquiry))
-  const newInquiriesThisWeek = businessInquiries.filter((inquiry) => new Date(inquiry.created_at).getTime() >= oneWeekAgo).length
-  const followUpQueue = businessInquiries.filter((inquiry) => ['new', 'contacted', 'tour_requested'].includes(inquiry.status)).length
+    fetch(`/api/marketing/overview?days=${rangeDays}`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as MarketingOverviewData & { error?: string }
+        if (!response.ok) throw new Error(payload.error || 'Unable to load marketing performance.')
+        if (active) setData(payload)
+      })
+      .catch((loadError: unknown) => {
+        if (active) {
+          setData(null)
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load marketing performance.')
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
 
-  const totalSent = campaigns.reduce((sum, campaign) => sum + Number(campaign.sent_count || 0), 0)
-  const totalUniqueOpens = campaigns.reduce((sum, campaign) => sum + Number(campaign.unique_opens || 0), 0)
-  const totalUniqueClicks = campaigns.reduce((sum, campaign) => sum + Number(campaign.unique_clicks || 0), 0)
-  const overallOpenRate = totalSent ? Math.round((totalUniqueOpens / totalSent) * 1000) / 10 : 0
+    return () => { active = false }
+  }, [rangeDays, retryVersion])
 
-  const topCampaign = React.useMemo(
-    () => [...campaigns]
-      .filter((campaign) => campaign.recipient_count > 0 || campaign.sent_count > 0)
-      .sort((a, b) => {
-        const engagementDifference = (b.unique_clicks * 3 + b.unique_opens) - (a.unique_clicks * 3 + a.unique_opens)
-        return engagementDifference || new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      })[0] ?? null,
-    [campaigns],
-  )
-
-  const scheduledCampaigns = React.useMemo(
-    () => campaigns
-      .filter((campaign) => campaign.status === 'scheduled' || campaign.status === 'sending' || campaign.queued_count > 0)
-      .sort((a, b) => new Date(a.scheduled_for || 0).getTime() - new Date(b.scheduled_for || 0).getTime()),
-    [campaigns],
-  )
-
-  const audienceRows = React.useMemo(
-    () => [...marketingLists].sort((a, b) => b.memberCount - a.memberCount),
-    [marketingLists],
-  )
-
-  const sentTrend = React.useMemo(() => {
-    const days = Array.from({ length: selectedRangeDays }, (_, index) => {
-      const date = new Date(nowTime - (6 - index) * 24 * 60 * 60 * 1000)
-      date.setTime(nowTime - (selectedRangeDays - 1 - index) * 24 * 60 * 60 * 1000)
-      date.setHours(0, 0, 0, 0)
-      return { date, value: 0 }
-    })
-    campaigns.forEach((campaign) => {
-      if (!campaign.sent_at) return
-      const campaignDate = new Date(campaign.sent_at)
-      campaignDate.setHours(0, 0, 0, 0)
-      const day = days.find((item) => item.date.getTime() === campaignDate.getTime())
-      if (day) day.value += Number(campaign.sent_count || 0)
-    })
-    return days
-  }, [campaigns, nowTime, selectedRangeDays])
+  const periodLabel = data
+    ? `${formatDate(data.period.startDate)}–${formatDate(data.period.endDate)} · Chicago time`
+    : `Last ${rangeDays} days · Chicago time`
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(19rem,0.85fr)]">
-        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] pb-4">
-            <div>
-              <h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Performance overview</h3>
-              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">A quick read on reach and engagement across your marketing activity.</p>
-            </div>
-            <PortalSelect value={rangeDays} onChange={setRangeDays} options={[{ value: '7', label: 'Last 7 days' }, { value: '30', label: 'Last 30 days' }, { value: '90', label: 'Last 90 days' }]} buttonClassName="min-h-10 min-w-32" />
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-4 border-b border-[color:var(--portal-border)] pb-5 sm:grid-cols-5">
-            <MetricBlock label="Subscribers" value={totalSubscribers.toLocaleString()} loading={loading} />
-            <MetricBlock label="New this week" value={newSubscribersThisWeek.toLocaleString()} loading={loading} />
-            <MetricBlock label="Emails sent" value={totalSent.toLocaleString()} loading={loading} />
-            <MetricBlock label="Open rate" value={`${overallOpenRate}%`} loading={loading} />
-            <MetricBlock label="New inquiries" value={newInquiriesThisWeek.toLocaleString()} loading={loading} />
-          </div>
-          <TrendChart points={sentTrend} loading={loading} />
-        </section>
-
-        <section className="luxor-glass-card flex min-h-[18rem] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
-          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
-            <h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Needs attention</h3>
-            <ArrowUpRight size={16} className="text-[#caa24c]" />
-          </div>
-          <AttentionRow value={followUpQueue} label="Needs follow-up" detail="New, contacted, or tour time needed" loading={loading} onClick={() => onTabChange('call-center')} />
-          <AttentionRow value={newInquiriesThisWeek} label="New inquiries" detail="Submitted in the last 7 days" loading={loading} onClick={() => onTabChange('contact-lists')} />
-          <div className="mt-auto border-t border-[color:var(--portal-border)] pt-4">
-            <button type="button" onClick={() => onTabChange('call-center')} className="text-xs font-bold text-[#a8792f] hover:text-[#caa24c]">Open follow-up queue →</button>
-          </div>
-        </section>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 lg:col-span-2">
-          <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] pb-4">
-            <div>
-              <h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Audience</h3>
-              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Current marketing-list membership, grouped by saved source.</p>
-            </div>
-            <button type="button" onClick={() => onTabChange('contact-lists')} className="text-[10px] font-black uppercase tracking-wider text-[#a8792f] hover:text-[#caa24c]">Manage audience</button>
-          </div>
-
-          {loading ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {[1, 2, 3, 4].map((item) => <AudienceSkeleton key={item} />)}
-            </div>
-          ) : audienceRows.length ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {audienceRows.map((list) => {
-                const share = totalSubscribers ? Math.min(100, (list.memberCount / totalSubscribers) * 100) : 0
-                return (
-                  <div key={list.name} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                    <div className="flex items-center justify-between gap-3"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{list.name}</p><span className="font-mono text-xs font-black text-[#caa24c]">{list.memberCount.toLocaleString()}</span></div>
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-border)]"><div className="h-full rounded-full bg-[#caa24c]" style={{ width: `${share}%` }} /></div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : <DataEmptyState loading={loading} message="No subscribers are saved yet." />}
-        </section>
-
-        <section className="luxor-glass-card flex min-h-[18rem] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
-          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4"><h3 className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Recent subscribers</h3><button type="button" onClick={() => onTabChange('contact-lists')} className="text-[10px] font-black uppercase tracking-wider text-[#a8792f]">View all</button></div>
-          {loading ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{[1, 2, 3, 4, 5].map((item) => <SubscriberSkeleton key={item} />)}</div> : recentSubscribers.length ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{recentSubscribers.map((subscriber) => <div key={`${subscriber.listName}-${subscriber.id || subscriber.email}`} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{subscriber.full_name || subscriber.email}</p><p className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">{subscriber.listName}</p></div><span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{subscriber.created_at ? formatDate(subscriber.created_at) : 'Date not recorded'}</span></div>)}</div> : <DataEmptyState loading={false} message="No subscriber records are available." />}
-        </section>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
-          <div className="flex items-start justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
-            <div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Grand Opening history</h3>
-              <p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">Legacy RSVP records are read-only and retained for historical reference.</p>
-            </div>
-          </div>
-
-          {loading ? (
-            <HistorySkeleton />
-          ) : grandOpeningRsvps.length ? (
-            <>
-              <div className="grid grid-cols-3 gap-2 border-b border-[color:var(--portal-border)] py-4 text-center font-mono">
-                <MetricBlock label="RSVPs" value={grandOpeningRsvps.length.toLocaleString()} />
-                <MetricBlock label="Attending" value={attendingRsvps.toLocaleString()} />
-                <MetricBlock label="Guests Listed" value={recordedGuests.toLocaleString()} />
-              </div>
-              <div className="mt-2 divide-y divide-[color:var(--portal-border)]">
-                {grandOpeningRsvps.slice(0, 4).map((rsvp) => (
-                  <div key={rsvp.id} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{rsvp.full_name}</p>
-                      <p className="mt-0.5 text-[9px] text-[color:var(--portal-muted)]">
-                        {rsvp.rsvp_status ? formatStatus(rsvp.rsvp_status) : 'RSVP status not recorded'}
-                        {' · '}
-                        {rsvp.attendee_count == null ? 'Guest count not provided' : `${rsvp.attendee_count} guest${rsvp.attendee_count === 1 ? '' : 's'}`}
-                      </p>
-                    </div>
-                    <span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{formatDate(rsvp.created_at)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <DataEmptyState loading={loading} message="No legacy Grand Opening RSVP rows are stored." />
-          )}
-        </section>
-
-        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
-          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Highest Engagement</h3>
-            <button type="button" onClick={() => onTabChange('email-campaigns')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">View campaigns</button>
-          </div>
-
-          {loading ? (
-            <TopCampaignSkeleton />
-          ) : topCampaign ? (
-            <div className="pt-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#caa24c]"><Mail size={18} /></div>
-                <div className="min-w-0">
-                  <PortalStatusBadge status={topCampaign.status} />
-                  <h4 className="mt-2 truncate text-xs font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(topCampaign.name)}</h4>
-                  <p className="mt-0.5 truncate text-[9px] text-[color:var(--portal-muted)]">{decodeHtmlEntities(topCampaign.subject)}</p>
-                  <p className="mt-1 font-mono text-[9px] text-[color:var(--portal-faint)]">{formatCampaignDate(topCampaign)}</p>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-4 gap-2 border-t border-[color:var(--portal-border)] pt-4 text-center font-mono">
-                <MetricBlock label="Sent" value={topCampaign.sent_count.toLocaleString()} />
-                <MetricBlock label="Open" value={`${topCampaign.open_rate}%`} />
-                <MetricBlock label="Click" value={`${topCampaign.click_rate}%`} />
-                <MetricBlock label="Unsubs" value={topCampaign.unsubscribe_count.toLocaleString()} />
-              </div>
-            </div>
-          ) : (
-            <DataEmptyState loading={loading} message="No campaign has recipients or sends yet." />
-          )}
-        </section>
-
-        <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
-          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Recent Email Activity</h3>
-            <span className="font-mono text-[9px] text-[color:var(--portal-faint)]">{activityEvents.length} tracked</span>
-          </div>
-          {loading ? (
-            <div className="mt-2 divide-y divide-[color:var(--portal-border)]">{[1, 2, 3, 4, 5].map((item) => <ActivitySkeleton key={item} />)}</div>
-          ) : activityEvents.length ? (
-            <div className="mt-2 divide-y divide-[color:var(--portal-border)]">
-              {activityEvents.slice(0, 5).map((event) => (
-                <div key={event.id} className="flex items-start justify-between gap-3 py-2.5">
-                  <div className="flex min-w-0 items-start gap-2.5">
-                    <span className="mt-0.5 text-[#caa24c]">{event.event_type === 'click' ? <MousePointerClick size={13} /> : <MailOpen size={13} />}</span>
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{event.recipient_name || event.recipient_email || 'Recipient name unavailable'}</p>
-                      <p className="mt-0.5 truncate text-[9px] text-[color:var(--portal-muted)]">{formatStatus(event.event_type)} · {decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</p>
-                    </div>
-                  </div>
-                  <span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-faint)]">{formatDate(event.created_at)}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <DataEmptyState loading={loading} message="No tracked opens, clicks, or unsubscribes yet." />
-          )}
-        </section>
-      </div>
-
-      <section className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
-        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-4">
-          <div>
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Scheduled Sends</h3>
-            <p className="mt-1 text-[9px] text-[color:var(--portal-muted)]">Campaigns with queued recipients or a scheduled or sending status.</p>
-          </div>
-          <button type="button" onClick={() => onTabChange('calendar')} className="text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open calendar</button>
+    <div className="min-h-0 flex-1 space-y-6 overflow-y-auto portal-scrollbar pb-8">
+      <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Marketing performance</p>
+          <p className="mt-1 text-sm text-[color:var(--portal-muted)]">A live view of inquiries, campaign sends, and the next scheduled emails.</p>
         </div>
-        {loading ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">{[1, 2, 3, 4].map((item) => <ScheduledSkeleton key={item} />)}</div>
-        ) : scheduledCampaigns.length ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            {scheduledCampaigns.slice(0, 4).map((campaign) => (
-              <div key={campaign.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <CalendarClock size={15} className="shrink-0 text-[#caa24c]" />
-                  <PortalStatusBadge status={campaign.status} />
-                </div>
-                <p className="mt-3 truncate text-xs font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(campaign.name)}</p>
-                <p className="mt-1 font-mono text-[9px] text-[color:var(--portal-muted)]">{campaign.scheduled_for ? formatDateTime(campaign.scheduled_for) : 'Send date not set'}</p>
-                <p className="mt-2 text-[9px] text-[color:var(--portal-faint)]">{campaign.queued_count.toLocaleString()} queued recipient{campaign.queued_count === 1 ? '' : 's'}</p>
-              </div>
-            ))}
+        <label className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">
+          <span>Date range</span>
+          <PortalSelect
+            value={rangeDays}
+            onChange={(value) => {
+              if (value === '7' || value === '30' || value === '90') setRangeDays(value)
+            }}
+            options={[
+              { value: '7', label: 'Last 7 days' },
+              { value: '30', label: 'Last 30 days' },
+              { value: '90', label: 'Last 90 days' },
+            ]}
+            className="w-40"
+            buttonClassName="min-h-10 bg-[color:var(--portal-card)] font-semibold normal-case tracking-normal"
+          />
+        </label>
+      </div>
+
+      {error ? (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-rose-500/25 bg-rose-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-[color:var(--portal-text)]">Marketing data could not load.</p>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{error}</p>
           </div>
-        ) : (
-          <DataEmptyState loading={false} message="No campaigns are currently scheduled or queued." />
-        )}
+          <button type="button" onClick={() => setRetryVersion((value) => value + 1)} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-bold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Try again</button>
+        </div>
+      ) : null}
+
+      <section aria-label="Marketing summary" className="grid grid-cols-2 border-y border-[color:var(--portal-border)] xl:grid-cols-4">
+        <MetricCard label="Inquiries" value={data?.inquiryCount} detail="Non-test inquiry records by creation date" loading={loading} />
+        <MetricCard label="Campaign emails sent" value={data?.sentRecipientCount} detail="Recipient records marked sent with a non-test email job" loading={loading} />
+        <MetricCard label="Click events recorded" value={data?.clickEventCount} detail="Tracked click events in this date range" loading={loading} />
+        <MetricCard label="Upcoming campaigns" value={data?.upcomingCampaignCount} detail="Scheduled campaigns with future send dates" loading={loading} />
       </section>
 
-      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
-        <h4 className="mb-3.5 px-1 text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Quick Actions</h4>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <ActionButton onClick={onAddContactClick} icon={<Plus size={14} className="text-[#caa24c]" />} label="Add Contact" />
-          <ActionButton onClick={() => onTabChange('email-campaigns')} icon={<MailOpen size={14} className="text-[#caa24c]" />} label="View Campaigns" />
-          <ActionButton onClick={() => onTabChange('calendar')} icon={<CalendarClock size={14} className="text-[#caa24c]" />} label="View Schedule" />
-        </div>
+      {data && data.excludedUnlinkedSentCount > 0 ? (
+        <p className="-mt-3 text-[11px] leading-5 text-[color:var(--portal-muted)]">
+          {data.excludedUnlinkedSentCount.toLocaleString()} sent recipient record{data.excludedUnlinkedSentCount === 1 ? '' : 's'} without a linked email job were left out so test sends cannot be counted as production activity.
+        </p>
+      ) : null}
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
+        <section aria-labelledby="inquiries-chart-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 id="inquiries-chart-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Inquiries over time</h2>
+              <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">{periodLabel} · non-test inquiries, grouped by local creation date.</p>
+            </div>
+            <span className="text-[10px] font-semibold text-[color:var(--portal-muted)]">{data ? `${data.inquiryCount.toLocaleString()} total` : ' '}</span>
+          </div>
+          {loading ? <ChartSkeleton /> : error || !data ? <InlineUnavailable label="Inquiry chart is unavailable until data loads." /> : data.inquiryCount === 0 ? (
+            <InlineEmpty label="No non-test inquiries were created in this date range." />
+          ) : <InquiryChart points={data.inquiriesByDay} />}
+        </section>
+
+        <section aria-labelledby="sources-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+          <div>
+            <h2 id="sources-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Inquiry sources</h2>
+            <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Recorded source values in the same date range.</p>
+          </div>
+          {loading ? <SourceSkeleton /> : error || !data ? <InlineUnavailable label="Source totals are unavailable until data loads." /> : data.sourceBreakdown.length === 0 ? (
+            <InlineEmpty label="No source data is available for this date range." />
+          ) : <SourceBreakdown sources={data.sourceBreakdown} total={data.inquiryCount} />}
+          <button type="button" onClick={() => onTabChange('sources')} className="mt-4 inline-flex min-h-9 items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+            View lead sources <ArrowUpRight size={13} />
+          </button>
+        </section>
       </div>
 
-      <span className="sr-only">{totalUniqueClicks.toLocaleString()} unique campaign clicks</span>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <section aria-labelledby="upcoming-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="upcoming-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Upcoming campaigns</h2>
+              <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Future sends currently marked Scheduled.</p>
+            </div>
+            <button type="button" onClick={() => onTabChange('email-campaigns')} className="min-h-9 shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">View all</button>
+          </div>
+          {loading ? <UpcomingSkeleton /> : error || !data ? <InlineUnavailable label="Scheduled campaigns are unavailable until data loads." /> : data.upcomingCampaigns.length === 0 ? (
+            <InlineEmpty label="No campaigns are scheduled for a future date." />
+          ) : (
+            <ul className="mt-3 divide-y divide-[color:var(--portal-border)]">
+              {data.upcomingCampaigns.map((campaign) => (
+                <li key={campaign.id} className="flex min-w-0 items-center gap-3 py-3 first:pt-1 last:pb-1">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 text-[#a8792f]"><CalendarClock size={15} /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(campaign.name)}</span>
+                    <span className="mt-1 block text-[10px] text-[color:var(--portal-muted)]">Scheduled {formatDateTime(campaign.scheduledFor)}</span>
+                  </span>
+                  <span className="shrink-0 rounded-full border border-[color:var(--portal-border)] px-2 py-1 text-[8px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Scheduled</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {data && data.upcomingCampaignCount > data.upcomingCampaigns.length ? <p className="mt-2 text-[10px] text-[color:var(--portal-muted)]">Showing the next {data.upcomingCampaigns.length}; {data.upcomingCampaignCount - data.upcomingCampaigns.length} more scheduled.</p> : null}
+        </section>
+
+        <section aria-labelledby="recent-activity-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="recent-activity-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Recent campaign activity</h2>
+              <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Tracked events in {periodLabel}.</p>
+            </div>
+            <button type="button" onClick={() => onTabChange('activity')} className="min-h-9 shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">View activity</button>
+          </div>
+          {loading ? <ActivitySkeleton /> : error || !data ? <InlineUnavailable label="Recent activity is unavailable until data loads." /> : data.recentActivity.length === 0 ? (
+            <InlineEmpty label="No campaign tracking events were recorded in this date range." />
+          ) : (
+            <ul className="mt-3 divide-y divide-[color:var(--portal-border)]">
+              {data.recentActivity.slice(0, 6).map((event) => (
+                <li key={event.id} className="flex min-w-0 items-start gap-3 py-3 first:pt-1 last:pb-1">
+                  <EventMark eventType={event.eventType} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(event.campaignName)}</span>
+                    <span className="mt-1 block text-[10px] text-[color:var(--portal-muted)]">{formatEventType(event.eventType)} · {formatDateTime(event.createdAt)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 border-t border-[color:var(--portal-border)] pt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">Opens and clicks are tracking signals, not proof that an email was read or delivered.</p>
+        </section>
+      </div>
+
+      <section aria-labelledby="quick-actions-title" className="border-t border-[color:var(--portal-border)] pt-5">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 id="quick-actions-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Quick actions</h2>
+            <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Open the tools available today.</p>
+          </div>
+          <p className="text-[10px] text-[color:var(--portal-muted)]">Automation editing arrives in a later phase.</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <QuickAction icon={<MailPlus size={16} />} label="Create campaign" detail="Open the existing campaign editor." onClick={onCreateCampaign} />
+          <QuickAction icon={<Users size={16} />} label="Manage contacts" detail="Review existing contacts and lists." onClick={() => onTabChange('contact-lists')} />
+          <QuickAction icon={<Workflow size={16} />} label="View automations" detail="See what automation tools are available." onClick={() => onTabChange('automations')} />
+        </div>
+      </section>
     </div>
   )
 }
 
-function TrendChart({ points, loading }: { points: Array<{ date: Date; value: number }>; loading: boolean }) {
-  const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null)
-  const max = Math.max(...points.map((point) => point.value), 1)
-  const coordinates = points.map((point, index) => ({ x: (index / Math.max(points.length - 1, 1)) * 100, y: 92 - (point.value / max) * 68 }))
-  const chartPoints = coordinates.map((point) => `${point.x},${point.y}`).join(' ')
-  const hoveredPoint = hoveredIndex === null ? null : points[hoveredIndex]
-  const hoveredCoordinate = hoveredIndex === null ? null : coordinates[hoveredIndex]
+function MetricCard({ label, value, detail, loading }: { label: string; value?: number; detail: string; loading: boolean }) {
+  return (
+    <div className="min-h-28 border-b border-r border-[color:var(--portal-border)] p-4 last:border-r-0 even:border-r-0 xl:border-b-0 xl:even:border-r xl:last:border-r-0 sm:p-5">
+      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
+      {loading ? <div className="mt-3 h-7 w-16 rounded luxor-skeleton" aria-label={`Loading ${label.toLowerCase()}`} /> : <p className="mt-2 font-mono text-2xl font-semibold leading-none text-[color:var(--portal-text)]">{value === undefined ? '—' : value.toLocaleString()}</p>}
+      <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">{detail}</p>
+    </div>
+  )
+}
+
+function InquiryChart({ points }: { points: MarketingOverviewData['inquiriesByDay'] }) {
+  const width = 100
+  const height = 100
+  const max = Math.max(1, ...points.map((point) => point.count))
+  const bandWidth = width / Math.max(points.length, 1)
+  const barWidth = Math.max(0.35, bandWidth * 0.68)
+  const labelIndexes = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])]
+
   return (
     <div className="mt-5">
-      <div className="relative h-36 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/55 p-3">
-        <div className="pointer-events-none absolute inset-x-3 top-7 border-t border-dashed border-[color:var(--portal-border)]" />
-        <div className="pointer-events-none absolute inset-x-3 top-1/2 border-t border-dashed border-[color:var(--portal-border)]" />
-        {loading ? <div className="h-full w-full rounded-lg luxor-skeleton" /> : <><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full"><polyline points={chartPoints} fill="none" stroke="#caa24c" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />{hoveredCoordinate ? <line x1={hoveredCoordinate.x} x2={hoveredCoordinate.x} y1="4" y2="96" stroke="#caa24c" strokeDasharray="2 2" strokeOpacity="0.45" vectorEffect="non-scaling-stroke" /> : null}{coordinates.map((point, index) => <rect key={index} x={Math.max(0, point.x - 3)} y="0" width="6" height="100" fill="transparent" tabIndex={0} aria-label={`${points[index].value} email sends on ${formatDate(points[index].date.toISOString())}`} onMouseEnter={() => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex(null)} onFocus={() => setHoveredIndex(index)} onBlur={() => setHoveredIndex(null)} />)}</svg>{hoveredPoint && hoveredCoordinate ? <div className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1.5 text-center shadow-lg" style={{ left: `${hoveredCoordinate.x}%`, top: `${Math.max(4, hoveredCoordinate.y - 19)}%` }}><p className="font-mono text-xs font-black text-[color:var(--portal-text)]">{hoveredPoint.value.toLocaleString()}</p><p className="mt-0.5 whitespace-nowrap text-[9px] text-[color:var(--portal-muted)]">Email sends · {formatDate(hoveredPoint.date.toISOString())}</p></div> : null}</>}
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={`Daily non-test inquiries from ${formatDate(points[0]?.date || '')} through ${formatDate(points[points.length - 1]?.date || '')}`} className="h-44 w-full overflow-visible">
+        <line x1="0" y1="99" x2="100" y2="99" stroke="var(--portal-border)" strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
+        {points.map((point, index) => {
+          const barHeight = point.count ? Math.max(1.5, (point.count / max) * 82) : 0
+          const x = index * bandWidth + (bandWidth - barWidth) / 2
+          return <g key={point.date}><title>{`${point.count} ${point.count === 1 ? 'inquiry' : 'inquiries'} · ${formatDate(point.date)}`}</title><rect x={x} y={98 - barHeight} width={barWidth} height={barHeight} rx="0.5" fill="#caa24c" opacity="0.88" /></g>
+        })}
+      </svg>
+      <div className="mt-2 flex items-center justify-between text-[9px] font-mono text-[color:var(--portal-muted)]">
+        {labelIndexes.map((index) => <span key={index}>{formatDate(points[index]?.date || '')}</span>)}
       </div>
-      <div className="mt-2 flex items-center justify-between text-[9px] font-mono text-[color:var(--portal-faint)]"><span>{points[0] ? formatDate(points[0].date.toISOString()) : '—'}</span><span>Email sends</span><span>{points[points.length - 1] ? formatDate(points[points.length - 1].date.toISOString()) : '—'}</span></div>
+      <p className="sr-only">{points.map((point) => `${formatDate(point.date)}: ${point.count}`).join('; ')}</p>
     </div>
   )
 }
 
-function AttentionRow({ value, label, detail, loading, onClick }: { value: number; label: string; detail: string; loading: boolean; onClick: () => void }) {
-  return <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 border-b border-[color:var(--portal-border)] py-5 text-left"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#a8792f]"><Users size={16} /></span><span className="min-w-0 flex-1">{loading ? <><span className="block h-7 w-12 rounded luxor-skeleton" /><span className="mt-2 block h-3 w-28 rounded luxor-skeleton" /><span className="mt-1.5 block h-2.5 w-44 max-w-full rounded luxor-skeleton" /></> : <><strong className="block font-mono text-2xl leading-none text-[color:var(--portal-text)]">{value.toLocaleString()}</strong><span className="mt-1 block text-xs font-bold text-[color:var(--portal-text)]">{label}</span><span className="mt-0.5 block text-[10px] text-[color:var(--portal-muted)]">{detail}</span></>}</span><ArrowUpRight size={16} className="text-[color:var(--portal-faint)] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#caa24c]" /></button>
-}
-
-function MetricBlock({ label, value, loading = false }: { label: string; value: string; loading?: boolean }) {
+function SourceBreakdown({ sources, total }: { sources: MarketingOverviewData['sourceBreakdown']; total: number }) {
   return (
-    <div className="border-r border-[color:var(--portal-border)] last:border-r-0">
-      <p className="text-[8px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">{label}</p>
-      {loading ? <div className="mt-2 h-3.5 w-12 rounded luxor-skeleton" /> : <p className="mt-1.5 text-xs font-bold text-[color:var(--portal-text)]">{value}</p>}
-    </div>
+    <ul className="mt-5 space-y-4">
+      {sources.map((source) => {
+        const width = total ? Math.min(100, (source.count / total) * 100) : 0
+        return (
+          <li key={source.source}>
+            <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px]">
+              <span className="truncate font-semibold text-[color:var(--portal-text)]">{source.source}</span>
+              <span className="shrink-0 font-mono text-[color:var(--portal-muted)]">{source.count.toLocaleString()}</span>
+            </div>
+            <div aria-label={`${source.source}: ${source.count} of ${total} inquiries`} role="img" className="h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-soft)]">
+              <span className="block h-full rounded-full bg-[#caa24c]" style={{ width: `${width}%` }} />
+            </div>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
-function AudienceSkeleton() {
-  return <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4"><div className="flex items-center justify-between gap-3"><div className="h-3 w-32 rounded luxor-skeleton" /><div className="h-3 w-8 rounded luxor-skeleton" /></div><div className="mt-3 h-1.5 w-full rounded-full luxor-skeleton" /></div>
-}
-
-function SubscriberSkeleton() {
-  return <div className="flex items-center justify-between gap-3 py-3"><div className="min-w-0 flex-1"><div className="h-3 w-32 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-24 rounded luxor-skeleton" /></div><div className="h-2.5 w-16 rounded luxor-skeleton" /></div>
-}
-
-function HistorySkeleton() {
-  return <><div className="grid grid-cols-3 gap-2 border-b border-[color:var(--portal-border)] py-4">{['RSVPs', 'Attending', 'Guests Listed'].map((label) => <MetricBlock key={label} label={label} value="" loading />)}</div><div className="mt-2 divide-y divide-[color:var(--portal-border)]">{[1, 2, 3, 4].map((item) => <SubscriberSkeleton key={item} />)}</div></>
-}
-
-function TopCampaignSkeleton() {
-  return <div className="pt-4"><div className="flex items-start gap-3"><div className="h-12 w-12 shrink-0 rounded-xl luxor-skeleton" /><div className="min-w-0 flex-1"><div className="h-4 w-16 rounded luxor-skeleton" /><div className="mt-2 h-3 w-40 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-32 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-24 rounded luxor-skeleton" /></div></div><div className="mt-4 grid grid-cols-4 gap-2 border-t border-[color:var(--portal-border)] pt-4">{[1, 2, 3, 4].map((item) => <MetricBlock key={item} label="" value="" loading />)}</div></div>
-}
-
-function ActivitySkeleton() {
-  return <div className="flex items-start justify-between gap-3 py-2.5"><div className="flex min-w-0 flex-1 items-start gap-2.5"><div className="mt-0.5 h-3.5 w-3.5 rounded luxor-skeleton" /><div className="min-w-0 flex-1"><div className="h-3 w-32 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-44 max-w-full rounded luxor-skeleton" /></div></div><div className="h-2.5 w-14 rounded luxor-skeleton" /></div>
-}
-
-function ScheduledSkeleton() {
-  return <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4"><div className="flex items-start justify-between gap-2"><div className="h-4 w-4 rounded luxor-skeleton" /><div className="h-4 w-16 rounded-full luxor-skeleton" /></div><div className="mt-3 h-3 w-32 max-w-full rounded luxor-skeleton" /><div className="mt-1.5 h-2.5 w-24 rounded luxor-skeleton" /><div className="mt-2 h-2.5 w-28 rounded luxor-skeleton" /></div>
-}
-
-function DataEmptyState({ loading, message }: { loading: boolean; message: string }) {
+function QuickAction({ icon, label, detail, onClick }: { icon: React.ReactNode; label: string; detail: string; onClick: () => void }) {
   return (
-    <div className="mt-4 flex min-h-28 items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-center text-xs leading-5 text-[color:var(--portal-muted)]">
-      {loading ? (
-        <div className="w-full max-w-xs space-y-2">
-          <div className="h-3 w-full rounded luxor-skeleton" />
-          <div className="h-3 w-3/4 mx-auto rounded luxor-skeleton" />
-        </div>
-      ) : message}
-    </div>
-  )
-}
-
-function ActionButton({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <button type="button" onClick={onClick} className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-center text-xs font-bold text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/30 hover:bg-[#caa24c]/8 hover:text-[#a8792f] active:scale-95">
-      {icon}
-      <span>{label}</span>
+    <button type="button" onClick={onClick} className="group flex min-h-20 items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 text-left transition hover:border-[#caa24c]/50 hover:bg-[#caa24c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 text-[#a8792f]">{icon}</span>
+      <span className="min-w-0 flex-1"><span className="block text-xs font-bold text-[color:var(--portal-text)]">{label}</span><span className="mt-1 block text-[10px] leading-4 text-[color:var(--portal-muted)]">{detail}</span></span>
+      <ArrowUpRight size={15} className="shrink-0 text-[color:var(--portal-faint)] transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#a8792f]" />
     </button>
   )
 }
 
-function isGrandOpeningRsvp(inquiry: LuxorInquiry) {
-  return inquiry.campaign_key === 'grand_opening_2026_07_25'
-    || inquiry.flow === 'grand_opening_rsvp'
-    || inquiry.source === 'grand_opening_rsvp'
+function EventMark({ eventType }: { eventType: string }) {
+  const icon = eventType === 'unsubscribe' ? <Users size={13} /> : eventType === 'click' ? <ArrowUpRight size={13} /> : <MailPlus size={13} />
+  return <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[#a8792f]">{icon}</span>
 }
 
-function formatStatus(value: string) {
-  return value.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+function ChartSkeleton() {
+  return <div role="status" aria-label="Loading inquiry chart" className="mt-5 h-44 rounded-lg luxor-skeleton" />
+}
+
+function SourceSkeleton() {
+  return <div role="status" aria-label="Loading inquiry sources" className="mt-5 space-y-4">{[1, 2, 3, 4].map((item) => <div key={item}><div className="h-3 w-3/4 rounded luxor-skeleton" /><div className="mt-2 h-1.5 w-full rounded-full luxor-skeleton" /></div>)}</div>
+}
+
+function UpcomingSkeleton() {
+  return <div role="status" aria-label="Loading upcoming campaigns" className="mt-3 space-y-2">{[1, 2, 3].map((item) => <div key={item} className="flex items-center gap-3 border-b border-[color:var(--portal-border)] py-3"><span className="h-9 w-9 rounded-full luxor-skeleton" /><span className="flex-1"><span className="block h-3 w-2/3 rounded luxor-skeleton" /><span className="mt-2 block h-2.5 w-1/3 rounded luxor-skeleton" /></span></div>)}</div>
+}
+
+function ActivitySkeleton() {
+  return <div role="status" aria-label="Loading campaign activity" className="mt-3 space-y-2">{[1, 2, 3].map((item) => <div key={item} className="flex items-start gap-3 border-b border-[color:var(--portal-border)] py-3"><span className="h-7 w-7 rounded-full luxor-skeleton" /><span className="flex-1"><span className="block h-3 w-2/3 rounded luxor-skeleton" /><span className="mt-2 block h-2.5 w-1/3 rounded luxor-skeleton" /></span></div>)}</div>
+}
+
+function InlineEmpty({ label }: { label: string }) {
+  return <p className="mt-5 flex min-h-24 items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-center text-xs leading-5 text-[color:var(--portal-muted)]">{label}</p>
+}
+
+function InlineUnavailable({ label }: { label: string }) {
+  return <p className="mt-5 flex min-h-24 items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-center text-xs leading-5 text-[color:var(--portal-muted)]">{label}</p>
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value))
+  if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return '—'
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, day)))
 }
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -431,8 +309,9 @@ function formatDateTime(value: string) {
   }).format(new Date(value))
 }
 
-function formatCampaignDate(campaign: Campaign) {
-  if (campaign.sent_at) return `Sent ${formatDateTime(campaign.sent_at)}`
-  if (campaign.scheduled_for) return `Scheduled ${formatDateTime(campaign.scheduled_for)}`
-  return `Created ${formatDateTime(campaign.created_at)}`
+function formatEventType(value: string) {
+  if (value === 'open') return 'Open signal recorded'
+  if (value === 'click') return 'Click event recorded'
+  if (value === 'unsubscribe') return 'Unsubscribe recorded'
+  return 'Campaign event recorded'
 }

@@ -15,6 +15,8 @@ import {
   Megaphone,
   PenSquare,
   FilePenLine,
+  Clock3,
+  Workflow,
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -23,7 +25,6 @@ import {
   PortalStatusBadge,
   PortalButton,
   PortalCloseButton,
-  PortalSelect,
   PortalTabTransition
 } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -32,6 +33,8 @@ import dynamic from 'next/dynamic'
 
 // Tab Component Imports (Lazy Loaded)
 const MarketingOverviewTab = dynamic(() => import('./tabs/MarketingOverviewTab').then(m => m.MarketingOverviewTab), { ssr: false, loading: () => <MarketingOverviewSkeleton /> })
+const MarketingActivityTab = dynamic(() => import('./tabs/MarketingActivityTab').then(m => m.MarketingActivityTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
+const MarketingTemplatesTab = dynamic(() => import('./tabs/MarketingTemplatesTab').then(m => m.MarketingTemplatesTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
 const LeadSourcesTab = dynamic(() => import('./tabs/LeadSourcesTab').then(m => m.LeadSourcesTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
 const EmailCampaignsTab = dynamic(() => import('./tabs/EmailCampaignsTab').then(m => m.EmailCampaignsTab), { ssr: false, loading: () => <MarketingCampaignSkeleton /> })
 const TextCampaignsTab = dynamic(() => import('./tabs/TextCampaignsTab').then(m => m.TextCampaignsTab), { ssr: false, loading: () => <MarketingTextSkeleton /> })
@@ -45,6 +48,9 @@ import { normalizeLuxorEventType, type LuxorInquiry, type LuxorInquiryStatus } f
 
 export type MarketingTab =
   | 'overview'
+  | 'automations'
+  | 'templates'
+  | 'activity'
   | 'sources'
   | 'email-campaigns'
   | 'text-campaigns'
@@ -62,7 +68,7 @@ function SkeletonBlock({ className }: { className: string }) {
 }
 
 function MarketingOverviewSkeleton() {
-  return <div className="space-y-6" aria-label="Loading marketing overview"><div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(19rem,0.85fr)]"><div className="min-h-[21rem] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6"><SkeletonBlock className="h-6 w-48" /><SkeletonBlock className="mt-2 h-3 w-72 max-w-full" /><div className="mt-6 grid grid-cols-2 gap-4 border-b border-[color:var(--portal-border)] pb-5 sm:grid-cols-5">{[1, 2, 3, 4, 5].map((item) => <div key={item}><SkeletonBlock className="h-2.5 w-16" /><SkeletonBlock className="mt-2 h-3.5 w-12" /></div>)}</div><SkeletonBlock className="mt-5 h-36 w-full" /></div><div className="min-h-[21rem] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6"><SkeletonBlock className="h-6 w-40" /><div className="mt-6 space-y-5">{[1, 2].map((item) => <div key={item} className="flex gap-3"><SkeletonBlock className="h-10 w-10 shrink-0 rounded-full" /><div className="flex-1"><SkeletonBlock className="h-7 w-14" /><SkeletonBlock className="mt-2 h-3 w-28" /><SkeletonBlock className="mt-1.5 h-2.5 w-44 max-w-full" /></div></div>)}</div></div></div><div className="grid grid-cols-1 gap-6 lg:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="min-h-[18rem] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6"><SkeletonBlock className="h-6 w-32" /><SkeletonBlock className="mt-2 h-3 w-52 max-w-full" /><div className="mt-6 space-y-4">{[1, 2, 3, 4].map((row) => <SkeletonBlock key={row} className="h-10 w-full" />)}</div></div>)}</div><SkeletonBlock className="h-48 w-full rounded-2xl" /></div>
+  return <div className="space-y-6" aria-label="Loading marketing overview"><div className="grid grid-cols-2 border-y border-[color:var(--portal-border)] xl:grid-cols-4">{[1, 2, 3, 4].map((item) => <div key={item} className="min-h-28 border-r border-[color:var(--portal-border)] p-4 last:border-r-0"><SkeletonBlock className="h-2.5 w-28" /><SkeletonBlock className="mt-3 h-7 w-16" /><SkeletonBlock className="mt-2 h-2.5 w-36 max-w-full" /></div>)}</div><div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]"><SkeletonBlock className="h-72 w-full rounded-2xl" /><SkeletonBlock className="h-72 w-full rounded-2xl" /></div><div className="grid gap-5 xl:grid-cols-2"><SkeletonBlock className="h-64 w-full rounded-2xl" /><SkeletonBlock className="h-64 w-full rounded-2xl" /></div></div>
 }
 
 function MarketingCampaignSkeleton() {
@@ -85,19 +91,33 @@ function MarketingCalendarSkeleton() {
   return <div className="space-y-6" aria-label="Loading campaign calendar"><SkeletonBlock className="h-24 w-full rounded-2xl" /><div className="grid grid-cols-2 gap-4 md:grid-cols-4">{[1, 2, 3, 4].map((item) => <SkeletonBlock key={item} className="h-32 w-full rounded-2xl" />)}</div><SkeletonBlock className="h-[36rem] w-full rounded-2xl" /></div>
 }
 
-const MARKETING_TABS = [
-  { id: 'overview', label: 'Marketing Overview', icon: <BarChart3 size={15} /> },
+const PRIMARY_MARKETING_TABS = [
+  { id: 'overview', label: 'Overview', icon: <BarChart3 size={15} /> },
+  { id: 'automations', label: 'Automations', icon: <Workflow size={15} /> },
+  { id: 'contact-lists', label: 'Contacts & Lists', icon: <Users size={15} /> },
+  { id: 'email-campaigns', label: 'Campaigns', icon: <Megaphone size={15} /> },
+  { id: 'templates', label: 'Templates', icon: <LayoutTemplate size={15} /> },
+  { id: 'activity', label: 'Activity', icon: <Clock3 size={15} /> },
+] as const satisfies readonly { id: MarketingTab; label: string; icon: React.ReactNode }[]
+
+const LEGACY_MARKETING_TABS = [
   { id: 'sources', label: 'Lead Sources', icon: <TrendingUp size={15} /> },
-  { id: 'email-campaigns', label: 'Email Campaigns', icon: <Megaphone size={15} /> },
+  { id: 'email-campaigns', label: 'Campaigns', icon: <Mail size={15} /> },
   { id: 'text-campaigns', label: 'Text Campaigns', icon: <MessageSquare size={15} /> },
   { id: 'builder-automation', label: 'Email Builder', icon: <LayoutTemplate size={15} /> },
-  { id: 'contact-lists', label: 'Contact Lists', icon: <Users size={15} /> },
+  { id: 'contact-lists', label: 'Contacts & Lists', icon: <Users size={15} /> },
   { id: 'call-center', label: 'Call Center', icon: <Phone size={15} /> },
   { id: 'calendar', label: 'Marketing Calendar', icon: <Calendar size={15} /> },
 ] as const satisfies readonly { id: MarketingTab; label: string; icon: React.ReactNode }[]
 
 function isMarketingTab(tab: string | null): tab is MarketingTab {
-  return MARKETING_TABS.some((item) => item.id === tab)
+  return PRIMARY_MARKETING_TABS.some((item) => item.id === tab) || LEGACY_MARKETING_TABS.some((item) => item.id === tab)
+}
+
+function primaryTabFor(tab: MarketingTab): MarketingTab {
+  if (tab === 'sources' || tab === 'call-center') return 'contact-lists'
+  if (tab === 'text-campaigns' || tab === 'builder-automation' || tab === 'calendar') return 'email-campaigns'
+  return tab
 }
 
 export type Campaign = {
@@ -638,6 +658,24 @@ function MarketingPageContent() {
   // Derive page headers
   const getHeaderInfo = () => {
     switch (activeTab) {
+      case 'automations':
+        return {
+          title: 'Automations',
+          icon: <Workflow size={18} />,
+          description: 'Automation management is planned for a later phase.'
+        }
+      case 'templates':
+        return {
+          title: 'Templates',
+          icon: <LayoutTemplate size={18} />,
+          description: 'Browse starter and saved email layouts.'
+        }
+      case 'activity':
+        return {
+          title: 'Activity',
+          icon: <Clock3 size={18} />,
+          description: 'Review recorded email campaign tracking events.'
+        }
       case 'sources':
         return {
           title: 'Lead Sources',
@@ -698,7 +736,7 @@ function MarketingPageContent() {
     </PortalButton>
   )
 
-  if (activeTab === 'overview' || activeTab === 'sources' || activeTab === 'text-campaigns' || activeTab === 'call-center') {
+  if (activeTab === 'sources' || activeTab === 'text-campaigns' || activeTab === 'call-center') {
     headerActions = (
       createCampaignButton
     )
@@ -786,52 +824,35 @@ function MarketingPageContent() {
             description={activeTab === 'overview' ? 'Grow your audience, engage your contacts, and fill your event calendar.' : ('description' in header ? header.description : undefined)}
             actions={headerActions}
           />
-          {activeTab === 'overview' ? (
-            <p className="max-w-2xl text-xs font-medium leading-5 text-[color:var(--portal-muted)] md:hidden">Use the sections below to plan campaigns, understand your audience, and follow up with the right people.</p>
-          ) : null}
         </div>
       ) : null}
 
       {!builderCanvasOpen ? (
         <div className="shrink-0">
-          <div className="2xl:hidden">
-            <div className="flex items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2.5 shadow-sm">
-              <div className="hidden min-w-0 flex-1 sm:block">
-                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Marketing section</p>
-                <p className="mt-0.5 truncate text-xs text-[color:var(--portal-text)]">Move between planning, outreach, and reporting.</p>
-              </div>
-              <PortalSelect
-                value={activeTab}
-                onChange={(tab) => {
-                  if (isMarketingTab(tab)) handleTabChange(tab)
-                }}
-                options={MARKETING_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
-                className="w-full sm:w-64"
-                buttonClassName="min-h-11 bg-[color:var(--portal-soft)] font-semibold"
-              />
-            </div>
-          </div>
-          <div className="hidden 2xl:block">
-            <MarketingWorkspaceNav activeTab={activeTab} onTabChange={handleTabChange} />
-          </div>
+          <MarketingWorkspaceNav activeTab={activeTab} onTabChange={handleTabChange} />
+          <MarketingSubnav activeTab={activeTab} onTabChange={handleTabChange} />
         </div>
       ) : null}
-
-      {!builderCanvasOpen ? <MarketingTabGuide activeTab={activeTab} /> : null}
 
       <div className="mt-1 flex min-h-0 flex-grow flex-col overflow-hidden">
         <PortalTabTransition activeKey={activeTab} className="flex h-full min-h-0 flex-col overflow-hidden">
             {activeTab === 'overview' && (
               <MarketingOverviewTab
-                inquiries={inquiries}
-                campaigns={campaigns}
-                activityEvents={marketingActivity}
-                marketingLists={marketingLists}
-                loading={loadingCampaigns || loadingInquiries || loadingLists}
                 onTabChange={handleTabChange}
-                onAddContactClick={() => router.push('/portal/marketing?tab=contact-lists&add=true')}
+                onCreateCampaign={() => { setCampaignModalView('start'); setCampaignModalOpen(true) }}
               />
             )}
+
+            {activeTab === 'automations' && <MarketingAutomationsUnavailable />}
+
+            {activeTab === 'templates' && (
+              <MarketingTemplatesTab
+                onOpenTemplate={openTemplateInBuilder}
+                onOpenBuilder={openBlankBuilder}
+              />
+            )}
+
+            {activeTab === 'activity' && <MarketingActivityTab />}
 
             {activeTab === 'sources' && (
               <LeadSourcesTab
@@ -910,52 +931,59 @@ function MarketingPageContent() {
 }
 
 function MarketingWorkspaceNav({ activeTab, onTabChange }: { activeTab: MarketingTab; onTabChange: (tab: MarketingTab) => void }) {
-  const groups: Array<{ label: string; tabs: ReadonlyArray<typeof MARKETING_TABS[number]> }> = [
-    { label: 'Plan', tabs: MARKETING_TABS.filter((tab) => tab.id === 'overview' || tab.id === 'sources') },
-    { label: 'Reach', tabs: MARKETING_TABS.filter((tab) => ['email-campaigns', 'text-campaigns', 'contact-lists', 'call-center'].includes(tab.id)) },
-    { label: 'Measure', tabs: MARKETING_TABS.filter((tab) => tab.id === 'calendar') },
-  ]
-
+  const selectedTab = primaryTabFor(activeTab)
   return (
-    <nav aria-label="Marketing sections" className="flex min-w-max items-end gap-6 py-1">
-      {groups.map((group) => (
-        <div key={group.label} className="flex items-end gap-4 border-r border-[color:var(--portal-border)] pr-6 last:border-r-0 last:pr-0">
-          <span className="pb-2 text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f]">{group.label}</span>
-          <div className="flex items-end gap-5">
-            {group.tabs.map((tab) => {
-              const isActive = activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => onTabChange(tab.id)}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`relative inline-flex items-center gap-2 border-b-2 py-2 text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${isActive ? 'border-[#caa24c] text-[#a8792f]' : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
-                >
-                  {tab.icon}
-                  <span>{tab.label.replace('Marketing ', '')}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ))}
+    <nav aria-label="Marketing sections" className="min-w-0 overflow-x-auto portal-scrollbar pb-1">
+      <div className="flex min-w-max items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1">
+        {PRIMARY_MARKETING_TABS.map((tab) => {
+          const isActive = selectedTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onTabChange(tab.id)}
+              aria-current={isActive ? 'page' : undefined}
+              className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:px-4 sm:text-xs ${isActive ? 'bg-[#caa24c]/15 text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+            >
+              {tab.icon}<span>{tab.label}</span>
+            </button>
+          )
+        })}
+      </div>
     </nav>
   )
 }
 
-function MarketingTabGuide({ activeTab }: { activeTab: MarketingTab }) {
-  const guide = {
-    overview: ['Start here', 'See reach, attention, and audience movement in one place.'],
-    sources: ['Understand demand', 'Compare where inquiries come from and which sources become tours.'],
-    'email-campaigns': ['Manage campaigns', 'Review drafts, scheduled sends, and performance without leaving this workspace.'],
-    'text-campaigns': ['Reach people directly', 'Use SMS for timely updates while keeping consent and opt-outs visible.'],
-    'builder-automation': ['Create the message', 'Choose a starting point, build the email, then send it to a campaign.'],
-    'contact-lists': ['Organize the audience', 'Keep lists and contacts ready for the next campaign or follow-up.'],
-    'call-center': ['Work the queue', 'Prioritize new inquiries, log outcomes, and move good conversations forward.'],
-    calendar: ['Plan the rhythm', 'Use the calendar to see upcoming sends and keep the marketing plan intentional.'],
-  }[activeTab]
-  return <div className="flex shrink-0 items-center gap-3 border-b border-[color:var(--portal-border)] py-3 text-xs"><span className="font-black uppercase tracking-[0.18em] text-[#a8792f]">{guide[0]}</span><span className="text-[color:var(--portal-muted)]">{guide[1]}</span></div>
+function MarketingSubnav({ activeTab, onTabChange }: { activeTab: MarketingTab; onTabChange: (tab: MarketingTab) => void }) {
+  const root = primaryTabFor(activeTab)
+  const items = root === 'contact-lists'
+    ? LEGACY_MARKETING_TABS.filter((tab) => tab.id === 'sources' || tab.id === 'call-center')
+    : root === 'email-campaigns'
+      ? LEGACY_MARKETING_TABS.filter((tab) => tab.id === 'text-campaigns' || tab.id === 'builder-automation' || tab.id === 'calendar')
+      : []
+
+  if (!items.length) return null
+  return (
+    <nav aria-label={root === 'contact-lists' ? 'Contacts tools' : 'Campaign tools'} className="mt-2 min-w-0 overflow-x-auto portal-scrollbar">
+      <div className="flex min-w-max items-center gap-1">
+        {items.map((tab) => (
+          <button key={tab.id} type="button" onClick={() => onTabChange(tab.id)} aria-current={activeTab === tab.id ? 'page' : undefined} className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${activeTab === tab.id ? 'bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
+            {tab.icon}<span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+    </nav>
+  )
+}
+
+function MarketingAutomationsUnavailable() {
+  return (
+    <section aria-labelledby="automations-unavailable-title" className="mx-auto w-full max-w-3xl rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-8">
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Planned for a later phase</p>
+      <h2 id="automations-unavailable-title" className="mt-2 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Automation management is not available yet.</h2>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--portal-muted)]">This Phase 1 workspace does not offer workflow creation, editing, pausing, or activation. Existing lead follow-up and tour email workflows continue through their current configuration.</p>
+    </section>
+  )
 }
 
 function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | null; onClose: () => void }) {

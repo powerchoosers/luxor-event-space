@@ -150,7 +150,7 @@ export function EmailCampaignsTab({ campaigns, loading, error, busyId, detailLoa
 
         <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] pb-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex gap-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Campaign status">
-            {([['all', 'All'], ['draft', 'Drafts'], ['scheduled', 'Scheduled'], ['sent', 'Sent'], ['automations', 'Automations']] as const).map(([value, label]) => (
+            {([['all', 'All'], ['draft', 'Drafts'], ['scheduled', 'Scheduled'], ['sent', 'Sent'], ['automations', 'Automation audience label']] as const).map(([value, label]) => (
               <button key={value} type="button" role="tab" aria-selected={filter === value} onClick={() => { setFilter(value); setPage(1) }} className={`relative shrink-0 pb-3 text-[11px] font-bold transition-colors ${filter === value ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{label} <span className="ml-1 font-mono text-[9px] text-[color:var(--portal-faint)]">{filterCounts[value]}</span>{filter === value ? <span className="absolute inset-x-0 bottom-0 h-0.5 bg-[#caa24c]" /> : null}</button>
             ))}
           </div>
@@ -159,6 +159,8 @@ export function EmailCampaignsTab({ campaigns, loading, error, busyId, detailLoa
             <div className="flex rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1" aria-label="Campaign view"><ViewButton active={view === 'grid'} onClick={() => { setView('grid'); setPage(1) }} label="Grid view"><Grid2X2 size={14} /></ViewButton><ViewButton active={view === 'list'} onClick={() => { setView('list'); setPage(1) }} label="List view"><List size={15} /></ViewButton></div>
           </div>
         </div>
+
+        {filter === 'automations' ? <p className="-mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">This filter matches saved campaign audience labels containing “automat”; it does not show automation workflows.</p> : null}
 
         {loading ? <CampaignSkeleton view={view} /> : !pageCampaigns.length ? (
           <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-6 py-16 text-center"><p className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">{campaigns.length ? 'No campaigns found' : 'Your campaign library is ready'}</p><p className="mx-auto mt-2 max-w-md text-xs leading-5 text-[color:var(--portal-muted)]">{campaigns.length ? 'Try another status or search term.' : 'Create your first campaign to start building a visual history of every send.'}</p></div>
