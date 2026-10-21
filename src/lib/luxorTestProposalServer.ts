@@ -11,7 +11,11 @@ import {
   resolveLuxorSameDayBooking,
   assertLuxorWeekdayRentalSelection,
 } from '@/lib/luxorProposalPricingServer'
-import { buildLuxorProposalEmail } from '@/lib/luxorProposalEmailServer'
+import { buildLuxorProposalEmail, formatLuxorProposalTimeDetails, getLuxorProposalPricingSummary } from '@/lib/luxorProposalEmailServer'
+import { buildLuxorProposalBreakdownEmail } from '@/lib/luxorProposalBreakdownEmail'
+import { calculateLuxorProposalBreakdownForInvoice } from '@/lib/luxorProposalBreakdownServer'
+import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
+import { markLuxorTestEmailOnly } from '@/lib/luxorTestEmailTemplates'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { proposalExpirationInstant, proposalValidThrough, luxorCalendarDate } from '@/lib/luxorProposalTerms'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
@@ -186,7 +190,7 @@ export async function prepareLuxorTestProposal(input: {
   const email = input.action === 'publish'
     ? buildLuxorProposalEmail({ invoice, inquiry: testInquiry, reviewUrl, testOnly: true })
     : null
-  const pdf = input.action === 'publish' ? await buildLuxorInvoicePdf(invoice, testInquiry) : null
+  const pdf = input.action === 'publish' ? await buildLuxorInvoicePdf(invoice, testInquiry, { testOnly: true }) : null
   const details: Record<string, unknown> = {
     simulation_only: true,
     invoice,
@@ -208,5 +212,59 @@ export async function prepareLuxorTestProposal(input: {
     recipient: LUXOR_TEST_PROPOSAL_RECIPIENT,
     requestFingerprint,
     replayed: false,
+  }
+}
+
+/** Render the shared Breakdown email from the proposal's frozen test artifact. */
+export async function prepareLuxorTestProposalBreakdown(input: { testRunId: string; expectedRevision: number }) {
+  const [run] = await supabaseRest<TestRun[]>(
+    `luxor_test_runs?select=id,test_lead_id,status&id=eq.${encodeURIComponent(input.testRunId)}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
+  )
+  if (!run) throw new LuxorTestProposalConflictError('Choose an active permanent Test Lead run before preparing its Breakdown email.')
+  const [artifact] = await supabaseRest<Artifact[]>(
+    `luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.proposal&limit=1`,
+  )
+  if (!artifact || !['drafted', 'sent'].includes(artifact.status) || !isRecord(artifact.details.invoice)) {
+    throw new LuxorTestProposalConflictError('Save the isolated proposal before preparing its Breakdown email.')
+  }
+  const revision = Number(artifact.details.proposal_revision) || 0
+  if (!Number.isSafeInteger(input.expectedRevision) || revision < 1 || revision !== input.expectedRevision) {
+    throw new LuxorTestProposalConflictError('The saved test proposal changed. Refresh it before preparing its Breakdown email.')
+  }
+
+  const invoice = artifact.details.invoice as unknown as LuxorInvoice
+  const { selection, calculation } = await calculateLuxorProposalBreakdownForInvoice(invoice)
+  const selectedPackageId = normalizeLuxorProposalPackageTierId(selection.packageTierId)
+  const selectedPackage = calculation.packages.find((candidate) => candidate.id === selectedPackageId)
+  if (!selectedPackage || !selectedPackageId || !calculation.packageOptions?.length) {
+    throw new Error('The saved test proposal does not include a complete package comparison.')
+  }
+  const summary = getLuxorProposalPricingSummary(invoice)
+  const timeDetails = formatLuxorProposalTimeDetails(summary)
+  const valueFor = (prefix: string) => timeDetails.find((value) => value.startsWith(prefix))?.slice(prefix.length).trim() || ''
+  const rendered = buildLuxorProposalBreakdownEmail({
+    recipientName: 'Luxor Test Lead',
+    eventType: invoice.event_type || String(invoice.proposal_context?.event_type || 'Event'),
+    eventDate: summary.eventDate || '',
+    guestCount: Number(summary.expectedGuestCount) || 0,
+    venueAccess: valueFor('Venue access:') || valueFor('Venue access starts:') || valueFor('Venue access ends:') || 'To be confirmed',
+    guestArrival: valueFor('Guest arrival:'),
+    eventEnd: valueFor('Event end:'),
+    selectedPackageId,
+    packageOptions: calculation.packageOptions,
+    packages: calculation.packages,
+    selectedPackage,
+    addOnQuotes: (calculation.addOnQuotes || []) as NonNullable<Parameters<typeof buildLuxorProposalBreakdownEmail>[0]['addOnQuotes']>,
+    phoneNumber: null,
+    bookingUrl: null,
+  })
+  const marked = markLuxorTestEmailOnly(rendered.subject, rendered.html, run.id)
+  const fingerprint = createHash('sha256').update(stableJson({ subject: marked.subject, body: marked.body })).digest('hex')
+  return {
+    revision,
+    subject: marked.subject,
+    body: marked.body,
+    source: `proposal_breakdown:${revision}:${fingerprint}`,
+    recipient: LUXOR_TEST_PROPOSAL_RECIPIENT,
   }
 }

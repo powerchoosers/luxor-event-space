@@ -449,6 +449,7 @@ export default function LeadDetailPage({
 }) {
   const { id } = use(params)
   const searchParams = useSearchParams()
+  const requestedTestRunId = searchParams?.get('testRunId') || null
   const router = useRouter()
   const pathname = usePathname()
   const { notify } = useToast()
@@ -900,24 +901,25 @@ export default function LeadDetailPage({
     () => leadEvents.find((event) => event.id === activeEventId) || leadEvents.find((event) => event.is_primary) || leadEvents[0] || null,
     [activeEventId, leadEvents],
   )
+  const isolatedTestLead = isLuxorTestInquiry(lead)
   const eventBookings = useMemo(
-    () => selectedLeadEvent ? bookings.filter((booking) => booking.lead_event_id === selectedLeadEvent.id) : bookings,
-    [bookings, selectedLeadEvent],
+    () => isolatedTestLead ? [] : selectedLeadEvent ? bookings.filter((booking) => booking.lead_event_id === selectedLeadEvent.id) : bookings,
+    [bookings, isolatedTestLead, selectedLeadEvent],
   )
   const eventBookingIds = useMemo(() => new Set(eventBookings.map((booking) => booking.id)), [eventBookings])
   const eventInvoices = useMemo(
-    () => selectedLeadEvent
+    () => isolatedTestLead ? [] : selectedLeadEvent
       ? invoices.filter((invoice) => invoice.lead_event_id === selectedLeadEvent.id || (!invoice.lead_event_id && Boolean(invoice.booking_id && eventBookingIds.has(invoice.booking_id))))
       : invoices,
-    [eventBookingIds, invoices, selectedLeadEvent],
+    [eventBookingIds, invoices, isolatedTestLead, selectedLeadEvent],
   )
   const eventInvoiceIds = useMemo(() => new Set(eventInvoices.map((invoice) => invoice.id)), [eventInvoices])
-  const clientProposals = useMemo(() => getLeadClientProposals(invoices), [invoices])
+  const clientProposals = useMemo(() => isolatedTestLead ? [] : getLeadClientProposals(invoices), [invoices, isolatedTestLead])
   const eventPayments = useMemo(
-    () => selectedLeadEvent
+    () => isolatedTestLead ? [] : selectedLeadEvent
       ? payments.filter((payment) => Boolean((payment.booking_id && eventBookingIds.has(payment.booking_id)) || (payment.invoice_id && eventInvoiceIds.has(payment.invoice_id))))
       : payments,
-    [eventBookingIds, eventInvoiceIds, payments, selectedLeadEvent],
+    [eventBookingIds, eventInvoiceIds, payments, isolatedTestLead, selectedLeadEvent],
   )
   const latestBooking = useMemo(() => getMostRecentBooking(eventBookings), [eventBookings])
   // Always anchor proposal/contract UI to the newest saved event proposal in
@@ -927,8 +929,8 @@ export default function LeadDetailPage({
     // An accepted proposal can temporarily have no booking or event link
     // while the acceptance workflow finishes. Include all lead invoices so
     // that transient state cannot fall back to an unrelated legacy booking.
-    () => getCurrentFinalProposal(invoices),
-    [invoices],
+    () => isolatedTestLead ? null : getCurrentFinalProposal(invoices),
+    [invoices, isolatedTestLead],
   )
   const currentProposalBooking = useMemo(
     () => currentProposalInvoice
@@ -1759,9 +1761,17 @@ export default function LeadDetailPage({
 
   const ensureActiveTestRun = useCallback(async (showSuccess = false) => {
     if (!lead || !isLuxorTestInquiry(lead)) return
-    activeTestRunRequestRef.current = lead.id
+    const requestKey = `${lead.id}:${requestedTestRunId || 'active'}`
+    activeTestRunRequestRef.current = requestKey
     setLoadingTestRun(true)
     try {
+      if (requestedTestRunId && !showSuccess) {
+        const response = await fetch(`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(requestedTestRunId)}`, { cache: 'no-store' })
+        const payload = await response.json().catch(() => ({})) as { error?: string }
+        if (!response.ok) throw new Error(payload.error || 'This test email refers to a run that is no longer active.')
+        setActiveTestRunId(requestedTestRunId)
+        return
+      }
       const response = await fetch('/api/portal/test-lead', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'ensure_active_run' }),
@@ -1775,11 +1785,12 @@ export default function LeadDetailPage({
       if (showSuccess) notify({ title: 'Isolated test run ready', description: 'This Test Lead is connected to a run-scoped simulation.', variant: 'success' })
     } catch (error) {
       activeTestRunRequestRef.current = null
+      if (requestedTestRunId) setActiveTestRunId(null)
       notify({ title: 'Test run unavailable', description: error instanceof Error ? error.message : 'The isolated Test Lead run could not be prepared.', variant: 'error' })
     } finally {
       setLoadingTestRun(false)
     }
-  }, [lead, notify])
+  }, [lead, notify, requestedTestRunId])
 
   useEffect(() => {
     if (!lead || !isLuxorTestInquiry(lead)) {
@@ -1788,9 +1799,10 @@ export default function LeadDetailPage({
       activeTestRunRequestRef.current = null
       return
     }
-    if (activeTestRunRequestRef.current === lead.id) return
+    const requestKey = `${lead.id}:${requestedTestRunId || 'active'}`
+    if (activeTestRunRequestRef.current === requestKey) return
     void ensureActiveTestRun()
-  }, [ensureActiveTestRun, lead?.id, lead?.is_test, lead?.metadata?.is_test_record])
+  }, [ensureActiveTestRun, lead?.id, lead?.is_test, lead?.metadata?.is_test_record, requestedTestRunId])
 
   useEffect(() => {
     const handleReset = () => {
@@ -1800,7 +1812,8 @@ export default function LeadDetailPage({
     const handleReady = (event: Event) => {
       const runId = (event as CustomEvent<{ runId?: string }>).detail?.runId
       if (!runId) return
-      activeTestRunRequestRef.current = lead?.id || null
+      if (requestedTestRunId && runId !== requestedTestRunId) return
+      activeTestRunRequestRef.current = lead ? `${lead.id}:${requestedTestRunId || 'active'}` : null
       setActiveTestRunId(runId)
     }
     window.addEventListener('luxor-test-run-reset', handleReset)
@@ -1809,7 +1822,7 @@ export default function LeadDetailPage({
       window.removeEventListener('luxor-test-run-reset', handleReset)
       window.removeEventListener('luxor-test-run-ready', handleReady)
     }
-  }, [lead?.id])
+  }, [lead?.id, requestedTestRunId])
 
   // The Luxor tables are private behind RLS, so browser Realtime may not receive
   // their row payloads. Keep the payment/open cards current through the
@@ -2520,7 +2533,8 @@ export default function LeadDetailPage({
   }
 
   useEffect(() => {
-    if (!lead || !isLuxorTestInquiry(lead) || !activeTestRunId || searchParams?.get('createTestProposal') !== '1') return
+    if (!lead || !isLuxorTestInquiry(lead) || !activeTestRunId || searchParams?.get('createTestProposal') !== '1'
+      || (requestedTestRunId && requestedTestRunId !== activeTestRunId)) return
     const requestKey = `${lead.id}:${activeTestRunId}`
     if (testProposalOpenRequestRef.current === requestKey) return
     testProposalOpenRequestRef.current = requestKey
@@ -2539,7 +2553,7 @@ export default function LeadDetailPage({
         notify({ title: 'Test proposal unavailable', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
       }
     })()
-  }, [lead, notify, openProposalBuilder, activeTestRunId, searchParams])
+  }, [lead, notify, openProposalBuilder, activeTestRunId, requestedTestRunId, searchParams])
 
   const duplicateProposalDraft = (invoice: LuxorInvoice) => {
     openProposalBuilder()
@@ -3524,7 +3538,7 @@ export default function LeadDetailPage({
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createLuxorTourAttendancePayload({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, attendance, expectedAttendance: lead.tour_attendance_status || null })),
+        body: JSON.stringify({ ...createLuxorTourAttendancePayload({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, attendance, expectedAttendance: lead.tour_attendance_status || null }), expectedInquiryUpdatedAt: lead.updated_at }),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: unknown; warnings?: string[]; simulated?: boolean }
       if (!response.ok) throw new Error(payload.error || 'Tour attendance could not be updated.')
@@ -3568,6 +3582,7 @@ export default function LeadDetailPage({
           meetingType: tourMeetingType,
           clientFacingNotes: tourClientFacingNotes,
           tourAssignees,
+          expectedInquiryUpdatedAt: lead.updated_at,
         }),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: LuxorInquiry; simulated?: boolean; confirmationJob?: LuxorEmailJob | null; reminderJobs?: LuxorEmailJob[] }
@@ -7934,11 +7949,13 @@ export default function LeadDetailPage({
               <button type="button" onClick={() => openProposalBuilder()} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition hover:bg-[#dfbd68]"><Plus size={14} /> Create New Proposal</button>
             </div>
             {clientProposals.length === 0 ? (
+              isLuxorTestInquiry(lead) ? null : (
               <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">
                 <p className="font-semibold text-[color:var(--portal-text)]">No proposals saved for this lead yet.</p>
                 <p className="mt-1">Start a draft. It will appear here after it is saved.</p>
                 <button type="button" onClick={() => openProposalBuilder()} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/10 px-4 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><Plus size={13} /> Build proposal</button>
               </div>
+              )
             ) : (
               <div className="mt-5 space-y-3">
                 {clientProposals.map((proposal, proposalIndex) => {
@@ -8171,15 +8188,14 @@ export default function LeadDetailPage({
 
           {activeLeadTab === 'documents' || activeLeadTab === 'contract' ? (
           <div id="lead-documents" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
-            {activeLeadTab === 'contract' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="contract" onOpenProposal={() => openProposalBuilder()} /> : null}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]"><FileText size={16} className="text-[#a8792f] dark:text-[#caa24c]" /> PDF library</h3>
                 <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[color:var(--portal-muted)]">Preview the final proposal, agreement, and signed contract saved for this lead. These files are private to the owner portal.</p>
               </div>
-              <span className="font-mono text-xs text-[color:var(--portal-muted)]">{documents.length + signatureRequests.length} files</span>
+              <span className="font-mono text-xs text-[color:var(--portal-muted)]">{isLuxorTestInquiry(lead) ? 'Run-scoped test files' : `${documents.length + signatureRequests.length} files`}</span>
             </div>
-            {documents.length === 0 && signatureRequests.length === 0 ? (
+            {isLuxorTestInquiry(lead) ? activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="documents" onOpenProposal={() => openProposalBuilder()} /> : <p className="mt-5 text-xs text-[color:var(--portal-muted)]">Loading the isolated Test Lead run…</p> : documents.length === 0 && signatureRequests.length === 0 ? (
               <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">PDFs will appear here after a final proposal or agreement is generated.</div>
             ) : (
               <div className="mt-5 grid gap-3 lg:grid-cols-2">
@@ -8212,9 +8228,11 @@ export default function LeadDetailPage({
                 <FileSignature size={16} className="text-[#a8792f] dark:text-[#caa24c]" />
                 Booking & Contract
               </span>
-              <span className="font-mono text-xs text-[color:var(--portal-muted)]">{sortedBookings.length} records</span>
+              <span className="font-mono text-xs text-[color:var(--portal-muted)]">{isLuxorTestInquiry(lead) ? 'Isolated test run' : `${sortedBookings.length} records`}</span>
             </h3>
 
+            {isLuxorTestInquiry(lead) ? activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="contract" onOpenProposal={() => openProposalBuilder()} /> : <p className="text-xs text-[color:var(--portal-muted)]">Loading the isolated Test Lead run…</p> : (
+            <>
             {proposalInvoice && !agreementBooking ? (
               <div className="mb-4 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-4 text-xs leading-5 text-[color:var(--portal-muted)]">
                 <p className="font-semibold text-[color:var(--portal-text)]">Current proposal agreement</p>
@@ -8340,6 +8358,8 @@ export default function LeadDetailPage({
                   </div>
                 ))}
               </div>
+            )}
+            </>
             )}
           </div>
           ) : null}

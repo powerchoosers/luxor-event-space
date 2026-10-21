@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { cancelLuxorTestTour, enqueueLuxorTestEmail, ensureActiveLuxorTestRun, getLuxorTestSettings, recordLuxorTestRunActivity, resetLuxorTestRun, simulateLuxorTestTourChange } from '@/lib/luxorTestLeadServer'
+import { cancelLuxorTestTour, enqueueLuxorTestEmail, ensureActiveLuxorTestRun, getLuxorTestSettings, LuxorTestTourConflictError, recordLuxorTestRunActivity, resetLuxorTestRun, simulateLuxorTestTourChange } from '@/lib/luxorTestLeadServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { buildLuxorTestEmailTemplate, isLuxorTestEmailCategory } from '@/lib/luxorTestEmailTemplates'
@@ -133,12 +133,18 @@ export async function POST(request: NextRequest) {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(testRunId)) {
         return NextResponse.json({ error: 'Choose a valid active Test Lead run.' }, { status: 400 })
       }
-      const result = await cancelLuxorTestTour({ testRunId, reason: typeof body.reason === 'string' ? body.reason : '' })
+      const expectedInquiryUpdatedAt = typeof body.expectedInquiryUpdatedAt === 'string' ? body.expectedInquiryUpdatedAt : ''
+      if (!expectedInquiryUpdatedAt || !Number.isFinite(Date.parse(expectedInquiryUpdatedAt))) {
+        return NextResponse.json({ error: 'Refresh the Test Lead before cancelling its simulated tour.' }, { status: 400 })
+      }
+      const result = await cancelLuxorTestTour({ testRunId, expectedInquiryUpdatedAt, reason: typeof body.reason === 'string' ? body.reason : '' })
       return NextResponse.json({ result, simulated: true })
     }
     if (body.action === 'tour_change') {
       if (typeof body.testRunId !== 'string' || typeof body.actionKey !== 'string'
         || !/^[0-9a-f-]{8,160}$/i.test(body.actionKey)
+        || !Number.isSafeInteger(body.expectedTourRevision) || Number(body.expectedTourRevision) < 0 || Number(body.expectedTourRevision) > 2147483646
+        || !['simulated', 'requested', 'scheduled', 'confirmed', 'completed', 'cancelled', 'failed', 'reset'].includes(String(body.expectedTourStatus || ''))
         || !['reschedule', 'cancel'].includes(body.tourAction)) {
         return NextResponse.json({ error: 'A valid active test run, action key, and tour action are required.' }, { status: 400 })
       }
@@ -168,8 +174,11 @@ export async function POST(request: NextRequest) {
         testRunId: body.testRunId,
         action,
         actionKey: body.actionKey,
+        expectedTourRevision: Number(body.expectedTourRevision),
+        expectedTourStatus: String(body.expectedTourStatus),
         payload,
       })
+      if (result.conflict) return NextResponse.json({ error: String(result.error || 'The simulated tour changed. Refresh its history before trying again.') }, { status: 409 })
       return NextResponse.json({ result, simulated: true })
     }
     if (body.action === 'send_test_email') {
@@ -181,7 +190,7 @@ export async function POST(request: NextRequest) {
       }
       const category = String(body.category)
       if (!isLuxorTestEmailCategory(category)) return NextResponse.json({ error: 'Choose a supported test email template.' }, { status: 400 })
-      if (category === 'proposal') return NextResponse.json({ error: 'Use the proposal builder to calculate, save, render, and publish the actual test proposal.' }, { status: 409 })
+      if (category === 'proposal' || category === 'proposal_breakdown') return NextResponse.json({ error: 'Use the isolated proposal review screen to render and queue a saved test proposal email.' }, { status: 409 })
       const template = await buildLuxorTestEmailTemplate(category, body.testRunId)
       const result = await enqueueLuxorTestEmail({
         testRunId: body.testRunId,
@@ -197,6 +206,9 @@ export async function POST(request: NextRequest) {
       }
       if (body.artifactType === 'contract' && body.status === 'prepared') {
         return NextResponse.json({ error: 'Prepare the watermarked contract preview from the Contract tab before advancing its simulated status.' }, { status: 409 })
+      }
+      if (body.artifactType === 'tour') {
+        return NextResponse.json({ error: 'Use the run-scoped tour controls so the inquiry and tour artifact update atomically.' }, { status: 409 })
       }
       if (body.artifactType === 'contract' && ['sent', 'signed'].includes(body.status)) {
         const [contract] = await supabaseRest<Array<{ details: Record<string, unknown> }>>(
@@ -234,6 +246,7 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ result: await resetLuxorTestRun(body.testRunId) })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to reset test lead.' }, { status: 400 })
+    const status = error instanceof LuxorTestTourConflictError ? error.status : 400
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to update the isolated test lead.' }, { status })
   }
 }

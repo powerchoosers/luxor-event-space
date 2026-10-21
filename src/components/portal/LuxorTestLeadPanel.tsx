@@ -172,6 +172,9 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
   }
 
   async function changeTour(runId: string, tourAction: 'reschedule' | 'cancel') {
+    const tourArtifact = data?.artifacts?.find((artifact) => artifact.test_run_id === runId && artifact.artifact_type === 'tour')
+    const expectedTourRevision = Number(tourArtifact?.details?.tour_revision) || 0
+    const expectedTourStatus = tourArtifact?.status || 'simulated'
     const confirmText = tourAction === 'reschedule'
       ? `Queue a simulated tour confirmation and two reminders to ${recipient || 'the verified test inbox'}? No real calendar or venue inventory will change.`
       : `Cancel this simulated tour and queue one cancellation notice to ${recipient || 'the verified test inbox'}? No real calendar or venue inventory will change.`
@@ -181,10 +184,11 @@ export function LuxorTestLeadPanel({ leadId }: { leadId: string }) {
       const response = await fetch('/api/portal/test-lead', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'tour_change', tourAction, testRunId: runId,
-          actionKey: window.crypto.randomUUID(), date: tourDate, time: tourTime }),
+          actionKey: window.crypto.randomUUID(), expectedTourRevision, expectedTourStatus, date: tourDate, time: tourTime }),
       })
-      const result = await response.json() as { error?: string }
+      const result = await response.json() as { error?: string; result?: { conflict?: boolean; error?: string } }
       if (!response.ok) throw new Error(result.error || 'Unable to update simulated tour.')
+      if (result.result?.conflict) throw new Error(result.result.error || 'The simulated tour changed. Refresh its history before trying again.')
       setNotice(tourAction === 'reschedule' ? 'Simulated tour rescheduled; run-scoped confirmation and reminders are queued.' : 'Simulated tour cancelled; queued reminders were cancelled and a run-scoped cancellation notice was queued.')
       await refresh()
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Unable to update simulated tour.') }

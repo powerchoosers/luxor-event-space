@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { createHash } from 'node:crypto'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorInquiry, LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { matchesTestLeadIdentifiers } from '@/lib/luxorTestLeadPolicy'
@@ -18,6 +19,82 @@ export type LuxorTestSettings = {
 }
 
 const LUXOR_PERMANENT_TEST_LEAD_ID = '00b264d6-a3fb-4ea3-9142-415f76385c39'
+
+type TestTourArtifact = { id?: string; status: string; details: Record<string, unknown> }
+type TestTourActionContext = {
+  run: { id: string }
+  lead: Record<string, unknown> & LuxorInquiry
+  artifact: TestTourArtifact | null
+}
+type TestTourActionResult = {
+  artifact?: TestTourArtifact
+  inquiry?: Record<string, unknown>
+  conflict?: boolean
+  error?: string
+  replayed?: boolean
+}
+
+export class LuxorTestTourConflictError extends Error {
+  readonly status = 409
+}
+
+function stableTestJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableTestJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableTestJson(record[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
+async function getTestTourActionContext(testRunId: string): Promise<TestTourActionContext> {
+  const [run] = await supabaseRest<Array<{ id: string }>>(
+    `luxor_test_runs?select=id&id=eq.${encodeURIComponent(testRunId)}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
+  )
+  if (!run) throw new Error('Choose the active permanent Test Lead run before changing its simulated tour.')
+  const [lead] = await supabaseRest<Array<Record<string, unknown> & LuxorInquiry>>(
+    `luxor_inquiries?select=*&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true&limit=1`,
+  )
+  if (!lead || lead.is_test !== true) throw new Error('The permanent Test Lead is unavailable.')
+  const [artifact] = await supabaseRest<Array<TestTourArtifact>>(
+    `luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`,
+  )
+  return { run, lead, artifact: artifact ?? null }
+}
+
+async function applyLuxorTestTourAction(input: {
+  context: TestTourActionContext
+  action: 'schedule' | 'outcome_attended' | 'outcome_no_show' | 'cancel'
+  expectedInquiryUpdatedAt: string
+  payload: Record<string, unknown>
+}) {
+  const expectedStatus = input.context.artifact?.status || 'simulated'
+  const rawRevision = input.context.artifact?.details?.tour_revision
+  const expectedRevision = Number.isSafeInteger(Number(rawRevision)) && Number(rawRevision) >= 0 ? Number(rawRevision) : 0
+  const requestFingerprint = createHash('sha256').update(stableTestJson({ action: input.action, payload: input.payload })).digest('hex')
+  const actionKey = createHash('sha256').update(stableTestJson({
+    testRunId: input.context.run.id,
+    action: input.action,
+    expectedStatus,
+    expectedRevision,
+    requestFingerprint,
+  })).digest('hex')
+  const result = await supabaseRest<TestTourActionResult>('rpc/luxor_apply_test_tour_action', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_test_run_id: input.context.run.id,
+      p_action: input.action,
+      p_action_key: actionKey,
+      p_expected_tour_status: expectedStatus,
+      p_expected_revision: expectedRevision,
+      p_expected_inquiry_updated_at: input.expectedInquiryUpdatedAt,
+      p_request_fingerprint: requestFingerprint,
+      p_payload: input.payload,
+    }),
+  })
+  if (result.conflict) throw new LuxorTestTourConflictError(result.error || 'The simulated tour changed in another request. Refresh and review its current state.')
+  return result
+}
 
 export async function getLuxorTestSettings() {
   const rows = await supabaseRest<LuxorTestSettings[]>('luxor_test_settings?select=*&id=eq.1&limit=1')
@@ -167,6 +244,7 @@ export async function recordLuxorTestRunActivity(input: {
 
 export async function scheduleLuxorTestTour(input: {
   testRunId: string
+  expectedInquiryUpdatedAt: string
   date: string
   time: string
   durationMinutes?: number
@@ -174,15 +252,8 @@ export async function scheduleLuxorTestTour(input: {
   clientFacingNotes?: string
   assignees?: string[]
 }) {
-  const [run] = await supabaseRest<Array<{ id: string }>>(
-    `luxor_test_runs?select=id&id=eq.${encodeURIComponent(input.testRunId)}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
-  )
-  if (!run) throw new Error('Choose the active permanent Test Lead run before scheduling a simulated tour.')
-
-  const [lead] = await supabaseRest<Array<Record<string, unknown> & { id: string; is_test: boolean }>>(
-    `luxor_inquiries?select=*&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true&limit=1`,
-  )
-  if (!lead || lead.is_test !== true) throw new Error('The permanent Test Lead is unavailable.')
+  const context = await getTestTourActionContext(input.testRunId)
+  const { lead } = context
 
   const meetingType = String(input.meetingType || 'Private Venue Tour').trim().slice(0, 120)
   const clientFacingNotes = String(input.clientFacingNotes || '').trim().slice(0, 2_000)
@@ -207,78 +278,31 @@ export async function scheduleLuxorTestTour(input: {
     assignees,
   }
 
-  const [artifact] = await supabaseRest<Array<{ id: string; status: string; details: Record<string, unknown> }>>(
-    `luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`,
-  )
-  let status = artifact?.status || 'simulated'
-  if (['completed', 'cancelled', 'reset', 'failed'].includes(status)) {
-    throw new Error('This simulated tour has a final outcome. Start a new test run to schedule another tour.')
+  const result = await applyLuxorTestTourAction({ context, action: 'schedule', expectedInquiryUpdatedAt: input.expectedInquiryUpdatedAt, payload: details })
+  return {
+    inquiry: result.inquiry || lead,
+    tour: { status: result.artifact?.status || 'confirmed', ...details },
+    simulated: true,
+    emailsQueued: false,
+    replayed: result.replayed === true,
   }
-  const nextStatuses: Record<string, string> = { simulated: 'requested', requested: 'scheduled', scheduled: 'confirmed' }
-  while (status !== 'confirmed') {
-    const nextStatus = nextStatuses[status]
-    if (!nextStatus) throw new Error('This simulated tour cannot be scheduled from its current status.')
-    await supabaseRest('rpc/luxor_advance_test_artifact', {
-      method: 'POST',
-      body: JSON.stringify({
-        p_test_run_id: run.id,
-        p_artifact_type: 'tour',
-        p_status: nextStatus,
-        p_details: { ...details, requested_by: 'portal_test_lead' },
-      }),
-    })
-    status = nextStatus
-  }
-
-  const [updatedLead] = await supabaseRest<Array<Record<string, unknown>>>('luxor_inquiries?select=*&id=eq.' + encodeURIComponent(lead.id) + '&is_test=eq.true', {
-    method: 'PATCH',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({
-      status: 'tour_confirmed',
-      pipeline_stage: 'tour',
-      preferred_tour_date: input.date,
-      preferred_tour_time: input.time,
-      tour_attendance_status: 'pending',
-      tour_confirmed_at: new Date().toISOString(),
-      metadata: {
-        ...(lead.metadata && typeof lead.metadata === 'object' ? lead.metadata as Record<string, unknown> : {}),
-        tourMeetingType: meetingType,
-        tourClientFacingNotes: clientFacingNotes,
-        tour_assignees: assignees,
-      },
-      updated_at: new Date().toISOString(),
-    }),
-  })
-  if (!updatedLead) throw new Error('The simulated tour was saved, but the Test Lead view could not be refreshed.')
-
-  await supabaseRest('luxor_test_run_artifacts?test_run_id=eq.' + encodeURIComponent(run.id) + '&artifact_type=eq.tour', {
-    method: 'PATCH',
-      body: JSON.stringify({ details: { ...(artifact?.details || {}), ...details }, updated_at: new Date().toISOString() }),
-  })
-  await recordLuxorTestRunActivity({
-    testRunId: run.id,
-    eventType: 'test_tour_scheduled',
-    status: 'confirmed',
-    source: 'portal_test_lead',
-    details,
-  })
-
-  return { inquiry: updatedLead, tour: { status: 'confirmed', ...details }, simulated: true, emailsQueued: false }
 }
 
 export async function recordLuxorTestTourOutcome(input: {
   testRunId: string
   attendance: 'attended' | 'no_show'
   expectedAttendance?: string | null
+  expectedInquiryUpdatedAt: string
 }) {
-  const [run] = await supabaseRest<Array<{ id: string }>>(
-    `luxor_test_runs?select=id&id=eq.${encodeURIComponent(input.testRunId)}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
-  )
-  if (!run) throw new Error('Choose the active permanent Test Lead run before recording a tour outcome.')
-  const [lead] = await supabaseRest<Array<Record<string, unknown> & { id: string; is_test: boolean; preferred_tour_date: string | null; tour_attendance_status: string | null; status: string; pipeline_stage: string | null }>>(
-    `luxor_inquiries?select=*&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true&limit=1`,
-  )
-  if (!lead || lead.is_test !== true) throw new Error('The permanent Test Lead is unavailable.')
+  const context = await getTestTourActionContext(input.testRunId)
+  const lead = context.lead as Record<string, unknown> & {
+    id: string
+    is_test: boolean
+    preferred_tour_date: string | null
+    tour_attendance_status: string | null
+    status: string
+    pipeline_stage: string | null
+  }
   if (!lead.preferred_tour_date) throw new Error('Schedule a simulated tour before recording its outcome.')
   if (input.expectedAttendance !== undefined && lead.tour_attendance_status !== input.expectedAttendance && lead.tour_attendance_status !== input.attendance) {
     throw new Error('The tour outcome changed since this view loaded. Refresh and review the current outcome before correcting it.')
@@ -287,117 +311,59 @@ export async function recordLuxorTestTourOutcome(input: {
   if (lead.tour_attendance_status === input.attendance) {
     return { inquiry: lead, simulated: true, calendarEventChanged: false, inventoryChanged: false, replayed: true }
   }
-
-  const [artifact] = await supabaseRest<Array<{ id: string; status: string; details: Record<string, unknown> }>>(
-    `luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`,
-  )
+  const { artifact } = context
   if (!artifact || ['simulated', 'requested', 'failed', 'cancelled', 'reset'].includes(artifact.status)) {
     throw new Error('Schedule this simulated tour before marking it complete or no-show.')
   }
-
-  if (artifact.status !== 'completed') {
-    let status = artifact.status
-    const nextStatuses: Record<string, string> = { scheduled: 'confirmed', confirmed: 'completed' }
-    while (status !== 'completed') {
-      const nextStatus = nextStatuses[status]
-      if (!nextStatus) throw new Error('This simulated tour cannot record an outcome from its current status.')
-      await supabaseRest('rpc/luxor_advance_test_artifact', {
-        method: 'POST',
-        body: JSON.stringify({
-          p_test_run_id: run.id,
-          p_artifact_type: 'tour',
-          p_status: nextStatus,
-          p_details: nextStatus === 'completed'
-            ? { tour_attendance_status: input.attendance, outcome_recorded_at: new Date().toISOString() }
-            : { outcome_preparation: true },
-        }),
-      })
-      status = nextStatus
-    }
-  }
-
-  const updatedAt = new Date().toISOString()
-  const [updatedLead] = await supabaseRest<Array<Record<string, unknown>>>('luxor_inquiries?select=*&id=eq.' + encodeURIComponent(lead.id) + '&is_test=eq.true', {
-    method: 'PATCH',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({
-      tour_attendance_status: input.attendance,
-      status: input.attendance === 'attended' ? 'tour_confirmed' : lead.status,
-      pipeline_stage: input.attendance === 'attended' ? 'proposal' : 'tour',
-      tour_confirmed_at: lead.tour_confirmed_at || updatedAt,
-      updated_at: updatedAt,
-    }),
+  if (!['scheduled', 'confirmed'].includes(artifact.status)) throw new Error('Confirm the simulated tour before recording its outcome.')
+  const result = await applyLuxorTestTourAction({
+    context,
+    action: input.attendance === 'attended' ? 'outcome_attended' : 'outcome_no_show',
+    expectedInquiryUpdatedAt: input.expectedInquiryUpdatedAt,
+    payload: { expected_attendance: input.expectedAttendance ?? null },
   })
-  if (!updatedLead) throw new Error('The simulated tour outcome was recorded, but the Test Lead view could not be refreshed.')
-
-  const [currentArtifact] = await supabaseRest<Array<{ details: Record<string, unknown> }>>(
-    `luxor_test_run_artifacts?select=details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.tour&limit=1`,
-  )
-  if (currentArtifact) {
-    await supabaseRest('luxor_test_run_artifacts?test_run_id=eq.' + encodeURIComponent(run.id) + '&artifact_type=eq.tour', {
-      method: 'PATCH',
-      body: JSON.stringify({
-        details: { ...(currentArtifact.details || {}), tour_attendance_status: input.attendance, outcome_recorded_at: updatedAt, simulation_only: true },
-        updated_at: updatedAt,
-      }),
-    })
+  return {
+    inquiry: result.inquiry || lead,
+    simulated: true,
+    calendarEventChanged: false,
+    inventoryChanged: false,
+    replayed: result.replayed === true,
   }
-  await recordLuxorTestRunActivity({
-    testRunId: run.id,
-    eventType: 'test_tour_outcome',
-    status: input.attendance,
-    source: 'portal_test_lead',
-    details: { tour_attendance_status: input.attendance, simulation_only: true, calendar_event_changed: false, inventory_changed: false },
-  })
-  return { inquiry: updatedLead, simulated: true, calendarEventChanged: false, inventoryChanged: false }
 }
 
-export async function cancelLuxorTestTour(input: { testRunId: string; reason?: string }) {
-  const runId = encodeURIComponent(input.testRunId)
-  const [run] = await supabaseRest<Array<{ id: string }>>(
-    `luxor_test_runs?select=id&id=eq.${runId}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
-  )
-  if (!run) throw new Error('Choose the active permanent Test Lead run before cancelling a simulated tour.')
-  const [lead] = await supabaseRest<Array<{ id: string; is_test: boolean; preferred_tour_date: string | null; tour_attendance_status: string | null }>>(
-    `luxor_inquiries?select=id,is_test,preferred_tour_date,tour_attendance_status&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true&limit=1`,
-  )
-  if (!lead || lead.is_test !== true) throw new Error('The permanent Test Lead is unavailable.')
-  if (!lead.preferred_tour_date) throw new Error('Schedule a simulated tour before cancelling it.')
+export async function cancelLuxorTestTour(input: { testRunId: string; expectedInquiryUpdatedAt: string; reason?: string }) {
+  const context = await getTestTourActionContext(input.testRunId)
+  const lead = context.lead as Record<string, unknown> & {
+    id: string
+    is_test: boolean
+    preferred_tour_date: string | null
+    tour_attendance_status: string | null
+  }
+  if (!lead.preferred_tour_date && context.artifact?.status !== 'cancelled') throw new Error('Schedule a simulated tour before cancelling it.')
   if (['attended', 'no_show'].includes(lead.tour_attendance_status || '')) {
     throw new Error('A completed simulated tour cannot be cancelled.')
   }
-  const [artifact] = await supabaseRest<Array<{ id: string; status: string; details: Record<string, unknown> }>>(
-    `luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${runId}&artifact_type=eq.tour&limit=1`,
-  )
-  if (!artifact || !['requested', 'scheduled', 'confirmed'].includes(artifact.status)) {
+  const { artifact } = context
+  // Let an identical retry reach the RPC's replay branch after a committed
+  // cancellation whose HTTP response was lost. A different reason still
+  // conflicts inside the transaction because the tour is already cancelled.
+  if (!artifact || !['requested', 'scheduled', 'confirmed', 'cancelled'].includes(artifact.status)) {
     throw new Error('There is no upcoming simulated tour to cancel.')
   }
-  const updatedAt = new Date().toISOString()
-  const details = {
-    ...(artifact.details || {}),
-    simulation_only: true,
-    cancellation_reason: String(input.reason || '').trim().slice(0, 500) || null,
-    cancelled_at: updatedAt,
-    calendar_event_cancelled: false,
-    inventory_released: false,
-    test_email_queued: false,
+  const result = await applyLuxorTestTourAction({
+    context,
+    action: 'cancel',
+    expectedInquiryUpdatedAt: input.expectedInquiryUpdatedAt,
+    payload: { reason: String(input.reason || '').trim().slice(0, 500) || null },
+  })
+  return {
+    inquiry: result.inquiry || lead,
+    simulated: true,
+    calendarEventChanged: false,
+    inventoryChanged: false,
+    emailQueued: false,
+    replayed: result.replayed === true,
   }
-  await supabaseRest(`luxor_test_run_artifacts?test_run_id=eq.${runId}&artifact_type=eq.tour`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status: 'cancelled', details, updated_at: updatedAt }),
-  })
-  const [updatedLead] = await supabaseRest<Array<Record<string, unknown>>>(
-    `luxor_inquiries?select=*&id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&is_test=eq.true`,
-    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ tour_attendance_status: 'cancelled', updated_at: updatedAt }) },
-  )
-  await recordLuxorTestRunActivity({
-    testRunId: run.id,
-    eventType: 'test_tour_cancelled',
-    status: 'cancelled',
-    source: 'portal_test_lead',
-    details,
-  })
-  return { inquiry: updatedLead ?? lead, simulated: true, calendarEventChanged: false, inventoryChanged: false, emailQueued: false }
 }
 
 async function prepareLuxorTestSubmission(input: LuxorInquiryInput, runId: string, startedAt: string) {
@@ -592,6 +558,8 @@ export async function simulateLuxorTestTourChange(input: {
   testRunId: string
   action: 'reschedule' | 'cancel'
   actionKey: string
+  expectedTourRevision: number
+  expectedTourStatus: string
   payload: Record<string, unknown>
 }) {
   return supabaseRest<Record<string, unknown>>('rpc/luxor_simulate_test_tour_change', {
@@ -600,7 +568,7 @@ export async function simulateLuxorTestTourChange(input: {
       p_test_run_id: input.testRunId,
       p_action: input.action,
       p_action_key: input.actionKey,
-      p_payload: input.payload,
+      p_payload: { ...input.payload, expected_tour_revision: input.expectedTourRevision, expected_tour_status: input.expectedTourStatus },
     }),
   })
 }

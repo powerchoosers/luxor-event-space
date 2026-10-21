@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib'
 import type { LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
 import { LUXOR_VENUE_ADDRESS } from './luxorVenue'
 import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
@@ -34,7 +34,7 @@ function safeMoney(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : fallback
 }
 
-export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: LuxorInquiry | null) {
+export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: LuxorInquiry | null, options: { testOnly?: boolean } = {}) {
   const pdf = await PDFDocument.create()
   const regular = await pdf.embedFont(StandardFonts.Helvetica)
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
@@ -355,5 +355,19 @@ export async function buildLuxorInvoicePdf(invoice: LuxorInvoice, inquiry?: Luxo
     drawLines(noteLines, margin, y, 8.8, regular, muted, 11)
   }
 
+  if (options.testOnly) {
+    const watermark = await pdf.embedFont(StandardFonts.HelveticaBold)
+    for (const testPage of pdf.getPages()) {
+      testPage.drawText('SIMULATED TEST ONLY - NONBINDING', {
+        x: 84,
+        y: 356,
+        size: 22,
+        font: watermark,
+        color: rgb(0.67, 0.22, 0.12),
+        opacity: 0.24,
+        rotate: degrees(32),
+      })
+    }
+  }
   return pdf.save()
 }

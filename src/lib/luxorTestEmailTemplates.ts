@@ -24,6 +24,7 @@ const copy = {
   tour_cancellation: 'Tour cancellation',
   follow_up: 'Follow up',
   proposal: 'Proposal',
+  proposal_breakdown: 'Proposal Breakdown',
   contract: 'Contract',
   booking_confirmation: 'Booking confirmation',
   payment_reminder: 'Payment reminder',
@@ -143,15 +144,19 @@ function testBanner(runId: string) {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;border:2px solid #1254a6;background:#eaf2ff"><tr><td style="padding:14px 18px;color:#17365d;font-family:Arial,sans-serif;font-size:13px;line-height:1.6"><strong style="display:block;letter-spacing:.12em">SIMULATED TEST MESSAGE · NO CUSTOMER ACTION</strong>Synthetic Luxor data for run ${safeRunId(runId)}. Links open the protected test-lead page. They cannot accept a proposal, sign a contract, create a booking, or collect payment.</td></tr></table>`
 }
 
-function markTestOnly(subject: string, body: string, runId: string) {
+export function markLuxorTestEmailOnly(subject: string, body: string, runId: string) {
   const safeUrl = safePortalUrl(runId)
   const banner = testBanner(runId)
-  const safeActions = body.replace(/href=(['"])(https?:\/\/[^'"]*)\1/gi, (_match, quote: string) => `href=${quote}${safeUrl}${quote}`)
+  const safeActions = body.replace(/\s+href=(['"])([^'"]*)\1/gi, (_match, quote: string, href: string) => (
+    /^(?:mailto:|tel:)/i.test(href) ? '' : ` href=${quote}${safeUrl}${quote}`
+  ))
   const html = /<body\b[^>]*>/i.test(safeActions)
     ? safeActions.replace(/<body\b[^>]*>/i, (opening) => `${opening}${banner}`)
     : `<html><body>${banner}${safeActions}</body></html>`
   return { subject: `[TEST ONLY] ${subject}`, body: html }
 }
+
+const markTestOnly = markLuxorTestEmailOnly
 
 export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCategory, runId: string, options: {
   flow?: string | null
@@ -160,6 +165,9 @@ export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCatego
   confirmedSlot?: boolean
   reminderLabel?: 'tomorrow' | 'soon'
 } = {}) {
+  if (category === 'proposal_breakdown') {
+    throw new Error('Use the saved test proposal builder to prepare a Breakdown email.')
+  }
   const inquiry = syntheticInquiry()
   inquiry.preferred_tour_date = options.preferredTourDate || inquiry.preferred_tour_date
   inquiry.preferred_tour_time = options.preferredTourTime || inquiry.preferred_tour_time

@@ -23,7 +23,7 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorCalendarEvent, getLuxorCalendarStatus } from '@/lib/luxorCalendarServer'
 import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
 import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
-import { cancelLuxorTestTour, ensureActiveLuxorTestRun, recordLuxorTestTourOutcome, scheduleLuxorTestTour } from '@/lib/luxorTestLeadServer'
+import { cancelLuxorTestTour, ensureActiveLuxorTestRun, LuxorTestTourConflictError, recordLuxorTestTourOutcome, scheduleLuxorTestTour } from '@/lib/luxorTestLeadServer'
 
 const PRE_PROPOSAL_STATUSES = new Set<LuxorInquiryStatus>(['new', 'contacted', 'tour_requested', 'tour_confirmed'])
 const PRE_PROPOSAL_STAGES = new Set<LuxorPipelineStage | null | undefined>([null, undefined, 'inquiry', 'tour'])
@@ -69,6 +69,11 @@ export async function POST(request: NextRequest) {
       if (inquiry.id !== '00b264d6-a3fb-4ea3-9142-415f76385c39') {
         return NextResponse.json({ error: 'Only the permanent isolated Test Lead can use simulator actions.' }, { status: 409 })
       }
+      const expectedInquiryUpdatedAt = typeof body.expectedInquiryUpdatedAt === 'string' ? body.expectedInquiryUpdatedAt : ''
+      if (['schedule-tour', 'cancel-tour', 'attendance'].includes(action)
+        && (!expectedInquiryUpdatedAt || !Number.isFinite(Date.parse(expectedInquiryUpdatedAt)))) {
+        return NextResponse.json({ error: 'Refresh the Test Lead before changing its simulated tour.' }, { status: 400 })
+      }
       const context = await ensureActiveLuxorTestRun()
       if (action === 'schedule-tour') {
         const tourDate = String(body.tourDate || '').trim()
@@ -76,6 +81,7 @@ export async function POST(request: NextRequest) {
         if (!tourDate || !tourTime) return NextResponse.json({ error: 'Choose a date and time for the simulated tour.' }, { status: 400 })
         const result = await scheduleLuxorTestTour({
           testRunId: context.run.id,
+          expectedInquiryUpdatedAt,
           date: tourDate,
           time: tourTime,
           durationMinutes: Number(body.durationMinutes) || 30,
@@ -92,7 +98,7 @@ export async function POST(request: NextRequest) {
         }, { status: 201 })
       }
       if (action === 'cancel-tour' || (action === 'attendance' && body.attendance === 'cancelled')) {
-        const result = await cancelLuxorTestTour({ testRunId: context.run.id, reason: typeof body.reason === 'string' ? body.reason : '' })
+        const result = await cancelLuxorTestTour({ testRunId: context.run.id, expectedInquiryUpdatedAt, reason: typeof body.reason === 'string' ? body.reason : '' })
         return NextResponse.json({ inquiry: result.inquiry, simulated: true, cancellation: result })
       }
       if (action === 'attendance') {
@@ -104,6 +110,7 @@ export async function POST(request: NextRequest) {
           testRunId: context.run.id,
           attendance: attendance as 'attended' | 'no_show',
           expectedAttendance: typeof body.expectedAttendance === 'string' ? body.expectedAttendance : body.expectedAttendance === null ? null : undefined,
+          expectedInquiryUpdatedAt,
         })
         return NextResponse.json({ inquiry: result.inquiry, simulated: true, warnings: [], idempotent: result.replayed === true })
       }
@@ -314,6 +321,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Tour action failed.'
     const scopeError = message.includes('INVALID_OAUTHSCOPE') || message.includes('calendar lookup')
-    return NextResponse.json({ error: message, reconnectRequired: scopeError }, { status: scopeError ? 403 : 500 })
+    const conflict = error instanceof LuxorTestTourConflictError
+    return NextResponse.json({ error: message, reconnectRequired: scopeError }, { status: scopeError ? 403 : conflict ? 409 : 500 })
   }
 }

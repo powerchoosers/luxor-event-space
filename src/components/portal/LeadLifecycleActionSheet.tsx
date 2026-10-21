@@ -247,7 +247,7 @@ export function LeadLifecycleActionSheet({
         headers: { 'Content-Type': 'application/json' },
         body: action === 'deal-lost'
           ? JSON.stringify({ reason: completeReason, cancelTour: cancellableTour && cancelTour })
-          : JSON.stringify({ inquiryId: lead.id, action: 'cancel-tour' }),
+          : JSON.stringify({ inquiryId: lead.id, action: 'cancel-tour', expectedInquiryUpdatedAt: lead.updated_at }),
       })
       const payload = await response.json().catch(() => ({})) as {
         error?: string

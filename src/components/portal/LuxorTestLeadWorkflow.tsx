@@ -1,12 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarDays, CheckCircle2, FileText, ReceiptText, RotateCcw, Send, WalletCards } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Download, FileText, Mail, ReceiptText, RotateCcw, Send, WalletCards } from 'lucide-react'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 
-type Section = 'proposals' | 'contract' | 'payments' | 'planning'
+type Section = 'proposals' | 'documents' | 'contract' | 'payments' | 'planning'
 type Artifact = { id: string; test_run_id: string; artifact_type: string; status: string; details: Record<string, unknown> }
 type Activity = { id: number; event_type: string; status: string | null; created_at: string; details: Record<string, unknown> }
+type TestEmail = { id: number; test_run_id: string; category: string; status: string; created_at: string; actual_recipient: string | null; details: Record<string, unknown> }
 type InvoiceSnapshot = {
   id: string
   updated_at?: string
@@ -31,6 +32,7 @@ type WorkflowPayload = {
   runs?: Array<{ id: string; status: string }>
   artifacts?: Artifact[]
   activity?: Activity[]
+  emails?: TestEmail[]
 }
 
 const panelClass = 'rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm'
@@ -67,6 +69,7 @@ export function LuxorTestLeadWorkflow({
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const [breakdownPreviewOpen, setBreakdownPreviewOpen] = useState(false)
   const [eventDate, setEventDate] = useState('')
   const [guestCount, setGuestCount] = useState('')
   const [runOfShow, setRunOfShow] = useState('')
@@ -123,6 +126,8 @@ export function LuxorTestLeadWorkflow({
   const testTasks = activities.filter((item) => item.event_type === 'test_task')
   const completedTaskTitles = new Set(activities.filter((item) => item.event_type === 'test_task_completed').map((item) => String(item.details.title || '')))
   const canCompleteEvent = bookingArtifact?.status === 'confirmed' && paymentArtifact?.status === 'pending' && Boolean(savedPlanActivity)
+  const proposalEmails = (payload?.emails || []).filter((email) => email.test_run_id === runId && ['proposal', 'proposal_breakdown'].includes(email.category))
+  const proposalRevision = Number(proposalArtifact?.details.proposal_revision) || 0
 
   useEffect(() => {
     if (!savedPlanActivity) {
@@ -163,6 +168,30 @@ export function LuxorTestLeadWorkflow({
       window.dispatchEvent(new CustomEvent('luxor-test-activity-recorded'))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to update the isolated workflow.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function queueBreakdownEmail() {
+    if (!proposalArtifact || proposalRevision < 1) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const response = await fetch('/api/portal/test-lead/proposal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'breakdown', testRunId: runId, expectedRevision: proposalRevision }),
+      })
+      const result = await response.json() as { error?: string; replayed?: boolean; recipient?: string }
+      if (!response.ok) throw new Error(result.error || 'The test Breakdown email could not be queued.')
+      setNotice(result.replayed
+        ? `The marked Breakdown email is already queued for ${result.recipient || 'luxoratlaspalmas@gmail.com'}.`
+        : `The marked Breakdown email is queued for ${result.recipient || 'luxoratlaspalmas@gmail.com'}.`)
+      await refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'The test Breakdown email could not be queued.')
     } finally {
       setBusy(false)
     }
@@ -241,8 +270,8 @@ export function LuxorTestLeadWorkflow({
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Isolated Test Lead run</p>
           <h2 className="mt-1 flex items-center gap-2 text-base font-semibold text-[color:var(--portal-text)]">
-            {section === 'proposals' ? <FileText size={16} /> : section === 'contract' ? <FileText size={16} /> : section === 'payments' ? <WalletCards size={16} /> : <CalendarDays size={16} />}
-            {section === 'proposals' ? 'Proposal simulation' : section === 'contract' ? 'Contract and booking simulation' : section === 'payments' ? 'Invoice and payment simulation' : 'Event planning and completion'}
+            {section === 'proposals' || section === 'documents' || section === 'contract' ? <FileText size={16} /> : section === 'payments' ? <WalletCards size={16} /> : <CalendarDays size={16} />}
+            {section === 'proposals' ? 'Proposal simulation' : section === 'documents' ? 'Test document review' : section === 'contract' ? 'Contract and booking simulation' : section === 'payments' ? 'Invoice and payment simulation' : 'Event planning and completion'}
           </h2>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-[color:var(--portal-muted)]">
             Run {runId.slice(0, 8)} · simulated values remain with this run and never reserve availability, create production records, move money, or send messages.
@@ -269,7 +298,39 @@ export function LuxorTestLeadWorkflow({
           <button type="button" disabled={busy || run?.status !== 'in_progress'} onClick={onOpenProposal} className={actionClass}><FileText size={13} /> {proposalArtifact?.status === 'drafted' ? 'Reopen proposal draft' : 'Open proposal builder'}</button>
           {proposalArtifact?.status === 'sent' ? <button type="button" disabled={busy || run?.status !== 'in_progress'} onClick={() => void advance('proposal', 'accepted', { acceptance_simulated: true, legal_effect: false })} className={secondaryClass}><CheckCircle2 size={13} /> Accept in simulation</button> : null}
         </div>
-        <p className="text-[11px] leading-5 text-[color:var(--portal-muted)] lg:col-span-2">Publishing uses the existing proposal calculator and isolated test proposal artifact. No customer record, production invoice, signing action, or payment is created here.</p>
+        {proposalArtifact && invoice ? <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 lg:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Proposal review</h3><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Revision {proposalRevision} · the PDF and Breakdown use this saved test snapshot.</p></div>
+            <div className="flex flex-wrap gap-2">
+              <a href={`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(runId)}&format=pdf`} target="_blank" rel="noreferrer" className={secondaryClass}><Download size={13} /> Review test PDF</a>
+              <button type="button" disabled={busy || run?.status !== 'in_progress' || proposalRevision < 1 || !['drafted', 'sent'].includes(proposalArtifact.status)} onClick={() => void queueBreakdownEmail()} className={actionClass}><Mail size={13} /> Queue Breakdown to test inbox</button>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">
+            <p className="text-[11px] text-[color:var(--portal-muted)]">Rendered with the shared Luxor Breakdown email and frozen proposal snapshot. Queueing stores a marked test email for the verified Luxor inbox.</p>
+            <button type="button" onClick={() => setBreakdownPreviewOpen((open) => !open)} disabled={busy} className={secondaryClass}>{breakdownPreviewOpen ? 'Hide email preview' : 'Review email preview'}</button>
+          </div>
+          {breakdownPreviewOpen ? <iframe title="Isolated test Proposal Breakdown email preview" sandbox="" src={`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(runId)}&format=breakdown-preview`} className="mt-3 h-[640px] w-full rounded-lg border border-[color:var(--portal-border)] bg-white" /> : null}
+          {proposalEmails.length ? <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3"><h4 className="text-xs font-semibold text-[color:var(--portal-text)]">Proposal email history</h4><ul className="mt-2 space-y-2">{[...proposalEmails].reverse().slice(0, 6).map((email) => <li key={email.id} className="flex flex-wrap items-center justify-between gap-2 text-[11px]"><span className="text-[color:var(--portal-text)]">{email.category === 'proposal_breakdown' ? 'Proposal Breakdown' : 'Final proposal'} · {statusLabel(email.status)}</span><span className="text-[color:var(--portal-muted)]">{email.actual_recipient || 'Verified Luxor test inbox'} · {new Date(email.created_at).toLocaleString()}</span></li>)}</ul></div> : <p className="mt-3 text-[11px] text-[color:var(--portal-muted)]">No proposal email is queued for this run yet.</p>}
+        </div> : null}
+        <p className="text-[11px] leading-5 text-[color:var(--portal-muted)] lg:col-span-2">The proposal stays in this run’s isolated artifacts. PDF review has a nonbinding test watermark, and no canonical invoice, customer link, booking, signature, payment, availability, or analytics record is created.</p>
+      </div> : null}
+
+      {section === 'documents' ? <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+          <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Saved test proposal</h3><span className="text-xs text-[color:var(--portal-muted)]">{proposalArtifact ? `Revision ${proposalRevision}` : 'Not saved'}</span></div>
+          {proposalArtifact && invoice ? <>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">This watermarked PDF is rendered from the isolated proposal snapshot. It has no customer link and cannot be accepted.</p>
+            <a href={`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(runId)}&format=pdf`} target="_blank" rel="noreferrer" className={`${secondaryClass} mt-3`}><Download size={13} /> Review test proposal PDF</a>
+          </> : <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Save a proposal in the Proposals tab to add its isolated PDF here.</p>}
+        </div>
+        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+          <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Agreement preview</h3><span className="text-xs capitalize text-[color:var(--portal-muted)]">{statusLabel(contractArtifact?.status)}</span></div>
+          {contractPreview && ['prepared', 'sent', 'signed'].includes(contractArtifact?.status || '') ? <>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">The shared agreement renderer watermarks every page. Simulated delivery and signature checkpoints have no legal effect.</p>
+            <a href={`/api/portal/test-lead/contract-preview?testRunId=${encodeURIComponent(runId)}`} target="_blank" rel="noreferrer" className={`${secondaryClass} mt-3`}><FileText size={13} /> Review test agreement</a>
+          </> : <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Prepare a watermarked preview in Booking &amp; Contract after accepting the isolated proposal.</p>}
+        </div>
       </div> : null}
 
       {section === 'contract' ? <div className="space-y-4">

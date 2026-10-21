@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
-import { LuxorTestProposalConflictError, prepareLuxorTestProposal } from '@/lib/luxorTestProposalServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
+import { enqueueLuxorTestEmail } from '@/lib/luxorTestLeadServer'
+import { LuxorTestProposalConflictError, LUXOR_PERMANENT_TEST_LEAD_ID, LUXOR_TEST_PROPOSAL_RECIPIENT, prepareLuxorTestProposal, prepareLuxorTestProposalBreakdown } from '@/lib/luxorTestProposalServer'
+import type { LuxorInquiry, LuxorInvoice } from '@/lib/luxorInquiryTypes'
 import type { LuxorProposalSelection } from '@/lib/luxorProposalPricing'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -27,6 +31,41 @@ export async function GET(request: NextRequest) {
     const [artifact] = await supabaseRest<Array<{ id: string; test_run_id: string; artifact_type: string; status: string; details: Record<string, unknown> }>>(
       `luxor_test_run_artifacts?select=id,test_run_id,artifact_type,status,details&test_run_id=eq.${encodeURIComponent(testRunId)}&artifact_type=eq.proposal&limit=1`,
     )
+    const format = request.nextUrl.searchParams.get('format')
+    if (format === 'breakdown-preview') {
+      const prepared = await prepareLuxorTestProposalBreakdown({
+        testRunId,
+        expectedRevision: Number(artifact?.details?.proposal_revision),
+      })
+      return new NextResponse(prepared.body, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+          'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
+          'X-Content-Type-Options': 'nosniff',
+          'X-Robots-Tag': 'noindex, nofollow',
+        },
+      })
+    }
+    if (format === 'pdf') {
+      const invoice = artifact?.details?.invoice
+      if (!invoice || typeof invoice !== 'object' || Array.isArray(invoice)) {
+        return NextResponse.json({ error: 'Save or publish an isolated proposal before viewing its PDF.' }, { status: 404 })
+      }
+      const lead = await getLuxorInquiry(LUXOR_PERMANENT_TEST_LEAD_ID)
+      if (!lead || lead.is_test !== true) return NextResponse.json({ error: 'The permanent Test Lead is unavailable.' }, { status: 404 })
+      const source = await buildLuxorInvoicePdf(invoice as LuxorInvoice, { ...lead, email: LUXOR_TEST_PROPOSAL_RECIPIENT } as LuxorInquiry, { testOnly: true })
+      const pdfBytes = new Uint8Array(source.length)
+      pdfBytes.set(source)
+      return new NextResponse(pdfBytes.buffer, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="Luxor-SIMULATED-Proposal-${testRunId.slice(0, 8)}.pdf"`,
+          'Cache-Control': 'private, no-store',
+          'X-Robots-Tag': 'noindex, nofollow',
+        },
+      })
+    }
     return NextResponse.json({
       artifact: artifact ? {
         id: artifact.id,
@@ -36,7 +75,8 @@ export async function GET(request: NextRequest) {
       } : null,
     })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to load the test proposal.' }, { status: 500 })
+    const status = error instanceof LuxorTestProposalConflictError ? error.status : 500
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to load the test proposal.' }, { status })
   }
 }
 
@@ -45,18 +85,40 @@ export async function POST(request: NextRequest) {
     if (!await authorizedMember()) return NextResponse.json({ error: 'Owner or admin access required.' }, { status: 403 })
     const body = await request.json().catch(() => ({})) as Record<string, unknown>
     const testRunId = typeof body.testRunId === 'string' ? body.testRunId : ''
-    const action = body.action === 'publish' ? 'publish' : body.action === 'save' ? 'save' : null
+    const action = body.action === 'publish' ? 'publish' : body.action === 'save' ? 'save' : body.action === 'breakdown' ? 'breakdown' : null
     const selection = body.selection && typeof body.selection === 'object' && !Array.isArray(body.selection)
       ? body.selection as LuxorProposalSelection
       : null
     const description = typeof body.description === 'string' ? body.description.trim() : ''
     const notes = typeof body.notes === 'string' ? body.notes.trim() || null : null
     const expectedRevision = Number(body.expectedRevision)
-    if (!UUID.test(testRunId) || !action || !selection || !description) {
-      return NextResponse.json({ error: 'An active test run, proposal selection, description, and save or publish action are required.' }, { status: 400 })
+    if (!UUID.test(testRunId) || !action) {
+      return NextResponse.json({ error: 'An active test run and supported proposal action are required.' }, { status: 400 })
     }
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
       return NextResponse.json({ error: 'Refresh the test proposal before saving; its draft revision is missing.' }, { status: 409 })
+    }
+
+    if (action === 'breakdown') {
+      const prepared = await prepareLuxorTestProposalBreakdown({ testRunId, expectedRevision })
+      const result = await enqueueLuxorTestEmail({
+        testRunId,
+        category: 'proposal_breakdown',
+        subject: prepared.subject,
+        body: prepared.body,
+        source: prepared.source,
+      })
+      if (result.conflict) return NextResponse.json({ error: String(result.error || 'This proposal Breakdown already has a queued test email.') }, { status: 409 })
+      return NextResponse.json({
+        queued: true,
+        sent: false,
+        replayed: result.replayed === true,
+        revision: prepared.revision,
+        recipient: LUXOR_TEST_PROPOSAL_RECIPIENT,
+      }, { status: result.replayed ? 200 : 202 })
+    }
+    if (!selection || !description) {
+      return NextResponse.json({ error: 'A proposal selection and description are required to save or publish.' }, { status: 400 })
     }
 
     const prepared = await prepareLuxorTestProposal({ testRunId, action, selection, description, notes, expectedRevision })
