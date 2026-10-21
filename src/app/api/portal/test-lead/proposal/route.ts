@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
       const prepared = await prepareLuxorTestProposalBreakdown({
         testRunId,
         expectedRevision: Number(artifact?.details?.proposal_revision),
+        purpose: 'preview',
       })
       return new NextResponse(prepared.body, {
         headers: {
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'breakdown') {
-      const prepared = await prepareLuxorTestProposalBreakdown({ testRunId, expectedRevision })
+      const prepared = await prepareLuxorTestProposalBreakdown({ testRunId, expectedRevision, purpose: 'queue' })
       const result = await enqueueLuxorTestEmail({
         testRunId,
         category: 'proposal_breakdown',

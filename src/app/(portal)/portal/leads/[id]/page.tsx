@@ -164,6 +164,11 @@ function tourDisplayStatus(lead: LuxorInquiry) {
   return 'Not scheduled'
 }
 
+function tourHeaderStatusLabel(lead: LuxorInquiry) {
+  const status = tourDisplayStatus(lead)
+  return status === 'Confirmed' ? 'Tour scheduled' : `Tour ${status.toLowerCase()}`
+}
+
 function emailAttachmentUrl(email: ZohoEmailMessage, attachment: NonNullable<ZohoEmailMessage['attachments']>[number]) {
   const query = new URLSearchParams({ filename: attachment.filename })
   if (attachment.attachmentId) query.set('attachmentId', attachment.attachmentId)
@@ -4488,7 +4493,7 @@ export default function LeadDetailPage({
         </Link>
         {lead.status === 'tour_confirmed' ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
-            <Calendar size={12} /> Tour scheduled
+            <Calendar size={12} /> {tourHeaderStatusLabel(lead)}
           </span>
         ) : <PortalStatusBadge status={proposalWorkflowDisplay.status} />}
       </div>

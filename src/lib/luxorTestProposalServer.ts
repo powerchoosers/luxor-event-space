@@ -216,7 +216,15 @@ export async function prepareLuxorTestProposal(input: {
 }
 
 /** Render the shared Breakdown email from the proposal's frozen test artifact. */
-export async function prepareLuxorTestProposalBreakdown(input: { testRunId: string; expectedRevision: number }) {
+export function canPrepareLuxorTestProposalBreakdown(status: string, purpose: 'preview' | 'queue') {
+  return (purpose === 'preview' ? ['drafted', 'sent', 'accepted'] : ['drafted', 'sent']).includes(status)
+}
+
+export async function prepareLuxorTestProposalBreakdown(input: {
+  testRunId: string
+  expectedRevision: number
+  purpose: 'preview' | 'queue'
+}) {
   const [run] = await supabaseRest<TestRun[]>(
     `luxor_test_runs?select=id,test_lead_id,status&id=eq.${encodeURIComponent(input.testRunId)}&test_lead_id=eq.${LUXOR_PERMANENT_TEST_LEAD_ID}&status=eq.in_progress&limit=1`,
   )
@@ -224,7 +232,7 @@ export async function prepareLuxorTestProposalBreakdown(input: { testRunId: stri
   const [artifact] = await supabaseRest<Artifact[]>(
     `luxor_test_run_artifacts?select=id,status,details&test_run_id=eq.${encodeURIComponent(run.id)}&artifact_type=eq.proposal&limit=1`,
   )
-  if (!artifact || !['drafted', 'sent'].includes(artifact.status) || !isRecord(artifact.details.invoice)) {
+  if (!artifact || !canPrepareLuxorTestProposalBreakdown(artifact.status, input.purpose) || !isRecord(artifact.details.invoice)) {
     throw new LuxorTestProposalConflictError('Save the isolated proposal before preparing its Breakdown email.')
   }
   const revision = Number(artifact.details.proposal_revision) || 0
