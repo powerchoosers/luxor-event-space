@@ -108,7 +108,7 @@ import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPre
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import { SameDayReceiptDialog, type SameDayReceiptEvidence } from '@/components/portal/SameDayReceiptDialog'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
-import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext } from '@/lib/luxorProposalDuplicateContext'
+import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext, isPreferredVendorEstimateLine } from '@/lib/luxorProposalDuplicateContext'
 import { findProposalLeadEvent, getLeadClientProposals, getProposalCardState, getProposalWorkflowDisplayState, getSavedProposalPricingSummary } from '@/lib/luxorProposalCard'
 import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
@@ -2573,7 +2573,8 @@ export default function LeadDetailPage({
     const sourceRentalPeriodFallback = sourceRentalPeriod === 'morning' || sourceRentalPeriod === 'full_day' || sourceRentalPeriod === 'custom' || sourceRentalPeriod === 'evening'
       ? sourceRentalPeriod
       : 'evening'
-    const duplicateSelection = getDuplicatedProposalSelection(savedSelection)
+    const savedLineItems = Array.isArray(invoice.line_items) ? invoice.line_items : []
+    const duplicateSelection = getDuplicatedProposalSelection(savedSelection, savedLineItems)
     const discountType = invoice.discount_type === 'fixed' ? 'fixed' : 'percent'
     const discountValue = asProposalNumber(invoice.discount_value, invoice.discount_percent, 0) || 0
     const nextContext: ProposalBuilderContext = {
@@ -2592,8 +2593,8 @@ export default function LeadDetailPage({
         ? { payment_plan: savedContext.payment_plan as ProposalBuilderContext['payment_plan'] }
         : {}),
     }
-    const lineItems = Array.isArray(invoice.line_items) && invoice.line_items.length
-      ? invoice.line_items.map((item) => ({ ...item }))
+    const lineItems = savedLineItems.length
+      ? savedLineItems.filter((item) => !isPreferredVendorEstimateLine(item)).map((item) => ({ ...item }))
       : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }]
 
     setProposalContext(nextContext)

@@ -1968,8 +1968,8 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
     final_event_price: confirmedLuxorTotal ?? undefined, refundable_security_deposit: securityDeposit, payment_collection_scope: 'luxor_services_only', amount_due_to_book: amountDueFor(confirmedLuxorTotal),
     ...(finalPaymentPlan ? { payment_plan: finalPaymentPlan } : {}), ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}),
     package_fee_amount: selectedPackageNeedsPricingReview ? null : selectedTierPackage?.packageFeeAmount || 0,
-    confirmed_luxor_total: selectedPackageFinalPrice ?? undefined, estimated_vendor_total: estimatedVendorTotal, estimated_overall_investment: confirmedLuxorTotal === null ? null : rounded(confirmedLuxorTotal + estimatedVendorTotal), preferred_vendor_estimate_lines: selectedVendorEstimateLines,
-    vendor_pricing_disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER,
+    confirmed_luxor_total: selectedPackageFinalPrice ?? undefined, estimated_vendor_total: estimatedVendorTotal, estimated_overall_investment: !selectedVendorEstimateLines.length || confirmedLuxorTotal === null ? null : rounded(confirmedLuxorTotal + estimatedVendorTotal), preferred_vendor_estimate_lines: selectedVendorEstimateLines,
+    ...(selectedVendorEstimateLines.length ? { vendor_pricing_disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER } : {}),
     pricing_selection: {
       packageId: 'luxor_venue_proposal',
       ...(packageTierId ? { packageTierId, package_tier_id: packageTierId } : {}),
@@ -2053,10 +2053,10 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
       refundable_security_deposit: securityDeposit,
     },
     confirmed_luxor: { line_items: confirmedLines, total: selectedPackageFinalPrice, refundable_security_deposit: securityDeposit },
-    preferred_vendor_estimates: { selected_lines: selectedVendorEstimateLines, total: estimatedVendorTotal, disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER },
-    estimated_overall_investment: confirmedLuxorTotal === null ? null : rounded(confirmedLuxorTotal + estimatedVendorTotal),
+    preferred_vendor_estimates: { selected_lines: selectedVendorEstimateLines, total: estimatedVendorTotal, ...(selectedVendorEstimateLines.length ? { disclaimer: PREFERRED_VENDOR_PRICING_DISCLAIMER } : {}) },
+    estimated_overall_investment: !selectedVendorEstimateLines.length || confirmedLuxorTotal === null ? null : rounded(confirmedLuxorTotal + estimatedVendorTotal),
   }
-  const estimatedOverallInvestment = confirmedLuxorTotal === null ? null : rounded(confirmedLuxorTotal + estimatedVendorTotal)
+  const estimatedOverallInvestment = !selectedVendorEstimateLines.length || confirmedLuxorTotal === null ? null : rounded(confirmedLuxorTotal + estimatedVendorTotal)
   return { valid: calculationErrors.length === 0, publishable: calculationErrors.length === 0 && publicationErrors.length === 0, calculationErrors, publicationErrors, requirements: { paymentPlan: !paymentPlan }, errors: [...calculationErrors, ...publicationErrors], warnings, packages: finalizedPackages, packageOptions: Object.values(packageSettings.options), lineItems: confirmedLines, line_items: confirmedLines, subtotal, discountAmount, discount_amount: discountAmount, taxAmount, tax_amount: taxAmount, taxRate: effectiveTaxRate, tax_rate: effectiveTaxRate, total: confirmedLuxorTotal, finalEventPrice: confirmedLuxorTotal, final_event_price: confirmedLuxorTotal, securityDepositAmount: securityDeposit, refundable_security_deposit: securityDeposit, totalWithSecurityDeposit: confirmedLuxorTotal === null ? null : rounded(confirmedLuxorTotal + securityDeposit), amountDueToBook: primary.amountDueToBook, amount_due_to_book: primary.amount_due_to_book, addOnQuotes, selectedVendorEstimateLines, preferred_vendor_estimate_lines: selectedVendorEstimateLines, confirmedLuxorTotal, confirmed_luxor_total: confirmedLuxorTotal, estimatedVendorTotal, estimated_vendor_total: estimatedVendorTotal, estimatedOverallInvestment, estimated_overall_investment: estimatedOverallInvestment, ...(promotion ? { promotion: { ...promotion, amount: discountAmount } } : {}), proposalContext: finalContext, context: finalContext, snapshot }
 }
 
@@ -2400,7 +2400,8 @@ export function calculateLuxorProposal(selection: LuxorProposalSelection, config
       final_event_price: result.total, amount_due_to_book: result.amountDueToBook })
     if (result.confirmedLuxorTotal !== undefined) {
       result.confirmedLuxorTotal = result.confirmed_luxor_total = result.total
-      result.estimatedOverallInvestment = result.estimated_overall_investment = result.total === null ? null : rounded(result.total + (result.estimatedVendorTotal || 0))
+      const hasVendorEstimateLines = Array.isArray(result.preferred_vendor_estimate_lines) && result.preferred_vendor_estimate_lines.length > 0
+      result.estimatedOverallInvestment = result.estimated_overall_investment = !hasVendorEstimateLines || result.total === null ? null : rounded(result.total + (result.estimatedVendorTotal || 0))
       Object.assign(result.context, { confirmed_luxor_total: result.total, estimated_overall_investment: result.estimatedOverallInvestment })
     }
     result.context.pricing_selection = { ...result.context.pricing_selection, taxCoveragePromotionId: terms.id, tax_coverage_promotion_id: terms.id }
