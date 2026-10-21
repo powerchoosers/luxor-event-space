@@ -1703,7 +1703,15 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
     return Math.min(eventPrice, paymentPlan.booking_payment_amount ?? rounded(Math.max(eventPrice * paymentPlan.booking_payment_percent / 100, 750)))
   }
   const decorItemIds = new Set(decor.items.map((item) => item.id))
-  const packageBaseLines = confirmed.filter((item) => !decorItemIds.has(item.id))
+  // Policy v4 keeps Step 2 customizations separate from the venue/package
+  // baseline. They belong to the Customized package only; required and
+  // event-dependent charges remain shared by every package calculation.
+  const customizationItemIds = proposalPricingPolicyVersion >= 4
+    ? new Set([...confirmedCustom, ...decor.items].map((item) => item.id))
+    : new Set<string>()
+  const packageBaseLines = confirmed.filter((item) => (
+    !decorItemIds.has(item.id) && !customizationItemIds.has(item.id)
+  ))
   const rentalAccessHours = safePeriod === 'custom'
     ? numberValue(customRental?.duration_hours)
     : readNumber(luxor, 'rental_access', safePeriod, 'hours') ?? (safePeriod === 'full_day' ? 14 : 6)
@@ -1736,7 +1744,10 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
       )
       const lines = [
         ...packageBaseLines.map((item) => ({ ...item })),
-        ...(proposalPricingPolicyVersion >= 4 || option.id === 'customized' ? optionDecor.items.map((item) => ({ ...item })) : []),
+        ...(option.id === 'customized' ? optionDecor.items.map((item) => ({ ...item })) : []),
+        ...(proposalPricingPolicyVersion >= 4 && option.id === 'customized'
+          ? confirmedCustom.map((item) => ({ ...item }))
+          : []),
       ]
   if (packageFee.valid && packageFee.amount && packageFee.amount > 0) {
         const tier = option.price_tiers.find((entry) => guestCount >= entry.min_guests && guestCount <= entry.max_guests)
