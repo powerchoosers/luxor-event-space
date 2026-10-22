@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   Mail,
@@ -15,7 +16,8 @@ import {
   MoreVertical,
   ChevronDown,
   Check,
-  CheckCircle
+  CheckCircle,
+  Loader2
 } from 'lucide-react'
 import { PortalSelect, PortalCloseButton } from '@/components/portal/PortalUI'
 import { EmailRichTextEditor } from '@/components/portal/EmailRichTextEditor'
@@ -74,6 +76,9 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   const reduceMotion = useReducedMotion()
   const [isMinimized, setIsMinimized] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isFocusMode, setIsFocusMode] = useState(false)
+  const [isFocusModePresent, setIsFocusModePresent] = useState(false)
+  const [focusModeCommand, setFocusModeCommand] = useState<string | null>(null)
   const [isClosing, setIsClosing] = useState(false)
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit')
   const [canSplitCompose, setCanSplitCompose] = useState(false)
@@ -119,6 +124,35 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   const [iframeHeight, setIframeHeight] = useState(800)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
+  const bodyReviewRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!isFocusModePresent) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isFocusModePresent])
+
+  const openFocusMode = (command: string | null = null) => {
+    setActiveTab('edit')
+    setFocusModeCommand(command)
+    setIsFocusModePresent(true)
+    setIsFocusMode(true)
+  }
+
+  const returnFromFocusMode = () => {
+    setIsFocusMode(false)
+  }
+
+  const handleFocusModeExit = () => {
+    if (isFocusMode && isOpen) return
+    setIsFocusModePresent(false)
+    if (isOpen) bodyReviewRef.current?.focus({ preventScroll: true })
+  }
+
+  const handleFocusCommandApplied = useCallback(() => setFocusModeCommand(null), [])
 
   const fitPreviewToContainer = useCallback(() => {
     const width = containerRef.current?.clientWidth
@@ -438,7 +472,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         throw new Error(data.error || 'Failed to send email.')
       }
       if (data.simulated === true) {
-        setSimulationMsg('No email was sent. This permanent test recipient uses a no-send simulation; your draft is still open.')
+        setSimulationMsg('No email was sent. The protected test address uses a no-send simulation; use an approved test mailbox to verify delivery.')
         return
       }
       if (data.success !== true) {
@@ -472,7 +506,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
 
   // Class definitions based on minimized / expanded states
   const drawerClasses = `
-    fixed inset-x-0 top-[var(--email-compose-top,0px)] h-[var(--email-compose-height,100dvh)] z-50 flex flex-col overflow-hidden bg-[color:var(--portal-card)] shadow-2xl
+    fixed inset-x-0 top-[var(--email-compose-top,0px)] h-[var(--email-compose-height,100dvh)] z-[110] flex flex-col overflow-hidden bg-[color:var(--portal-card)] shadow-2xl
     pt-[env(safe-area-inset-top)] sm:pt-0 ${isMinimized ? '' : 'pb-[env(safe-area-inset-bottom)] sm:pb-0'}
     sm:inset-auto sm:right-4 sm:top-1/2 sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(760px,calc(100vw-2rem))] sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:border-[color:var(--portal-border)]
     lg:right-6 lg:w-[min(820px,calc(100vw-3rem))]
@@ -481,6 +515,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   `
 
   return (
+    <>
     <motion.div
       initial={{ y: '100%', opacity: 0 }}
       animate={isClosing ? { y: '100%', opacity: 0 } : { y: 0, opacity: 1 }}
@@ -500,7 +535,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         <div className="flex min-w-0 items-center gap-2">
           <PortalCloseButton onClick={requestClose} aria-label="Close composer" />
           {isMinimized && <button type="button" onClick={() => setIsMinimized(false)} aria-label="Restore composer" className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]"><Maximize2 size={15} /></button>}
-          <div className="min-w-0">
+          <div className="absolute left-1/2 min-w-0 max-w-[calc(100%-8rem)] -translate-x-1/2 text-center sm:static sm:translate-x-0 sm:text-left">
             <p className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{isMinimized ? `Draft to ${lead?.full_name || toAddress || 'Client'}` : 'New Message'}</p>
           </div>
         </div>
@@ -511,15 +546,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
               onClick={() => setIsExpanded(!isExpanded)}
               aria-label={isExpanded ? 'Restore composer size' : 'Expand composer'}
               title={isExpanded ? 'Restore size' : 'Expand'}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
+              className="hidden h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:inline-flex"
             >
               <Maximize2 size={15} />
             </button>
           )}
-          <button type="button" onClick={() => void handleSend()} disabled={isSending} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition-colors hover:bg-[#d4b060] disabled:cursor-wait disabled:opacity-50">
-            <Send size={14} /> {isSending ? 'Sending' : 'Send'}
+          <button type="button" onClick={() => void handleSend()} disabled={isSending} aria-label={isSending ? 'Sending email' : 'Send email'} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition-colors hover:bg-[#d4b060] disabled:cursor-wait disabled:opacity-50">
+            {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} {isSending ? 'Sending…' : 'Send'}
           </button>
-          <div className="relative">
+          <div className="relative hidden sm:block">
             <button type="button" aria-label="More compose options" aria-expanded={moreMenuOpen} onClick={() => setMoreMenuOpen((open) => !open)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
               <MoreVertical size={16} />
             </button>
@@ -783,12 +818,36 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
             {/* Editor Workspace */}
             <div className="flex min-h-0 flex-1 flex-col">
               {selectedTemplateId === 'regular' ? (
-                <EmailRichTextEditor
-                  value={bodyText}
-                  onChange={setBodyText}
-                  placeholder="Write your message…"
-                  ariaLabel="Write your message"
-                />
+                <>
+                  <div className="relative flex min-h-[11rem] min-w-0 flex-1 flex-col sm:hidden">
+                    <EmailRichTextEditor
+                      value={bodyText}
+                      onChange={setBodyText}
+                      placeholder="Write your message…"
+                      readOnly
+                      bodyClassName="pb-16 pr-14"
+                      onReadOnlyBodyClick={() => openFocusMode()}
+                      onReadOnlyCommand={(command) => openFocusMode(command)}
+                    />
+                    <button
+                      ref={bodyReviewRef}
+                      type="button"
+                      onClick={() => openFocusMode()}
+                      aria-label="Expand message editor"
+                      title="Expand message editor"
+                      className="absolute bottom-3 right-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#caa24c]/15 text-[#a8792f] transition-colors hover:bg-[#caa24c]/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:bg-[#caa24c]/20 dark:text-[#f1d27a] dark:hover:bg-[#caa24c]/30"
+                    >
+                      <ExternalLink size={18} />
+                    </button>
+                  </div>
+                  <EmailRichTextEditor
+                    value={bodyText}
+                    onChange={setBodyText}
+                    placeholder="Write your message…"
+                    ariaLabel="Write your message"
+                    className="hidden sm:flex"
+                  />
+                </>
               ) : (
                 // Marketing Template Field Editor
                 <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3 scrollbar-thin">
@@ -1115,9 +1174,9 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
       {!isMinimized && (
         <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 sm:px-4">
           <div className="min-w-0 flex-1">
-            {errorMsg ? <p role="alert" className="truncate text-xs text-rose-600 dark:text-rose-300">{errorMsg}</p>
-              : simulationMsg ? <p role="status" className="truncate text-xs text-amber-700 dark:text-amber-300">{simulationMsg}</p>
-                : successMsg ? <p role="status" className="truncate text-xs text-emerald-700 dark:text-emerald-300">{successMsg}</p>
+            {errorMsg ? <p role="alert" aria-live="assertive" className="text-xs leading-4 text-rose-600 dark:text-rose-300">{errorMsg}</p>
+              : simulationMsg ? <p role="status" aria-live="polite" className="text-xs leading-4 text-amber-700 dark:text-amber-300">{simulationMsg}</p>
+                : successMsg ? <p role="status" aria-live="polite" className="text-xs leading-4 text-emerald-700 dark:text-emerald-300">{successMsg}</p>
                   : null}
           </div>
           <button
@@ -1139,5 +1198,52 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         )}
       </AnimatePresence>
     </motion.div>
+    {typeof document !== 'undefined' ? createPortal(
+      <AnimatePresence onExitComplete={handleFocusModeExit}>
+      {isFocusMode && isOpen && <motion.section
+        key="email-writing-mode"
+        initial={{ y: reduceMotion ? 0 : '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: reduceMotion ? 0 : '100%' }}
+        transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Write email message"
+        className="fixed inset-x-0 z-[120] flex min-h-0 flex-col overflow-hidden bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+        style={{
+          top: `${visualViewportMetrics?.top ?? 0}px`,
+          height: visualViewportMetrics ? `${visualViewportMetrics.height}px` : '100dvh',
+        }}
+      >
+        <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-4">
+          <PortalCloseButton onClick={returnFromFocusMode} aria-label="Close writing mode and keep draft" />
+          <button
+            type="button"
+            onClick={returnFromFocusMode}
+            aria-label="Done editing message"
+            title="Done editing"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)]"
+          >
+            <Check size={19} strokeWidth={2.5} />
+          </button>
+        </header>
+        <div className="flex min-h-0 flex-1 px-2">
+          <EmailRichTextEditor
+            value={bodyText}
+            onChange={setBodyText}
+            placeholder="Write your message…"
+            ariaLabel="Write your message"
+            autoFocus
+            hideToolbar
+            focusMode
+            initialCommand={focusModeCommand}
+            onInitialCommandApplied={handleFocusCommandApplied}
+          />
+        </div>
+      </motion.section>}
+      </AnimatePresence>,
+      document.body,
+    ) : null}
+    </>
   )
 }

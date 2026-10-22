@@ -4,7 +4,7 @@ const LUXOR_MAIL_DISPLAY_NAME = 'Luxor at Las Palmas Events'
 const LEGACY_LUXOR_MAIL_DISPLAY_NAME = 'Luxor Event Space'
 
 export function luxorMailProvider(): LuxorMailProvider {
-  const provider = (process.env.LUXOR_MAIL_PROVIDER || 'zoho').trim().toLowerCase()
+  const provider = (process.env.LUXOR_MAIL_PROVIDER || 'resend').trim().toLowerCase()
   if (provider !== 'zoho' && provider !== 'resend') throw new Error('LUXOR_MAIL_PROVIDER must be zoho or resend.')
   return provider
 }

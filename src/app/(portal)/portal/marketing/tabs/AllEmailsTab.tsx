@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import {
   Folder,
   ArrowLeft,
+  ArrowUp,
   Send,
   Reply,
   Megaphone,
@@ -222,6 +223,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const reduceMotion = useReducedMotion()
   const appliedInitialMessageId = useRef<string | null>(null)
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
+  const [mobileReplyAnchor, setMobileReplyAnchor] = useState<HTMLDivElement | null>(null)
+  const mobileReplyPortalRef = useRef<HTMLDivElement | null>(null)
+  const mobileReplyTriggerRef = useRef<HTMLButtonElement | null>(null)
   const threadScrollRef = useRef<HTMLDivElement | null>(null)
   const readerMenuRef = useRef<HTMLDivElement | null>(null)
   const mailboxListRef = useRef<HTMLDivElement | null>(null)
@@ -261,38 +265,85 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const replyDelivery = useRef<{ fingerprint: string; key: string } | null>(null)
   const [replyStatus, setReplyStatus] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
+  const [replyPromptOpen, setReplyPromptOpen] = useState(false)
+  const [replyModalPresent, setReplyModalPresent] = useState(false)
   const [replyDraftLoadedKey, setReplyDraftLoadedKey] = useState<string | null>(null)
-  const [replyKeyboardInset, setReplyKeyboardInset] = useState(0)
+  const [mobileReplyBounds, setMobileReplyBounds] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
+  const [replyViewport, setReplyViewport] = useState({ top: 0, left: 0, width: 0, height: 0 })
   const replyDraftStorageKey = selectedId
     ? `luxor-email-reply-draft:v1:${encodeURIComponent(activeMailboxKey)}:${encodeURIComponent(selectedId)}`
     : null
   const [replyPreviewOpen, setReplyPreviewOpen] = useState(false)
   const hasUnsentReply = Boolean(replyText.trim() || replyInstruction.trim())
 
-  useEffect(() => {
-    if (!replyOpen || !isMobileReader) {
-      setReplyKeyboardInset(0)
-      return
-    }
+  const syncReplyBounds = useCallback(() => {
+    if (!mobileReplyAnchor) return
+    const bounds = mobileReplyAnchor.getBoundingClientRect()
+    if (!bounds.width || !bounds.height) return
     const visualViewport = window.visualViewport
-    const syncKeyboardInset = () => {
-      if (!visualViewport) {
-        setReplyKeyboardInset(0)
-        return
+    const nextBounds = { top: bounds.top, left: bounds.left, width: bounds.width, height: bounds.height }
+    setMobileReplyBounds((current) => current && current.top === nextBounds.top && current.left === nextBounds.left && current.width === nextBounds.width && current.height === nextBounds.height ? current : nextBounds)
+    const nextViewport = {
+      top: visualViewport?.offsetTop || 0,
+      left: visualViewport?.offsetLeft || 0,
+      width: visualViewport?.width || window.innerWidth,
+      height: visualViewport?.height || window.innerHeight,
+    }
+    setReplyViewport((current) => current.top === nextViewport.top && current.left === nextViewport.left && current.width === nextViewport.width && current.height === nextViewport.height ? current : nextViewport)
+  }, [mobileReplyAnchor])
+
+  useEffect(() => {
+    if (!replyModalPresent || !isMobileReader) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const background = document.querySelector<HTMLElement>('main.portal-main')
+    const previousInert = background?.inert || false
+    if (background) background.inert = true
+    const handleReplyKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !sendingReply) {
+        event.preventDefault()
+        setReplyOpen(false)
       }
-      const inset = window.innerHeight - visualViewport.height - visualViewport.offsetTop
-      setReplyKeyboardInset(inset > 100 ? inset : 0)
+      if (event.key !== 'Tab') return
+      const panel = mobileReplyPortalRef.current
+      if (!panel) return
+      const controls = Array.from(panel.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])'))
+        .filter((element) => element.getClientRects().length > 0)
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      if (!first || !last) return
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault()
+        last.focus({ preventScroll: true })
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault()
+        first.focus({ preventScroll: true })
+      }
     }
-    syncKeyboardInset()
-    visualViewport?.addEventListener('resize', syncKeyboardInset)
-    visualViewport?.addEventListener('scroll', syncKeyboardInset)
-    window.addEventListener('resize', syncKeyboardInset)
+    document.addEventListener('keydown', handleReplyKeys)
     return () => {
-      visualViewport?.removeEventListener('resize', syncKeyboardInset)
-      visualViewport?.removeEventListener('scroll', syncKeyboardInset)
-      window.removeEventListener('resize', syncKeyboardInset)
+      document.body.style.overflow = previousOverflow
+      if (background) background.inert = previousInert
+      document.removeEventListener('keydown', handleReplyKeys)
     }
-  }, [replyOpen, isMobileReader])
+  }, [replyModalPresent, isMobileReader, sendingReply])
+
+  useEffect(() => {
+    if (!isMobileReader || !mobileReplyAnchor) return
+    const visualViewport = window.visualViewport
+    syncReplyBounds()
+    const observer = new ResizeObserver(syncReplyBounds)
+    observer.observe(mobileReplyAnchor)
+    visualViewport?.addEventListener('resize', syncReplyBounds)
+    visualViewport?.addEventListener('scroll', syncReplyBounds)
+    window.addEventListener('resize', syncReplyBounds)
+    return () => {
+      visualViewport?.removeEventListener('resize', syncReplyBounds)
+      visualViewport?.removeEventListener('scroll', syncReplyBounds)
+      window.removeEventListener('resize', syncReplyBounds)
+      observer.disconnect()
+    }
+  }, [isMobileReader, mobileReplyAnchor, syncReplyBounds])
 
   useEffect(() => {
     if (!replyDraftStorageKey) {
@@ -623,10 +674,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     if (target) { setSelectedId(target.id); setSelectedMessageKey(messageKey(target)) }
   }, [initialMessageId, loading, messages, selectedId])
 
-  const selectedSummary = messages.find((message) => messageKey(message) === selectedMessageKey)
+  const selectedMailboxSummary = messages.find((message) => messageKey(message) === selectedMessageKey)
     || messages.find((message) => message.id === selectedId)
-    || (messageDetail?.id === selectedId ? messageDetail : undefined)
-  const selectedFolderId = selectedSummary?.folderId
+  // Detail loading must not change its own folder dependency as it clears/repopulates the detail.
+  const selectedFolderId = selectedMailboxSummary?.folderId
 
   const inquiryByEmail = useMemo(() => {
     const entries = new Map<string, LuxorInquiry>()
@@ -1071,7 +1122,48 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }
 
   const selectedCcLabel = messageDetail?.cc ? mailboxLabel(messageDetail.cc, inquiryByEmail, '') : ''
-  const renderReplyComposerContent = (mobile: boolean) => (
+  const renderReplyComposerContent = (mobile: boolean) => mobile ? (
+    <>
+      <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4">
+        <PortalCloseButton onClick={collapseReplyComposer} disabled={sendingReply} aria-label="Close reply and keep draft" />
+        <p className="sr-only">Reply to {thread?.clientEmail || (messageDetail?.direction === 'incoming' ? firstMailboxEmail(messageDetail.from) : firstMailboxEmail(messageDetail?.to || ''))}</p>
+        <button type="button" onClick={() => void sendInlineReply()} disabled={sendingReply || !replyText.trim()} aria-label={sendingReply ? 'Sending reply' : 'Send reply'} title="Send reply" className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-card)] disabled:cursor-not-allowed disabled:opacity-50">
+          {sendingReply ? <Loader2 size={19} className="animate-spin" /> : <Send size={19} />}
+        </button>
+      </header>
+      <div className="flex min-h-0 flex-1 px-2" onPointerDown={() => setReplyPromptOpen(false)} onFocusCapture={() => setReplyPromptOpen(false)}>
+        <EmailRichTextEditor value={replyText} onChange={setReplyText} placeholder="Write your message…" ariaLabel="Write your reply" autoFocus hideToolbar focusMode />
+      </div>
+      <div className="shrink-0 bg-[color:var(--portal-card)] px-4 pb-3 pt-2">
+        <AnimatePresence initial={false}>
+          {replyPromptOpen && <motion.div
+            key="reply-elena-prompt"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className="relative rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-3 shadow-sm transition-colors focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/10">
+              <label htmlFor="mobile-reply-instruction" className="sr-only">Direction for Elena</label>
+              <textarea id="mobile-reply-instruction" value={replyInstruction} onChange={(event) => setReplyInstruction(event.target.value)} placeholder="Ask Elena to draft a reply…" rows={2} className="portal-input-transparent min-h-16 max-h-32 w-full resize-none border-0 bg-transparent pr-6 text-sm leading-6 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]" />
+              <button type="button" onClick={() => setReplyPromptOpen(false)} aria-label="Hide Elena prompt" title="Hide prompt" className="absolute right-1.5 top-1.5 inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-faint)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><X size={14} /></button>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--portal-muted)]"><FilePenLine size={13} /> Elena</span>
+                <button type="button" onClick={() => void draftWithElena()} disabled={draftingReply || loadingThread} aria-label={draftingReply ? 'Elena is drafting' : 'Generate reply with Elena'} title="Generate reply" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)] disabled:cursor-wait disabled:opacity-50">
+                  {draftingReply ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
+                </button>
+              </div>
+            </div>
+          </motion.div>}
+        </AnimatePresence>
+        {!replyPromptOpen && <button type="button" onClick={() => setReplyPromptOpen(true)} aria-expanded={false} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs font-medium text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+          <FilePenLine size={15} /> Write with Elena
+        </button>}
+        {replyStatus ? <p role="status" aria-live="polite" className="pb-2 text-xs leading-4 text-[color:var(--portal-muted)]">{replyStatus}</p> : null}
+      </div>
+    </>
+  ) : (
     <>
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#eee9e0] px-3 py-2.5 sm:px-4">
         <p className="min-w-0 truncate text-xs font-semibold text-zinc-800">To: {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail?.direction === 'incoming' ? messageDetail.from : messageDetail?.to || ''), inquiryByEmail)} <span className="font-normal text-zinc-500">{thread?.clientEmail || (messageDetail?.direction === 'incoming' ? firstMailboxEmail(messageDetail.from) : firstMailboxEmail(messageDetail?.to || ''))}</span></p>
@@ -1131,7 +1223,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             autoFocus
             placeholder="Write your message…"
             ariaLabel="Write your reply"
-            className={mobile ? 'min-h-[160px]' : 'min-h-[280px]'}
+            className="min-h-[280px]"
           />
         )}
         <div className={mobile ? "sticky bottom-0 -mx-3 -mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#eee9e0] bg-white/95 px-3 py-2 backdrop-blur" : "flex shrink-0 flex-wrap items-center justify-between gap-3"}>
@@ -1548,6 +1640,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             animate={{ opacity: 1, x: 0 }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -8 }}
             transition={{ duration: reduceMotion ? 0.1 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+            onAnimationComplete={syncReplyBounds}
             className="flex min-h-0 flex-1 flex-col"
           >
             {/* Email Header Bar */}
@@ -1603,6 +1696,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
             </div>
 
+            <div className="flex min-h-0 flex-1 flex-col">
             {/* Scrollable email thread — grows to fill, reply pinned below */}
             <div ref={threadScrollRef} data-email-thread-scroll className="portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-white p-2 [overflow-anchor:none] sm:px-6 sm:py-4 lg:px-8">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
@@ -1666,48 +1760,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               </div>
             </div>
 
-            {messageDetail.direction !== 'campaign' && !replyOpen ? <div className="shrink-0 border-t border-[#e8e2d9] bg-white px-3 py-2 sm:px-6">
+            {messageDetail.direction !== 'campaign' && (isMobileReader || !replyOpen) ? <div
+              className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 sm:px-6"
+            >
               {isMobileReader ? (
-                <motion.div
-                  layout
-                  animate={{ borderRadius: replyOpen ? 20 : 999 }}
-                  transition={{ layout: { duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }, borderRadius: { duration: reduceMotion ? 0.08 : 0.24 } }}
-                  className="overflow-hidden border border-[#e8e2d9] bg-[#fffdf9] shadow-sm"
-                >
-                  <AnimatePresence initial={false} mode="popLayout">
-                    {replyOpen ? (
-                      <motion.div
-                        ref={replyComposerRef}
-                        id="mobile-inline-reply-composer"
-                        key="mobile-inline-reply-composer"
-                        role="region"
-                        aria-label="Reply to this email"
-                        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.985 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.99 }}
-                        transition={{ duration: reduceMotion ? 0.08 : 0.2, ease: [0.23, 1, 0.32, 1] }}
-                        className="flex max-h-[48%] min-h-0 flex-col bg-white"
-                      >
-                        {renderReplyComposerContent(true)}
-                      </motion.div>
-                    ) : (
-                      <motion.button
-                        layout
-                        key="mobile-reply-pill"
-                        type="button"
-                        onClick={() => setReplyOpen(true)}
-                        aria-label="Open reply editor"
-                        aria-controls="mobile-inline-reply-composer"
-                        aria-expanded={false}
-                        className="flex min-h-11 w-full items-center gap-3 px-3 text-left text-sm text-zinc-500 hover:border-[#d8c8a8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
-                      >
-                        <Reply size={17} className="shrink-0 text-zinc-500" />
-                        <span className="min-w-0 flex-1 truncate">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}…</span>
-                        <Send size={17} className="shrink-0 text-[#caa24c]" />
-                      </motion.button>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
+                <div ref={setMobileReplyAnchor} className="h-11 w-full" aria-hidden="true" />
               ) : (
                 <button type="button" onClick={() => setReplyOpen(true)} aria-label="Open reply editor" className="flex min-h-11 w-full items-center gap-3 rounded-full border border-[#e8e2d9] bg-[#fffdf9] px-3 text-left text-sm text-zinc-500 shadow-sm hover:border-[#d8c8a8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
                   <Reply size={17} className="shrink-0 text-zinc-500" />
@@ -1716,6 +1773,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 </button>
               )}
             </div> : null}
+            </div>
 
           </motion.div>
         ) : (
@@ -1785,23 +1843,60 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         </AnimatePresence>
       </div>
     </div>
-  </div>  {replyOpen && isMobileReader && messageDetail && messageDetail.direction !== 'campaign' && typeof document !== 'undefined'
-    ? createPortal(
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-label="Reply to email"
-        className="fixed inset-x-0 z-[65] flex min-h-0 flex-col overflow-hidden border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl"
-        style={{
-          top: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)',
-          bottom: `${replyKeyboardInset}px`,
+  </div>
+    {isMobileReader && compactReaderOpen && mobileReplyAnchor && messageDetail && messageDetail.direction !== 'campaign' && mobileReplyBounds && typeof document !== 'undefined' ? createPortal(
+      <>
+      {replyModalPresent && <div aria-hidden="true" className="fixed inset-0 z-[120]" />}
+      <motion.div
+        key="mobile-reply-container"
+        ref={mobileReplyPortalRef}
+        id="mobile-reply-container"
+        role={replyModalPresent ? 'dialog' : undefined}
+        aria-modal={replyModalPresent || undefined}
+        aria-label={replyModalPresent ? 'Write email message' : undefined}
+        initial={false}
+        animate={{
+          top: replyOpen ? replyViewport.top : mobileReplyBounds.top,
+          left: replyOpen ? replyViewport.left : mobileReplyBounds.left,
+          width: replyOpen ? replyViewport.width : mobileReplyBounds.width,
+          height: replyOpen ? replyViewport.height : mobileReplyBounds.height,
+          borderRadius: replyOpen ? 0 : 24,
         }}
+        transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32 }}
+        onAnimationComplete={() => {
+          if (replyOpen || !replyModalPresent) return
+          setReplyModalPresent(false)
+          mobileReplyTriggerRef.current?.focus({ preventScroll: true })
+        }}
+        className="fixed flex min-h-0 flex-col overflow-hidden border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-sm"
+        style={{ zIndex: replyModalPresent ? 130 : 65, paddingTop: replyOpen ? 'env(safe-area-inset-top)' : undefined, paddingBottom: replyOpen ? 'env(safe-area-inset-bottom)' : undefined }}
       >
-        {renderReplyComposerContent(true)}
-      </section>,
+        <AnimatePresence initial={false} mode="popLayout">
+          {replyOpen ? (
+            <motion.div key="mobile-reply-writer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.12 }} className="flex min-h-0 flex-1 flex-col">
+              {renderReplyComposerContent(true)}
+            </motion.div>
+          ) : (
+            <motion.button
+              ref={mobileReplyTriggerRef}
+              key="mobile-reply-trigger"
+              type="button"
+              onClick={() => { setReplyModalPresent(true); setReplyOpen(true) }}
+              aria-label="Open reply editor"
+              aria-controls="mobile-reply-container"
+              aria-expanded={false}
+              className="flex min-h-11 w-full shrink-0 items-center gap-3 px-3 text-left text-sm text-[color:var(--portal-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
+            >
+              <Reply size={17} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}…</span>
+              <Send size={17} className="shrink-0 text-[#caa24c]" />
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </motion.div>
+      </>,
       document.body,
-    )
-    : null}
+    ) : null}
     </>
 )
 }
