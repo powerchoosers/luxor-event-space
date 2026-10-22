@@ -69,9 +69,61 @@ export const CUSTOM_WORKFLOW_ALLOWED_MERGE_FIELDS = [
 
 const MAX_STEPS = 20
 const MAX_BODY_LENGTH = 12_000
-const MAX_TEXT_LENGTH = 480
+export const CUSTOM_WORKFLOW_TEXT_MAX_LENGTH = 480
 const MAX_WAIT_AMOUNT = 365
 const CANONICAL_LUXOR_ORIGIN = 'https://www.luxoratlaspalmas.com'
+
+export const CUSTOM_WORKFLOW_TEXT_DEFAULT_BRAND = 'Luxor Events'
+export const CUSTOM_WORKFLOW_TEXT_OPT_OUT_FOOTER = 'Reply STOP to opt out.'
+
+const LUXOR_TEXT_BRANDS = [
+  'Luxor Event Space',
+  'Luxor Events',
+  'Luxor at Las Palmas Events',
+  'Luxor at Las Palmas',
+] as const
+const LUXOR_TEXT_BRAND_PREFIX = /^(Luxor at Las Palmas Events|Luxor at Las Palmas|Luxor Event Space|Luxor Events)\b\s*:?\s*/i
+const LUXOR_TEXT_STOP_FOOTER = /\s*(?:(?:reply|text|send)\s+)?stop(?:\s+to\s+(?:opt[\s-]?out|unsubscribe|stop|end|cancel|quit)|\s+for\s+(?:help|assistance))?[.!?]*\s*$/i
+
+function splitCustomWorkflowText(value: string) {
+  let content = value
+  let brand: string | null = null
+  let brandMatch = LUXOR_TEXT_BRAND_PREFIX.exec(content)
+  while (brandMatch) {
+    brand ||= LUXOR_TEXT_BRANDS.find((candidate) => candidate.toLowerCase() === brandMatch?.[1]?.toLowerCase()) || null
+    content = content.slice(brandMatch[0].length)
+    brandMatch = LUXOR_TEXT_BRAND_PREFIX.exec(content)
+  }
+  while (content) {
+    const contentWithoutFooter = content.replace(LUXOR_TEXT_STOP_FOOTER, '').trim()
+    if (contentWithoutFooter === content) break
+    content = contentWithoutFooter
+  }
+  content = content.trim()
+  return { brand, content }
+}
+
+export function getCustomWorkflowTextEditorContent(value: string) {
+  return splitCustomWorkflowText(value).content
+}
+
+export function getCustomWorkflowTextBrand(value: string) {
+  return splitCustomWorkflowText(value).brand || CUSTOM_WORKFLOW_TEXT_DEFAULT_BRAND
+}
+
+export function composeCustomWorkflowText(value: string, preferredBrand = CUSTOM_WORKFLOW_TEXT_DEFAULT_BRAND) {
+  const parts = splitCustomWorkflowText(value)
+  const requestedBrand = LUXOR_TEXT_BRANDS.find((candidate) => candidate.toLowerCase() === preferredBrand.trim().toLowerCase())
+  const brand = parts.brand || requestedBrand || CUSTOM_WORKFLOW_TEXT_DEFAULT_BRAND
+  if (!parts.content) return ''
+  return `${brand}: ${parts.content} ${CUSTOM_WORKFLOW_TEXT_OPT_OUT_FOOTER}`
+}
+
+export function getCustomWorkflowTextEditorMaxLength(brand = CUSTOM_WORKFLOW_TEXT_DEFAULT_BRAND) {
+  const approvedBrand = LUXOR_TEXT_BRANDS.find((candidate) => candidate.toLowerCase() === brand.trim().toLowerCase())
+    || CUSTOM_WORKFLOW_TEXT_DEFAULT_BRAND
+  return Math.max(0, CUSTOM_WORKFLOW_TEXT_MAX_LENGTH - `${approvedBrand}:`.length - CUSTOM_WORKFLOW_TEXT_OPT_OUT_FOOTER.length - 2)
+}
 
 export function createNewContactFollowUpDefinition(): CustomWorkflowDefinition {
   return {
@@ -183,8 +235,8 @@ export function validateCustomWorkflowDefinition(
       if (step.requiredConsentScope !== 'marketing') errors.push({ path: `${path}.requiredConsentScope`, message: 'Automated workflow texts require marketing consent.' })
       if (typeof step.body !== 'string') errors.push({ path: `${path}.body`, message: 'Text content must be text.' })
       else {
-        if (step.body.length > MAX_TEXT_LENGTH || (!allowIncompleteDraft && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Text body must be 1 to ${MAX_TEXT_LENGTH} characters.` })
-        if (step.body.trim() && !/^Luxor Event Space\b/i.test(step.body.trim())) errors.push({ path: `${path}.body`, message: 'Start the message with "Luxor Event Space" so the sender is identified.' })
+        if (step.body.length > CUSTOM_WORKFLOW_TEXT_MAX_LENGTH || (!allowIncompleteDraft && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Text body must be 1 to ${CUSTOM_WORKFLOW_TEXT_MAX_LENGTH} characters.` })
+        if (step.body.trim() && !/^(?:Luxor Event Space|Luxor Events|Luxor at Las Palmas Events|Luxor at Las Palmas)\b/i.test(step.body.trim())) errors.push({ path: `${path}.body`, message: 'Start the message with an approved Luxor brand name so the sender is identified.' })
         if (step.body.trim() && !/\bstop\b/i.test(step.body)) errors.push({ path: `${path}.body`, message: 'Include clear STOP instructions in the text.' })
         validateMergeFields(step.body, `${path}.body`, errors)
       }

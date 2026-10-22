@@ -9,7 +9,13 @@ import {
   addCustomWorkflowStep,
   canEditCustomWorkflowStep,
   cloneCustomWorkflowDefinition,
+  composeCustomWorkflowText,
+  CUSTOM_WORKFLOW_TEXT_MAX_LENGTH,
+  CUSTOM_WORKFLOW_TEXT_OPT_OUT_FOOTER,
   createNewContactFollowUpDefinition,
+  getCustomWorkflowTextBrand,
+  getCustomWorkflowTextEditorContent,
+  getCustomWorkflowTextEditorMaxLength,
   moveCustomWorkflowStep,
   removeCustomWorkflowStep,
   validateCustomWorkflowDefinition,
@@ -339,10 +345,54 @@ function StepEditor({ step, editable, index, total, onChange, onMove, onRemove, 
     {readOnly && step.type === 'email' && step.mode === 'existing_inquiry_acknowledgment' ? <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4"><p className="text-xs font-semibold text-[color:var(--portal-text)]">Existing contact acknowledgment</p><p className="mt-2 text-sm text-[color:var(--portal-muted)]">Subject: {step.subject}</p><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{step.previewText}</p><p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">This saved marker observes the existing inquiry acknowledgment. Its branded body, personal details, visit link, and delivery remain controlled by the current inquiry path.</p></div> : null}
     <label className="mt-4 block"><span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Step name</span><input value={step.name} disabled={readOnly || step.type === 'end'} onChange={(event) => onChange('name' as keyof CustomWorkflowStep, event.target.value as never)} maxLength={120} className="mt-1 min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-transparent px-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c] disabled:opacity-70" /></label>
     {step.type === 'email' && step.mode === 'marketing' ? <div className="mt-4 space-y-3"><Field label="Subject" value={step.subject} disabled={readOnly} maxLength={500} onChange={(value) => onChange('subject', value)} /><Field label="Preview text" value={step.previewText} disabled={readOnly} maxLength={500} onChange={(value) => onChange('previewText', value)} /><TextArea label="Email body" value={step.body} disabled={readOnly} maxLength={12000} rows={8} help="Use only supported fields: {{first_name}}, {{full_name}}, {{event_type}}, {{guest_count}}, and {{target_date}}." onChange={(value) => onChange('body', value)} /><div className="grid gap-3 sm:grid-cols-2"><Field label="Button label (optional)" value={step.ctaText} disabled={readOnly} maxLength={100} onChange={(value) => onChange('ctaText', value)} /><Field label="Luxor page or URL (optional)" value={step.ctaUrl} disabled={readOnly} maxLength={500} onChange={(value) => onChange('ctaUrl', value)} /></div><button type="button" onClick={onPreview} disabled={previewing || !step.body.trim() || !step.subject.trim()} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"><Eye size={14} />{previewing ? 'Rendering…' : 'Preview email'}</button></div> : null}
-    {step.type === 'text' ? <TextArea label="Text body" value={step.body} disabled={readOnly} maxLength={1200} rows={5} help="Start with Luxor Event Space, include STOP instructions, and use only supported personalization fields." onChange={(value) => onChange('body', value)} /> : null}
+    {step.type === 'text' ? readOnly
+      ? <TextArea label="Saved text" value={step.body} disabled maxLength={CUSTOM_WORKFLOW_TEXT_MAX_LENGTH} rows={5} help="This saved workflow version is shown exactly as approved and cannot be edited." onChange={() => undefined} />
+      : <CustomWorkflowTextEditor key={step.id} value={step.body} onChange={(value) => onChange('body', value)} />
+      : null}
     {step.type === 'wait' ? <div className="mt-4 grid gap-3 sm:grid-cols-2"><Field label="Wait amount" type="number" value={step.amount === null ? '' : String(step.amount)} disabled={readOnly} min={0} max={365} onChange={(value) => onChange('amount', value === '' ? null : Number(value))} /><div><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Unit</p><PortalSelect disabled={readOnly} value={step.unit} onChange={(value) => onChange('unit', value as typeof step.unit)} options={[{ value: 'minutes', label: 'Minutes' }, { value: 'hours', label: 'Hours' }, { value: 'days', label: 'Days' }]} className="mt-1 w-full" buttonClassName="min-h-10" /></div></div> : null}
     {step.type === 'condition' ? <div className="mt-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Supported condition</p><PortalSelect disabled={readOnly} value={step.condition} onChange={(value) => onChange('condition', value as typeof step.condition)} options={[{ value: 'follow_up_eligible', label: 'Contact remains eligible; stop after booking, close, or opt-out' }, { value: 'marketing_email_consent', label: 'Marketing email consent is present' }, { value: 'marketing_sms_consent', label: 'Marketing SMS consent is present' }]} className="mt-1 w-full" buttonClassName="min-h-10" /></div> : null}
     {!readOnly && step.type !== 'end' ? <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">This is a saved draft only. The editor cannot activate or dispatch it.</p> : null}
+  </div>
+}
+
+function CustomWorkflowTextEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [fallbackBrand, setFallbackBrand] = React.useState(() => getCustomWorkflowTextBrand(value))
+  const brand = value ? getCustomWorkflowTextBrand(value) : fallbackBrand
+  const content = getCustomWorkflowTextEditorContent(value)
+  const preview = value
+    ? value.replace(/\s+/g, ' ').trim()
+    : `${brand}: [Your message] ${CUSTOM_WORKFLOW_TEXT_OPT_OUT_FOOTER}`
+  const hasContent = content.trim().length > 0
+
+  function updateMessageContent(nextContent: string) {
+    const nextValue = composeCustomWorkflowText(nextContent, brand)
+    setFallbackBrand(nextValue ? getCustomWorkflowTextBrand(nextValue) : brand)
+    onChange(nextValue)
+  }
+
+  return <div className="mt-4 space-y-3">
+    <label className="block">
+      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Message content</span>
+      <textarea
+        rows={5}
+        value={content}
+        maxLength={getCustomWorkflowTextEditorMaxLength(brand)}
+        onChange={(event) => updateMessageContent(event.target.value)}
+        className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-transparent px-3 py-2 text-sm leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+      />
+      <span className="mt-1 block text-[10px] leading-4 text-[color:var(--portal-muted)]">The Luxor brand prefix and STOP footer are added automatically. Use only supported fields: {'{{first_name}}'}, {'{{full_name}}'}, {'{{event_type}}'}, {'{{guest_count}}'}, and {'{{target_date}}'}.</span>
+    </label>
+    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[color:var(--portal-muted)]">
+      <span>Complete message</span>
+      <span aria-live="polite">{value.length} / {CUSTOM_WORKFLOW_TEXT_MAX_LENGTH} characters, including prefix and footer</span>
+    </div>
+    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">SMS preview</p>
+      <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-[color:var(--portal-text)]">{preview}</p>
+    </div>
+    {value.length > CUSTOM_WORKFLOW_TEXT_MAX_LENGTH
+      ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">Shorten the message so the complete SMS fits within the {CUSTOM_WORKFLOW_TEXT_MAX_LENGTH}-character limit.</p>
+      : !hasContent ? <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Enter message content to save a sendable text. The preview placeholder is not saved.</p> : null}
   </div>
 }
 
