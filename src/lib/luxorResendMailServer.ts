@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { createHash, randomUUID } from 'node:crypto'
-import { luxorMailAddress, luxorMailFrom } from './luxorMailConfig'
+import { luxorMailAddress, luxorMailDisplayName, luxorMailFrom } from './luxorMailConfig'
 import { luxorResendApi } from './luxorResendApiServer'
 import { prepareLuxorOutbox, saveLuxorMailAttachment, updateLuxorMailRow } from './luxorMailboxServer'
 import { supabaseRest } from './supabaseRestServer'
@@ -30,7 +30,7 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
   const content = input.content.trim()
   if (!content) throw new Error('Please add an email message.')
   if (input.calendar && input.attachments?.length) throw new Error('Send calendar invitations separately from other attachments.')
-  const fromName = (input.fromName || 'Luxor Event Space').replace(/[\r\n"<>]/g, '').slice(0, 120)
+  const fromName = luxorMailDisplayName(input.fromName)
   const html = /<\/?[a-z][\s\S]*>/i.test(content) ? content : null
   const text = input.text ?? (html ? content.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : content)
   const references = (input.references || []).filter((value) => /^<[^<>\s]+>$/.test(value)).slice(-50)

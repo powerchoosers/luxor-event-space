@@ -1,5 +1,8 @@
 export type LuxorMailProvider = 'zoho' | 'resend'
 
+const LUXOR_MAIL_DISPLAY_NAME = 'Luxor at Las Palmas Events'
+const LEGACY_LUXOR_MAIL_DISPLAY_NAME = 'Luxor Event Space'
+
 export function luxorMailProvider(): LuxorMailProvider {
   const provider = (process.env.LUXOR_MAIL_PROVIDER || 'zoho').trim().toLowerCase()
   if (provider !== 'zoho' && provider !== 'resend') throw new Error('LUXOR_MAIL_PROVIDER must be zoho or resend.')
@@ -24,6 +27,12 @@ export function luxorMailFrom(value?: string) {
   const from = luxorMailAddress(value || process.env.LUXOR_MAIL_FROM || process.env.LUXOR_ZOHO_LOGIN_EMAIL || 'booking@luxoratlaspalmas.com')
   if (!from || !luxorMailSenders().includes(from)) throw new Error('This sender is not approved for the Luxor mailbox.')
   return from
+}
+
+export function luxorMailDisplayName(value?: string) {
+  const requested = value?.trim() || LUXOR_MAIL_DISPLAY_NAME
+  const displayName = requested === LEGACY_LUXOR_MAIL_DISPLAY_NAME ? LUXOR_MAIL_DISPLAY_NAME : requested
+  return displayName.replace(/[\r\n"<>]/g, '').slice(0, 120)
 }
 
 export function luxorResendConfigured() {
