@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Folder,
   ArrowLeft,
@@ -260,8 +261,74 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const replyDelivery = useRef<{ fingerprint: string; key: string } | null>(null)
   const [replyStatus, setReplyStatus] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
+  const [replyDraftLoadedKey, setReplyDraftLoadedKey] = useState<string | null>(null)
+  const [replyKeyboardInset, setReplyKeyboardInset] = useState(0)
+  const replyDraftStorageKey = selectedId
+    ? `luxor-email-reply-draft:v1:${encodeURIComponent(activeMailboxKey)}:${encodeURIComponent(selectedId)}`
+    : null
   const [replyPreviewOpen, setReplyPreviewOpen] = useState(false)
   const hasUnsentReply = Boolean(replyText.trim() || replyInstruction.trim())
+
+  useEffect(() => {
+    if (!replyOpen || !isMobileReader) {
+      setReplyKeyboardInset(0)
+      return
+    }
+    const visualViewport = window.visualViewport
+    const syncKeyboardInset = () => {
+      if (!visualViewport) {
+        setReplyKeyboardInset(0)
+        return
+      }
+      const inset = window.innerHeight - visualViewport.height - visualViewport.offsetTop
+      setReplyKeyboardInset(inset > 100 ? inset : 0)
+    }
+    syncKeyboardInset()
+    visualViewport?.addEventListener('resize', syncKeyboardInset)
+    visualViewport?.addEventListener('scroll', syncKeyboardInset)
+    window.addEventListener('resize', syncKeyboardInset)
+    return () => {
+      visualViewport?.removeEventListener('resize', syncKeyboardInset)
+      visualViewport?.removeEventListener('scroll', syncKeyboardInset)
+      window.removeEventListener('resize', syncKeyboardInset)
+    }
+  }, [replyOpen, isMobileReader])
+
+  useEffect(() => {
+    if (!replyDraftStorageKey) {
+      setReplyDraftLoadedKey(null)
+      return
+    }
+    setReplyDraftLoadedKey(null)
+    try {
+      const savedDraft = window.localStorage.getItem(replyDraftStorageKey)
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft) as { replyText?: unknown; replyInstruction?: unknown }
+        setReplyText(typeof parsed.replyText === 'string' ? parsed.replyText : '')
+        setReplyInstruction(typeof parsed.replyInstruction === 'string' ? parsed.replyInstruction : '')
+      } else {
+        setReplyText('')
+        setReplyInstruction('')
+      }
+    } catch {
+      setReplyText('')
+      setReplyInstruction('')
+    }
+    setReplyDraftLoadedKey(replyDraftStorageKey)
+  }, [replyDraftStorageKey])
+
+  useEffect(() => {
+    if (!replyDraftStorageKey || replyDraftLoadedKey !== replyDraftStorageKey) return
+    try {
+      if (!replyText.trim() && !replyInstruction.trim()) {
+        window.localStorage.removeItem(replyDraftStorageKey)
+        return
+      }
+      window.localStorage.setItem(replyDraftStorageKey, JSON.stringify({ replyText, replyInstruction }))
+    } catch {
+      // Keep the in-memory draft available if browser storage is unavailable.
+    }
+  }, [replyDraftStorageKey, replyDraftLoadedKey, replyText, replyInstruction])
 
   // Reader pane controls
   const [viewMode, setViewMode] = useState<'html' | 'text'>('html')
@@ -766,6 +833,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       replyDelivery.current = null
       setReplyInstruction('')
       setReplyStatus(null)
+      if (replyDraftStorageKey) {
+        try { window.localStorage.removeItem(replyDraftStorageKey) } catch { /* The sent reply remains cleared in memory. */ }
+      }
       setReplyOpen(false)
       setReplyPreviewOpen(false)
     } catch (error) {
@@ -982,6 +1052,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     setReplyText('')
     setReplyInstruction('')
     setReplyStatus(null)
+    if (replyDraftStorageKey) {
+      try { window.localStorage.removeItem(replyDraftStorageKey) } catch { /* Keep the close action available if storage is unavailable. */ }
+    }
     if (readerOpenedFromList.current && searchParams?.get('messageId')) {
       router.back()
       return
@@ -1025,7 +1098,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       </div>
 
       <div className={mobile
-        ? 'flex min-h-0 flex-col gap-2.5 overflow-y-auto overscroll-contain p-3 portal-scrollbar'
+        ? 'flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain p-3 portal-scrollbar'
         : 'flex min-h-[360px] flex-col gap-2.5 p-3 sm:min-h-[400px] sm:p-4'}>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
           <input
@@ -1061,7 +1134,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             className={mobile ? 'min-h-[160px]' : 'min-h-[280px]'}
           />
         )}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <div className={mobile ? "sticky bottom-0 -mx-3 -mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#eee9e0] bg-white/95 px-3 py-2 backdrop-blur" : "flex shrink-0 flex-wrap items-center justify-between gap-3"}>
           <p role={replyStatus ? 'status' : undefined} className="min-h-4 min-w-0 flex-1 text-[10px] text-zinc-500">{replyStatus}</p>
           <div className="flex shrink-0 items-center gap-2">
             <button type="button" onClick={() => setReplyPreviewOpen((open) => !open)} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-medium text-zinc-600 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
@@ -1083,6 +1156,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   )
 
   return (
+    <>
     <div className="relative flex h-full min-h-0 w-full flex-col">
       {mailboxDrawerOpen ? <>
         <button type="button" aria-label="Close mailbox navigation" onClick={() => onMailboxDrawerOpenChange(false)} className="absolute inset-0 z-40 cursor-default bg-black/40 xl:bg-black/25" />
@@ -1592,7 +1666,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               </div>
             </div>
 
-            {messageDetail.direction !== 'campaign' && (isMobileReader || !replyOpen) ? <div className="shrink-0 border-t border-[#e8e2d9] bg-white px-3 py-2 sm:px-6">
+            {messageDetail.direction !== 'campaign' && !replyOpen ? <div className="shrink-0 border-t border-[#e8e2d9] bg-white px-3 py-2 sm:px-6">
               {isMobileReader ? (
                 <motion.div
                   layout
@@ -1711,7 +1785,24 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         </AnimatePresence>
       </div>
     </div>
-  </div>
+  </div>  {replyOpen && isMobileReader && messageDetail && messageDetail.direction !== 'campaign' && typeof document !== 'undefined'
+    ? createPortal(
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Reply to email"
+        className="fixed inset-x-0 z-[65] flex min-h-0 flex-col overflow-hidden border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xl"
+        style={{
+          top: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)',
+          bottom: `${replyKeyboardInset}px`,
+        }}
+      >
+        {renderReplyComposerContent(true)}
+      </section>,
+      document.body,
+    )
+    : null}
+    </>
 )
 }
 
