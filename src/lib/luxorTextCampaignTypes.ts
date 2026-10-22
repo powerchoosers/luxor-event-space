@@ -24,6 +24,7 @@ export type LuxorTextJobKind =
   | 'payment_confirmation'
   | 'invoice_due_reminder'
   | 'invoice_overdue_reminder'
+  | 'custom_workflow'
 
 export type LuxorTextJobStatus =
   | 'queued'
@@ -103,6 +104,7 @@ export type LuxorTextJob = {
   twilio_message_sid: string | null
   last_error: string | null
   automation_key: string | null
+  custom_workflow_step_run_id?: string | null
   metadata: Record<string, unknown>
 }
 

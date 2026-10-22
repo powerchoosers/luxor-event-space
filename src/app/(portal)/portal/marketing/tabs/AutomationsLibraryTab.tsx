@@ -10,12 +10,22 @@ import {
   type AutomationStatus,
   type AutomationStatusFilter,
 } from '@/lib/luxorAutomationsLibrary'
+import type { CustomWorkflowDefinition, CustomWorkflowStatus } from '@/lib/luxorCustomWorkflowDefinition'
 
 type LibraryResponse = {
   workflows: AutomationLibraryEntry[]
   systemManaged: AutomationLibraryEntry
   totals: AutomationLibraryTotals
   error?: string
+}
+
+type CustomWorkflowSummary = {
+  id: string
+  name: string
+  status: CustomWorkflowStatus
+  draft_definition: CustomWorkflowDefinition
+  updated_at: string
+  draft_revision: number
 }
 
 const STATUS_FILTERS: Array<{ id: AutomationStatusFilter; label: string }> = [
@@ -33,6 +43,10 @@ export function AutomationsLibraryTab() {
   const [search, setSearch] = React.useState('')
   const [status, setStatus] = React.useState<AutomationStatusFilter>('all')
   const [openEntryId, setOpenEntryId] = React.useState<string | null>(null)
+  const [customWorkflows, setCustomWorkflows] = React.useState<CustomWorkflowSummary[]>([])
+  const [customAuthoringEnabled, setCustomAuthoringEnabled] = React.useState(false)
+  const [customLoadError, setCustomLoadError] = React.useState<string | null>(null)
+  const [customRetryVersion, setCustomRetryVersion] = React.useState(0)
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -58,6 +72,23 @@ export function AutomationsLibraryTab() {
 
     return () => controller.abort()
   }, [retryVersion])
+
+  React.useEffect(() => {
+    const controller = new AbortController()
+    setCustomLoadError(null)
+    fetch('/api/marketing/custom-workflows', { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as { enabled?: boolean; workflows?: CustomWorkflowSummary[]; error?: string }
+        if (!response.ok) throw new Error(payload.error || 'Custom workflows could not load.')
+        setCustomAuthoringEnabled(payload.enabled === true)
+        setCustomWorkflows(Array.isArray(payload.workflows) ? payload.workflows : [])
+      })
+      .catch((loadError: unknown) => {
+        if (controller.signal.aborted) return
+        setCustomLoadError(loadError instanceof Error ? loadError.message : 'Custom workflows could not load.')
+      })
+    return () => controller.abort()
+  }, [customRetryVersion])
 
   const entries = React.useMemo(() => data ? [...data.workflows, data.systemManaged] : [], [data])
   const visibleEntries = React.useMemo(
@@ -86,6 +117,23 @@ export function AutomationsLibraryTab() {
       ) : null}
 
       {loading && data ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing saved workflow data…</p> : null}
+
+      <section aria-labelledby="custom-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 id="custom-workflows-heading" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Custom workflows</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Versioned workflows are separate from the existing brochure sequence and calendar-managed tour notices. Sending and activation are currently unavailable.</p>
+          </div>
+          {customAuthoringEnabled ? (
+            <Link href="/portal/marketing/custom-workflows/new" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Create workflow</Link>
+          ) : (
+            <button type="button" disabled title="Custom workflow schema and authorization validation are pending." className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-bold text-[color:var(--portal-muted)] opacity-70">Create workflow</button>
+          )}
+        </div>
+        {!customAuthoringEnabled ? <p className="mt-3 text-[11px] leading-5 text-[color:var(--portal-muted)]">The editor is prepared in the application, but draft storage remains closed until its additive schema is validated. Existing workflow controls are unchanged.</p> : null}
+        {customLoadError ? <div role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3"><p className="text-xs text-[color:var(--portal-muted)]">{customLoadError}</p><button type="button" onClick={() => setCustomRetryVersion((value) => value + 1)} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)]">Retry</button></div> : null}
+        {customWorkflows.length ? <div className="mt-4 divide-y divide-[color:var(--portal-border)] border-t border-[color:var(--portal-border)]">{customWorkflows.map((workflow) => <Link key={workflow.id} href={`/portal/marketing/custom-workflows/${encodeURIComponent(workflow.id)}`} className="flex min-h-14 flex-col gap-1 py-3 transition hover:text-[#a8792f] sm:flex-row sm:items-center sm:justify-between"><span className="min-w-0"><span className="block break-words text-sm font-semibold text-[color:var(--portal-text)]">{workflow.name}</span><span className="mt-1 block text-[11px] text-[color:var(--portal-muted)]">{workflow.draft_definition.steps.length} configured steps · Contact form inquiry</span></span><span className="shrink-0 text-xs font-semibold text-[color:var(--portal-muted)]">{workflowStatusLabel(workflow.status)} · Updated {formatDate(workflow.updated_at)}</span></Link>)}</div> : customAuthoringEnabled ? <p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)]">No custom workflows saved yet.</p> : null}
+      </section>
 
       <section aria-label="Saved automation totals" className="grid grid-cols-2 border-y border-[color:var(--portal-border)] lg:grid-cols-4">
         <SummaryMetric label="Total" value={data?.totals.total ?? null} detail="Saved workflow definitions" />
@@ -317,6 +365,11 @@ function formatStepTiming(entry: AutomationLibraryEntry, key: string, delayDays:
 
 function metricLabel(value: number | null) {
   return value === null ? 'Unavailable' : value.toLocaleString()
+}
+
+function workflowStatusLabel(status: CustomWorkflowStatus) {
+  if (status === 'active') return 'Runtime status unavailable'
+  return status[0].toUpperCase() + status.slice(1)
 }
 
 function formatDate(value: string) {

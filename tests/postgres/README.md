@@ -38,3 +38,13 @@ four live action states (`scheduled`, `email_queued`, `task_created`,
 and anon/auth denial on protected reads and the service-role-only invoker RPC. All inserted
 records use synthetic UUIDs and `example.invalid` recipients. The harness does
 not connect to Supabase or send mail.
+
+## Custom-workflow integration harness
+
+Run the Phase 4 workflow migration and ACL tests with:
+
+```sh
+tests/postgres/run-custom-workflows-postgres.sh
+```
+
+The script starts a disposable PostgreSQL 16 container without publishing a host port. It runs the synthetic custom-workflow migration harness twice, each inside a transaction that rolls back: once with clean ACL defaults and once with Supabase-style table and function defaults. The checks include migration reapply, private-table and service-role ACLs, untrusted RPC denial, fail-closed controls, event/step uniqueness, immutable version pinning, legacy queue preservation, consent and Chicago SMS-window checks, acknowledgment reuse, and pause/resume/archive behavior. Fixtures use synthetic `.invalid` recipients; no hosted database or provider is contacted.

@@ -739,6 +739,7 @@ export type LuxorEmailJobKind =
   | 'marketing_campaign'
   | 'grand_opening_rsvp_confirmation'
   | 'layout_review'
+  | 'custom_workflow'
 
 
 export type LuxorEmailJob = {
@@ -764,6 +765,7 @@ export type LuxorEmailJob = {
   tour_notice?: 'confirmation' | 'reminder_24' | 'reminder_2' | null
   automation_enrollment_id?: string | null
   automation_step_key?: string | null
+  custom_workflow_step_run_id?: string | null
   test_run_id?: string | null
   test_claim_token?: string | null
 }

@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test:custom-workflows": "node --test tests/custom-workflow-authorization.test.cjs",
     "test:follow-ups": "node --test tests/follow-ups-*.test.cjs tests/notes-route.test.cjs",
     "test:automations-library": "node --test tests/marketing-automations-library.test.cjs"
   },

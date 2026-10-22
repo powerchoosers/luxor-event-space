@@ -1,0 +1,293 @@
+export const CUSTOM_WORKFLOW_TRIGGER = 'contact_form_inquiry_created' as const
+
+export type CustomWorkflowTrigger = typeof CUSTOM_WORKFLOW_TRIGGER
+export type CustomWorkflowStatus = 'draft' | 'active' | 'paused' | 'archived'
+export type CustomWorkflowChannel = 'email' | 'text' | 'wait' | 'condition' | 'end'
+
+export type CustomWorkflowEmailStep = {
+  id: string
+  type: 'email'
+  mode: 'existing_inquiry_acknowledgment' | 'marketing'
+  name: string
+  subject: string
+  previewText: string
+  body: string
+  ctaText: string
+  ctaUrl: string
+}
+
+export type CustomWorkflowTextStep = {
+  id: string
+  type: 'text'
+  name: string
+  body: string
+  requiredConsentScope: 'marketing'
+}
+
+export type CustomWorkflowWaitStep = {
+  id: string
+  type: 'wait'
+  name: string
+  amount: number | null
+  unit: 'minutes' | 'hours' | 'days'
+}
+
+export type CustomWorkflowConditionStep = {
+  id: string
+  type: 'condition'
+  name: string
+  condition: 'follow_up_eligible' | 'marketing_email_consent' | 'marketing_sms_consent'
+  whenFalse: 'stop'
+}
+
+export type CustomWorkflowEndStep = {
+  id: string
+  type: 'end'
+  name: string
+}
+
+export type CustomWorkflowStep = CustomWorkflowEmailStep | CustomWorkflowTextStep | CustomWorkflowWaitStep | CustomWorkflowConditionStep | CustomWorkflowEndStep
+
+export type CustomWorkflowDefinition = {
+  schemaVersion: 1
+  trigger: CustomWorkflowTrigger
+  steps: CustomWorkflowStep[]
+}
+
+export type CustomWorkflowDefinitionError = {
+  path: string
+  message: string
+}
+
+export const CUSTOM_WORKFLOW_ALLOWED_MERGE_FIELDS = [
+  'first_name',
+  'full_name',
+  'event_type',
+  'guest_count',
+  'target_date',
+] as const
+
+const MAX_STEPS = 20
+const MAX_BODY_LENGTH = 12_000
+const MAX_TEXT_LENGTH = 480
+const MAX_WAIT_AMOUNT = 365
+const CANONICAL_LUXOR_ORIGIN = 'https://www.luxoratlaspalmas.com'
+
+export function createNewContactFollowUpDefinition(): CustomWorkflowDefinition {
+  return {
+    schemaVersion: 1,
+    trigger: CUSTOM_WORKFLOW_TRIGGER,
+    steps: [
+      {
+        id: 'inquiry-acknowledgment',
+        type: 'email',
+        mode: 'existing_inquiry_acknowledgment',
+        name: 'Existing inquiry acknowledgment',
+        subject: 'We have received your Luxor inquiry',
+        previewText: 'We received your Luxor inquiry and will connect with you shortly.',
+        body: '',
+        ctaText: '',
+        ctaUrl: '',
+      },
+      { id: 'follow-up-wait', type: 'wait', name: 'Wait before follow-up', amount: null, unit: 'days' },
+      { id: 'eligibility-check', type: 'condition', name: 'Check that follow-up is still appropriate', condition: 'follow_up_eligible', whenFalse: 'stop' },
+      { id: 'marketing-text', type: 'text', name: 'Marketing text', body: '', requiredConsentScope: 'marketing' },
+      { id: 'finished', type: 'end', name: 'End follow-up' },
+    ],
+  }
+}
+
+export function cloneCustomWorkflowDefinition(definition: CustomWorkflowDefinition): CustomWorkflowDefinition {
+  return JSON.parse(JSON.stringify(definition)) as CustomWorkflowDefinition
+}
+
+export function validateCustomWorkflowDefinition(
+  input: unknown,
+  options: { allowIncompleteDraft?: boolean } = {},
+): CustomWorkflowDefinitionError[] {
+  const allowIncompleteDraft = options.allowIncompleteDraft === true
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return [{ path: 'definition', message: 'Workflow definition must be an object.' }]
+  }
+
+  const definition = input as Partial<CustomWorkflowDefinition>
+  const errors: CustomWorkflowDefinitionError[] = []
+  rejectUnexpectedKeys(definition, ['schemaVersion', 'trigger', 'steps'], 'definition', errors)
+  if (definition.schemaVersion !== 1) errors.push({ path: 'schemaVersion', message: 'This workflow version is not supported.' })
+  if (definition.trigger !== CUSTOM_WORKFLOW_TRIGGER) {
+    errors.push({ path: 'trigger', message: 'Only new inquiries from the verified website contact form are supported.' })
+  }
+  if (!Array.isArray(definition.steps) || definition.steps.length < 2 || definition.steps.length > MAX_STEPS) {
+    errors.push({ path: 'steps', message: `Add between 2 and ${MAX_STEPS} steps.` })
+    return errors
+  }
+
+  const ids = new Set<string>()
+  for (const [index, step] of definition.steps.entries()) {
+    const path = `steps.${index}`
+    if (!step || typeof step !== 'object' || Array.isArray(step)) {
+      errors.push({ path, message: 'Step is invalid.' })
+      continue
+    }
+    const allowedStepKeys = step.type === 'email'
+      ? ['id', 'type', 'mode', 'name', 'subject', 'previewText', 'body', 'ctaText', 'ctaUrl']
+      : step.type === 'text'
+        ? ['id', 'type', 'name', 'body', 'requiredConsentScope']
+        : step.type === 'wait'
+          ? ['id', 'type', 'name', 'amount', 'unit']
+          : step.type === 'condition'
+            ? ['id', 'type', 'name', 'condition', 'whenFalse']
+            : step.type === 'end'
+              ? ['id', 'type', 'name']
+              : ['id', 'type', 'name']
+    rejectUnexpectedKeys(step, allowedStepKeys, path, errors)
+    if (typeof step.id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(step.id)) errors.push({ path: `${path}.id`, message: 'Step identifiers may use letters, numbers, underscores, and hyphens.' })
+    if (typeof step.name !== 'string') {
+      errors.push({ path: `${path}.name`, message: 'Enter a step name of 1 to 120 characters.' })
+      continue
+    }
+    if (ids.has(step.id)) errors.push({ path: `${path}.id`, message: 'Step identifiers must be unique.' })
+    ids.add(step.id)
+    if (!step.name.trim() || step.name.length > 120) errors.push({ path: `${path}.name`, message: 'Enter a step name of 1 to 120 characters.' })
+
+    if (step.type === 'email') {
+      if (step.mode !== 'existing_inquiry_acknowledgment' && step.mode !== 'marketing') {
+        errors.push({ path: `${path}.mode`, message: 'This email delivery type is unsupported.' })
+      }
+      if (typeof step.subject !== 'string' || typeof step.previewText !== 'string' || typeof step.body !== 'string' || typeof step.ctaText !== 'string' || typeof step.ctaUrl !== 'string') {
+        errors.push({ path, message: 'Email content fields must be text.' })
+        continue
+      }
+      if (step.mode === 'existing_inquiry_acknowledgment' && index !== 0) {
+        errors.push({ path, message: 'The existing contact acknowledgment can only be the first step.' })
+      }
+      if (step.mode === 'existing_inquiry_acknowledgment'
+        && (step.name !== 'Existing inquiry acknowledgment'
+          || step.subject !== 'We have received your Luxor inquiry'
+          || step.previewText !== 'We received your Luxor inquiry and will connect with you shortly.'
+          || step.body !== '' || step.ctaText !== '' || step.ctaUrl !== '')) {
+        errors.push({ path, message: 'The existing contact acknowledgment is a read-only marker; its content remains managed by the existing inquiry path.' })
+      }
+      if (step.mode === 'marketing') {
+        if (step.subject.length > 500 || (!allowIncompleteDraft && !step.subject.trim()) || /[\r\n]/.test(step.subject)) errors.push({ path: `${path}.subject`, message: 'Enter a one-line subject of 1 to 500 characters.' })
+        if (step.previewText.length > 500) errors.push({ path: `${path}.previewText`, message: 'Preview text is too long.' })
+        if (step.body.length > MAX_BODY_LENGTH || (!allowIncompleteDraft && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Email body must be 1 to ${MAX_BODY_LENGTH} characters.` })
+        validateMergeFields(step.subject, `${path}.subject`, errors)
+        validateMergeFields(step.previewText, `${path}.previewText`, errors)
+        validateMergeFields(step.body, `${path}.body`, errors)
+        validateMergeFields(step.ctaText, `${path}.ctaText`, errors)
+        validateLuxorLink(step.ctaUrl, `${path}.ctaUrl`, errors)
+        if (Boolean(step.ctaText.trim()) !== Boolean(step.ctaUrl.trim())) errors.push({ path: `${path}.ctaUrl`, message: 'The button needs both a label and a destination, or neither.' })
+      }
+    } else if (step.type === 'text') {
+      if (step.requiredConsentScope !== 'marketing') errors.push({ path: `${path}.requiredConsentScope`, message: 'Automated workflow texts require marketing consent.' })
+      if (typeof step.body !== 'string') errors.push({ path: `${path}.body`, message: 'Text content must be text.' })
+      else {
+        if (step.body.length > MAX_TEXT_LENGTH || (!allowIncompleteDraft && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Text body must be 1 to ${MAX_TEXT_LENGTH} characters.` })
+        if (step.body.trim() && !/^Luxor Event Space\b/i.test(step.body.trim())) errors.push({ path: `${path}.body`, message: 'Start the message with "Luxor Event Space" so the sender is identified.' })
+        if (step.body.trim() && !/\bstop\b/i.test(step.body)) errors.push({ path: `${path}.body`, message: 'Include clear STOP instructions in the text.' })
+        validateMergeFields(step.body, `${path}.body`, errors)
+      }
+    } else if (step.type === 'wait') {
+      if (!['minutes', 'hours', 'days'].includes(step.unit)) errors.push({ path: `${path}.unit`, message: 'Choose a supported wait unit.' })
+      if (step.amount !== null && (!Number.isInteger(step.amount) || step.amount < 0 || step.amount > MAX_WAIT_AMOUNT)) {
+        errors.push({ path: `${path}.amount`, message: `Wait must be a whole number from 0 to ${MAX_WAIT_AMOUNT}.` })
+      }
+      if (step.amount === null && !allowIncompleteDraft) errors.push({ path: `${path}.amount`, message: 'Choose a delay before this workflow can be activated.' })
+    } else if (step.type === 'condition') {
+      if (!['follow_up_eligible', 'marketing_email_consent', 'marketing_sms_consent'].includes(step.condition)) {
+        errors.push({ path: `${path}.condition`, message: 'This condition is not supported.' })
+      }
+      if (step.whenFalse !== 'stop') errors.push({ path: `${path}.whenFalse`, message: 'Conditions can only stop or continue a workflow.' })
+    } else if (step.type !== 'end') {
+      errors.push({ path: `${path}.type`, message: 'This step type is unavailable.' })
+    }
+  }
+
+  const endSteps = definition.steps.filter((step) => Boolean(step && typeof step === 'object' && step.type === 'end'))
+  if (definition.steps[0]?.type !== 'email' || definition.steps[0].mode !== 'existing_inquiry_acknowledgment') {
+    errors.push({ path: 'steps.0', message: 'The existing contact acknowledgment must remain first so the workflow cannot send a duplicate receipt.' })
+  }
+  if (endSteps.length !== 1 || definition.steps.at(-1)?.type !== 'end') {
+    errors.push({ path: 'steps', message: 'A workflow must have exactly one end step, at the end.' })
+  }
+  return errors
+}
+
+function rejectUnexpectedKeys(
+  value: object,
+  allowed: string[],
+  path: string,
+  errors: CustomWorkflowDefinitionError[],
+) {
+  const allowedKeys = new Set(allowed)
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) errors.push({ path: `${path}.${key}`, message: 'This workflow field is not supported.' })
+  }
+}
+
+export function canEditCustomWorkflowStep(step: CustomWorkflowStep) {
+  return step.type !== 'email' || step.mode !== 'existing_inquiry_acknowledgment'
+}
+
+export function moveCustomWorkflowStep(definition: CustomWorkflowDefinition, stepId: string, direction: -1 | 1) {
+  const steps = cloneCustomWorkflowDefinition(definition).steps
+  const index = steps.findIndex((step) => step.id === stepId)
+  const target = index + direction
+  if (index < 0 || target < 0 || target >= steps.length - 1) return definition
+  if (steps[index]?.type === 'end' || steps[target]?.type === 'end') return definition
+  if (!canEditCustomWorkflowStep(steps[index]) || !canEditCustomWorkflowStep(steps[target])) return definition
+  ;[steps[index], steps[target]] = [steps[target], steps[index]]
+  return { ...definition, steps }
+}
+
+export function removeCustomWorkflowStep(definition: CustomWorkflowDefinition, stepId: string) {
+  const target = definition.steps.find((step) => step.id === stepId)
+  if (!target || !canEditCustomWorkflowStep(target)) return definition
+  const steps = definition.steps.filter((step) => step.id !== stepId)
+  if (steps.length === definition.steps.length || steps.at(-1)?.type !== 'end') return definition
+  return { ...definition, steps }
+}
+
+export function addCustomWorkflowStep(definition: CustomWorkflowDefinition, type: Exclude<CustomWorkflowChannel, 'end'>, id: string) {
+  if (definition.steps.length >= MAX_STEPS || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(id) || definition.steps.some((step) => step.id === id)) return definition
+  const step: CustomWorkflowStep = type === 'email'
+    ? { id, type, mode: 'marketing', name: 'Email follow-up', subject: '', previewText: '', body: '', ctaText: '', ctaUrl: '' }
+    : type === 'text'
+      ? { id, type, name: 'Marketing text', body: '', requiredConsentScope: 'marketing' }
+      : type === 'wait'
+        ? { id, type, name: 'Wait', amount: null, unit: 'days' }
+        : { id, type, name: 'Check eligibility', condition: 'follow_up_eligible', whenFalse: 'stop' }
+  const steps = [...definition.steps]
+  steps.splice(steps.length - 1, 0, step)
+  return { ...definition, steps }
+}
+
+function validateMergeFields(value: string, path: string, errors: CustomWorkflowDefinitionError[]) {
+  const allowed = new Set<string>(CUSTOM_WORKFLOW_ALLOWED_MERGE_FIELDS)
+  const valid = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g
+  let withoutFields = value
+  for (const match of value.matchAll(valid)) {
+    if (!allowed.has(match[1])) errors.push({ path, message: `The merge field {{${match[1]}}} is unavailable.` })
+  }
+  withoutFields = withoutFields.replace(valid, '')
+  if (withoutFields.includes('{{') || withoutFields.includes('}}')) errors.push({ path, message: 'Merge fields must use a supported {{field_name}} format.' })
+}
+
+function validateLuxorLink(value: unknown, path: string, errors: CustomWorkflowDefinitionError[]) {
+  if (typeof value !== 'string') {
+    errors.push({ path, message: 'Use a valid Luxor page or the canonical Luxor website.' })
+    return
+  }
+  const target = value.trim()
+  if (!target) return
+  if (target.startsWith('/') && !target.startsWith('//') && !target.includes('\\')) return
+  try {
+    const url = new URL(target)
+    if (url.protocol !== 'https:' || url.origin !== CANONICAL_LUXOR_ORIGIN || url.username || url.password) {
+      errors.push({ path, message: 'Use a Luxor page or the canonical Luxor website.' })
+    }
+  } catch {
+    errors.push({ path, message: 'Use a valid Luxor page or the canonical Luxor website.' })
+  }
+}

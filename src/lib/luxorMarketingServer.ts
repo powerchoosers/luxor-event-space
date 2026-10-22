@@ -760,7 +760,21 @@ export async function recordMarketingClick(trackingToken: string, url: string, r
 
 export async function recordMarketingUnsubscribe(trackingToken: string, request: Request) {
   const recipient = await getRecipientByTrackingToken(trackingToken)
-  if (!recipient) return null
+  if (!recipient) {
+    if (!/^[0-9a-f]{64}$/i.test(trackingToken)) return null
+    const [customWorkflowRecipient] = await supabaseRest<Array<{ email: string }>>(
+      'rpc/luxor_custom_workflow_record_unsubscribe',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          p_token_hash: crypto.createHash('sha256').update(trackingToken.toLowerCase()).digest('hex'),
+        }),
+      },
+    )
+    if (!customWorkflowRecipient?.email) return null
+    await removeMarketingMember(customWorkflowRecipient.email)
+    return { email: customWorkflowRecipient.email }
+  }
 
   const userAgent = request.headers.get('user-agent') || ''
   const ip = maskIp(request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown')

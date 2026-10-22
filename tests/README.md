@@ -10,6 +10,14 @@ The Node built-in test runner transpiles the actual `src/app/api/follow-ups/rout
 
 The same command runs `tests/notes-route.test.cjs`, which checks the existing database note-type constraint and verifies that a task-linked note is rejected unless the task belongs to the same lead. Its fetch stub uses only synthetic IDs and a reserved `.invalid` host.
 
+For custom-workflow authorization regressions, run:
+
+```bash
+npm run test:custom-workflows
+```
+
+This checks the approved-operator allowlist, active portal membership, existing marketing permission, owner semantics, and that request payloads cannot choose the audit actor. The PostgreSQL migration/ACL tests use a disposable local container; see `tests/postgres/README.md`.
+
 For rendered browser QA, run the committed harness from the project root in an environment with Playwright and Chromium available:
 
 ```bash

@@ -16,6 +16,8 @@ import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 import { isLuxorMarketingDeliveryBlocked, recordLuxorMarketingJobResult } from './luxorMarketingDeliveryServer'
 import { luxorMailProvider } from './luxorMailConfig'
 import { luxorTestEmailAcceptedPatch, sendLuxorTestEmail } from './luxorTestEmailDelivery'
+import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
+import { processDueLuxorCustomWorkflowOrchestration } from './luxorCustomWorkflowRuntimeServer'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -750,7 +752,7 @@ export async function cancelAllQueuedLuxorEmailJobs(inquiryId: string, reason = 
 
 export async function listDueLuxorEmailJobs(limit = 25) {
   return supabaseRest<LuxorEmailJob[]>(
-    `luxor_email_jobs?select=*&job_type=not.in.(inquiry_notification,transactional_notice,test_notification)&status=eq.queued&scheduled_for=lte.${encodeURIComponent(new Date().toISOString())}&order=scheduled_for.asc&limit=${encodeURIComponent(limit)}`,
+    `luxor_email_jobs?select=*&job_type=not.in.(inquiry_notification,transactional_notice,test_notification,custom_workflow)&status=eq.queued&scheduled_for=lte.${encodeURIComponent(new Date().toISOString())}&order=scheduled_for.asc&limit=${encodeURIComponent(limit)}`,
   )
 }
 
@@ -775,6 +777,42 @@ export async function claimDueLuxorEmailJobs(limit = 25) {
     method: 'POST',
     body: JSON.stringify({
       job_limit: Math.min(Math.max(limit, 1), 100),
+    }),
+  })
+}
+
+async function claimDueCustomWorkflowEmailJobs(limit = 1) {
+  if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED) return []
+  return supabaseRest<LuxorEmailJob[]>('rpc/luxor_custom_workflow_claim_due_email_jobs', {
+    method: 'POST', body: JSON.stringify({ p_limit: Math.min(Math.max(limit, 1), 3) }),
+  })
+}
+
+async function authorizeCustomWorkflowEmailJob(jobId: string) {
+  if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED) return false
+  const [result] = await supabaseRest<Array<{ allowed: boolean; reason: string | null }>>(
+    'rpc/luxor_custom_workflow_authorize_message_job',
+    { method: 'POST', body: JSON.stringify({ p_job_id: jobId, p_channel: 'email' }) },
+  )
+  return result?.allowed === true
+}
+
+async function recordCustomWorkflowEmailOutcome(
+  job: LuxorEmailJob,
+  outcome: 'accepted' | 'unknown',
+  providerReference: string | null,
+  reason?: string,
+) {
+  if (!job.custom_workflow_step_run_id) return false
+  return supabaseRest<boolean>('rpc/luxor_custom_workflow_record_message_outcome', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_step_run_id: job.custom_workflow_step_run_id,
+      p_job_id: job.id,
+      p_channel: 'email',
+      p_outcome: outcome,
+      p_provider_reference: providerReference,
+      p_reason: reason || null,
     }),
   })
 }
@@ -901,15 +939,32 @@ async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<L
 
 export async function processLuxorEmailJobs(
   jobs: LuxorEmailJob[],
-  options: { markSending?: boolean } = {},
+  options: { markSending?: boolean; customWorkflowDispatch?: boolean } = {},
 ) {
-  const { markSending = true } = options
+  const { markSending = true, customWorkflowDispatch = false } = options
   const results: { id: string; status: 'sent' | 'failed' | 'skipped'; error?: string }[] = []
 
   for (let job of jobs) {
     let testProviderAccepted = false
     let providerAccepted = false
+    let providerAttemptStarted = false
+    let providerMessageReference: string | null = null
+    const isCustomWorkflowJob = isCustomWorkflowJobBlockedFromLegacyDispatch(job)
     try {
+      // Custom jobs have an isolated claim and a separately gated dispatch
+      // path. A direct-query, test, or stale caller cannot route them here.
+      if (isCustomWorkflowJob && (!customWorkflowDispatch || !CUSTOM_WORKFLOW_EXECUTION_ENABLED)) {
+        results.push({ id: job.id, status: 'skipped' })
+        continue
+      }
+      if (!isCustomWorkflowJob && customWorkflowDispatch) {
+        results.push({ id: job.id, status: 'skipped' })
+        continue
+      }
+      if (isCustomWorkflowJob && !await authorizeCustomWorkflowEmailJob(job.id)) {
+        results.push({ id: job.id, status: 'skipped' })
+        continue
+      }
       if (job.test_run_id) {
         // Test mail is never sent by preview/manual processing paths. A queued
         // test notification has its own atomic claim and recipient guard below.
@@ -934,7 +989,7 @@ export async function processLuxorEmailJobs(
         }
         // Configured test messages can only reach the owner-confirmed recipient.
         job = { ...job, test_run_id: authorization.test_run_id || job.test_run_id, recipient_email: authorization.recipient }
-      } else if (job.inquiry_id) {
+      } else if (job.inquiry_id && !isCustomWorkflowJob) {
         const inquiry = await getLuxorInquiry(job.inquiry_id)
         if (inquiry?.is_test === true) {
           await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Test email blocked: no dedicated simulated test notification workflow is enabled.' })
@@ -942,7 +997,7 @@ export async function processLuxorEmailJobs(
           continue
         }
       }
-      const preparedJob = job.test_run_id ? job : await preparePostContractPaymentReminder(job)
+      const preparedJob = job.test_run_id || isCustomWorkflowJob ? job : await preparePostContractPaymentReminder(job)
       if (!preparedJob) {
         results.push({ id: job.id, status: 'skipped' })
         continue
@@ -952,7 +1007,7 @@ export async function processLuxorEmailJobs(
       // lead lost. Re-check immediately before delivery so queued and claimed
       // emails cannot keep following up after close-out. Historical sent mail
       // is never touched by this guard.
-      if (job.inquiry_id) {
+      if (job.inquiry_id && !isCustomWorkflowJob) {
         const inquiry = await getLuxorInquiry(job.inquiry_id)
         if (inquiry?.is_test && !job.test_run_id) {
           await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Test lead email blocked: this job is not linked to an active test run.' })
@@ -967,6 +1022,10 @@ export async function processLuxorEmailJobs(
           results.push({ id: job.id, status: 'skipped' })
           continue
         }
+      }
+      if (isCustomWorkflowJob && !await authorizeCustomWorkflowEmailJob(job.id)) {
+        results.push({ id: job.id, status: 'skipped' })
+        continue
       }
       const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
       const isPreparedTourResend = metadata.prepared_tour_email_resend === true
@@ -1141,11 +1200,19 @@ export async function processLuxorEmailJobs(
       if (markSending && !isCorrectedEmailResend) {
         await updateLuxorEmailJob(job.id, { status: 'sending', attempts: Number(job.attempts || 0) + 1 })
       }
-      if (job.job_type === 'marketing_campaign' && await isLuxorMarketingDeliveryBlocked(job.recipient_email,
+      if ((job.job_type === 'marketing_campaign' || isCustomWorkflowJob) && await isLuxorMarketingDeliveryBlocked(job.recipient_email,
         metadata.ignore_suppressions === true, typeof metadata.campaign_id === 'string' ? metadata.campaign_id : undefined)) {
         const reason = 'Marketing email cancelled because this recipient is unsubscribed or suppressed.'
-        await recordLuxorMarketingJobResult(job.id, 'cancelled', reason)
-        await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: reason })
+        if (isCustomWorkflowJob && job.custom_workflow_step_run_id) {
+          await supabaseRest<boolean>('rpc/luxor_custom_workflow_stop_step', {
+            method: 'POST',
+            body: JSON.stringify({ p_step_run_id: job.custom_workflow_step_run_id, p_reason: reason }),
+          })
+        }
+        else {
+          await recordLuxorMarketingJobResult(job.id, 'cancelled', reason)
+          await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: reason })
+        }
         if (job.automation_enrollment_id) await stopSuppressedLuxorFollowUp(job.automation_enrollment_id)
         results.push({ id: job.id, status: 'skipped' })
         continue
@@ -1172,6 +1239,11 @@ export async function processLuxorEmailJobs(
         }
       }
       assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
+      if (isCustomWorkflowJob && !await authorizeCustomWorkflowEmailJob(job.id)) {
+        results.push({ id: job.id, status: 'skipped' })
+        continue
+      }
+      providerAttemptStarted = true
       const providerResult = job.test_run_id
         ? await sendLuxorTestEmail({
             subject: job.subject,
@@ -1198,8 +1270,13 @@ export async function processLuxorEmailJobs(
             idempotencyKey: `email-job/${job.id}`,
           })
       providerAccepted = true
+      providerMessageReference = typeof providerResult.messageId === 'string' ? providerResult.messageId : null
       testProviderAccepted = Boolean(job.test_run_id)
-      await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
+      if (isCustomWorkflowJob) {
+        await recordCustomWorkflowEmailOutcome(job, 'accepted', providerMessageReference)
+      } else {
+        await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
+      }
       if (job.test_run_id) {
         await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(job.id)}`, {
           method: 'PATCH',
@@ -1234,6 +1311,18 @@ export async function processLuxorEmailJobs(
       results.push({ id: job.id, status: 'sent' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Email send failed.'
+      if (isCustomWorkflowJob) {
+        await recordCustomWorkflowEmailOutcome(
+          job,
+          'unknown',
+          providerMessageReference,
+          providerAccepted || providerAttemptStarted ? `Provider outcome is uncertain: ${message}` : `Custom workflow delivery was held before provider confirmation: ${message}`,
+        ).catch((recordError) => console.error('Could not hold custom workflow email outcome:', recordError instanceof Error ? recordError.message : recordError))
+        results.push({ id: job.id, status: 'failed', error: providerAccepted || providerAttemptStarted
+          ? 'Provider outcome needs reconciliation; automatic resend is disabled.'
+          : 'Custom workflow delivery was held for review.' })
+        continue
+      }
       if (job.test_run_id && testProviderAccepted) {
         await updateLuxorEmailJob(job.id, { status: 'sent', last_error: null }).catch((recordError) => console.error('Provider accepted test email; could not finalize its queue status:', recordError))
         results.push({ id: job.id, status: 'sent', error: 'Provider accepted; a run activity update needs reconciliation.' })
@@ -1408,6 +1497,9 @@ export async function queueUpcoming60DayInvoiceReminders() {
 // makes a due-time collision harmless: one scheduled minute equals one send.
 export async function processDueLuxorEmailJobs(limit = 1) {
   await queueUpcoming60DayInvoiceReminders().catch((err) => console.warn('final-payment reminder scan skipped:', err))
+  await processDueLuxorCustomWorkflowOrchestration().catch((err) =>
+    console.warn('custom workflow orchestration did not run; custom execution remains fail-closed:', err instanceof Error ? err.message : err),
+  )
   let testJobs: LuxorEmailJob[] = []
   try {
     testJobs = await claimDueLuxorTestEmailJobs(Math.max(1, Math.min(limit, 3)))
@@ -1418,14 +1510,18 @@ export async function processDueLuxorEmailJobs(limit = 1) {
   if (testResults.length) return testResults
   try {
     const jobs = await claimDueLuxorEmailJobs(limit)
-    return [...testResults, ...await processLuxorEmailJobs(jobs, { markSending: false })]
+    if (jobs.length) return [...testResults, ...await processLuxorEmailJobs(jobs, { markSending: false })]
+    const customJobs = await claimDueCustomWorkflowEmailJobs(Math.min(limit, 1))
+    return [...testResults, ...await processLuxorEmailJobs(customJobs, { markSending: false, customWorkflowDispatch: true })]
   } catch (error) {
     console.warn(
       'luxor_claim_due_email_jobs RPC unavailable, falling back to direct due-job processing:',
       error instanceof Error ? error.message : error,
     )
     const jobs = await listDueLuxorEmailJobs(limit)
-    return [...testResults, ...await processLuxorEmailJobs(jobs, { markSending: true })]
+    if (jobs.length) return [...testResults, ...await processLuxorEmailJobs(jobs, { markSending: true })]
+    const customJobs = await claimDueCustomWorkflowEmailJobs(Math.min(limit, 1))
+    return [...testResults, ...await processLuxorEmailJobs(customJobs, { markSending: false, customWorkflowDispatch: true })]
   }
 }
 

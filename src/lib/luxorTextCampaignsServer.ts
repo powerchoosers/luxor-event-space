@@ -29,6 +29,7 @@ import {
 } from './luxorPaymentReminderDueDate'
 import { getLuxorInquiry } from './luxorInquiriesServer'
 import { recordLuxorTestSmsSimulation } from './luxorTestLeadServer'
+import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
 
 const MAX_CAMPAIGN_RECIPIENTS = 1000
 const MAX_CAMPAIGN_BODY_LENGTH = 480
@@ -568,6 +569,15 @@ export async function processDueTextJobs(limit = getWorkerBatchSize()) {
     results.push(result)
     if (result.status === 'sent') remainingSegments -= job.segment_count
   }
+  if (CUSTOM_WORKFLOW_EXECUTION_ENABLED && isWithinSmsSendWindow() && remainingSegments > 0) {
+    const customJobs = await claimDueCustomWorkflowTextJobs(Math.min(limit, getWorkerBatchSize()), remainingSegments)
+    for (const job of customJobs) {
+      if (job.segment_count > remainingSegments) continue
+      const result = await processTextJob(job, { customWorkflowDispatch: true })
+      results.push(result)
+      if (result.status === 'sent') remainingSegments -= job.segment_count
+    }
+  }
   return { results, usedSegments, dailyLimit, remainingSegments }
 }
 
@@ -578,8 +588,57 @@ async function claimDueTextJobs(limit: number) {
   })
 }
 
-async function processTextJob(job: LuxorTextJob) {
+async function claimDueCustomWorkflowTextJobs(limit: number, remainingSegments: number) {
+  if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED || !isWithinSmsSendWindow() || remainingSegments <= 0) return []
+  return supabaseRest<LuxorTextJob[]>('rpc/luxor_custom_workflow_claim_due_text_jobs', {
+    method: 'POST',
+    body: JSON.stringify({ p_limit: Math.min(Math.max(limit, 1), 50), p_segment_budget: remainingSegments }),
+  })
+}
+
+async function authorizeCustomWorkflowTextJob(jobId: string) {
+  if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED) return false
+  const [result] = await supabaseRest<Array<{ allowed: boolean; reason: string | null }>>(
+    'rpc/luxor_custom_workflow_authorize_message_job',
+    { method: 'POST', body: JSON.stringify({ p_job_id: jobId, p_channel: 'text' }) },
+  )
+  return result?.allowed === true
+}
+
+async function recordCustomWorkflowTextOutcome(
+  job: LuxorTextJob,
+  outcome: 'accepted' | 'unknown',
+  providerReference: string | null,
+  reason?: string,
+) {
+  if (!job.custom_workflow_step_run_id) return false
+  return supabaseRest<boolean>('rpc/luxor_custom_workflow_record_message_outcome', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_step_run_id: job.custom_workflow_step_run_id,
+      p_job_id: job.id,
+      p_channel: 'text',
+      p_outcome: outcome,
+      p_provider_reference: providerReference,
+      p_reason: reason || null,
+    }),
+  })
+}
+
+async function processTextJob(job: LuxorTextJob, options: { customWorkflowDispatch?: boolean } = {}) {
+  const customWorkflowDispatch = options.customWorkflowDispatch === true
+  const isCustomWorkflowJob = isCustomWorkflowJobBlockedFromLegacyDispatch(job)
+  let providerAttemptStarted = false
+  let providerAccepted = false
+  let providerReference: string | null = null
+  let customStepAccepted = false
   try {
+    if (isCustomWorkflowJob && (!customWorkflowDispatch || !CUSTOM_WORKFLOW_EXECUTION_ENABLED)) {
+      return { id: job.id, status: 'skipped' as const, error: 'custom_workflow_execution_disabled' }
+    }
+    if (!isCustomWorkflowJob && customWorkflowDispatch) {
+      return { id: job.id, status: 'skipped' as const, error: 'not_a_custom_workflow_job' }
+    }
     const inquiry = job.inquiry_id ? await getLuxorInquiry(job.inquiry_id) : null
     if (inquiry?.is_test) {
       if (normalizePhoneNumber(job.recipient_phone)?.replace(/\D/g, '') !== LUXOR_TEST_PHONE_E164_DIGITS) {
@@ -590,7 +649,10 @@ async function processTextJob(job: LuxorTextJob) {
       await finishTextJob(job, 'cancelled', simulation ? 'Test text was recorded in the isolated run simulation; Twilio was not called.' : 'Test text simulation was unavailable; Twilio was not called.')
       return { id: job.id, status: 'skipped' as const, error: simulation ? 'simulated' : 'simulation_unavailable' }
     }
-    const skipReason = await getTextJobSkipReason(job)
+    if (isCustomWorkflowJob && !await authorizeCustomWorkflowTextJob(job.id)) {
+      return { id: job.id, status: 'skipped' as const, error: 'custom_workflow_no_longer_eligible' }
+    }
+    const skipReason = isCustomWorkflowJob ? null : await getTextJobSkipReason(job)
     if (skipReason) {
       await finishTextJob(job, 'skipped', skipReason)
       return { id: job.id, status: 'skipped' as const, error: skipReason }
@@ -602,6 +664,10 @@ async function processTextJob(job: LuxorTextJob) {
     const config = getLuxorTwilioMessagingConfig()
     const from = await getActiveLuxorPhoneNumber()
     const client = twilio(config.accountSid, config.authToken)
+    if (isCustomWorkflowJob && (!isWithinSmsSendWindow() || !await authorizeCustomWorkflowTextJob(job.id))) {
+      return { id: job.id, status: 'skipped' as const, error: 'custom_workflow_dispatch_window_or_eligibility_changed' }
+    }
+    providerAttemptStarted = true
     const sent = await client.messages.create({
       to: destination,
       ...(config.messagingServiceSid
@@ -611,9 +677,14 @@ async function processTextJob(job: LuxorTextJob) {
       validityPeriod: 21600,
       statusCallback: buildTwilioCallbackUrl('/api/twilio/messaging/status'),
     })
+    providerAccepted = true
+    providerReference = sent.sid
     const now = new Date().toISOString()
-    await Promise.all([
-      createOrUpdateLuxorMessage({
+    if (isCustomWorkflowJob) {
+      const recorded = await recordCustomWorkflowTextOutcome(job, 'accepted', sent.sid)
+      if (!recorded) throw new Error('Twilio accepted the text, but the workflow step result could not be recorded.')
+      customStepAccepted = true
+      await createOrUpdateLuxorMessage({
         sid: sent.sid,
         direction: 'outbound',
         status: normalizeTwilioMessageStatus(sent.status),
@@ -624,27 +695,68 @@ async function processTextJob(job: LuxorTextJob) {
         contactName: job.recipient_name,
         ownerEmail: job.campaign_id ? 'luxor-text-campaign' : 'luxor-text-automation',
         isRead: true,
-      }),
-      updateTextJob(job.id, {
-        status: 'sent',
-        sent_at: now,
-        twilio_message_sid: sent.sid,
-        last_error: null,
-      }),
-      job.campaign_recipient_id
-        ? updateCampaignRecipient(job.campaign_recipient_id, {
-            status: 'sent',
-            sent_at: now,
-            twilio_message_sid: sent.sid,
-            error_code: null,
-            error_message: null,
-          })
-        : Promise.resolve(null),
-    ])
+      })
+    } else {
+      await Promise.all([
+        createOrUpdateLuxorMessage({
+          sid: sent.sid,
+          direction: 'outbound',
+          status: normalizeTwilioMessageStatus(sent.status),
+          from,
+          to: destination,
+          body: job.body,
+          inquiryId: job.inquiry_id,
+          contactName: job.recipient_name,
+          ownerEmail: job.campaign_id ? 'luxor-text-campaign' : 'luxor-text-automation',
+          isRead: true,
+        }),
+        updateTextJob(job.id, {
+          status: 'sent',
+          sent_at: now,
+          twilio_message_sid: sent.sid,
+          last_error: null,
+        }),
+        job.campaign_recipient_id
+          ? updateCampaignRecipient(job.campaign_recipient_id, {
+              status: 'sent',
+              sent_at: now,
+              twilio_message_sid: sent.sid,
+              error_code: null,
+              error_message: null,
+            })
+          : Promise.resolve(null),
+      ])
+    }
     if (job.campaign_id) await refreshTextCampaignStats(job.campaign_id)
     return { id: job.id, status: 'sent' as const }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Text delivery failed.'
+    if (isCustomWorkflowJob) {
+      if (customStepAccepted) {
+        console.error('Custom workflow text was accepted but its conversation history update failed:', message)
+        return { id: job.id, status: 'sent' as const, error: 'provider_accepted_history_needs_reconciliation' }
+      }
+      if (!providerAttemptStarted && /opt-in|opted out|not opted/i.test(message) && job.custom_workflow_step_run_id) {
+        await supabaseRest('rpc/luxor_custom_workflow_stop_step', {
+          method: 'POST', body: JSON.stringify({ p_step_run_id: job.custom_workflow_step_run_id, p_reason: 'Marketing SMS consent was withdrawn before dispatch.' }),
+        }).catch(() => undefined)
+        return { id: job.id, status: 'skipped' as const, error: 'marketing_consent_withdrawn' }
+      }
+      await recordCustomWorkflowTextOutcome(
+        job,
+        'unknown',
+        providerReference,
+        providerAccepted || providerAttemptStarted
+          ? `Provider outcome is uncertain: ${message}`
+          : `Custom workflow text was held before provider confirmation: ${message}`,
+      ).catch((recordError) => console.error('Could not hold custom workflow text outcome:', recordError instanceof Error ? recordError.message : recordError))
+      if (providerReference) {
+        await updateTextJob(job.id, { twilio_message_sid: providerReference }).catch(() => undefined)
+      }
+      return { id: job.id, status: 'failed' as const, error: providerAccepted || providerAttemptStarted
+        ? 'Provider outcome needs reconciliation; automatic resend is disabled.'
+        : 'Custom workflow delivery was held for review.' }
+    }
     const consentFailure = /opt-in|opted out|not opted/i.test(message)
     const terminal = consentFailure || Number(job.attempts || 0) >= 3
     const status: LuxorTextJobStatus = consentFailure ? 'skipped' : terminal ? 'failed' : 'queued'
@@ -762,7 +874,23 @@ export async function updateTextDeliveryStatus(
   )
   if (!job) return null
   const status = mapDeliveryStatus(twilioStatus)
-  await updateTextJob(job.id, { status, last_error: errorMessage || null })
+  await updateTextJob(job.id, {
+    status,
+    last_error: errorMessage || null,
+    ...(job.custom_workflow_step_run_id && ['accepted', 'queued', 'sending', 'sent', 'delivered', 'read'].includes(twilioStatus.toLowerCase()) && !job.sent_at
+      ? { sent_at: new Date().toISOString() }
+      : {}),
+  })
+  if (job.custom_workflow_step_run_id) {
+    await supabaseRest<boolean>('rpc/luxor_custom_workflow_reconcile_text_callback', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_message_sid: sid,
+        p_provider_status: twilioStatus,
+        p_error: errorMessage || (errorCode ? `Twilio error ${errorCode}` : null),
+      }),
+    })
+  }
   if (job.campaign_recipient_id) {
     await updateCampaignRecipient(job.campaign_recipient_id, {
       status,
