@@ -44,10 +44,9 @@ Do not run `npm run build` after every small change. During normal iteration, pr
 
 ## Browser Validation
 
-- Lewis has the bundled Chrome plugin (`[@chrome](plugin://chrome@openai-bundled)`) available. Treat the Chrome skill as available when it is listed in the session, and read it before browser work.
-- Use the Chrome plugin first for portal and public-site visual QA, interaction testing, console inspection, screenshots, and flows that benefit from Lewis's existing authenticated Chrome session.
-- When Lewis explicitly mentions `@chrome` or the Chrome plugin, that selects Chrome for the task. Do not substitute standalone Playwright, Computer Use, or another browser unless Lewis approves the switch or the Chrome skill's documented recovery path has been exhausted.
-- Standalone Playwright remains an acceptable fallback only when the Chrome plugin is not available for the session or when its documented setup/recovery process cannot establish a connection. Record the reason for the fallback in the final QA summary.
+- Use the Codex in-app browser first for portal and public-site visual QA, interaction testing, console inspection, screenshots, and flows that benefit from the existing signed-in session.
+- Do not use the Chrome extension browser for repository tasks unless Lewis explicitly requests it. If the Codex in-app browser cannot establish the required session, report the limitation and continue with non-browser checks; do not silently switch browsers.
+- Use another browser only when Lewis explicitly approves that switch.
 
 ## Current Site Conventions
 

@@ -40,23 +40,65 @@ export function buildTourReminderEmail(
   context: TourEmailContext,
   reminderLabel: 'tomorrow' | 'soon',
 ) {
-  const firstName = firstNameOf(context.inquiry.full_name)
-  const subject = reminderLabel === 'tomorrow'
-    ? `Tomorrow: your Luxor tour at ${context.tourTimeLabel}`
-    : `Your Luxor tour starts soon`
-  const introduction = reminderLabel === 'tomorrow'
-    ? `A quick reminder that your private Luxor walkthrough is tomorrow, ${context.tourDateLabel}, at ${context.tourTimeLabel}.`
-    : `We are looking forward to seeing you at ${context.tourTimeLabel} for your private Luxor walkthrough.`
+  const copy = tourReminderCopy(context, reminderLabel)
+  return {
+    subject: copy.subject,
+    body: renderTourEmailHtml(context, copy),
+  }
+}
+
+function tourReminderCopy(context: TourEmailContext, reminderLabel: 'tomorrow' | 'soon'): TourCopy {
+  return {
+    subject: reminderLabel === 'tomorrow'
+      ? `Tomorrow: your Luxor tour at ${context.tourTimeLabel}`
+      : 'Your Luxor tour starts soon',
+    greeting: `Hi ${firstNameOf(context.inquiry.full_name)},`,
+    introduction: reminderLabel === 'tomorrow'
+      ? `A quick reminder that your private Luxor walkthrough is tomorrow, ${context.tourDateLabel}, at ${context.tourTimeLabel}.`
+      : `We are looking forward to seeing you at ${context.tourTimeLabel} for your private Luxor walkthrough.`,
+    preparation: context.clientFacingNotes || `We will focus the walkthrough on your ${context.inquiry.event_type || 'event'} plans and answer any questions about layout, packages, and next steps.`,
+    closing: 'If your timing changes, reply to this email and our team will help.',
+  }
+}
+
+/**
+ * Render inspectable, code-backed examples for the read-only automation detail
+ * page. These examples use synthetic values and never call the AI provider.
+ */
+export function getLuxorTourEmailTemplatePreviews() {
+  const context: TourEmailContext = {
+    inquiry: {
+      id: '00000000-0000-4000-8000-000000000001',
+      full_name: 'Sample guest',
+      email: 'sample@example.invalid',
+      phone: null,
+      event_type: 'Sample event',
+      guest_count: 80,
+    } as unknown as LuxorInquiry,
+    meetingType: 'Private Venue Tour',
+    clientFacingNotes: '[Saved client-facing tour notes, when provided]',
+    tourDateLabel: '[Scheduled tour date]',
+    tourTimeLabel: '[Scheduled tour time]',
+    durationMinutes: 30,
+    responseUrl: null,
+    contactPhone: null,
+  }
+  const confirmationCopy = fallbackCopy(context)
+  const confirmation = {
+    subject: confirmationCopy.subject,
+    body: renderTourEmailHtml(context, confirmationCopy),
+    text: renderTourEmailText(context, confirmationCopy),
+  }
+  const reminder24Copy = tourReminderCopy(context, 'tomorrow')
+  const reminder2Copy = tourReminderCopy(context, 'soon')
+  const reminder24 = { subject: reminder24Copy.subject, body: renderTourEmailHtml(context, reminder24Copy), text: renderTourEmailText(context, reminder24Copy) }
+  const reminder2 = { subject: reminder2Copy.subject, body: renderTourEmailHtml(context, reminder2Copy), text: renderTourEmailText(context, reminder2Copy) }
 
   return {
-    subject,
-    body: renderTourEmailHtml(context, {
-      subject,
-      greeting: `Hi ${firstName},`,
-      introduction,
-      preparation: context.clientFacingNotes || `We will focus the walkthrough on your ${context.inquiry.event_type || 'event'} plans and answer any questions about layout, packages, and next steps.`,
-      closing: 'If your timing changes, reply to this email and our team will help.',
-    }),
+    sampleNotice: 'Sample guest, event, date, and time values are used for inspection only. A real confirmation includes a tour-specific signed reschedule link and is saved with its tour revision.',
+    confirmation: { ...confirmation, source: 'Code fallback. The scheduled confirmation may be AI-tailored when the server AI provider is configured.' },
+    reminder_24: { ...reminder24, source: 'Code-rendered reminder copy with saved tour values inserted.' },
+    reminder_2: { ...reminder2, source: 'Code-rendered reminder copy with saved tour values inserted.' },
   }
 }
 

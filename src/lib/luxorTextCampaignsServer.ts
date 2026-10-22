@@ -348,7 +348,7 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
       name: inquiry.full_name,
       inquiryId: inquiry.id,
       automationKey: `tour_confirmation:${inquiry.id}:${inquiry.preferred_tour_date}:${inquiry.preferred_tour_time || ''}`,
-      body: `Luxor Event Space: Hi ${firstName(inquiry.full_name)}, your private venue tour is confirmed for ${formatDate(inquiry.preferred_tour_date)}${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}. Reply with any questions. Reply STOP to opt out.`,
+      body: buildLuxorTourConfirmationText(inquiry),
       requiredScope: 'tour',
       metadata: { tour_date: inquiry.preferred_tour_date },
     }))
@@ -363,7 +363,7 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
         inquiryId: inquiry.id,
         scheduledFor: reminderDate.toISOString(),
         automationKey: `tour_reminder:${inquiry.id}:${inquiry.preferred_tour_date}:${inquiry.preferred_tour_time || ''}`,
-        body: `Luxor Event Space: Reminder for your private venue tour tomorrow${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}. We look forward to meeting you. Reply STOP to opt out.`,
+        body: buildLuxorTourReminderText(inquiry),
         requiredScope: 'tour',
         metadata: { tour_date: inquiry.preferred_tour_date },
       }))
@@ -379,6 +379,38 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
     }))
   }
   return jobs.filter((job): job is LuxorTextJob => Boolean(job))
+}
+
+type LuxorTourTextContext = Pick<LuxorInquiry, 'full_name' | 'preferred_tour_date' | 'preferred_tour_time'>
+
+export function buildLuxorTourConfirmationText(inquiry: LuxorTourTextContext) {
+  return `Luxor Event Space: Hi ${firstName(inquiry.full_name)}, your private venue tour is confirmed for ${formatDate(inquiry.preferred_tour_date)}${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}. Reply with any questions. Reply STOP to opt out.`
+}
+
+export function buildLuxorTourReminderText(inquiry: LuxorTourTextContext) {
+  return `Luxor Event Space: Reminder for your private venue tour tomorrow${inquiry.preferred_tour_time ? ` at ${inquiry.preferred_tour_time}` : ''}. We look forward to meeting you. Reply STOP to opt out.`
+}
+
+export function getLuxorTourSmsTemplatePreviews() {
+  const sampleDate = new Date()
+  sampleDate.setDate(sampleDate.getDate() + 7)
+  const sample: LuxorTourTextContext = {
+    full_name: 'Sample guest',
+    preferred_tour_date: sampleDate.toISOString().slice(0, 10),
+    preferred_tour_time: '11:00 AM',
+  }
+  return {
+    sampleNotice: 'Sample values are for inspection only; texts are queued only when the inquiry has a phone number and automated SMS authorization allows delivery.',
+    confirmation: {
+      body: buildLuxorTourConfirmationText(sample),
+      timing: 'When the tour is scheduled.',
+    },
+    reminder: {
+      body: buildLuxorTourReminderText(sample),
+      timing: '15:00 UTC on the calendar day before the tour, only if that time is still in the future.',
+    },
+    consent: 'Automated SMS authorization is checked before queueing. Existing STOP consent and send controls remain in force.',
+  }
 }
 
 /**

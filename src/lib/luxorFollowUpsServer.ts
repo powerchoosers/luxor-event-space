@@ -78,8 +78,9 @@ const EDITABLE_TEMPLATE_FIELDS = new Set([
   'name', 'subject', 'body', 'cta_text', 'cta_url', 'secondary_cta_text', 'secondary_cta_url', 'delay_days', 'active',
 ])
 
-export async function updateLuxorFollowUpTemplate(id: string, input: Record<string, unknown>) {
+export async function updateLuxorFollowUpTemplate(id: string, input: Record<string, unknown>, expectedUpdatedAt?: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Invalid follow-up template id.')
+  if (expectedUpdatedAt && !Number.isFinite(Date.parse(expectedUpdatedAt))) throw new Error('The email changed after it was opened. Reload before saving.')
   const updates: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(input)) {
     if (!EDITABLE_TEMPLATE_FIELDS.has(key)) continue
@@ -100,9 +101,10 @@ export async function updateLuxorFollowUpTemplate(id: string, input: Record<stri
   if (!Object.keys(updates).length) throw new Error('There are no editable template fields to save.')
   updates.updated_at = new Date().toISOString()
   const [template] = await supabaseRest<LuxorFollowUpTemplate[]>(
-    `luxor_follow_up_templates?select=*&id=eq.${encodeURIComponent(id)}&automation_key=eq.brochure_lead`,
+    `luxor_follow_up_templates?select=*&id=eq.${encodeURIComponent(id)}&automation_key=eq.brochure_lead${expectedUpdatedAt ? `&updated_at=eq.${encodeURIComponent(expectedUpdatedAt)}` : ''}`,
     { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(updates) },
   )
+  if (!template && expectedUpdatedAt) throw new Error('This email changed after it was opened. Reload before saving.')
   if (!template) throw new Error('Follow-up template not found.')
   return template
 }

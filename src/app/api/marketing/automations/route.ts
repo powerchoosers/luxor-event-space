@@ -29,6 +29,7 @@ type SavedTemplateRow = {
   name: string
   active: boolean | null
   uses_existing_delivery: boolean | null
+  updated_at: string | null
 }
 
 async function readAllRows<T>(resource: string, total: number) {
@@ -62,6 +63,15 @@ function stepsFor(templates: SavedTemplateRow[]): AutomationLibraryStep[] {
     active: template.active,
     usesExistingDelivery: template.uses_existing_delivery === true,
   }))
+}
+
+function latestUpdatedAt(automationUpdatedAt: string | null, templates: SavedTemplateRow[]) {
+  const dates = [automationUpdatedAt, ...templates.map((template) => template.updated_at)]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => ({ value, time: Date.parse(value) }))
+    .filter((item) => Number.isFinite(item.time))
+    .sort((left, right) => right.time - left.time)
+  return dates[0]?.value ?? null
 }
 
 function statusNote(status: AutomationStatus) {
@@ -109,7 +119,7 @@ function buildSavedEntry(
     activeEnrollmentCount: isBrochureFollowUp ? metrics.activeEnrollments : null,
     sentMessageCount: isBrochureFollowUp ? metrics.sentMessages : null,
     sentMessageLabel: 'Emails sent',
-    updatedAt: automation.updated_at,
+    updatedAt: latestUpdatedAt(automation.updated_at, templates),
     summaryNote: isBrochureFollowUp
       ? 'This is a read-only summary of the saved sequence. Per-lead follow-up controls do not pause the workflow globally.'
       : 'This library does not provide editing or runtime controls for this saved definition.',
@@ -150,7 +160,7 @@ export async function GET() {
     ])
     const [automationRows, templateRows] = await Promise.all([
       readAllRows<SavedAutomationRow>('luxor_follow_up_automations?select=automation_key,name,enabled,send_approved,timing_configured,timezone,updated_at&order=name.asc', totalSavedWorkflows),
-      readAllRows<SavedTemplateRow>('luxor_follow_up_templates?select=automation_key,step_key,sort_order,channel,delay_days,name,active,uses_existing_delivery&order=sort_order.asc', templateTotal),
+      readAllRows<SavedTemplateRow>('luxor_follow_up_templates?select=automation_key,step_key,sort_order,channel,delay_days,name,active,uses_existing_delivery,updated_at&order=sort_order.asc', templateTotal),
     ])
 
     let sendsConfigured: boolean | null = null

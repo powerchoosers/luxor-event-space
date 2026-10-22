@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { CalendarClock, ChevronDown, ChevronRight, Clock3, Mail, Phone, Search, Workflow } from 'lucide-react'
 import {
   filterAutomationLibrary,
@@ -102,7 +103,7 @@ export function AutomationsLibraryTab() {
         </p>
       )}
       <p className="-mt-4 text-[11px] leading-5 text-[color:var(--portal-muted)]">
-        This phase is read-only. Creation, editing, duplication, workflow-wide pause or resume, and archive controls are not available.
+        Workflow structure and status controls are read-only. Saved brochure email copy can be edited from its detail page.
       </p>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -214,16 +215,24 @@ function AutomationEntryCard({ entry, expanded, onToggle }: { entry: AutomationL
           {entry.updatedAt ? <Metadata label="Updated" value={formatDate(entry.updatedAt) || 'Unavailable'} /> : null}
         </div>
 
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={detailsId}
-          onClick={onToggle}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-bold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/60 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-        >
-          {expanded ? 'Close summary' : 'Open summary'}
-          {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/portal/marketing/automations/${entry.kind === 'system' ? 'tour-notifications' : encodeURIComponent(entry.id)}`}
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+          >
+            View details
+          </Link>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-controls={detailsId}
+            onClick={onToggle}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-bold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/60 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+          >
+            {expanded ? 'Close summary' : 'Open summary'}
+            {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+          </button>
+        </div>
       </div>
 
       {expanded ? (
