@@ -31,7 +31,7 @@ type WorkflowRow = {
 }
 
 type ActivityRow = { id: string; event_type: string; actor_email: string | null; created_at: string; details: Record<string, unknown> }
-type WorkflowCapabilities = { canPause: boolean; canResume: boolean; canArchive: boolean; canActivate: false; activationMessage: string }
+type WorkflowCapabilities = { canPause: boolean; canResume: boolean; canArchive: boolean; canActivate: boolean; activationMessage: string }
 type WorkflowPayload = { workflow: WorkflowRow; definition?: CustomWorkflowDefinition; activity: ActivityRow[]; capabilities?: WorkflowCapabilities; error?: string }
 
 const ADDABLE_STEPS: Array<{ type: Exclude<CustomWorkflowChannel, 'end'>; label: string }> = [
@@ -239,9 +239,11 @@ export default function CustomWorkflowEditorPage() {
     finally { setSaving(false) }
   }
 
-  async function changeLifecycle(action: 'pause' | 'resume' | 'archive') {
+  async function changeLifecycle(action: 'activate' | 'pause' | 'resume' | 'archive') {
     if (!workflow) return
+    if (action === 'activate' && (dirty || validationErrors.length > 0)) return
     const confirmations = {
+      activate: `Activate "${workflow.name}" for new eligible contact-form inquiries? Only inquiries created after activation may enroll; existing contacts will not be backfilled. The saved version will be pinned for those enrollments.`,
       pause: 'Pause this workflow? New inquiries will not enroll, and queued custom messages will wait until it is resumed.',
       resume: 'Resume this workflow? Unsent steps will be rechecked for current eligibility and consent before dispatch.',
       archive: dirty
@@ -277,6 +279,7 @@ export default function CustomWorkflowEditorPage() {
               <input id="workflow-name" value={nameDraft} onChange={(event) => { setNameDraft(event.target.value); setFeedback(null) }} disabled={!enabled || (workflow !== null && workflow.status !== 'draft')} maxLength={120} className="mt-2 min-h-12 w-full max-w-2xl border-b border-[color:var(--portal-border)] bg-transparent px-1 py-2 font-serif text-2xl font-semibold text-[color:var(--portal-text)] outline-none focus:border-[#caa24c] disabled:opacity-70 sm:text-3xl" />
             </div>
             <div className="flex flex-wrap gap-2">
+              {!isNew && workflow?.status === 'draft' && capabilities?.canActivate ? <button type="button" disabled={!enabled || saving || dirty || validationErrors.length > 0} onClick={() => changeLifecycle('activate')} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#caa24c] px-3 text-xs font-bold text-[#17130b] disabled:cursor-not-allowed disabled:opacity-50">Activate for new inquiries</button> : null}
               {!isNew && workflow ? <button type="button" disabled={!enabled || saving} onClick={duplicateDraft} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"><Copy size={14} />Duplicate</button> : null}
               {!isNew && workflow?.status === 'active' && capabilities?.canPause ? <button type="button" disabled={!enabled || saving || dirty} onClick={() => changeLifecycle('pause')} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Pause</button> : null}
               {!isNew && workflow?.status === 'paused' && capabilities?.canResume ? <button type="button" disabled={!enabled || saving || dirty} onClick={() => changeLifecycle('resume')} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Resume</button> : null}
@@ -285,7 +288,7 @@ export default function CustomWorkflowEditorPage() {
             </div>
           </div>
           <p className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[color:var(--portal-muted)]"><span><strong className="text-[color:var(--portal-text)]">Status:</strong> {workflow ? statusLabel(workflow.status) : 'Draft setup'}</span><span><strong className="text-[color:var(--portal-text)]">Trigger:</strong> New eligible website contact form inquiry</span><span><strong className="text-[color:var(--portal-text)]">Updated:</strong> {workflow ? formatDate(workflow.updated_at) : 'Not saved'}</span><span><strong className="text-[color:var(--portal-text)]">Draft revision:</strong> {workflow?.draft_revision ?? 'Not saved'}</span></p>
-          <p className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Workflow activation and dispatch are disabled. Draft edits do not change the existing brochure sequence, queued messages, or contact acknowledgments.</p>
+          <p className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Saving a draft never activates it. Custom workflow versions remain separate from the existing brochure sequence, queued messages, and inquiry acknowledgments.</p>
           {workflow?.status === 'draft' ? <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{capabilities?.activationMessage || 'Activation remains unavailable pending separate owner approval and runtime review.'}</p> : null}
         </header>
 

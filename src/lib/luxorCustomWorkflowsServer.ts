@@ -44,7 +44,7 @@ export type CustomWorkflowLifecycleCapabilities = {
   canPause: boolean
   canResume: boolean
   canArchive: boolean
-  canActivate: false
+  canActivate: boolean
   activationMessage: string
 }
 
@@ -129,9 +129,8 @@ export async function getCustomWorkflowLifecycleCapabilities(status: CustomWorkf
     canPause: evaluateCustomWorkflowLifecycleAction({ ...common, action: 'pause' }).allowed,
     canResume: evaluateCustomWorkflowLifecycleAction({ ...common, action: 'resume' }).allowed,
     canArchive: evaluateCustomWorkflowLifecycleAction({ ...common, action: 'archive' }).allowed,
-    // Keep activation absent from the owner UI until the separate approval is granted.
-    canActivate: false,
-    activationMessage: 'Activation remains unavailable pending separate owner approval and runtime review.',
+    canActivate: evaluateCustomWorkflowLifecycleAction({ ...common, action: 'activate' }).allowed,
+    activationMessage: 'Activate only after the workflow content and timing have owner approval. Activation enrolls only new eligible inquiries.',
   }
 }
 

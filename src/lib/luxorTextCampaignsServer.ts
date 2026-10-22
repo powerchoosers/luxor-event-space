@@ -29,7 +29,7 @@ import {
 } from './luxorPaymentReminderDueDate'
 import { getLuxorInquiry } from './luxorInquiriesServer'
 import { recordLuxorTestSmsSimulation } from './luxorTestLeadServer'
-import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
+import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, getCustomWorkflowDispatchOrder, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
 
 const MAX_CAMPAIGN_RECIPIENTS = 1000
 const MAX_CAMPAIGN_BODY_LENGTH = 480
@@ -548,11 +548,30 @@ export async function queueInvoiceReminderTexts(
 }
 
 export async function processDueTextJobs(limit = getWorkerBatchSize()) {
-  const jobs = await claimDueTextJobs(limit)
   const usedSegments = await getRollingSentSegments()
   const dailyLimit = getDailySegmentLimit()
   let remainingSegments = Math.max(0, dailyLimit - usedSegments)
   const results: Array<{ id: string; status: LuxorTextJobStatus; error?: string }> = []
+
+  let jobs: LuxorTextJob[] = []
+  let customWorkflowDispatch = false
+  for (const lane of getCustomWorkflowDispatchOrder()) {
+    if (lane === 'legacy') {
+      jobs = await claimDueTextJobs(limit)
+    } else {
+      if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED || !isWithinSmsSendWindow() || remainingSegments <= 0) continue
+      try {
+        jobs = await claimDueCustomWorkflowTextJobs(Math.min(limit, getWorkerBatchSize()), remainingSegments)
+      } catch (error) {
+        // A failed claim may already have reserved jobs. Leave this worker
+        // budget unused rather than risk a second queue claim or duplicate send.
+        console.warn('Custom workflow text claim failed; preserving the worker budget:', error instanceof Error ? error.message : error)
+        return { results, usedSegments, dailyLimit, remainingSegments }
+      }
+      customWorkflowDispatch = jobs.length > 0
+    }
+    if (jobs.length) break
+  }
 
   for (const job of jobs) {
     if (job.segment_count > remainingSegments) {
@@ -565,18 +584,9 @@ export async function processDueTextJobs(limit = getWorkerBatchSize()) {
       continue
     }
 
-    const result = await processTextJob(job)
+    const result = await processTextJob(job, { customWorkflowDispatch })
     results.push(result)
     if (result.status === 'sent') remainingSegments -= job.segment_count
-  }
-  if (CUSTOM_WORKFLOW_EXECUTION_ENABLED && isWithinSmsSendWindow() && remainingSegments > 0) {
-    const customJobs = await claimDueCustomWorkflowTextJobs(Math.min(limit, getWorkerBatchSize()), remainingSegments)
-    for (const job of customJobs) {
-      if (job.segment_count > remainingSegments) continue
-      const result = await processTextJob(job, { customWorkflowDispatch: true })
-      results.push(result)
-      if (result.status === 'sent') remainingSegments -= job.segment_count
-    }
   }
   return { results, usedSegments, dailyLimit, remainingSegments }
 }
