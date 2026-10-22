@@ -504,7 +504,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {[
-                    ['Venue', 'Luxor Event Space'],
+                    ['Venue', 'Luxor at Las Palmas Events'],
                     ['Location', 'San Antonio, Texas'],
                     ['Primary mailbox', 'booking@luxoratlaspalmas.com'],
                     ['Public website', 'www.luxoratlaspalmas.com'],
