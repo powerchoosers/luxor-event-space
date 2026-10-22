@@ -118,8 +118,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
 \endif
 
-\ir ../../supabase/migrations/20261022120000_luxor_custom_workflow_foundation.sql
-\ir ../../supabase/migrations/20261022120000_luxor_custom_workflow_foundation.sql
+\ir ../../supabase/migrations/20261022123048_luxor_custom_workflow_foundation.sql
+\ir ../../supabase/migrations/20261022123048_luxor_custom_workflow_foundation.sql
 
 DO $$
 BEGIN
