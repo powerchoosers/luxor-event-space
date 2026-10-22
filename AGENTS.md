@@ -85,6 +85,15 @@ Do not run `npm run build` after every small change. During normal iteration, pr
 - Zoho handles approved portal identity and Luxor mailbox delivery. Use the approved sender allowlist, and route automated mail through `luxor_email_jobs` so it can be scheduled, deduplicated, retried, and recorded; do not bypass the queue for an automation.
 - If README and AGENTS disagree, follow AGENTS and the source files.
 
+## Git Synchronization And Publication
+
+- Fetch `origin` before starting work that depends on branch history and before comparing the local branch with `main`. Fetch again around publication; do not treat a cached `origin/main` tracking ref as the current remote branch.
+- Keep three states distinct: uncommitted working-tree changes, local commits ahead of the remote, and remote commits ahead of the local branch. Use a successful fetch, current commit SHAs, and an explicit ahead/behind comparison to describe each accurately.
+- Before calling work unsynced or unpublished, verify that the fetch succeeded, record `HEAD` and the freshly fetched `origin/main` SHAs, and inspect the commits or changes in question. If fetching fails, say that the remote comparison is unverified.
+- Preserve unfinished and unrelated work, including commits from concurrent tasks. Never use a blind reset, overwrite, discard, or force push to erase divergence. A local branch named `work` is valid; do not rename or reset it just for its label.
+- After publishing by any route—including an API, cherry-pick, or another checkout—fetch `origin/main` and safely reconcile the current checkout. If the branches diverged, preserve both sides and report the divergence instead of destructively resetting. A newer concurrent commit on `main` is legitimate and should be kept.
+- Verify that the intended commit is present in freshly fetched `origin/main`. Report local `HEAD`, fresh `origin/main`, ahead/behind counts, and working-tree dirtiness separately. A successful push does not by itself verify the production deployment.
+
 ## Commit And Push
 
 Only commit or push when the user explicitly requests it.
