@@ -23,6 +23,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { to, subject, content, from, track, campaignName, format, recipientName, contentMode, inquiryId } = body
+    const requestedIdempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey : ''
+    const idempotencyKey = /^manual\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedIdempotencyKey)
+      ? requestedIdempotencyKey
+      : `manual/${crypto.randomUUID()}`
     const normalizedRecipient = typeof to === 'string' ? to.trim().toLowerCase() : ''
     const testLeadId = typeof inquiryId === 'string' && inquiryId
       ? inquiryId
@@ -65,48 +69,77 @@ export async function POST(request: NextRequest) {
     let trackingToken = ''
 
     if (track) {
-      // 1. Generate unique tracking token
-      trackingToken = crypto.randomBytes(18).toString('base64url')
+      // Derive the tracking token from the stable send key so retries produce
+      // byte-identical HTML for the provider's idempotency check.
+      trackingToken = crypto.createHash('sha256').update(`luxor-direct-email:${idempotencyKey}`).digest('base64url').slice(0, 24)
+      const sourcePayloadHash = crypto.createHash('sha256').update(JSON.stringify({
+        to: normalizedRecipient,
+        from: typeof from === 'string' ? from.trim().toLowerCase() : '',
+        subject: String(subject || '').trim(),
+        content: finalContent,
+      })).digest('hex')
 
-      // 2. Create one-off campaign in luxor_marketing_campaigns
-      const [campaign] = await supabaseRest<LuxorMarketingCampaign[]>('luxor_marketing_campaigns?select=*', {
-        method: 'POST',
-        headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({
-          name: campaignName || `Direct Email: ${subject}`,
-          subject: subject,
-          html_body: finalContent,
-          status: 'sent',
-          audience_label: 'Direct Message',
-          scheduled_for: new Date().toISOString(),
-          sent_at: new Date().toISOString(),
-          recipient_count: 1,
-          metadata: { direct_message: true, sent_by: session.email }
-        }),
-      })
+      const existingCampaigns = await supabaseRest<Array<Pick<LuxorMarketingCampaign, 'id' | 'metadata'>>>(
+        `luxor_marketing_campaigns?select=id,metadata&metadata->>direct_email_idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=1`,
+      )
+      let campaign = existingCampaigns[0]
+      if (campaign && campaign.metadata?.direct_email_payload_hash !== sourcePayloadHash) {
+        return NextResponse.json({ error: 'This send key was already used for different email content. Review the draft and try again.' }, { status: 409 })
+      }
+
+      if (!campaign) {
+        const [createdCampaign] = await supabaseRest<LuxorMarketingCampaign[]>('luxor_marketing_campaigns?select=*', {
+          method: 'POST',
+          headers: { Prefer: 'return=representation' },
+          body: JSON.stringify({
+            name: campaignName || `Direct Email: ${subject}`,
+            subject: subject,
+            html_body: finalContent,
+            status: 'sent',
+            audience_label: 'Direct Message',
+            scheduled_for: new Date().toISOString(),
+            sent_at: new Date().toISOString(),
+            recipient_count: 1,
+            metadata: {
+              direct_message: true,
+              sent_by: session.email,
+              direct_email_idempotency_key: idempotencyKey,
+              direct_email_payload_hash: sourcePayloadHash,
+            },
+          }),
+        })
+        campaign = createdCampaign
+      }
 
       if (!campaign) {
         throw new Error('Failed to register email tracking campaign.')
       }
 
-      // 3. Create recipient record in luxor_marketing_recipients
-      const [recipient] = await supabaseRest<LuxorMarketingRecipient[]>('luxor_marketing_recipients?select=*', {
-        method: 'POST',
-        headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({
-          campaign_id: campaign.id,
-          email: String(to || '').trim().toLowerCase(),
-          name: typeof recipientName === 'string' ? recipientName : null,
-          status: 'sent',
-          tracking_token: trackingToken,
-          sent_at: new Date().toISOString(),
-          metadata: { direct_message: true }
-        }),
-      })
+      const existingRecipients = await supabaseRest<Array<Pick<LuxorMarketingRecipient, 'id' | 'tracking_token'>>>(
+        `luxor_marketing_recipients?select=id,tracking_token&campaign_id=eq.${encodeURIComponent(campaign.id)}&email=eq.${encodeURIComponent(normalizedRecipient)}&limit=1`,
+      )
+      let recipient = existingRecipients[0]
+      if (!recipient) {
+        const [createdRecipient] = await supabaseRest<LuxorMarketingRecipient[]>('luxor_marketing_recipients?select=*', {
+          method: 'POST',
+          headers: { Prefer: 'return=representation' },
+          body: JSON.stringify({
+            campaign_id: campaign.id,
+            email: normalizedRecipient,
+            name: typeof recipientName === 'string' ? recipientName : null,
+            status: 'sent',
+            tracking_token: trackingToken,
+            sent_at: new Date().toISOString(),
+            metadata: { direct_message: true, direct_email_idempotency_key: idempotencyKey },
+          }),
+        })
+        recipient = createdRecipient
+      }
 
       if (!recipient) {
         throw new Error('Failed to register email tracking recipient.')
       }
+      trackingToken = recipient.tracking_token || trackingToken
 
       trackingMetadata = {
         marketingCampaignId: campaign.id,
@@ -123,6 +156,7 @@ export async function POST(request: NextRequest) {
       content: String(finalContent || ''),
       from: typeof from === 'string' ? from : undefined,
       fromName: senderProfile.displayName,
+      idempotencyKey,
       metadata: trackingMetadata,
     })
 

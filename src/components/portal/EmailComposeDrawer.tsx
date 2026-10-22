@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   Mail,
@@ -34,15 +34,43 @@ const ALLOWED_SENDERS = [
   { value: 'a.patterson@luxoratlaspalmas.com', label: 'Arianna Patterson' },
 ]
 
+function createManualEmailIdempotencyKey() {
+  const random = window.crypto
+  const uuid = typeof random.randomUUID === 'function'
+    ? random.randomUUID()
+    : (() => {
+      const bytes = random.getRandomValues(new Uint8Array(16))
+      bytes[6] = (bytes[6] & 0x0f) | 0x40
+      bytes[8] = (bytes[8] & 0x3f) | 0x80
+      const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+    })()
+  return `manual/${uuid}`
+}
+
 interface EmailComposeDrawerProps {
   isOpen: boolean
   onClose: () => void
   lead: LuxorInquiry | null
   onSuccess?: () => void
   initialTemplateId?: string | null
+  composeContextKey: string
+  initialDraft: EmailComposeDraft | null
+  onDraftChange: (draft: EmailComposeDraft) => void
 }
 
-export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTemplateId }: EmailComposeDrawerProps) {
+export interface EmailComposeDraft {
+  contextKey: string
+  fromAddress: string
+  toAddress: string
+  subject: string
+  track: boolean
+  selectedTemplateId: string
+  bodyText: string
+  templateBlocks: EmailBlock[]
+}
+
+export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTemplateId, composeContextKey, initialDraft, onDraftChange }: EmailComposeDrawerProps) {
   const reduceMotion = useReducedMotion()
   const [isMinimized, setIsMinimized] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -113,30 +141,38 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   }, [zoomMode, activeTab, isExpanded, canSplitCompose, fitPreviewToContainer])
 
   // Form Fields
-  const [fromAddress, setFromAddress] = useState('booking@luxoratlaspalmas.com')
+  const [fromAddress, setFromAddress] = useState(initialDraft?.fromAddress || 'booking@luxoratlaspalmas.com')
   const [fromName, setFromName] = useState('Luxor Event Space')
   const [senderRole, setSenderRole] = useState('Venue Team')
   const [senderAvatarUrl, setSenderAvatarUrl] = useState<string | null>(null)
   const [senderPhone, setSenderPhone] = useState<string | null>(null)
-  const [toAddress, setToAddress] = useState('')
-  const [subject, setSubject] = useState('')
+  const [toAddress, setToAddress] = useState(initialDraft?.toAddress || lead?.email || '')
+  const [subject, setSubject] = useState(initialDraft?.subject || '')
   // Direct CRM messages should feel like a note from a person, not a campaign.
   // Tracking remains available when intentionally needed, but is off by default.
-  const [track, setTrack] = useState(false)
+  const [track, setTrack] = useState(initialDraft?.track ?? false)
 
   // Message Types & Templates
-  const [selectedTemplateId, setSelectedTemplateId] = useState('regular')
+  const [selectedTemplateId, setSelectedTemplateId] = useState(initialDraft?.selectedTemplateId || 'regular')
   const [customTemplates, setCustomTemplates] = useState<LuxorMarketingTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
 
   // Composed Body
-  const [bodyText, setBodyText] = useState('')
-  const [templateBlocks, setTemplateBlocks] = useState<EmailBlock[]>([])
+  const [bodyText, setBodyText] = useState(initialDraft?.bodyText || '')
+  const [templateBlocks, setTemplateBlocks] = useState<EmailBlock[]>(initialDraft?.templateBlocks || [])
 
   // Delivery states
   const [isSending, setIsSending] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [simulationMsg, setSimulationMsg] = useState<string | null>(null)
+  const sendInFlightRef = useRef(false)
+  const sendAttemptRef = useRef<{ fingerprint: string; idempotencyKey: string } | null>(null)
+  const closeAfterSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (closeAfterSendTimerRef.current) clearTimeout(closeAfterSendTimerRef.current)
+  }, [])
 
   // Brand Asset Picker for saved marketing-template image blocks.
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
@@ -195,8 +231,12 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
     }
   }, [isOpen])
 
-  // Auto-fill To Address when lead changes
+  // A closed composer unmounts, so PortalShell keeps this draft in memory and
+  // supplies it on reopen. Reset only when the user changes compose target.
+  const currentContextKeyRef = useRef(composeContextKey)
   useEffect(() => {
+    if (currentContextKeyRef.current === composeContextKey) return
+    currentContextKeyRef.current = composeContextKey
     if (lead) {
       setToAddress(lead.email || '')
     } else {
@@ -208,9 +248,24 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
     setTemplateBlocks([])
     setErrorMsg(null)
     setSuccessMsg(null)
+    setSimulationMsg(null)
     setShowDirectory(false)
     setDirectorySearch('')
-  }, [lead, isOpen])
+  }, [composeContextKey, lead])
+
+  useEffect(() => {
+    if (!isOpen) return
+    onDraftChange({
+      contextKey: composeContextKey,
+      fromAddress,
+      toAddress,
+      subject,
+      track,
+      selectedTemplateId,
+      bodyText,
+      templateBlocks,
+    })
+  }, [isOpen, composeContextKey, fromAddress, toAddress, subject, track, selectedTemplateId, bodyText, templateBlocks, onDraftChange])
 
   // Fetch saved marketing templates
   useEffect(() => {
@@ -331,6 +386,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   }, [compiledHtml, activeTab])
 
   const handleSend = async () => {
+    if (sendInFlightRef.current) return
     if (!toAddress.trim()) {
       setErrorMsg('Please enter a recipient email address.')
       return
@@ -345,8 +401,11 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
     }
 
     try {
+      sendInFlightRef.current = true
       setIsSending(true)
       setErrorMsg(null)
+      setSuccessMsg(null)
+      setSimulationMsg(null)
 
       const isConversational = selectedTemplateId === 'regular'
       const payload = {
@@ -360,16 +419,30 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         track,
         campaignName: selectedTemplateId !== 'regular' ? `Direct Campaign: ${subject.trim()}` : undefined
       }
+      const fingerprint = JSON.stringify(payload)
+      if (!sendAttemptRef.current || sendAttemptRef.current.fingerprint !== fingerprint) {
+        sendAttemptRef.current = {
+          fingerprint,
+          idempotencyKey: createManualEmailIdempotencyKey(),
+        }
+      }
 
       const res = await fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, idempotencyKey: sendAttemptRef.current.idempotencyKey }),
       })
 
       const data = await res.json()
       if (!res.ok) {
         throw new Error(data.error || 'Failed to send email.')
+      }
+      if (data.simulated === true) {
+        setSimulationMsg('No email was sent. This permanent test recipient uses a no-send simulation; your draft is still open.')
+        return
+      }
+      if (data.success !== true) {
+        throw new Error('The mail service did not confirm acceptance. Your draft is still open.')
       }
 
       publishLuxorEmailSent({
@@ -377,18 +450,18 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         recipient: toAddress.trim(),
         messageId: typeof data.messageId === 'string' ? data.messageId : null,
       })
-      setSuccessMsg('Email successfully sent!')
-      
-      // Auto-close after brief delay
-      setTimeout(() => {
+      setSuccessMsg('The mail provider accepted this email. Delivery is not confirmed yet.')
+      onSuccess?.()
+      closeAfterSendTimerRef.current = setTimeout(() => {
+        closeAfterSendTimerRef.current = null
         requestClose()
-        if (onSuccess) onSuccess()
-      }, 1500)
+      }, 1800)
 
     } catch (err) {
       console.error(err)
       setErrorMsg(err instanceof Error ? err.message : 'Failed to deliver message.')
     } finally {
+      sendInFlightRef.current = false
       setIsSending(false)
     }
   }
@@ -1043,8 +1116,9 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 sm:px-4">
           <div className="min-w-0 flex-1">
             {errorMsg ? <p role="alert" className="truncate text-xs text-rose-600 dark:text-rose-300">{errorMsg}</p>
-              : successMsg ? <p role="status" className="truncate text-xs text-emerald-700 dark:text-emerald-300">{successMsg}</p>
-                : null}
+              : simulationMsg ? <p role="status" className="truncate text-xs text-amber-700 dark:text-amber-300">{simulationMsg}</p>
+                : successMsg ? <p role="status" className="truncate text-xs text-emerald-700 dark:text-emerald-300">{successMsg}</p>
+                  : null}
           </div>
           <button
             type="button"

@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const mailRow = await resolveLuxorMailboxRow(id)
     if (id.startsWith('mail-') && !mailRow) return NextResponse.json({ error: 'Mailbox message not found.' }, { status: 404 })
     const useResend = mailRow?.provider === 'resend' || luxorMailProvider() === 'resend'
-    if (useResend && !mailRow) throw new Error('Import the complete original Zoho message before replying through Resend.')
+    if (useResend && !mailRow) throw new Error('Import the complete original message before replying through Resend.')
     const original = mailRow ? await getLuxorMailboxMessage(`mail-${mailRow.id}`) : await getLuxorZohoMessageDetail(id, String(body.folderId || '') || undefined)
     if (!original) throw new Error('The original email could not be loaded for this reply.')
 

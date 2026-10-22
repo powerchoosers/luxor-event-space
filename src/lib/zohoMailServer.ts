@@ -287,10 +287,9 @@ async function getZohoAccessToken(signal?: AbortSignal) {
 }
 
 /**
- * Safely verifies that Zoho still accepts the saved authorization. This only
- * requests an access token; it never sends, reads, or changes an email.
+ * Verifies the configured mail provider without sending or reading any email.
  */
-export async function verifyLuxorZohoMailConnection() {
+export async function verifyLuxorMailConnection() {
   if (luxorMailProvider() === 'resend') {
     const { luxorResendApi } = await import('./luxorResendApiServer')
     const result = await luxorResendApi<{ data: Array<{ name: string; status: string }> }>('/domains?limit=100')

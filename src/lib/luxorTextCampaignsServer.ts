@@ -29,7 +29,7 @@ import {
 } from './luxorPaymentReminderDueDate'
 import { getLuxorInquiry } from './luxorInquiriesServer'
 import { recordLuxorTestSmsSimulation } from './luxorTestLeadServer'
-import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, getCustomWorkflowDispatchOrder, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
+import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
 
 const MAX_CAMPAIGN_RECIPIENTS = 1000
 const MAX_CAMPAIGN_BODY_LENGTH = 480
@@ -553,24 +553,20 @@ export async function processDueTextJobs(limit = getWorkerBatchSize()) {
   let remainingSegments = Math.max(0, dailyLimit - usedSegments)
   const results: Array<{ id: string; status: LuxorTextJobStatus; error?: string }> = []
 
-  let jobs: LuxorTextJob[] = []
+  let jobs: LuxorTextJob[]
   let customWorkflowDispatch = false
-  for (const lane of getCustomWorkflowDispatchOrder()) {
-    if (lane === 'legacy') {
-      jobs = await claimDueTextJobs(limit)
-    } else {
-      if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED || !isWithinSmsSendWindow() || remainingSegments <= 0) continue
-      try {
-        jobs = await claimDueCustomWorkflowTextJobs(Math.min(limit, getWorkerBatchSize()), remainingSegments)
-      } catch (error) {
-        // A failed claim may already have reserved jobs. Leave this worker
-        // budget unused rather than risk a second queue claim or duplicate send.
-        console.warn('Custom workflow text claim failed; preserving the worker budget:', error instanceof Error ? error.message : error)
-        return { results, usedSegments, dailyLimit, remainingSegments }
-      }
-      customWorkflowDispatch = jobs.length > 0
+  if (CUSTOM_WORKFLOW_EXECUTION_ENABLED && isWithinSmsSendWindow() && remainingSegments > 0) {
+    try {
+      jobs = await claimDueLuxorMarketingTextJobs(Math.min(limit, getWorkerBatchSize()), remainingSegments)
+    } catch (error) {
+      // The database RPC serializes both lanes. Its response may fail after a
+      // claim commits, so this worker must leave the remaining budget unused.
+      console.warn('Fair marketing-text claim failed; preserving the worker budget:', error instanceof Error ? error.message : error)
+      return { results, usedSegments, dailyLimit, remainingSegments }
     }
-    if (jobs.length) break
+    customWorkflowDispatch = jobs.some((job) => isCustomWorkflowJobBlockedFromLegacyDispatch(job))
+  } else {
+    jobs = await claimDueTextJobs(limit)
   }
 
   for (const job of jobs) {
@@ -598,11 +594,13 @@ async function claimDueTextJobs(limit: number) {
   })
 }
 
-async function claimDueCustomWorkflowTextJobs(limit: number, remainingSegments: number) {
-  if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED || !isWithinSmsSendWindow() || remainingSegments <= 0) return []
-  return supabaseRest<LuxorTextJob[]>('rpc/luxor_custom_workflow_claim_due_text_jobs', {
+async function claimDueLuxorMarketingTextJobs(limit: number, segmentBudget: number) {
+  return supabaseRest<LuxorTextJob[]>('rpc/luxor_claim_due_marketing_text_jobs', {
     method: 'POST',
-    body: JSON.stringify({ p_limit: Math.min(Math.max(limit, 1), 50), p_segment_budget: remainingSegments }),
+    body: JSON.stringify({
+      job_limit: Math.min(Math.max(limit, 1), getWorkerBatchSize()),
+      segment_budget: Math.max(0, Math.min(segmentBudget, getDailySegmentLimit())),
+    }),
   })
 }
 

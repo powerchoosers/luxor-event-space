@@ -48,6 +48,7 @@ import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
 import { PortalContactAvatar } from '@/components/portal/PortalUI'
 import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
+import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
 
 type PortalUserProfile = {
   displayName: string
@@ -490,18 +491,34 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [composeLead, setComposeLead] = useState<LuxorInquiry | null>(null)
   const [composeTemplateId, setComposeTemplateId] = useState<string | null>(null)
+  const [composeDraft, setComposeDraft] = useState<EmailComposeDraft | null>(null)
+  const composeContextKeyRef = useRef('global')
+  const composeContextKey = composeLead?.id
+    ? `lead:${composeLead.id}`
+    : composeLead?.email
+      ? `email:${composeLead.email.trim().toLowerCase()}`
+      : 'global'
+  const persistComposeDraft = useCallback((draft: EmailComposeDraft) => setComposeDraft(draft), [])
 
   useEffect(() => {
     const handleComposeEvent = (e: Event) => {
       const customEvent = e as CustomEvent<{ lead?: LuxorInquiry; email?: string; templateId?: string }>
-      setComposeTemplateId(typeof customEvent.detail?.templateId === 'string' ? customEvent.detail.templateId : null)
-      if (customEvent.detail?.lead) {
-        setComposeLead(customEvent.detail.lead)
-      } else if (customEvent.detail?.email) {
-        setComposeLead({ email: customEvent.detail.email, full_name: customEvent.detail.email } as LuxorInquiry)
-      } else {
-        setComposeLead(null)
+      const nextLead = customEvent.detail?.lead
+        ? customEvent.detail.lead
+        : customEvent.detail?.email
+          ? { email: customEvent.detail.email, full_name: customEvent.detail.email } as LuxorInquiry
+          : null
+      const nextContextKey = nextLead?.id
+        ? `lead:${nextLead.id}`
+        : nextLead?.email
+          ? `email:${nextLead.email.trim().toLowerCase()}`
+          : 'global'
+      if (composeContextKeyRef.current !== nextContextKey) {
+        composeContextKeyRef.current = nextContextKey
+        setComposeDraft(null)
       }
+      setComposeTemplateId(typeof customEvent.detail?.templateId === 'string' ? customEvent.detail.templateId : null)
+      setComposeLead(nextLead)
       setIsComposeOpen(true)
     }
 
@@ -1175,6 +1192,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             onClose={() => { setIsComposeOpen(false); setComposeTemplateId(null) }}
             lead={composeLead}
             initialTemplateId={composeTemplateId}
+            composeContextKey={composeContextKey}
+            initialDraft={composeDraft?.contextKey === composeContextKey ? composeDraft : null}
+            onDraftChange={persistComposeDraft}
+            onSuccess={() => setComposeDraft(null)}
           />
         )}
       </AnimatePresence>

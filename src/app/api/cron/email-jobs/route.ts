@@ -2,7 +2,7 @@ import { after, NextRequest, NextResponse } from 'next/server'
 import { syncPendingLuxorEmailBodies } from '@/lib/luxorEmailArchiveServer'
 import { processDueLuxorEmailJobs, processDueLuxorFollowUpEmailJobs, processDueLuxorInquiryNotifications, processDueLuxorTestEmailJobs, reconcileLuxorFollowUpFinalizations } from '@/lib/luxorEmailJobsServer'
 import { getLuxorWorkerHealth, safelyRecordLuxorWorkerHealth } from '@/lib/luxorWorkerHealthServer'
-import { isLuxorZohoAuthorizationError, verifyLuxorZohoMailConnection } from '@/lib/zohoMailServer'
+import { isLuxorZohoAuthorizationError, verifyLuxorMailConnection } from '@/lib/zohoMailServer'
 import { processPendingLuxorResendEvents } from '@/lib/luxorResendWebhookServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { processPendingLuxorBillIntakes } from '@/lib/luxorBillIntakeServer'
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   if (request.nextUrl.searchParams.get('health') === '1') {
     try {
-      await verifyLuxorZohoMailConnection()
+      await verifyLuxorMailConnection()
     } catch (error) {
       const message = error instanceof Error ? error.message : `${providerLabel} connection check failed.`
       await safelyRecordLuxorWorkerHealth('email_jobs', {
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
   if (isHourlyConnectionCheck(now)) {
     try {
-      await verifyLuxorZohoMailConnection()
+      await verifyLuxorMailConnection()
     } catch (error) {
       const message = error instanceof Error ? error.message : `${providerLabel} connection check failed.`
       console.error('Luxor mail authorization check failed:', message)

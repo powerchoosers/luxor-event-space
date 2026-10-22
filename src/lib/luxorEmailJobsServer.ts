@@ -16,7 +16,7 @@ import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 import { isLuxorMarketingDeliveryBlocked, recordLuxorMarketingJobResult } from './luxorMarketingDeliveryServer'
 import { luxorMailProvider } from './luxorMailConfig'
 import { luxorTestEmailAcceptedPatch, sendLuxorTestEmail } from './luxorTestEmailDelivery'
-import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, getCustomWorkflowDispatchOrder, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
+import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
 import { processDueLuxorCustomWorkflowOrchestration } from './luxorCustomWorkflowRuntimeServer'
 
 const PUBLIC_BASE_URL =
@@ -781,10 +781,10 @@ export async function claimDueLuxorEmailJobs(limit = 25) {
   })
 }
 
-async function claimDueCustomWorkflowEmailJobs(limit = 1) {
-  if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED) return []
-  return supabaseRest<LuxorEmailJob[]>('rpc/luxor_custom_workflow_claim_due_email_jobs', {
-    method: 'POST', body: JSON.stringify({ p_limit: Math.min(Math.max(limit, 1), 3) }),
+async function claimDueLuxorMarketingEmailJobs(limit = 1) {
+  return supabaseRest<LuxorEmailJob[]>('rpc/luxor_claim_due_marketing_email_jobs', {
+    method: 'POST',
+    body: JSON.stringify({ job_limit: Math.min(Math.max(limit, 1), 1) }),
   })
 }
 
@@ -1508,48 +1508,41 @@ export async function processDueLuxorEmailJobs(limit = 1) {
   }
   const testResults = testJobs.length ? await processLuxorEmailJobs(testJobs, { markSending: false }) : []
   if (testResults.length) return testResults
-  let customClaimUncertain = false
-  let dispatchClaimed = false
-  try {
-    for (const lane of getCustomWorkflowDispatchOrder()) {
-      const customWorkflowDispatch = lane === 'custom'
-      let jobs: LuxorEmailJob[]
-      if (customWorkflowDispatch) {
-        if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED) {
-          jobs = []
-        } else {
-          try {
-            jobs = await claimDueCustomWorkflowEmailJobs(Math.min(limit, 1))
-          } catch (error) {
-            customClaimUncertain = true
-            throw error
-          }
-        }
-      } else {
-        jobs = await claimDueLuxorEmailJobs(limit)
-      }
-      if (jobs.length) {
-        dispatchClaimed = true
-        return [...testResults, ...await processLuxorEmailJobs(jobs, {
-          markSending: false,
-          ...(customWorkflowDispatch ? { customWorkflowDispatch: true } : {}),
-        })]
-      }
+  if (CUSTOM_WORKFLOW_EXECUTION_ENABLED) {
+    let jobs: LuxorEmailJob[]
+    try {
+      // One database transaction serializes the legacy/custom choice, persists
+      // its cursor, and preserves the existing one-message budget.
+      jobs = await claimDueLuxorMarketingEmailJobs(Math.min(limit, 1))
+    } catch (error) {
+      // The RPC may have reserved either lane before its response failed.
+      // Leave this run's budget unused rather than claim or send twice.
+      console.warn(
+        'Fair marketing-email claim failed; preserving the worker budget:',
+        error instanceof Error ? error.message : error,
+      )
+      return testResults
     }
+    if (!jobs.length) return testResults
+    const customWorkflowDispatch = jobs.some((job) => isCustomWorkflowJobBlockedFromLegacyDispatch(job))
+    return [...testResults, ...await processLuxorEmailJobs(jobs, {
+      markSending: false,
+      ...(customWorkflowDispatch ? { customWorkflowDispatch: true } : {}),
+    })]
+  }
+
+  try {
+    const jobs = await claimDueLuxorEmailJobs(limit)
+    if (jobs.length) return [...testResults, ...await processLuxorEmailJobs(jobs, { markSending: false })]
     return testResults
   } catch (error) {
     console.warn(
       'A due email queue claim failed; preserving the remaining worker budget:',
       error instanceof Error ? error.message : error,
     )
-    // A failed custom claim or dispatch may have reserved work already. Do not
-    // claim another queue in this run and exceed the one-message budget.
-    if (customClaimUncertain || dispatchClaimed) return testResults
-
     const jobs = await listDueLuxorEmailJobs(limit)
     if (jobs.length) return [...testResults, ...await processLuxorEmailJobs(jobs, { markSending: true })]
-    const customJobs = await claimDueCustomWorkflowEmailJobs(Math.min(limit, 1))
-    return [...testResults, ...await processLuxorEmailJobs(customJobs, { markSending: false, customWorkflowDispatch: true })]
+    return testResults
   }
 }
 
