@@ -33,6 +33,7 @@ import dynamic from 'next/dynamic'
 
 // Tab Component Imports (Lazy Loaded)
 const MarketingOverviewTab = dynamic(() => import('./tabs/MarketingOverviewTab').then(m => m.MarketingOverviewTab), { ssr: false, loading: () => <MarketingOverviewSkeleton /> })
+const AutomationsLibraryTab = dynamic(() => import('./tabs/AutomationsLibraryTab').then(m => m.AutomationsLibraryTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
 const MarketingActivityTab = dynamic(() => import('./tabs/MarketingActivityTab').then(m => m.MarketingActivityTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
 const MarketingTemplatesTab = dynamic(() => import('./tabs/MarketingTemplatesTab').then(m => m.MarketingTemplatesTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
 const LeadSourcesTab = dynamic(() => import('./tabs/LeadSourcesTab').then(m => m.LeadSourcesTab), { ssr: false, loading: () => <MarketingTableSkeleton /> })
@@ -662,7 +663,7 @@ function MarketingPageContent() {
         return {
           title: 'Automations',
           icon: <Workflow size={18} />,
-          description: 'Automation management is planned for a later phase.'
+          description: 'Manage saved follow-ups, confirmations, reminders, and marketing workflows in one place.'
         }
       case 'templates':
         return {
@@ -758,6 +759,20 @@ function MarketingPageContent() {
     headerActions = (
       createCampaignButton
     )
+  } else if (activeTab === 'automations') {
+    headerActions = (
+      <div className="flex flex-col items-start gap-1.5 sm:items-end">
+        <button
+          type="button"
+          disabled
+          aria-describedby="automation-create-note"
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#caa24c] px-4 text-xs font-bold text-white opacity-60 shadow-sm disabled:cursor-not-allowed"
+        >
+          <Plus size={14} /> Create Automation
+        </button>
+        <span id="automation-create-note" className="max-w-52 text-[10px] leading-4 text-[color:var(--portal-muted)]">The workflow builder is planned for a later phase.</span>
+      </div>
+    )
   }
 
   if (activeTab === 'contact-lists') {
@@ -843,7 +858,7 @@ function MarketingPageContent() {
               />
             )}
 
-            {activeTab === 'automations' && <MarketingAutomationsUnavailable />}
+            {activeTab === 'automations' && <AutomationsLibraryTab />}
 
             {activeTab === 'templates' && (
               <MarketingTemplatesTab
@@ -973,16 +988,6 @@ function MarketingSubnav({ activeTab, onTabChange }: { activeTab: MarketingTab; 
         ))}
       </div>
     </nav>
-  )
-}
-
-function MarketingAutomationsUnavailable() {
-  return (
-    <section aria-labelledby="automations-unavailable-title" className="mx-auto w-full max-w-3xl rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-8">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Planned for a later phase</p>
-      <h2 id="automations-unavailable-title" className="mt-2 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Automation management is not available yet.</h2>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--portal-muted)]">This Phase 1 workspace does not offer workflow creation, editing, pausing, or activation. Existing lead follow-up and tour email workflows continue through their current configuration.</p>
-    </section>
   )
 }
 
