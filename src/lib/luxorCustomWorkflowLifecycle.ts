@@ -25,7 +25,7 @@ export function evaluateCustomWorkflowLifecycleAction(input: {
 
   if (input.action === 'activate' || input.action === 'resume') {
     if (!input.activationEnabled || !input.executionEnabled) {
-      return { allowed: false, status: 503, message: 'Workflow activation and resume remain unavailable pending separate owner approval.' }
+      return { allowed: false, status: 503, message: 'Workflow activation and resume are disabled by their runtime controls.' }
     }
   }
 

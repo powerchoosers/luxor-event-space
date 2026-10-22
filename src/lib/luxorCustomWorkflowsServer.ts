@@ -48,6 +48,12 @@ export type CustomWorkflowLifecycleCapabilities = {
   activationMessage: string
 }
 
+export type CustomWorkflowFeatureStatus = {
+  authoringEnabled: boolean
+  executionEnabled: boolean
+  activationEnabled: boolean
+}
+
 export class CustomWorkflowServiceError extends Error {
   status: number
 
@@ -59,7 +65,34 @@ export class CustomWorkflowServiceError extends Error {
 
 export function requireCustomWorkflowAuthoring() {
   if (!CUSTOM_WORKFLOW_AUTHORING_ENABLED) {
-    throw new CustomWorkflowServiceError('Custom workflow authoring is unavailable until its database and security review is complete.', 503)
+    throw new CustomWorkflowServiceError('Custom workflow authoring is disabled by its release control.', 503)
+  }
+}
+
+async function getCustomWorkflowRuntimeControls() {
+  const [controls] = await supabaseRest<Array<{ authoring_enabled: boolean; execution_enabled: boolean; activation_enabled: boolean }>>(
+    'luxor_custom_workflow_runtime_controls?select=authoring_enabled,execution_enabled,activation_enabled&singleton=eq.true&limit=1',
+  )
+  return controls
+}
+
+export async function getCustomWorkflowFeatureStatus(actorEmail: string): Promise<CustomWorkflowFeatureStatus> {
+  await requireCustomWorkflowOperator(actorEmail)
+  const controls = await getCustomWorkflowRuntimeControls()
+  const authoringEnabled = CUSTOM_WORKFLOW_AUTHORING_ENABLED && controls?.authoring_enabled === true
+  const executionEnabled = CUSTOM_WORKFLOW_EXECUTION_ENABLED && controls?.execution_enabled === true
+  return {
+    authoringEnabled,
+    executionEnabled,
+    activationEnabled: authoringEnabled && executionEnabled && controls?.activation_enabled === true,
+  }
+}
+
+async function requireCustomWorkflowAuthoringControl() {
+  requireCustomWorkflowAuthoring()
+  const controls = await getCustomWorkflowRuntimeControls()
+  if (controls?.authoring_enabled !== true) {
+    throw new CustomWorkflowServiceError('Custom workflow authoring is disabled by its runtime control.', 503)
   }
 }
 
@@ -114,9 +147,7 @@ export async function getCustomWorkflow(id: string, actorEmail: string) {
 export async function getCustomWorkflowLifecycleCapabilities(status: CustomWorkflowRow['status'], actorEmail: string): Promise<CustomWorkflowLifecycleCapabilities> {
   const verifiedActorEmail = await requireCustomWorkflowOperator(actorEmail)
   requireCustomWorkflowAuthoring()
-  const [controls] = await supabaseRest<Array<{ authoring_enabled: boolean; execution_enabled: boolean; activation_enabled: boolean }>>(
-    'luxor_custom_workflow_runtime_controls?select=authoring_enabled,execution_enabled,activation_enabled&singleton=eq.true&limit=1',
-  )
+  const controls = await getCustomWorkflowRuntimeControls()
   const common = {
     actorEmail: verifiedActorEmail,
     authorizedOperatorEmails: getAllowedZohoPortalEmails(),
@@ -140,11 +171,9 @@ export async function changeCustomWorkflowLifecycle(input: {
   actorEmail: string
 }) {
   const verifiedActorEmail = await requireCustomWorkflowOperator(input.actorEmail)
-  requireCustomWorkflowAuthoring()
+  await requireCustomWorkflowAuthoringControl()
   assertId(input.id)
-  const [controls] = await supabaseRest<Array<{ authoring_enabled: boolean; execution_enabled: boolean; activation_enabled: boolean }>>(
-    'luxor_custom_workflow_runtime_controls?select=authoring_enabled,execution_enabled,activation_enabled&singleton=eq.true&limit=1',
-  )
+  const controls = await getCustomWorkflowRuntimeControls()
   const decision = evaluateCustomWorkflowLifecycleAction({
     actorEmail: verifiedActorEmail,
     authorizedOperatorEmails: getAllowedZohoPortalEmails(),
@@ -181,7 +210,7 @@ export async function changeCustomWorkflowLifecycle(input: {
 
 export async function createCustomWorkflow(input: { name: unknown; definition?: unknown; actorEmail: string }) {
   const verifiedActorEmail = await requireCustomWorkflowOperator(input.actorEmail)
-  requireCustomWorkflowAuthoring()
+  await requireCustomWorkflowAuthoringControl()
   const name = normalizeName(input.name)
   const definition = input.definition === undefined ? createNewContactFollowUpDefinition() : cloneAndValidateDraft(input.definition)
   const [workflow] = await supabaseRest<CustomWorkflowRow[]>('rpc/luxor_custom_workflow_create_draft', {
@@ -200,7 +229,7 @@ export async function saveCustomWorkflowDraft(input: {
   actorEmail: string
 }) {
   const verifiedActorEmail = await requireCustomWorkflowOperator(input.actorEmail)
-  requireCustomWorkflowAuthoring()
+  await requireCustomWorkflowAuthoringControl()
   assertId(input.id)
   if (!Number.isSafeInteger(input.expectedRevision) || Number(input.expectedRevision) < 1) {
     throw new CustomWorkflowServiceError('The saved draft changed. Reload it before saving again.', 409)
@@ -238,7 +267,7 @@ export async function duplicateCustomWorkflow(id: string, actorEmail: string) {
 
 export async function archiveCustomWorkflowDraft(id: string, actorEmail: string) {
   const verifiedActorEmail = await requireCustomWorkflowOperator(actorEmail)
-  requireCustomWorkflowAuthoring()
+  await requireCustomWorkflowAuthoringControl()
   assertId(id)
   let rows: CustomWorkflowRow[]
   try {

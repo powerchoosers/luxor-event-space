@@ -45,6 +45,8 @@ export function AutomationsLibraryTab() {
   const [openEntryId, setOpenEntryId] = React.useState<string | null>(null)
   const [customWorkflows, setCustomWorkflows] = React.useState<CustomWorkflowSummary[]>([])
   const [customAuthoringEnabled, setCustomAuthoringEnabled] = React.useState(false)
+  const [customExecutionEnabled, setCustomExecutionEnabled] = React.useState(false)
+  const [customActivationEnabled, setCustomActivationEnabled] = React.useState(false)
   const [customLoadError, setCustomLoadError] = React.useState<string | null>(null)
   const [customRetryVersion, setCustomRetryVersion] = React.useState(0)
 
@@ -78,9 +80,11 @@ export function AutomationsLibraryTab() {
     setCustomLoadError(null)
     fetch('/api/marketing/custom-workflows', { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
-        const payload = await response.json().catch(() => ({})) as { enabled?: boolean; workflows?: CustomWorkflowSummary[]; error?: string }
+        const payload = await response.json().catch(() => ({})) as { enabled?: boolean; executionEnabled?: boolean; activationEnabled?: boolean; workflows?: CustomWorkflowSummary[]; error?: string }
         if (!response.ok) throw new Error(payload.error || 'Custom workflows could not load.')
         setCustomAuthoringEnabled(payload.enabled === true)
+        setCustomExecutionEnabled(payload.executionEnabled === true)
+        setCustomActivationEnabled(payload.activationEnabled === true)
         setCustomWorkflows(Array.isArray(payload.workflows) ? payload.workflows : [])
       })
       .catch((loadError: unknown) => {
@@ -122,15 +126,15 @@ export function AutomationsLibraryTab() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 id="custom-workflows-heading" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Custom workflows</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Versioned workflows are separate from the existing brochure sequence and calendar-managed tour notices. Sending and activation are currently unavailable.</p>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Versioned workflows stay separate from the brochure sequence and calendar-managed tour notices. {customExecutionEnabled ? 'Runtime dispatch is enabled for workflows an authorized operator activates.' : 'Custom message dispatch is off; no custom workflow messages will be sent.'} {customExecutionEnabled && !customActivationEnabled ? 'Activation is currently disabled.' : ''}</p>
           </div>
           {customAuthoringEnabled ? (
             <Link href="/portal/marketing/custom-workflows/new" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Create workflow</Link>
           ) : (
-            <button type="button" disabled title="Custom workflow schema and authorization validation are pending." className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-bold text-[color:var(--portal-muted)] opacity-70">Create workflow</button>
+            <button type="button" disabled title="Draft creation and editing are disabled by the workflow controls." className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-bold text-[color:var(--portal-muted)] opacity-70">Create workflow</button>
           )}
         </div>
-        {!customAuthoringEnabled ? <p className="mt-3 text-[11px] leading-5 text-[color:var(--portal-muted)]">The editor is prepared in the application, but draft storage remains closed until its additive schema is validated. Existing workflow controls are unchanged.</p> : null}
+        {!customAuthoringEnabled ? <p className="mt-3 text-[11px] leading-5 text-[color:var(--portal-muted)]">Draft creation and editing are disabled by the workflow controls. Existing saved workflows remain available to inspect.</p> : null}
         {customLoadError ? <div role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3"><p className="text-xs text-[color:var(--portal-muted)]">{customLoadError}</p><button type="button" onClick={() => setCustomRetryVersion((value) => value + 1)} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)]">Retry</button></div> : null}
         {customWorkflows.length ? <div className="mt-4 divide-y divide-[color:var(--portal-border)] border-t border-[color:var(--portal-border)]">{customWorkflows.map((workflow) => <Link key={workflow.id} href={`/portal/marketing/custom-workflows/${encodeURIComponent(workflow.id)}`} className="flex min-h-14 flex-col gap-1 py-3 transition hover:text-[#a8792f] sm:flex-row sm:items-center sm:justify-between"><span className="min-w-0"><span className="block break-words text-sm font-semibold text-[color:var(--portal-text)]">{workflow.name}</span><span className="mt-1 block text-[11px] text-[color:var(--portal-muted)]">{workflow.draft_definition.steps.length} configured steps · Contact form inquiry</span></span><span className="shrink-0 text-xs font-semibold text-[color:var(--portal-muted)]">{workflowStatusLabel(workflow.status)} · Updated {formatDate(workflow.updated_at)}</span></Link>)}</div> : customAuthoringEnabled ? <p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)]">No custom workflows saved yet.</p> : null}
       </section>

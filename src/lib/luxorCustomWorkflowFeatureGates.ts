@@ -1,7 +1,8 @@
-// The first custom-workflow release remains fail-closed. Draft authoring and
-// runtime dispatch must not become available through an environment override.
-export const CUSTOM_WORKFLOW_AUTHORING_ENABLED = false
-export const CUSTOM_WORKFLOW_EXECUTION_ENABLED = false
+// Code paths are release-ready, but live access still requires the independent
+// database controls. Those controls remain fail-closed until the rollout is
+// explicitly enabled there; no environment variable can override either gate.
+export const CUSTOM_WORKFLOW_AUTHORING_ENABLED = true
+export const CUSTOM_WORKFLOW_EXECUTION_ENABLED = true
 
 /**
  * Dispatch lane order is persisted and serialized by the database claim RPC.

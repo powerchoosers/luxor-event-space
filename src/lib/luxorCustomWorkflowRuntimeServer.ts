@@ -52,6 +52,14 @@ export async function processDueLuxorCustomWorkflowOrchestration(limit = 20): Pr
   }
   if (!CUSTOM_WORKFLOW_EXECUTION_ENABLED) return disabled
 
+  // Read the independent production control before calling any orchestration
+  // RPC. Some reconciliation RPCs intentionally hold stale/unsafe work; the
+  // orchestration lane must not mutate even that state while runtime is off.
+  const [runtimeControls] = await supabaseRest<Array<{ execution_enabled: boolean }>>(
+    'luxor_custom_workflow_runtime_controls?select=execution_enabled&singleton=eq.true&limit=1',
+  )
+  if (runtimeControls?.execution_enabled !== true) return disabled
+
   const batchSize = Math.min(Math.max(Math.trunc(limit) || 1, 1), 100)
   const [staleDispatchesHeld, ineligibleStepsStopped] = await Promise.all([
     supabaseRest<number>('rpc/luxor_custom_workflow_hold_stale_dispatches', {

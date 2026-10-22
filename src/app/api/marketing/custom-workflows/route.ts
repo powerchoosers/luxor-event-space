@@ -4,6 +4,7 @@ import {
   CUSTOM_WORKFLOW_AUTHORING_ENABLED,
   createCustomWorkflow,
   CustomWorkflowServiceError,
+  getCustomWorkflowFeatureStatus,
   listCustomWorkflows,
   requireCustomWorkflowOperator,
 } from '@/lib/luxorCustomWorkflowsServer'
@@ -17,9 +18,16 @@ export async function GET() {
   try {
     await requireCustomWorkflowOperator(session.email)
     if (!CUSTOM_WORKFLOW_AUTHORING_ENABLED) {
-      return NextResponse.json({ enabled: false, workflows: [], unavailableReason: 'Custom workflow storage and runtime validation are still closed.' }, { headers: { 'Cache-Control': 'no-store' } })
+      return NextResponse.json({ enabled: false, executionEnabled: false, activationEnabled: false, workflows: [], unavailableReason: 'Custom workflow authoring is disabled by its release control.' }, { headers: { 'Cache-Control': 'no-store' } })
     }
-    return NextResponse.json({ enabled: true, workflows: await listCustomWorkflows(session.email) }, { headers: { 'Cache-Control': 'no-store' } })
+    const features = await getCustomWorkflowFeatureStatus(session.email)
+    return NextResponse.json({
+      enabled: features.authoringEnabled,
+      executionEnabled: features.executionEnabled,
+      activationEnabled: features.activationEnabled,
+      unavailableReason: features.authoringEnabled ? undefined : 'Draft creation and editing are disabled by the workflow runtime control.',
+      workflows: await listCustomWorkflows(session.email),
+    }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     return serviceError(error)
   }
