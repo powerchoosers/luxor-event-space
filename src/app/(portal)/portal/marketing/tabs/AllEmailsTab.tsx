@@ -1161,7 +1161,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       {mailboxDrawerOpen ? <>
         <button type="button" aria-label="Close mailbox navigation" onClick={() => onMailboxDrawerOpenChange(false)} className="absolute inset-0 z-40 cursor-default bg-black/40 xl:bg-black/25" />
         <aside ref={mailboxDrawerRef} role="dialog" aria-modal="true" aria-labelledby="mailbox-drawer-title" tabIndex={-1}
-          className="absolute inset-y-0 left-0 z-50 flex w-[min(88vw,22rem)] flex-col overflow-y-auto border-r border-[color:var(--portal-border)] bg-[color:var(--portal-card)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl">
+          className="absolute inset-y-0 left-0 z-50 flex w-full flex-col overflow-y-auto border-r border-[color:var(--portal-border)] bg-[color:var(--portal-card)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl lg:w-[min(88vw,22rem)]">
           <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] px-5 py-4">
             <div className="min-w-0">
               <p id="mailbox-drawer-title" className="font-serif text-lg tracking-[0.2em] text-[#a8792f] dark:text-[#f1d27a]">LUXOR</p>
