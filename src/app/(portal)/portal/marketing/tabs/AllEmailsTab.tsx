@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   Folder,
   ArrowLeft,
@@ -46,6 +46,17 @@ import { luxorMailAdditionalFolders, type LuxorMailFolder } from '@/lib/luxorMai
 import type { LuxorMailboxPageRequest, LuxorMailboxPageResult } from '@/lib/luxorMailboxPage'
 
 const EmailPdfPreview = dynamic(() => import('@/components/portal/EmailPdfPreview'), { ssr: false })
+const EMAIL_READER_MOBILE_QUERY = '(max-width: 1023px)'
+
+function subscribeToEmailReaderMobileLayout(callback: () => void) {
+  const mediaQuery = window.matchMedia(EMAIL_READER_MOBILE_QUERY)
+  mediaQuery.addEventListener('change', callback)
+  return () => mediaQuery.removeEventListener('change', callback)
+}
+
+function getEmailReaderMobileLayoutSnapshot() {
+  return window.matchMedia(EMAIL_READER_MOBILE_QUERY).matches
+}
 
 export interface EmailMessageItem {
   id: string
@@ -202,6 +213,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   sharedMailboxes, activeMailboxKey, onReaderOpenChange, mailboxDrawerOpen, onMailboxDrawerOpenChange, onMailboxChange }: AllEmailsTabProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isMobileReader = useSyncExternalStore(
+    subscribeToEmailReaderMobileLayout,
+    getEmailReaderMobileLayoutSnapshot,
+    () => false,
+  )
   const reduceMotion = useReducedMotion()
   const appliedInitialMessageId = useRef<string | null>(null)
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
@@ -245,6 +261,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [replyStatus, setReplyStatus] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyPreviewOpen, setReplyPreviewOpen] = useState(false)
+  const hasUnsentReply = Boolean(replyText.trim() || replyInstruction.trim())
 
   // Reader pane controls
   const [viewMode, setViewMode] = useState<'html' | 'text'>('html')
@@ -759,7 +776,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }
 
   useEffect(() => {
-    if (!replyOpen) return
+    if (!replyOpen || isMobileReader) return
     const frame = window.requestAnimationFrame(() => {
       const scrollPane = threadScrollRef.current
       scrollPane?.scrollTo({
@@ -768,7 +785,17 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [replyOpen, reduceMotion])
+  }, [replyOpen, isMobileReader, reduceMotion])
+
+  useEffect(() => {
+    if (!hasUnsentReply) return
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeLeaving)
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }, [hasUnsentReply])
 
   // Persist stars only for canonical archived mail IDs. Synthetic event, job,
   // and campaign rows intentionally do not expose a non-durable star action.
@@ -895,7 +922,24 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     }
   }, [readerMenuOpen])
 
+  const canLeaveReplyDraft = (destination: string) => {
+    if (sendingReply) {
+      window.alert('Please wait for the reply to finish sending before leaving this email.')
+      return false
+    }
+    return !hasUnsentReply || window.confirm(`Discard your unsent reply and ${destination}?`)
+  }
+
+  const collapseReplyComposer = () => {
+    setReplyOpen(false)
+    setReplyPreviewOpen(false)
+  }
+
   const selectMessage = (message: EmailMessageItem) => {
+    const nextMessageKey = messageKey(message)
+    const isSameMessage = nextMessageKey === selectedMessageKey
+    if (!isSameMessage && !canLeaveReplyDraft('open a different email')) return
+
     const cached = messageDetailCache.get(detailCacheKey(message.id, message.folderId))
     setSelectedId(message.id)
     setReadRequestedId(message.id)
@@ -910,9 +954,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     setReplyOpen(false)
     setReplyPreviewOpen(false)
     setReaderMenuOpen(false)
-    setReplyText('')
-    setReplyInstruction('')
-    setReplyStatus(null)
+    if (!isSameMessage) {
+      setReplyText('')
+      setReplyInstruction('')
+      setReplyStatus(null)
+    }
     const currentMessageId = searchParams?.get('messageId') || ''
     if (!currentMessageId) readerOpenedFromList.current = true
     if (currentMessageId !== message.id) {
@@ -930,6 +976,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }
 
   const closeReader = () => {
+    if (!canLeaveReplyDraft('return to the email list')) return
+    setReplyOpen(false)
+    setReplyPreviewOpen(false)
+    setReplyText('')
+    setReplyInstruction('')
+    setReplyStatus(null)
     if (readerOpenedFromList.current && searchParams?.get('messageId')) {
       router.back()
       return
@@ -946,6 +998,89 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }
 
   const selectedCcLabel = messageDetail?.cc ? mailboxLabel(messageDetail.cc, inquiryByEmail, '') : ''
+  const renderReplyComposerContent = (mobile: boolean) => (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#eee9e0] px-3 py-2.5 sm:px-4">
+        <p className="min-w-0 truncate text-xs font-semibold text-zinc-800">To: {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail?.direction === 'incoming' ? messageDetail.from : messageDetail?.to || ''), inquiryByEmail)} <span className="font-normal text-zinc-500">{thread?.clientEmail || (messageDetail?.direction === 'incoming' ? firstMailboxEmail(messageDetail.from) : firstMailboxEmail(messageDetail?.to || ''))}</span></p>
+        <div className="flex shrink-0 items-center gap-3">
+          {currentInquiry && (
+            <Link href={`/portal/leads/${currentInquiry.id}`} className={`${mobile ? 'hidden sm:inline-flex' : ''} text-[9px] font-bold uppercase tracking-wider text-[#a8792f] hover:underline dark:text-[#f1d27a]`}>
+              View client file
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={collapseReplyComposer}
+            disabled={sendingReply}
+            className={mobile
+              ? 'inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:cursor-wait disabled:opacity-50'
+              : 'rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:cursor-wait disabled:opacity-50'}
+            aria-label="Collapse reply composer and keep draft"
+            title="Collapse reply composer and keep draft"
+          >
+            {mobile ? <span className="text-[11px] font-medium">Cancel</span> : null}
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+
+      <div className={mobile
+        ? 'flex min-h-0 flex-col gap-2.5 overflow-y-auto overscroll-contain p-3 portal-scrollbar'
+        : 'flex min-h-[360px] flex-col gap-2.5 p-3 sm:min-h-[400px] sm:p-4'}>
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+          <input
+            value={replyInstruction}
+            onChange={(event) => setReplyInstruction(event.target.value)}
+            placeholder="Optional direction for Elena"
+            className="min-h-10 min-w-0 flex-1 rounded-lg border border-[#e8e2d9] bg-white px-3 text-xs text-zinc-800 outline-none placeholder:text-zinc-400 focus:border-[#caa24c]/50"
+          />
+          <button
+            type="button"
+            onClick={() => void draftWithElena()}
+            disabled={draftingReply || loadingThread}
+            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#e8e2d9] px-3 text-xs font-medium text-[#a8792f] hover:bg-[#f8f5ef] disabled:opacity-50"
+          >
+            {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <FilePenLine size={13} />}
+            Draft with Elena
+          </button>
+        </div>
+        {replyPreviewOpen ? (
+          <iframe
+            title="Reply preview"
+            srcDoc={buildEmailReplyPreviewDocument(replyText)}
+            sandbox="allow-popups"
+            className={`${mobile ? 'min-h-[8rem]' : 'min-h-[11rem]'} flex-1 rounded-lg border border-[#e8e2d9] bg-white`}
+          />
+        ) : (
+          <EmailRichTextEditor
+            value={replyText}
+            onChange={setReplyText}
+            autoFocus
+            placeholder="Write your message…"
+            ariaLabel="Write your reply"
+            className={mobile ? 'min-h-[160px]' : 'min-h-[280px]'}
+          />
+        )}
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+          <p role={replyStatus ? 'status' : undefined} className="min-h-4 min-w-0 flex-1 text-[10px] text-zinc-500">{replyStatus}</p>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={() => setReplyPreviewOpen((open) => !open)} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-medium text-zinc-600 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+              <Eye size={14} /> {replyPreviewOpen ? 'Back to editor' : 'Preview'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void sendInlineReply()}
+              disabled={sendingReply || !replyText.trim()}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#b98a3d] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {sendingReply ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              {sendingReply ? 'Sending' : 'Send reply'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col">
@@ -1440,7 +1575,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 />
 
                 <AnimatePresence initial={false}>
-                  {messageDetail.direction !== 'campaign' && replyOpen && (
+                  {!isMobileReader && messageDetail.direction !== 'campaign' && replyOpen && (
                     <motion.div
                       ref={replyComposerRef}
                       key="inline-thread-reply"
@@ -1450,85 +1585,62 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                       transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
                       className="overflow-hidden rounded-xl border border-[#e8e2d9] bg-white shadow-sm"
                     >
-                      <div className="flex items-center justify-between gap-3 border-b border-[#eee9e0] px-3 py-2.5 sm:px-4">
-                        <p className="min-w-0 truncate text-xs font-semibold text-zinc-800">To: {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)} <span className="font-normal text-zinc-500">{thread?.clientEmail || (messageDetail.direction === 'incoming' ? firstMailboxEmail(messageDetail.from) : firstMailboxEmail(messageDetail.to))}</span></p>
-                        <div className="flex items-center gap-3">
-                          {currentInquiry && (
-                            <Link href={`/portal/leads/${currentInquiry.id}`} className="text-[9px] font-bold uppercase tracking-wider text-[#a8792f] hover:underline dark:text-[#f1d27a]">
-                              View client file
-                            </Link>
-                          )}
-                          <button type="button" onClick={() => { setReplyOpen(false); setReplyPreviewOpen(false) }} className="rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close reply composer">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex min-h-[360px] flex-col gap-2.5 p-3 sm:min-h-[400px] sm:p-4">
-                        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-                          <input
-                            value={replyInstruction}
-                            onChange={(event) => setReplyInstruction(event.target.value)}
-                            placeholder="Optional direction for Elena"
-                            className="min-h-10 min-w-0 flex-1 rounded-lg border border-[#e8e2d9] bg-white px-3 text-xs text-zinc-800 outline-none placeholder:text-zinc-400 focus:border-[#caa24c]/50"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void draftWithElena()}
-                            disabled={draftingReply || loadingThread}
-                            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#e8e2d9] px-3 text-xs font-medium text-[#a8792f] hover:bg-[#f8f5ef] disabled:opacity-50"
-                          >
-                            {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <FilePenLine size={13} />}
-                            Draft with Elena
-                          </button>
-                        </div>
-                        {replyPreviewOpen ? (
-                          <iframe
-                            title="Reply preview"
-                            srcDoc={buildEmailReplyPreviewDocument(replyText)}
-                            sandbox="allow-popups"
-                            className="min-h-[11rem] flex-1 rounded-lg border border-[#e8e2d9] bg-white"
-                          />
-                        ) : (
-                          <EmailRichTextEditor
-                            value={replyText}
-                            onChange={setReplyText}
-                            autoFocus
-                            placeholder="Write your message…"
-                            ariaLabel="Write your reply"
-                            className="min-h-[280px]"
-                          />
-                        )}
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <p role={replyStatus ? 'status' : undefined} className="min-h-4 min-w-0 flex-1 text-[10px] text-zinc-500">{replyStatus}</p>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <button type="button" onClick={() => setReplyPreviewOpen((open) => !open)} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-medium text-zinc-600 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-                              <Eye size={14} /> {replyPreviewOpen ? 'Back to editor' : 'Preview'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void sendInlineReply()}
-                              disabled={sendingReply || !replyText.trim()}
-                              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#b98a3d] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {sendingReply ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                              {sendingReply ? 'Sending' : 'Send reply'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
+                      {renderReplyComposerContent(false)}
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
             </div>
 
-            {messageDetail.direction !== 'campaign' && !replyOpen ? <div className="shrink-0 border-t border-[#e8e2d9] bg-white px-3 py-2 sm:px-6">
-              <button type="button" onClick={() => setReplyOpen(true)} aria-label="Open reply editor" className="flex min-h-11 w-full items-center gap-3 rounded-full border border-[#e8e2d9] bg-[#fffdf9] px-3 text-left text-sm text-zinc-500 shadow-sm hover:border-[#d8c8a8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-                <Reply size={17} className="shrink-0 text-zinc-500" />
-                <span className="min-w-0 flex-1 truncate">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}…</span>
-                <Send size={17} className="shrink-0 text-[#caa24c]" />
-              </button>
+            {messageDetail.direction !== 'campaign' && (isMobileReader || !replyOpen) ? <div className="shrink-0 border-t border-[#e8e2d9] bg-white px-3 py-2 sm:px-6">
+              {isMobileReader ? (
+                <motion.div
+                  layout
+                  animate={{ borderRadius: replyOpen ? 20 : 999 }}
+                  transition={{ layout: { duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }, borderRadius: { duration: reduceMotion ? 0.08 : 0.24 } }}
+                  className="overflow-hidden border border-[#e8e2d9] bg-[#fffdf9] shadow-sm"
+                >
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {replyOpen ? (
+                      <motion.div
+                        ref={replyComposerRef}
+                        id="mobile-inline-reply-composer"
+                        key="mobile-inline-reply-composer"
+                        role="region"
+                        aria-label="Reply to this email"
+                        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.985 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.99 }}
+                        transition={{ duration: reduceMotion ? 0.08 : 0.2, ease: [0.23, 1, 0.32, 1] }}
+                        className="flex max-h-[48%] min-h-0 flex-col bg-white"
+                      >
+                        {renderReplyComposerContent(true)}
+                      </motion.div>
+                    ) : (
+                      <motion.button
+                        layout
+                        key="mobile-reply-pill"
+                        type="button"
+                        onClick={() => setReplyOpen(true)}
+                        aria-label="Open reply editor"
+                        aria-controls="mobile-inline-reply-composer"
+                        aria-expanded={false}
+                        className="flex min-h-11 w-full items-center gap-3 px-3 text-left text-sm text-zinc-500 hover:border-[#d8c8a8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
+                      >
+                        <Reply size={17} className="shrink-0 text-zinc-500" />
+                        <span className="min-w-0 flex-1 truncate">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}…</span>
+                        <Send size={17} className="shrink-0 text-[#caa24c]" />
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              ) : (
+                <button type="button" onClick={() => setReplyOpen(true)} aria-label="Open reply editor" className="flex min-h-11 w-full items-center gap-3 rounded-full border border-[#e8e2d9] bg-[#fffdf9] px-3 text-left text-sm text-zinc-500 shadow-sm hover:border-[#d8c8a8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                  <Reply size={17} className="shrink-0 text-zinc-500" />
+                  <span className="min-w-0 flex-1 truncate">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}…</span>
+                  <Send size={17} className="shrink-0 text-[#caa24c]" />
+                </button>
+              )}
             </div> : null}
 
           </motion.div>
