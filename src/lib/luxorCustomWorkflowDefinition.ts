@@ -72,6 +72,7 @@ const MAX_BODY_LENGTH = 12_000
 const MAX_TEXT_LENGTH = 480
 const MAX_WAIT_AMOUNT = 365
 const CANONICAL_LUXOR_ORIGIN = 'https://www.luxoratlaspalmas.com'
+const LUXOR_TEXT_BRAND_PREFIX = /^(?:Luxor Event Space|Luxor Events|Luxor at Las Palmas Events|Luxor at Las Palmas)\b/i
 
 export function createNewContactFollowUpDefinition(): CustomWorkflowDefinition {
   return {
@@ -184,7 +185,7 @@ export function validateCustomWorkflowDefinition(
       if (typeof step.body !== 'string') errors.push({ path: `${path}.body`, message: 'Text content must be text.' })
       else {
         if (step.body.length > MAX_TEXT_LENGTH || (!allowIncompleteDraft && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Text body must be 1 to ${MAX_TEXT_LENGTH} characters.` })
-        if (step.body.trim() && !/^Luxor Event Space\b/i.test(step.body.trim())) errors.push({ path: `${path}.body`, message: 'Start the message with "Luxor Event Space" so the sender is identified.' })
+        if (step.body.trim() && !LUXOR_TEXT_BRAND_PREFIX.test(step.body.trim())) errors.push({ path: `${path}.body`, message: 'Start the message with a Luxor brand name (Luxor Event Space, Luxor Events, Luxor at Las Palmas, or Luxor at Las Palmas Events) so the sender is identified.' })
         if (step.body.trim() && !/\bstop\b/i.test(step.body)) errors.push({ path: `${path}.body`, message: 'Include clear STOP instructions in the text.' })
         validateMergeFields(step.body, `${path}.body`, errors)
       }
