@@ -98,11 +98,16 @@ body {
 }
 
 @media (max-width: 1023px) and (display-mode: standalone) {
-  /* iOS Home Screen apps can underfill the screen when the root body is fixed. */
+  /* iOS Home Screen apps can report dvh shortened by the top safe area. */
   body.portal-shell {
     position: relative;
     inset: auto;
-    height: 100dvh;
+    height: 100lvh;
+  }
+
+  /* Anchor the app navigation to the expanded standalone shell as well. */
+  .portal-mobile-nav {
+    position: absolute;
   }
 }
 

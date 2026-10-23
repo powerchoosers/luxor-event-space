@@ -13,6 +13,7 @@ type RectSnapshot = {
 }
 
 type ViewportSnapshot = {
+  updatedAt: string
   innerHeight: number
   clientHeight: number
   outerHeight: number
@@ -66,6 +67,7 @@ function readViewportSnapshot(
   const screenWithAvailTop = window.screen as Screen & { availTop?: number }
 
   return {
+    updatedAt: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }),
     innerHeight: round(window.innerHeight),
     clientHeight: round(document.documentElement.clientHeight),
     outerHeight: round(window.outerHeight),
@@ -187,6 +189,7 @@ export function PortalViewportDiagnostics({
           </dl>
         ) : <p className="text-[10px] text-[color:var(--portal-muted)]">Measuring...</p>}
         <div className="mt-2 flex justify-end">
+          {snapshot && <p aria-live="polite" className="mr-auto self-center text-[10px] text-[color:var(--portal-muted)]">Updated {snapshot.updatedAt}</p>}
           <button type="button" onClick={refresh} className="min-h-9 rounded-lg px-3 text-[10px] font-semibold text-[#a8792f]">Refresh values</button>
         </div>
       </section>
