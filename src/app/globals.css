@@ -97,6 +97,15 @@ body {
   }
 }
 
+@media (max-width: 1023px) and (display-mode: standalone) {
+  /* iOS Home Screen apps can underfill the screen when the root body is fixed. */
+  body.portal-shell {
+    position: relative;
+    inset: auto;
+    height: 100dvh;
+  }
+}
+
 body[data-portal-theme='dark'] {
   --portal-bg: #080706;
   --portal-card: rgba(0, 0, 0, 0.36);
