@@ -1,10 +1,10 @@
 import 'server-only'
 
-import { compactText, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount } from './luxorInquiryTypes'
+import { compactText, LUXOR_INQUIRY_SMS_DISCLOSURE, LUXOR_MARKETING_EMAIL_DISCLOSURE, LUXOR_MARKETING_EMAIL_DISCLOSURE_VERSION, LUXOR_MARKETING_SMS_DISCLOSURE, LUXOR_SMS_CONSENT_DISCLOSURE_VERSION, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
 import { compareLuxorScheduledTours, getLuxorInquiryPageRequest, loadLuxorPages } from './luxorTourMetrics'
-import { recordLuxorSmsConsent } from './luxorTextAutomationsServer'
+import { recordLuxorWebsiteSmsConsent } from './luxorTextAutomationsServer'
 import {
   applyTourSlotToInquiry,
   assertTourSlotCanBeBooked,
@@ -60,20 +60,36 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
   }
 
   const smsScopes = [
-    ...(phone && input.smsOptIn ? ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice'] : []),
-    ...(phone && input.smsMarketingOptIn ? ['marketing'] : []),
+    ...(phone && input.smsOptIn === true ? ['customer_care', 'tour', 'event'] : []),
+    ...(phone && input.smsMarketingOptIn === true ? ['marketing'] : []),
   ]
 
   const metadata: Record<string, unknown> = {
     ...(input.metadata ?? {}),
     ...(input.sessionId ? { publicSessionId: compactText(input.sessionId).slice(0, 120) } : {}),
     ...(input.attribution ? { attribution: input.attribution } : {}),
+    ...(email && input.marketingOptIn === true
+      ? {
+          marketingEmailConsent: {
+            status: 'opted_in',
+            source: 'website_inquiry_form',
+            disclosureVersion: LUXOR_MARKETING_EMAIL_DISCLOSURE_VERSION,
+            disclosure: LUXOR_MARKETING_EMAIL_DISCLOSURE,
+            email,
+            capturedAt: new Date().toISOString(),
+          },
+        }
+      : {}),
     ...(smsScopes.length
       ? {
           smsConsent: {
             status: 'opted_in',
             source: 'website_inquiry_form',
-            disclosureVersion: '2026-07-27',
+            disclosureVersion: LUXOR_SMS_CONSENT_DISCLOSURE_VERSION,
+            disclosures: [
+              ...(input.smsOptIn === true ? [LUXOR_INQUIRY_SMS_DISCLOSURE] : []),
+              ...(input.smsMarketingOptIn === true ? [LUXOR_MARKETING_SMS_DISCLOSURE] : []),
+            ],
             scopes: smsScopes,
             capturedAt: new Date().toISOString(),
           },
@@ -97,7 +113,7 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     flow,
     campaign_key: compactText(input.campaignKey) || null,
     rsvp_status: normalizeRsvpStatus(input.rsvpStatus),
-    marketing_opt_in: Boolean(input.marketingOptIn),
+    marketing_opt_in: Boolean(email && input.marketingOptIn === true),
     attendee_count: parseGuestCount(input.attendeeCount),
     page_path: compactText(input.pagePath) || null,
     referrer: compactText(input.referrer) || null,
@@ -177,18 +193,19 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     throw error
   }
 
-  const smsConsent = row.metadata?.smsConsent as { scopes?: string[] } | undefined
+  const smsConsent = row.metadata?.smsConsent as { scopes?: string[]; disclosureVersion?: string; disclosures?: string[] } | undefined
   if (created?.phone && smsConsent) {
     try {
-      await recordLuxorSmsConsent(created.phone, 'START', 'website_inquiry_form', {
+      const consent = await recordLuxorWebsiteSmsConsent(created.phone, 'website_inquiry_form', {
         scopes: smsConsent.scopes,
         proof: {
           inquiry_id: created.id,
           page_path: created.page_path,
-          disclosure_version: '2026-07-27',
+          disclosure_version: smsConsent.disclosureVersion,
+          disclosure_texts: smsConsent.disclosures,
         },
       })
-      if (smsConsent.scopes?.includes('customer_care')) {
+      if (consent?.status === 'opted_in' && smsConsent.scopes?.includes('customer_care')) {
         const { queueInquiryTextJobs } = await import('./luxorTextCampaignsServer')
         await queueInquiryTextJobs(created)
       }

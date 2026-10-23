@@ -111,6 +111,22 @@ export type LuxorInquiryInput = {
   metadata?: Record<string, unknown>
 }
 
+const LUXOR_INQUIRY_CONSENT_FIELDS = ['smsOptIn', 'smsMarketingOptIn', 'marketingOptIn'] as const
+
+export const LUXOR_SMS_CONSENT_DISCLOSURE_VERSION = '2026-10-23-v2'
+export const LUXOR_INQUIRY_SMS_DISCLOSURE = 'By checking this box, I agree to receive text messages from Luxor at Las Palmas Events regarding my inquiry, tour scheduling, appointment reminders, and related event-planning communications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.'
+export const LUXOR_MARKETING_SMS_DISCLOSURE = 'By checking this box, I agree to receive recurring promotional text messages from Luxor at Las Palmas Events about exclusive offers, upcoming events, workshops, special classes, open houses, and other experiences hosted at our venue. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.'
+export const LUXOR_MARKETING_EMAIL_DISCLOSURE_VERSION = '2026-10-23-v1'
+export const LUXOR_MARKETING_EMAIL_DISCLOSURE = 'Get special offers, event updates, and inspiration. Unsubscribe using the link in any marketing email.'
+
+export function hasValidLuxorInquiryConsentFlags(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const input = value as Record<string, unknown>
+  return LUXOR_INQUIRY_CONSENT_FIELDS.every((field) =>
+    !Object.prototype.hasOwnProperty.call(input, field) || typeof input[field] === 'boolean',
+  )
+}
+
 export type LuxorPublicAttribution = {
   landingPage?: string
   initialReferrer?: string

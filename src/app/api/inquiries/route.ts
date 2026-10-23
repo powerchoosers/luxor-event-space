@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listAllLuxorInquiries, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
-import { isGuestCountOverCapacity, isLuxorEventTypeRequiredFlow, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
+import { hasValidLuxorInquiryConsentFlags, isGuestCountOverCapacity, isLuxorEventTypeRequiredFlow, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { addMarketingMember } from '@/lib/luxorMarketingServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
@@ -92,7 +92,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const payload = (await request.json()) as LuxorInquiryInput
+    const rawPayload: unknown = await request.json()
+    if (!hasValidLuxorInquiryConsentFlags(rawPayload)) {
+      return NextResponse.json({ error: 'Consent choices must be submitted as separate true or false values.' }, { status: 400 })
+    }
+    const payload = rawPayload as LuxorInquiryInput
     if (isLuxorEventTypeRequiredFlow(payload.flow)) {
       try {
         payload.eventType = normalizeLuxorEventType(payload.eventType)

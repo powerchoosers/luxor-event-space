@@ -135,12 +135,7 @@ export async function listEligibleTextAudience(
     const phone = normalizePhoneNumber(inquiry.phone || '')
     if (!phone || !optedInPhones.has(phone) || seen.has(phone)) return []
     const scopes = optedInPhones.get(phone) || []
-    if (
-      filter.requiredScope &&
-      scopes.length &&
-      !scopes.includes(filter.requiredScope) &&
-      !scopes.includes('customer_care')
-    ) return []
+    if (filter.requiredScope && !scopes.includes(filter.requiredScope)) return []
     if (inquiryIds.size && !inquiryIds.has(inquiry.id)) return []
     if (statuses.size && !statuses.has(inquiry.status)) return []
     if (eventTypes.size && !eventTypes.has(inquiry.event_type || '')) return []

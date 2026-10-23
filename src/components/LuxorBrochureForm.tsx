@@ -1,12 +1,13 @@
 'use client'
 
-import { FormEvent, useEffect, useRef, useState } from 'react'
-import { Check, Download, FileText, Loader2 } from 'lucide-react'
+import { FormEvent, useEffect, useId, useRef, useState } from 'react'
+import { Check, ChevronDown, Download, FileText, Loader2, Mail, Megaphone } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PortalDatePicker } from '@/components/portal/PortalUI'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Link from 'next/link'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
+import { LUXOR_INQUIRY_SMS_DISCLOSURE, LUXOR_MARKETING_EMAIL_DISCLOSURE, LUXOR_MARKETING_SMS_DISCLOSURE } from '@/lib/luxorInquiryTypes'
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -24,6 +25,9 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
   const [emailMarketingConsent, setEmailMarketingConsent] = useState(false)
   const [smsCustomerCareConsent, setSmsCustomerCareConsent] = useState(false)
   const [smsMarketingConsent, setSmsMarketingConsent] = useState(false)
+  const [inquirySmsDisclosureOpen, setInquirySmsDisclosureOpen] = useState(false)
+  const [marketingSmsDisclosureOpen, setMarketingSmsDisclosureOpen] = useState(false)
+  const preferencesId = useId()
 
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -313,37 +317,68 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
                 </div>
               </div>
 
-              <div className="space-y-3 border-t border-[#d8c4a4] pt-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#8d672b]">Optional contact preferences</p>
-                <label className="flex cursor-pointer select-none items-start gap-3 text-xs leading-relaxed text-[#665a4e]">
-                  <input
-                    type="checkbox"
-                    checked={emailMarketingConsent}
-                    onChange={(e) => setEmailMarketingConsent(e.target.checked)}
-                    className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]"
-                  />
-                  <span>Email me occasional Luxor news and planning ideas.</span>
-                </label>
-                <label className="flex cursor-pointer select-none items-start gap-3 text-xs leading-relaxed text-[#665a4e]">
-                  <input
-                    type="checkbox"
-                    checked={smsCustomerCareConsent}
-                    onChange={(e) => setSmsCustomerCareConsent(e.target.checked)}
-                    className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]"
-                  />
-                  <span>I agree to receive customer-care text messages from Luxor Event Space about my inquiry, tour, booking, payment, or event. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.</span>
-                </label>
-                <label className="flex cursor-pointer select-none items-start gap-3 text-xs leading-relaxed text-[#665a4e]">
-                  <input
-                    type="checkbox"
-                    checked={smsMarketingConsent}
-                    onChange={(e) => setSmsMarketingConsent(e.target.checked)}
-                    className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]"
-                  />
-                  <span>I agree to receive occasional promotional text messages from Luxor Event Space, such as venue open-house invitations and planning offers. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.</span>
-                </label>
-                <p className="ml-7 text-xs leading-5 text-[#827567]">Text choices are separate and optional. Read the <Link href="/privacy" className="text-[#8d672b] underline underline-offset-4">Privacy Policy</Link> and <Link href="/terms" className="text-[#8d672b] underline underline-offset-4">Terms</Link>.</p>
-              </div>
+              <section aria-labelledby={`${preferencesId}-heading`} className="space-y-3 border-t border-[#d8c4a4] pt-5">
+                <div className="mb-1">
+                  <h3 id={`${preferencesId}-heading`} className="font-serif text-xl text-[#241d17]">Contact Preferences</h3>
+                  <p className="mt-1 text-sm leading-6 text-[#665a4e]">Choose how you’d like us to hear from you.</p>
+                </div>
+
+                <div className="rounded-2xl border border-[#d8c4a4] bg-[#fffdfa] p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f5efe4] text-[#8d672b]"><Mail className="h-4 w-4" /></span>
+                    <div>
+                      <h4 className="font-serif text-lg text-[#241d17]">Inquiry Communications</h4>
+                      <p className="mt-1 text-sm leading-6 text-[#665a4e]">We’ll contact you about your inquiry, venue visit, and event planning needs.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 border-t border-[#eadfce] pt-4">
+                    <label htmlFor={`${preferencesId}-inquiry-sms`} className="flex cursor-pointer items-start gap-3 rounded-lg p-1 text-sm text-[#33291f]">
+                      <input id={`${preferencesId}-inquiry-sms`} type="checkbox" checked={smsCustomerCareConsent} onChange={(e) => setSmsCustomerCareConsent(e.target.checked)} className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
+                      <span><span className="font-semibold">Text me about my inquiry.</span> <span className="text-[11px] font-semibold uppercase tracking-wide text-[#8d672b]">Optional</span><span className="mt-1 block text-xs leading-5 text-[#827567]">Get tour confirmations, reminders, and updates.</span></span>
+                    </label>
+                    <DisclosureButton
+                      id={`${preferencesId}-inquiry-sms-toggle`}
+                      panelId={`${preferencesId}-inquiry-sms-disclosure`}
+                      open={inquirySmsDisclosureOpen}
+                      onClick={() => setInquirySmsDisclosureOpen((open) => !open)}
+                    />
+                    <div id={`${preferencesId}-inquiry-sms-disclosure`} hidden={!inquirySmsDisclosureOpen} className="ml-7 mt-2 rounded-lg bg-[#f8f4ed] p-3 text-xs leading-5 text-[#665a4e]">
+                      {LUXOR_INQUIRY_SMS_DISCLOSURE}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-[#d8c4a4] bg-[#fffdfa] p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f5efe4] text-[#8d672b]"><Megaphone className="h-4 w-4" /></span>
+                    <div>
+                      <h4 className="font-serif text-lg text-[#241d17]">Marketing &amp; Special Events</h4>
+                      <p className="mt-1 text-sm leading-6 text-[#665a4e]">Be the first to know about exclusive offers, upcoming Luxor events, special classes, and more.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-3 border-t border-[#eadfce] pt-4">
+                    <label htmlFor={`${preferencesId}-marketing-email`} className="flex cursor-pointer items-start gap-3 rounded-lg p-1 text-sm text-[#33291f]">
+                      <input id={`${preferencesId}-marketing-email`} type="checkbox" checked={emailMarketingConsent} onChange={(e) => setEmailMarketingConsent(e.target.checked)} className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
+                      <span><span className="font-semibold">Send me marketing emails.</span> <span className="text-[11px] font-semibold uppercase tracking-wide text-[#8d672b]">Optional</span><span className="mt-1 block text-xs leading-5 text-[#827567]">{LUXOR_MARKETING_EMAIL_DISCLOSURE}</span></span>
+                    </label>
+                    <label htmlFor={`${preferencesId}-marketing-sms`} className="flex cursor-pointer items-start gap-3 rounded-lg p-1 text-sm text-[#33291f]">
+                      <input id={`${preferencesId}-marketing-sms`} type="checkbox" checked={smsMarketingConsent} onChange={(e) => setSmsMarketingConsent(e.target.checked)} className="luxor-public-checkbox mt-1 h-4 w-4 shrink-0 rounded border-2 border-[#caa24c]" />
+                      <span><span className="font-semibold">Send me promotional text messages.</span> <span className="text-[11px] font-semibold uppercase tracking-wide text-[#8d672b]">Optional</span><span className="mt-1 block text-xs leading-5 text-[#827567]">Get offers, events, and exclusive experiences.</span></span>
+                    </label>
+                    <DisclosureButton
+                      id={`${preferencesId}-marketing-sms-toggle`}
+                      panelId={`${preferencesId}-marketing-sms-disclosure`}
+                      open={marketingSmsDisclosureOpen}
+                      onClick={() => setMarketingSmsDisclosureOpen((open) => !open)}
+                    />
+                    <div id={`${preferencesId}-marketing-sms-disclosure`} hidden={!marketingSmsDisclosureOpen} className="ml-7 rounded-lg bg-[#f8f4ed] p-3 text-xs leading-5 text-[#665a4e]">
+                      {LUXOR_MARKETING_SMS_DISCLOSURE}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <p className="text-xs leading-5 text-[#827567]">By submitting this form, you agree to our <Link href="/privacy" className="text-[#8d672b] underline underline-offset-4">Privacy Policy</Link> and <Link href="/terms" className="text-[#8d672b] underline underline-offset-4">Terms</Link>.</p>
 
               {/* Error Alert */}
               {error && (
@@ -377,5 +412,13 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+function DisclosureButton({ id, panelId, open, onClick }: { id: string; panelId: string; open: boolean; onClick: () => void }) {
+  return (
+    <button id={id} type="button" aria-controls={panelId} aria-expanded={open} onClick={onClick} className="ml-7 mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-md px-1 text-xs font-semibold text-[#8d672b] underline underline-offset-4 outline-none hover:text-[#6f4d1f] focus-visible:ring-2 focus-visible:ring-[#caa24c]">
+      Learn more <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+    </button>
   )
 }

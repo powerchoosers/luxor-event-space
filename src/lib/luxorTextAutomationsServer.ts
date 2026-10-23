@@ -67,6 +67,59 @@ export async function recordLuxorSmsConsent(
   return saved ?? null
 }
 
+/**
+ * Record consent collected by the public inquiry form without allowing a
+ * repeated submission to reverse a previously recorded SMS opt-out. A
+ * website checkbox is not the equivalent of an inbound START keyword.
+ *
+ * The conditional PATCH protects an existing opted-out row. If no row exists,
+ * INSERT ... ON CONFLICT DO NOTHING protects a STOP that races with the form
+ * submission. Explicit inbound START continues to use recordLuxorSmsConsent.
+ */
+export async function recordLuxorWebsiteSmsConsent(
+  phone: string,
+  source: string,
+  options: { scopes?: string[]; proof?: Record<string, unknown> } = {},
+) {
+  const phoneNumber = normalizePhoneNumber(phone)
+  if (!phoneNumber) return null
+
+  const timestamp = new Date().toISOString()
+  const consentScopes = options.scopes || ['customer_care', 'tour', 'event']
+  const consent = {
+    status: 'opted_in' as const,
+    source,
+    opted_out_at: null,
+    opted_in_at: timestamp,
+    consent_scopes: consentScopes,
+    proof: {
+      ...(options.proof || {}),
+      source,
+      captured_at: timestamp,
+    },
+    last_confirmed_at: timestamp,
+    updated_at: timestamp,
+  }
+
+  const phoneFilter = `phone_number=eq.${encodeURIComponent(phoneNumber)}`
+  const [updated] = await supabaseRest<ConsentRow[]>(`luxor_sms_consents?${phoneFilter}&status=neq.opted_out&select=*`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(consent),
+  })
+  if (updated) return updated
+
+  const [inserted] = await supabaseRest<ConsentRow[]>('luxor_sms_consents?on_conflict=phone_number&select=*', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+    body: JSON.stringify({ phone_number: phoneNumber, ...consent }),
+  })
+  if (inserted) return inserted
+
+  // A conflicting row may have been inserted concurrently by a STOP webhook.
+  return getLuxorSmsConsent(phoneNumber)
+}
+
 export async function getLuxorSmsConsent(phone: string) {
   const phoneNumber = normalizePhoneNumber(phone)
   if (!phoneNumber) return null
