@@ -72,7 +72,7 @@ async function ProtectedPortalLayout({ children }: { children: React.ReactNode }
       lang="en"
       className={`${manrope.variable} ${cormorant.variable} h-full scroll-smooth antialiased`}
     >
-      <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={member.permissions} role={member.role}>{children}</PortalShell>
+      <PortalShell session={session} initialProfile={userProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={member.permissions} role={member.role} buildId={process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7)}>{children}</PortalShell>
     </html>
   );
 }

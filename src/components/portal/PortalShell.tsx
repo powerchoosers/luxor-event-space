@@ -46,6 +46,7 @@ import type { PortalPermission, PortalRole } from '@/lib/luxorPortalAccess'
 import Image from 'next/image'
 import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
 import { PortalContactAvatar } from '@/components/portal/PortalUI'
+import { PortalViewportDiagnostics } from '@/components/portal/PortalViewportDiagnostics'
 import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
 import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
@@ -204,22 +205,23 @@ function getPortalDesktopViewportSnapshot() {
   return window.matchMedia(PORTAL_DESKTOP_MEDIA_QUERY).matches
 }
 
-export function PortalShell({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole }) {
+export function PortalShell({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role, buildId }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole; buildId?: string }) {
   return (
     <ToastProvider>
       <Suspense fallback={null}>
-        <PortalShellContent session={session} initialProfile={initialProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={permissions} role={role}>{children}</PortalShellContent>
+        <PortalShellContent session={session} initialProfile={initialProfile} initialTheme={initialTheme} initialSidebarCollapsed={initialSidebarCollapsed} permissions={permissions} role={role} buildId={buildId}>{children}</PortalShellContent>
       </Suspense>
     </ToastProvider>
   )
 }
 
-function PortalShellContent({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole }) {
+function PortalShellContent({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role, buildId }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole; buildId?: string }) {
   const pathname = usePathname()
   const canAccess = useCallback((permission: PortalPermission) => role === 'owner' || permissions.includes(permission), [permissions, role])
   const isLeadDetailPage = pathname.startsWith('/portal/leads/')
   const router = useRouter()
   const searchParams = useSearchParams()
+  const viewportDiagnosticsOpen = searchParams?.get('viewport-diagnostics') === '1'
   const isMobileViewport = useSyncExternalStore(
     subscribeToPortalMobileViewport,
     getPortalMobileViewportSnapshot,
@@ -238,6 +240,12 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     pathname === '/portal/messages' ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
   const isEmailPage = pathname === '/portal/emails'
+  const closeViewportDiagnostics = useCallback(() => {
+    const nextParams = new URLSearchParams(searchParams?.toString() ?? '')
+    nextParams.delete('viewport-diagnostics')
+    const query = nextParams.toString()
+    router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
+  }, [pathname, router, searchParams])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed)
   const [sidebarHoverOpen, setSidebarHoverOpen] = useState(false)
   const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
@@ -1199,6 +1207,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           />
         )}
       </AnimatePresence>
+      {viewportDiagnosticsOpen ? <PortalViewportDiagnostics buildId={buildId} onClose={closeViewportDiagnostics} /> : null}
       </PortalVoiceProvider>
     </body>
   )

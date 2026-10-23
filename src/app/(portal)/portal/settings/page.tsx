@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Settings,
@@ -165,6 +166,7 @@ type BrandAsset = {
 }
 
 export default function SettingsPage() {
+  const router = useRouter()
   const { notify } = useToast()
   const [activeTab, setActiveTab] = useState<Tab>('team')
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false)
@@ -599,6 +601,16 @@ export default function SettingsPage() {
                         <span className="mt-1 block text-[9px] text-[color:var(--portal-faint)]">Keep more room for work</span>
                       </button>
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-t border-[color:var(--portal-border)] pt-3">
+                    <p className="text-[10px] text-[color:var(--portal-faint)]">For support with a mobile screen gap</p>
+                    <button
+                      type="button"
+                      onClick={() => router.push('/portal/settings?viewport-diagnostics=1', { scroll: false })}
+                      className="min-h-9 shrink-0 rounded-lg px-2 text-[10px] font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
+                    >
+                      Open viewport check
+                    </button>
                   </div>
                 </div>
               </div>
