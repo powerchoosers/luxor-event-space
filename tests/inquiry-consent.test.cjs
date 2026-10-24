@@ -49,7 +49,7 @@ test('inquiry normalization records only explicitly checked independent choices'
     './luxorTextAutomationsServer': {},
     './luxorTourSlotsServer': {},
   })
-  const base = { fullName: 'Synthetic Lead', email: 'lead@example.invalid', phone: '3125550100', flow: 'brochure_lead', eventType: 'Wedding' }
+  const base = { fullName: 'Synthetic Lead', email: 'lead@example.invalid', phone: '3125550100', source: 'homepage_brochure', flow: 'brochure_lead', eventType: 'Wedding' }
   const none = normalizeInquiry(base)
   assert.equal(none.marketing_opt_in, false)
   assert.equal(none.metadata.marketingEmailConsent, undefined)
@@ -82,6 +82,81 @@ test('inquiry normalization records only explicitly checked independent choices'
   assert.equal(combined.metadata.smsConsent.disclosures.length, 2)
   assert.equal(combined.metadata.smsConsent.disclosureVersion, '2026-10-23-v2')
   assert.equal(combined.marketing_opt_in, true)
+
+  for (const invalidOrMissing of [false, undefined, 'false']) {
+    const payload = {
+      ...base,
+      ...(invalidOrMissing === undefined ? {} : { smsOptIn: invalidOrMissing }),
+      ...(invalidOrMissing === undefined ? {} : { marketingOptIn: invalidOrMissing }),
+      metadata: {
+        smsConsent: { status: 'opted_in', scopes: ['customer_care', 'marketing'], disclosures: ['forged'] },
+        marketingEmailConsent: { status: 'opted_in', disclosure: 'forged' },
+        consentPage: 'forged',
+        disclosureVersion: 'forged',
+        keepUnrelated: 'preserved',
+      },
+    }
+    const normalized = normalizeInquiry(payload)
+    assert.equal(normalized.metadata.smsConsent, undefined)
+    assert.equal(normalized.metadata.marketingEmailConsent, undefined)
+    assert.equal(normalized.metadata.consentPage, undefined)
+    assert.equal(normalized.metadata.disclosureVersion, undefined)
+    assert.equal(normalized.metadata.keepUnrelated, 'preserved')
+    assert.equal(normalized.marketing_opt_in, false)
+  }
+
+  const forgedDisclosure = normalizeInquiry({
+    ...base,
+    smsOptIn: true,
+    marketingOptIn: true,
+    metadata: { smsConsent: { disclosures: ['forged'] }, marketingEmailConsent: { disclosure: 'forged' } },
+  })
+  assert.equal(forgedDisclosure.metadata.smsConsent.disclosures[0], inquiryTypes.LUXOR_INQUIRY_SMS_DISCLOSURE)
+  assert.equal(forgedDisclosure.metadata.marketingEmailConsent.disclosure, inquiryTypes.LUXOR_MARKETING_EMAIL_DISCLOSURE)
+
+  const legacySmsSignup = normalizeInquiry({
+    ...base,
+    source: 'website_sms_signup',
+    flow: 'website_sms_signup',
+    smsOptIn: true,
+    smsMarketingOptIn: true,
+  })
+  assert.equal(legacySmsSignup.metadata.smsConsent.source, 'website_sms_signup')
+  assert.deepEqual(legacySmsSignup.metadata.smsConsent.scopes, ['customer_care', 'tour', 'event', 'marketing'])
+  assert.equal(legacySmsSignup.metadata.smsConsent.disclosures[0], inquiryTypes.LUXOR_SMS_SIGNUP_CUSTOMER_CARE_DISCLOSURE)
+
+  const visitEmail = normalizeInquiry({
+    ...base,
+    source: 'visit_page',
+    flow: 'visit_booking',
+    marketingOptIn: true,
+  })
+  assert.equal(visitEmail.marketing_opt_in, true)
+  assert.equal(visitEmail.metadata.marketingEmailConsent.disclosure, inquiryTypes.LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE)
+  const spanishVisitEmail = normalizeInquiry({
+    ...base,
+    source: 'visit_page',
+    flow: 'visit_booking',
+    marketingOptIn: true,
+    metadata: { websiteLocale: 'es' },
+  })
+  assert.equal(spanishVisitEmail.metadata.marketingEmailConsent.disclosure, inquiryTypes.LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE_ES)
+
+  const spanishNewsletter = normalizeInquiry({
+    ...base,
+    source: 'newsletter',
+    flow: 'newsletter_signup',
+    marketingOptIn: true,
+    metadata: { tourLanguagePreference: 'es' },
+  })
+  assert.equal(spanishNewsletter.marketing_opt_in, true)
+  assert.equal(spanishNewsletter.metadata.marketingEmailConsent.disclosure, inquiryTypes.LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_ES)
+  assert.equal(spanishNewsletter.metadata.marketingEmailConsent.disclosureVersion, inquiryTypes.LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_VERSION)
+
+  const unknownForm = normalizeInquiry({ ...base, source: 'client-selected-source', smsOptIn: true, marketingOptIn: true })
+  assert.equal(unknownForm.metadata.smsConsent, undefined)
+  assert.equal(unknownForm.metadata.marketingEmailConsent, undefined)
+  assert.equal(unknownForm.marketing_opt_in, false)
 })
 
 test('website consent never overwrites STOP, including a STOP racing the first insert', async () => {
@@ -124,10 +199,8 @@ test('website consent never overwrites STOP, including a STOP racing the first i
   current = { phone_number: '+13125550100', status: 'opted_out', proof: { stop: true }, opted_out_at: 'old' }
   inserted = false
   await recordLuxorWebsiteSmsConsent('3125550100', 'website_inquiry_form', { scopes: ['marketing'] })
-  assert.equal(calls.length, 3)
-  assert.match(calls[0].query, /status=neq\.opted_out/)
-  assert.equal(calls[1].method, 'POST')
-  assert.match(calls[1].headers.Prefer, /ignore-duplicates/)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].query, /status,updated_at,consent_scopes,proof/)
   assert.equal(current.status, 'opted_out')
   assert.deepEqual(current.proof, { stop: true })
 
@@ -135,9 +208,84 @@ test('website consent never overwrites STOP, including a STOP racing the first i
   current = null
   inserted = true
   const result = await recordLuxorWebsiteSmsConsent('3125550100', 'website_inquiry_form', { scopes: ['customer_care'] })
-  assert.equal(calls[0].method, 'PATCH')
-  assert.equal(calls[1].method, 'POST')
+  assert.equal(calls[0].method, 'GET')
+  assert.equal(calls[1].method, 'PATCH')
+  assert.equal(calls[2].method, 'POST')
+  assert.equal(calls[3].method, 'GET')
   assert.equal(result.status, 'opted_out')
+})
+
+test('repeated non-STOP website opt-ins do not replace prior consent proof', async () => {
+  const priorProof = { inquiry_id: 'synthetic-old', disclosure_texts: ['old approved copy'] }
+  let updatedBody
+  const { recordLuxorWebsiteSmsConsent } = loadTypeScript('src/lib/luxorTextAutomationsServer.ts', {
+    'server-only': {},
+    twilio: {},
+    './luxorCallsServer': { normalizePhoneNumber: (value) => `+1${value.replace(/\D/g, '').slice(-10)}` },
+    './luxorMessagesServer': {},
+    './luxorPhoneNumbersServer': {},
+    './supabaseRestServer': {
+      supabaseRest: async (_query, init = {}) => {
+        if (!init.method) return [{ phone_number: '+13125550100', status: 'opted_in', proof: priorProof }]
+        updatedBody = JSON.parse(init.body)
+        return [{ phone_number: '+13125550100', ...updatedBody }]
+      },
+    },
+    './luxorTwilioServer': {},
+    './luxorInquiriesServer': {},
+    './luxorTestLeadServer': {},
+    './luxorTestLeadPolicy': {},
+  })
+  await recordLuxorWebsiteSmsConsent('3125550100', 'website_inquiry_form', {
+    scopes: ['customer_care'],
+    proof: { inquiry_id: 'synthetic-new', disclosure_texts: ['new approved copy'] },
+  })
+  assert.deepEqual(updatedBody.proof, priorProof)
+})
+
+test('SMS signup marketing choice persists only server-selected disclosure evidence and reuses its source', async () => {
+  let inserted
+  let recorded
+  const inquiryTypes = loadTypeScript('src/lib/luxorInquiryTypes.ts')
+  const { createLuxorInquiry } = loadTypeScript('src/lib/luxorInquiriesServer.ts', {
+    'server-only': {},
+    './luxorInquiryTypes': inquiryTypes,
+    './luxorEmailJobsServer': {},
+    './supabaseRestServer': {
+      supabaseRest: async (_query, init = {}) => {
+        inserted = JSON.parse(init.body)
+        return [{ id: 'synthetic-inquiry', ...inserted }]
+      },
+    },
+    './luxorTourMetrics': {},
+    './luxorTextAutomationsServer': {
+      recordLuxorWebsiteSmsConsent: async (phone, source, options) => {
+        recorded = { phone, source, options }
+        return { status: 'opted_in' }
+      },
+    },
+    './luxorTextCampaignsServer': { queueInquiryTextJobs: async () => {} },
+    './luxorTourSlotsServer': {},
+  })
+
+  await createLuxorInquiry({
+    fullName: 'Synthetic SMS Signup',
+    phone: '3125550100',
+    eventType: 'Text messaging consent',
+    source: 'website_sms_signup',
+    flow: 'website_sms_signup',
+    smsMarketingOptIn: true,
+    metadata: {
+      smsConsent: { source: 'forged', scopes: ['payment'], disclosures: ['forged'] },
+      disclosureVersion: 'forged',
+    },
+  })
+  assert.equal(inserted.metadata.smsConsent.source, 'website_sms_signup')
+  assert.equal(inserted.metadata.smsConsent.disclosures[0], inquiryTypes.LUXOR_SMS_SIGNUP_MARKETING_DISCLOSURE)
+  assert.deepEqual(inserted.metadata.smsConsent.scopes, ['marketing'])
+  assert.equal(recorded.source, 'website_sms_signup')
+  assert.deepEqual(recorded.options.scopes, ['marketing'])
+  assert.deepEqual(recorded.options.proof.disclosure_texts, [inquiryTypes.LUXOR_SMS_SIGNUP_MARKETING_DISCLOSURE])
 })
 
 test('audience selection requires the exact requested SMS scope', async () => {
@@ -187,6 +335,16 @@ test('the public form keeps three separate unchecked optional controls and expan
   assert.match(source, /LUXOR_MARKETING_SMS_DISCLOSURE/)
   assert.match(source, /LUXOR_MARKETING_EMAIL_DISCLOSURE/)
   assert.match(source, /By submitting this form, you agree to our/)
+  assert.match(source, /Choose how you’d like to hear from us\./)
+  const smsSignup = fs.readFileSync(path.join(root, 'src/app/(site)/sms-signup/page.tsx'), 'utf8')
+  assert.match(smsSignup, /LUXOR_SMS_SIGNUP_CUSTOMER_CARE_DISCLOSURE/)
+  assert.match(smsSignup, /LUXOR_SMS_SIGNUP_MARKETING_DISCLOSURE/)
+  const inquiryForm = fs.readFileSync(path.join(root, 'src/components/LuxorInquiryForm.tsx'), 'utf8')
+  assert.match(inquiryForm, /LUXOR_LEGACY_INQUIRY_SMS_DISCLOSURE/)
+  assert.match(inquiryForm, /LUXOR_LEGACY_MARKETING_SMS_DISCLOSURE/)
+  const newsletter = fs.readFileSync(path.join(root, 'src/components/NewsletterSignup.tsx'), 'utf8')
+  assert.match(newsletter, /LUXOR_NEWSLETTER_EMAIL_DISCLOSURE/)
+  assert.match(newsletter, /LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_ES/)
   assert.match(source, /href="\/privacy"/)
   assert.match(source, /href="\/terms"/)
 })

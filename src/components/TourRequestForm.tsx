@@ -12,6 +12,8 @@ import {
   LUXOR_GUEST_CAPACITY_MESSAGE,
   LUXOR_GUEST_CAPACITY_MESSAGE_ES,
   LUXOR_MAX_GUESTS,
+  LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE,
+  LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE_ES,
   normalizeLuxorEventType,
   type LuxorInquiryInput,
 } from '@/lib/luxorInquiryTypes'
@@ -906,9 +908,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
               className="luxor-public-checkbox mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#b98a3d]"
             />
             <span>
-              {spanish
-                ? 'Envíame ocasionalmente noticias y consejos de planificación de Luxor.'
-                : 'Email me occasional Luxor news and planning ideas.'}
+              {spanish ? LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE_ES : LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE}
             </span>
           </label>
 

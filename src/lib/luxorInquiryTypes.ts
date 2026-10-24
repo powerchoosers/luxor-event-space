@@ -119,6 +119,93 @@ export const LUXOR_MARKETING_SMS_DISCLOSURE = 'By checking this box, I agree to 
 export const LUXOR_MARKETING_EMAIL_DISCLOSURE_VERSION = '2026-10-23-v1'
 export const LUXOR_MARKETING_EMAIL_DISCLOSURE = 'Get special offers, event updates, and inspiration. Unsubscribe using the link in any marketing email.'
 
+// Consent evidence is selected from server-owned form profiles. The browser
+// may report its source/flow and separate checkbox values, but it may never
+// supply the disclosure text or version that becomes part of the proof.
+export const LUXOR_LEGACY_INQUIRY_SMS_DISCLOSURE_VERSION = '2026-07-27'
+export const LUXOR_LEGACY_INQUIRY_SMS_DISCLOSURE = 'By checking this box, I agree to receive customer-care text messages from Luxor Event Space about my inquiry, tour, booking, payment, or event. Message frequency varies. Msg & data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.'
+export const LUXOR_LEGACY_MARKETING_SMS_DISCLOSURE = 'I agree to receive occasional promotional text messages from Luxor Event Space, such as venue open-house invitations and planning offers. Message frequency varies. Msg & data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.'
+export const LUXOR_LEGACY_MARKETING_EMAIL_DISCLOSURE_VERSION = 'visit-page-email-copy-v1'
+export const LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE = 'Email me occasional Luxor news and planning ideas.'
+export const LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE_ES = 'Envíame ocasionalmente noticias y consejos de planificación de Luxor.'
+export const LUXOR_LEGACY_INQUIRY_EMAIL_DISCLOSURE = 'Email me occasional Luxor news, open-house invitations, and planning ideas. This is optional and separate from my inquiry.'
+export const LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_VERSION = 'newsletter-email-copy-v1'
+export const LUXOR_NEWSLETTER_EMAIL_DISCLOSURE = 'Occasional Luxor invitations and news. Unsubscribe anytime.'
+export const LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_ES = 'Recibe invitaciones y novedades ocasionales de Luxor. Puedes darte de baja en cualquier momento.'
+export const LUXOR_SMS_SIGNUP_DISCLOSURE_VERSION = '2026-07-27'
+export const LUXOR_SMS_SIGNUP_CUSTOMER_CARE_DISCLOSURE = 'I agree to receive customer-care text messages from Luxor Event Space about my inquiry, tour, booking, payment, or event. Message frequency varies. Msg & data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.'
+export const LUXOR_SMS_SIGNUP_MARKETING_DISCLOSURE = 'I agree to receive occasional promotional text messages from Luxor Event Space, such as venue open-house invitations and planning offers. Message frequency varies. Msg & data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.'
+
+export type LuxorConsentFormProfile = {
+  source: string
+  flow: string
+  smsDisclosureVersion: string
+  customerCareSmsDisclosure: string | null
+  marketingSmsDisclosure: string | null
+  marketingEmailDisclosureVersion: string | null
+  marketingEmailDisclosure: string | null
+  customerCareScopes: string[]
+}
+
+export function getLuxorConsentFormProfile(source: unknown, flow: unknown, locale?: unknown): LuxorConsentFormProfile | null {
+  const spanish = locale === 'es' || locale === 'Spanish'
+  if (source === 'homepage_brochure' && flow === 'brochure_lead') {
+    return {
+      source: 'website_inquiry_form',
+      flow: 'brochure_lead',
+      smsDisclosureVersion: LUXOR_SMS_CONSENT_DISCLOSURE_VERSION,
+      customerCareSmsDisclosure: LUXOR_INQUIRY_SMS_DISCLOSURE,
+      marketingSmsDisclosure: LUXOR_MARKETING_SMS_DISCLOSURE,
+      marketingEmailDisclosureVersion: LUXOR_MARKETING_EMAIL_DISCLOSURE_VERSION,
+      marketingEmailDisclosure: LUXOR_MARKETING_EMAIL_DISCLOSURE,
+      customerCareScopes: ['customer_care', 'tour', 'event'],
+    }
+  }
+
+  if (source === 'visit_page' && (flow === 'visit_booking' || flow === 'custom_visit_request')) {
+    return {
+      source: 'website_inquiry_form',
+      flow,
+      smsDisclosureVersion: LUXOR_LEGACY_INQUIRY_SMS_DISCLOSURE_VERSION,
+      customerCareSmsDisclosure: null,
+      marketingSmsDisclosure: null,
+      marketingEmailDisclosureVersion: LUXOR_LEGACY_MARKETING_EMAIL_DISCLOSURE_VERSION,
+      marketingEmailDisclosure: spanish ? LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE_ES : LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE,
+      customerCareScopes: [],
+    }
+  }
+
+  if (source === 'newsletter' && flow === 'newsletter_signup') {
+    return {
+      source: 'newsletter_signup',
+      flow: 'newsletter_signup',
+      smsDisclosureVersion: LUXOR_LEGACY_INQUIRY_SMS_DISCLOSURE_VERSION,
+      customerCareSmsDisclosure: null,
+      marketingSmsDisclosure: null,
+      marketingEmailDisclosureVersion: LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_VERSION,
+      marketingEmailDisclosure: spanish ? LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_ES : LUXOR_NEWSLETTER_EMAIL_DISCLOSURE,
+      customerCareScopes: [],
+    }
+  }
+
+  if (source === 'website_sms_signup' && flow === 'website_sms_signup') {
+    return {
+      source: 'website_sms_signup',
+      flow: 'website_sms_signup',
+      smsDisclosureVersion: LUXOR_SMS_SIGNUP_DISCLOSURE_VERSION,
+      customerCareSmsDisclosure: LUXOR_SMS_SIGNUP_CUSTOMER_CARE_DISCLOSURE,
+      marketingSmsDisclosure: LUXOR_SMS_SIGNUP_MARKETING_DISCLOSURE,
+      marketingEmailDisclosureVersion: null,
+      marketingEmailDisclosure: null,
+      // Preserve the existing website grant. Disclosure copy mentioning a
+      // topic does not silently broaden the scopes enabled in the system.
+      customerCareScopes: ['customer_care', 'tour', 'event'],
+    }
+  }
+
+  return null
+}
+
 export function hasValidLuxorInquiryConsentFlags(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const input = value as Record<string, unknown>

@@ -320,7 +320,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
               <section aria-labelledby={`${preferencesId}-heading`} className="space-y-3 border-t border-[#d8c4a4] pt-5">
                 <div className="mb-1">
                   <h3 id={`${preferencesId}-heading`} className="font-serif text-xl text-[#241d17]">Contact Preferences</h3>
-                  <p className="mt-1 text-sm leading-6 text-[#665a4e]">Choose how you’d like us to hear from you.</p>
+                  <p className="mt-1 text-sm leading-6 text-[#665a4e]">Choose how you’d like to hear from us.</p>
                 </div>
 
                 <div className="rounded-2xl border border-[#d8c4a4] bg-[#fffdfa] p-4 sm:p-5">

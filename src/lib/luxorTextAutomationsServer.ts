@@ -84,19 +84,27 @@ export async function recordLuxorWebsiteSmsConsent(
   const phoneNumber = normalizePhoneNumber(phone)
   if (!phoneNumber) return null
 
+  const existing = await getLuxorSmsConsent(phoneNumber)
+  // A later web form is not an inbound START keyword. Keep STOP authoritative.
+  if (existing?.status === 'opted_out') return existing
+
   const timestamp = new Date().toISOString()
   const consentScopes = options.scopes || ['customer_care', 'tour', 'event']
+  const currentProof = {
+    ...(options.proof || {}),
+    source,
+    captured_at: timestamp,
+  }
   const consent = {
     status: 'opted_in' as const,
     source,
     opted_out_at: null,
     opted_in_at: timestamp,
     consent_scopes: consentScopes,
-    proof: {
-      ...(options.proof || {}),
-      source,
-      captured_at: timestamp,
-    },
+    // Inquiry-level metadata keeps each new form submission's proof. Keep
+    // the consent row's existing proof stable instead of replacing the
+    // original evidence on every repeated opt-in.
+    proof: existing?.proof ?? currentProof,
     last_confirmed_at: timestamp,
     updated_at: timestamp,
   }

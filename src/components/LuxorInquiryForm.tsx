@@ -7,7 +7,7 @@ import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
-import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
+import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_LEGACY_INQUIRY_EMAIL_DISCLOSURE, LUXOR_LEGACY_INQUIRY_SMS_DISCLOSURE, LUXOR_LEGACY_MARKETING_SMS_DISCLOSURE, LUXOR_MAX_GUESTS, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import { LUXOR_LEGACY_PACKAGE_NAMES, LUXOR_PACKAGE_INTEREST_OPTIONS } from '@/lib/luxorServiceCatalog'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
@@ -399,7 +399,7 @@ export function LuxorInquiryForm({
               ) : null}
 
               <ConsentRow checked={marketingOptIn} onChange={setMarketingOptIn}>
-                Email me occasional Luxor news, open-house invitations, and planning ideas. This is optional and separate from my inquiry.
+                {LUXOR_LEGACY_INQUIRY_EMAIL_DISCLOSURE}
               </ConsentRow>
 
               <label className="mt-5 block">
@@ -479,7 +479,7 @@ function SmsConsentRow({ checked, onChange }: { checked: boolean; onChange: (che
           className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]"
         />
         <span className="text-xs leading-5 text-[#d7c29a]/72">
-          By checking this box, I agree to receive customer-care text messages from Luxor Event Space about my inquiry, tour, booking, payment, or event. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
+          {LUXOR_LEGACY_INQUIRY_SMS_DISCLOSURE}
         </span>
       </label>
       <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">
@@ -495,7 +495,7 @@ function SmsMarketingConsentRow({ checked, onChange }: { checked: boolean; onCha
       <label className="flex cursor-pointer items-start gap-3">
         <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]" />
         <span className="text-xs leading-5 text-[#d7c29a]/72">
-          I agree to receive occasional promotional text messages from Luxor Event Space, such as venue open-house invitations and planning offers. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
+          {LUXOR_LEGACY_MARKETING_SMS_DISCLOSURE}
         </span>
       </label>
       <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">This optional marketing consent is separate from customer-care messages. Read the <a href="/privacy" className="text-[#f1d27a] underline underline-offset-4">Privacy Policy</a> and <a href="/terms" className="text-[#f1d27a] underline underline-offset-4">Terms</a>.</p>

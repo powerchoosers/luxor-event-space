@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowRight, CheckCircle2 } from 'lucide-react'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
+import { LUXOR_NEWSLETTER_EMAIL_DISCLOSURE, LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_ES } from '@/lib/luxorInquiryTypes'
 
 export function NewsletterSignup({ spanish = false }: { spanish?: boolean }) {
   const [email, setEmail] = useState('')
@@ -141,7 +142,7 @@ export function NewsletterSignup({ spanish = false }: { spanish?: boolean }) {
       <p className="mt-4 text-xs leading-5 !text-[#665a4e]">
         {spanish ? (
           <>
-            Recibe invitaciones y novedades ocasionales de Luxor. Puedes darte de baja en cualquier momento. Consulta nuestra{' '}
+            {LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_ES} Consulta nuestra{' '}
             <Link href="/privacy" className="!text-[#805b1f] underline underline-offset-4">
               política de privacidad
             </Link>
@@ -149,7 +150,7 @@ export function NewsletterSignup({ spanish = false }: { spanish?: boolean }) {
           </>
         ) : (
           <>
-            Occasional Luxor invitations and news. Unsubscribe anytime. Read our{' '}
+            {LUXOR_NEWSLETTER_EMAIL_DISCLOSURE} Read our{' '}
             <Link href="/privacy" className="!text-[#805b1f] underline underline-offset-4">
               privacy policy
             </Link>

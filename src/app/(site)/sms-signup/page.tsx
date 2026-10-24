@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Check, Loader2, MessageCircle } from 'lucide-react'
 import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
+import { LUXOR_SMS_SIGNUP_CUSTOMER_CARE_DISCLOSURE, LUXOR_SMS_SIGNUP_MARKETING_DISCLOSURE } from '@/lib/luxorInquiryTypes'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 
 export default function SmsSignupPage() {
@@ -80,14 +81,14 @@ export default function SmsSignupPage() {
               <div className="rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4">
                 <label className="flex cursor-pointer items-start gap-3">
                   <input type="checkbox" checked={customerCareAgreed} onChange={(event) => setCustomerCareAgreed(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]" />
-                  <span className="text-xs leading-5 text-[#d7c29a]/75">I agree to receive customer-care text messages from Luxor Event Space about my inquiry, tour, booking, payment, or event. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.</span>
+                  <span className="text-xs leading-5 text-[#d7c29a]/75">{LUXOR_SMS_SIGNUP_CUSTOMER_CARE_DISCLOSURE}</span>
                 </label>
                 <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">Read the <Link href="/privacy" className="text-[#f1d27a] underline underline-offset-4">Privacy Policy</Link> and <Link href="/terms" className="text-[#f1d27a] underline underline-offset-4">Terms</Link>.</p>
               </div>
               <div className="rounded-lg border border-[#caa24c]/16 bg-white/[0.02] p-4">
                 <label className="flex cursor-pointer items-start gap-3">
                   <input type="checkbox" checked={marketingAgreed} onChange={(event) => setMarketingAgreed(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[#caa24c]" />
-                  <span className="text-xs leading-5 text-[#d7c29a]/75">I agree to receive occasional promotional text messages from Luxor Event Space, such as venue open-house invitations and planning offers. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.</span>
+                  <span className="text-xs leading-5 text-[#d7c29a]/75">{LUXOR_SMS_SIGNUP_MARKETING_DISCLOSURE}</span>
                 </label>
                 <p className="ml-7 mt-2 text-xs leading-5 text-[#d7c29a]/58">This optional marketing consent is separate from customer-care messages. Read the <Link href="/privacy" className="text-[#f1d27a] underline underline-offset-4">Privacy Policy</Link> and <Link href="/terms" className="text-[#f1d27a] underline underline-offset-4">Terms</Link>.</p>
               </div>

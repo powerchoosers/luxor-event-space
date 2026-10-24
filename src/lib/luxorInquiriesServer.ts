@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { compactText, LUXOR_INQUIRY_SMS_DISCLOSURE, LUXOR_MARKETING_EMAIL_DISCLOSURE, LUXOR_MARKETING_EMAIL_DISCLOSURE_VERSION, LUXOR_MARKETING_SMS_DISCLOSURE, LUXOR_SMS_CONSENT_DISCLOSURE_VERSION, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount } from './luxorInquiryTypes'
+import { compactText, getLuxorConsentFormProfile, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
 import { compareLuxorScheduledTours, getLuxorInquiryPageRequest, loadLuxorPages } from './luxorTourMetrics'
@@ -59,36 +59,54 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     throw new Error('Please shorten the event notes to 3,000 characters or fewer.')
   }
 
+  const submittedMetadata = input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+    ? input.metadata
+    : {}
+  const consentProfile = getLuxorConsentFormProfile(
+    input.source,
+    input.flow,
+    submittedMetadata.websiteLocale ?? submittedMetadata.tourLanguagePreference ?? submittedMetadata.language,
+  )
+  const customerCareSmsOptIn = Boolean(phone && consentProfile?.customerCareSmsDisclosure && input.smsOptIn === true)
+  const marketingSmsOptIn = Boolean(phone && consentProfile?.marketingSmsDisclosure && input.smsMarketingOptIn === true)
+  const marketingEmailOptIn = Boolean(email && consentProfile?.marketingEmailDisclosure && input.marketingOptIn === true)
   const smsScopes = [
-    ...(phone && input.smsOptIn === true ? ['customer_care', 'tour', 'event'] : []),
-    ...(phone && input.smsMarketingOptIn === true ? ['marketing'] : []),
+    ...(customerCareSmsOptIn ? consentProfile?.customerCareScopes ?? [] : []),
+    ...(marketingSmsOptIn ? ['marketing'] : []),
   ]
+  const {
+    smsConsent: _untrustedSmsConsent,
+    marketingEmailConsent: _untrustedMarketingEmailConsent,
+    consentPage: _untrustedConsentPage,
+    disclosureVersion: _untrustedDisclosureVersion,
+    ...safeMetadata
+  } = submittedMetadata
 
   const metadata: Record<string, unknown> = {
-    ...(input.metadata ?? {}),
+    ...safeMetadata,
     ...(input.sessionId ? { publicSessionId: compactText(input.sessionId).slice(0, 120) } : {}),
     ...(input.attribution ? { attribution: input.attribution } : {}),
-    ...(email && input.marketingOptIn === true
+    ...(marketingEmailOptIn
       ? {
           marketingEmailConsent: {
             status: 'opted_in',
-            source: 'website_inquiry_form',
-            disclosureVersion: LUXOR_MARKETING_EMAIL_DISCLOSURE_VERSION,
-            disclosure: LUXOR_MARKETING_EMAIL_DISCLOSURE,
+            source: consentProfile!.source,
+            disclosureVersion: consentProfile!.marketingEmailDisclosureVersion,
+            disclosure: consentProfile!.marketingEmailDisclosure,
             email,
             capturedAt: new Date().toISOString(),
           },
         }
       : {}),
-    ...(smsScopes.length
+    ...(smsScopes.length && consentProfile
       ? {
           smsConsent: {
             status: 'opted_in',
-            source: 'website_inquiry_form',
-            disclosureVersion: LUXOR_SMS_CONSENT_DISCLOSURE_VERSION,
+            source: consentProfile.source,
+            disclosureVersion: consentProfile.smsDisclosureVersion,
             disclosures: [
-              ...(input.smsOptIn === true ? [LUXOR_INQUIRY_SMS_DISCLOSURE] : []),
-              ...(input.smsMarketingOptIn === true ? [LUXOR_MARKETING_SMS_DISCLOSURE] : []),
+              ...(customerCareSmsOptIn && consentProfile.customerCareSmsDisclosure ? [consentProfile.customerCareSmsDisclosure] : []),
+              ...(marketingSmsOptIn && consentProfile.marketingSmsDisclosure ? [consentProfile.marketingSmsDisclosure] : []),
             ],
             scopes: smsScopes,
             capturedAt: new Date().toISOString(),
@@ -113,7 +131,7 @@ export function normalizeInquiry(input: LuxorInquiryInput, userAgent?: string) {
     flow,
     campaign_key: compactText(input.campaignKey) || null,
     rsvp_status: normalizeRsvpStatus(input.rsvpStatus),
-    marketing_opt_in: Boolean(email && input.marketingOptIn === true),
+    marketing_opt_in: marketingEmailOptIn,
     attendee_count: parseGuestCount(input.attendeeCount),
     page_path: compactText(input.pagePath) || null,
     referrer: compactText(input.referrer) || null,
@@ -193,10 +211,10 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     throw error
   }
 
-  const smsConsent = row.metadata?.smsConsent as { scopes?: string[]; disclosureVersion?: string; disclosures?: string[] } | undefined
+  const smsConsent = row.metadata?.smsConsent as { source?: string; scopes?: string[]; disclosureVersion?: string; disclosures?: string[] } | undefined
   if (created?.phone && smsConsent) {
     try {
-      const consent = await recordLuxorWebsiteSmsConsent(created.phone, 'website_inquiry_form', {
+      const consent = await recordLuxorWebsiteSmsConsent(created.phone, smsConsent.source || 'website_inquiry_form', {
         scopes: smsConsent.scopes,
         proof: {
           inquiry_id: created.id,
