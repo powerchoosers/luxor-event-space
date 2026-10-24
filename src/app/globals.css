@@ -123,6 +123,12 @@ body {
   .portal-mobile-nav {
     position: absolute;
   }
+
+  /* Keep the unread badge crisp over the standalone app's translucent header. */
+  .portal-notification-number {
+    animation: none;
+    box-shadow: none;
+  }
 }
 
 body[data-portal-theme='dark'] {
