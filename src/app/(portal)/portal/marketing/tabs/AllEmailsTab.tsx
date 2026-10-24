@@ -1393,7 +1393,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           <SquarePen size={19} aria-hidden="true" />
         </button>
       </div> : null}
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)] shadow-sm sm:rounded-2xl">
+      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-none border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)] shadow-sm lg:rounded-2xl">
       {/* PANE 1: Mailbox Navigation (Desktop collapsible column) */}
       <AnimatePresence initial={false}>
       {mailboxDrawerOpen && !readerExpanded && (
