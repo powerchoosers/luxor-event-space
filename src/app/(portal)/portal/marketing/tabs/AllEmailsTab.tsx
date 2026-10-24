@@ -2044,6 +2044,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 )
 }
 
+const emailScrollMomentumCancelers = new WeakMap<HTMLElement, Set<() => void>>()
+
 function ThreadMessage({
   message,
   expanded: initiallyExpanded,
@@ -2070,6 +2072,17 @@ function ThreadMessage({
   const frameObserverRef = useRef<ResizeObserver | null>(null)
   const frameResizeRequestRef = useRef<number>(0)
   const frameInteractionCleanupRef = useRef<(() => void) | null>(null)
+  const cleanupMessageFrame = useCallback((frame: HTMLIFrameElement | null) => {
+    if (frame) return
+    frameObserverRef.current?.disconnect()
+    frameObserverRef.current = null
+    if (frameResizeRequestRef.current) {
+      window.cancelAnimationFrame(frameResizeRequestRef.current)
+      frameResizeRequestRef.current = 0
+    }
+    frameInteractionCleanupRef.current?.()
+    frameInteractionCleanupRef.current = null
+  }, [])
   const portalTheme = useSyncExternalStore<'light' | 'dark'>(
     (callback) => {
       window.addEventListener('storage', callback)
@@ -2116,6 +2129,7 @@ function ThreadMessage({
 
     frameObserverRef.current?.disconnect()
     frameInteractionCleanupRef.current?.()
+    frameInteractionCleanupRef.current = null
     const observer = new ResizeObserver(updateHeight)
     if (document.documentElement) observer.observe(document.documentElement)
     if (document.body) observer.observe(document.body)
@@ -2134,9 +2148,22 @@ function ThreadMessage({
         if (momentumFrame) window.cancelAnimationFrame(momentumFrame)
         momentumFrame = 0
       }
+      const cancelOwnMomentum = () => {
+        touchVelocity = 0
+        stopMomentum()
+      }
+      let cancelers = emailScrollMomentumCancelers.get(scrollContainer)
+      if (!cancelers) {
+        cancelers = new Set()
+        emailScrollMomentumCancelers.set(scrollContainer, cancelers)
+      }
+      cancelers.add(cancelOwnMomentum)
+      const cancelContainerMomentum = () => {
+        emailScrollMomentumCancelers.get(scrollContainer)?.forEach((cancel) => cancel())
+      }
       const startMomentum = () => {
         stopMomentum()
-        if (Math.abs(touchVelocity) < 0.04) return
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || Math.abs(touchVelocity) < 0.04) return
         momentumAt = 0
         const step = (now: number) => {
           if (!momentumAt) momentumAt = now
@@ -2158,13 +2185,12 @@ function ThreadMessage({
         momentumFrame = window.requestAnimationFrame(step)
       }
       const handOffWheel = (event: WheelEvent) => {
-        stopMomentum()
-        touchVelocity = 0
+        cancelContainerMomentum()
         scrollContainer.scrollTop += event.deltaY
         event.preventDefault()
       }
       const beginTouch = (event: TouchEvent) => {
-        stopMomentum()
+        cancelContainerMomentum()
         touchVelocity = 0
         lastTouchY = event.touches.length === 1 ? event.touches[0]?.clientY ?? null : null
         lastTouchAt = event.timeStamp
@@ -2172,8 +2198,7 @@ function ThreadMessage({
       const handOffTouch = (event: TouchEvent) => {
         if (event.touches.length !== 1) {
           lastTouchY = null
-          touchVelocity = 0
-          stopMomentum()
+          cancelContainerMomentum()
           return
         }
         const nextTouchY = event.touches[0]?.clientY
@@ -2193,28 +2218,36 @@ function ThreadMessage({
         lastTouchAt = event.timeStamp
         event.preventDefault()
       }
-      const endTouch = () => {
+      const endTouch = (event: TouchEvent) => {
         lastTouchY = null
+        if (event.timeStamp - lastTouchAt >= 160) touchVelocity = 0
         startMomentum()
       }
       const cancelTouch = () => {
         lastTouchY = null
-        touchVelocity = 0
-        stopMomentum()
+        cancelContainerMomentum()
       }
+      const cancelFromContainerInput = () => cancelContainerMomentum()
 
       document.addEventListener('wheel', handOffWheel, { passive: false })
       document.addEventListener('touchstart', beginTouch, { passive: true })
       document.addEventListener('touchmove', handOffTouch, { passive: false })
       document.addEventListener('touchend', endTouch, { passive: true })
       document.addEventListener('touchcancel', cancelTouch, { passive: true })
+      scrollContainer.addEventListener('wheel', cancelFromContainerInput, { passive: true })
+      scrollContainer.addEventListener('touchstart', cancelFromContainerInput, { passive: true })
       frameInteractionCleanupRef.current = () => {
-        stopMomentum()
+        cancelOwnMomentum()
         document.removeEventListener('wheel', handOffWheel)
         document.removeEventListener('touchstart', beginTouch)
         document.removeEventListener('touchmove', handOffTouch)
         document.removeEventListener('touchend', endTouch)
         document.removeEventListener('touchcancel', cancelTouch)
+        scrollContainer.removeEventListener('wheel', cancelFromContainerInput)
+        scrollContainer.removeEventListener('touchstart', cancelFromContainerInput)
+        const registeredCancelers = emailScrollMomentumCancelers.get(scrollContainer)
+        registeredCancelers?.delete(cancelOwnMomentum)
+        if (registeredCancelers?.size === 0) emailScrollMomentumCancelers.delete(scrollContainer)
       }
     }
   }
@@ -2223,6 +2256,7 @@ function ThreadMessage({
     frameObserverRef.current?.disconnect()
     if (frameResizeRequestRef.current) window.cancelAnimationFrame(frameResizeRequestRef.current)
     frameInteractionCleanupRef.current?.()
+    frameInteractionCleanupRef.current = null
   }, [])
 
   return (
@@ -2256,6 +2290,7 @@ function ThreadMessage({
               key={frameKey}
               srcDoc={html}
               title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
+              ref={cleanupMessageFrame}
               className="w-full border-0 bg-transparent"
               style={{
                 height: frameHeight,
