@@ -158,6 +158,7 @@ export default function AutomationDetailPage() {
   const [feedback, setFeedback] = React.useState<string | null>(null)
   const pendingSaveReload = React.useRef(false)
   const pendingSaveMessage = React.useRef<string | null>(null)
+  const preserveFeedbackOnTemplateRefresh = React.useRef(false)
 
   const fetchPageData = React.useCallback(async () => {
     const libraryResponse = await fetch('/api/marketing/automations', { cache: 'no-store' })
@@ -188,6 +189,9 @@ export default function AutomationDetailPage() {
       .then((payload) => {
         if (!active) return
         setEntry(payload.libraryEntry)
+        if (pendingSaveReload.current && payload.detail) {
+          preserveFeedbackOnTemplateRefresh.current = true
+        }
         setDetail(payload.detail)
         setDetailError(payload.detailError)
         if (pendingSaveReload.current) {
@@ -237,7 +241,11 @@ export default function AutomationDetailPage() {
     setDraft(draftFromTemplate(activeTemplate))
     setPreviewHtml(null)
     setPreviewNote(null)
-    setFeedback(null)
+    if (preserveFeedbackOnTemplateRefresh.current) {
+      preserveFeedbackOnTemplateRefresh.current = false
+    } else {
+      setFeedback(null)
+    }
     setApplyToQueued(false)
     setQueuedPreview(null)
   }, [activeTemplate?.id, activeTemplate?.updated_at])
