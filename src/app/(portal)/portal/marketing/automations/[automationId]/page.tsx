@@ -42,6 +42,13 @@ type ContentDraft = {
   secondary_cta_url: string
 }
 
+type QueuedCopyPreview = {
+  templateUpdatedAt: string
+  eligibleCount: number
+  candidates: Array<{ jobId: string; snapshotHash: string }>
+  limitExceeded: boolean
+}
+
 type SavedDetail = {
   kind: 'saved'
   name: string
@@ -145,8 +152,12 @@ export default function AutomationDetailPage() {
   const [reloadVersion, setReloadVersion] = React.useState(0)
   const [previewing, setPreviewing] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [applyToQueued, setApplyToQueued] = React.useState(false)
+  const [queuedPreview, setQueuedPreview] = React.useState<QueuedCopyPreview | null>(null)
+  const [queuePreviewing, setQueuePreviewing] = React.useState(false)
   const [feedback, setFeedback] = React.useState<string | null>(null)
   const pendingSaveReload = React.useRef(false)
+  const pendingSaveMessage = React.useRef<string | null>(null)
 
   const fetchPageData = React.useCallback(async () => {
     const libraryResponse = await fetch('/api/marketing/automations', { cache: 'no-store' })
@@ -180,8 +191,11 @@ export default function AutomationDetailPage() {
         setDetail(payload.detail)
         setDetailError(payload.detailError)
         if (pendingSaveReload.current) {
-          setFeedback(payload.detail ? 'Saved and reloaded from the current configuration.' : 'Saved, but reload could not be verified. Refresh the page to confirm the current copy.')
+          setFeedback(payload.detail
+            ? pendingSaveMessage.current || 'Saved and reloaded from the current configuration.'
+            : 'Saved, but reload could not be verified. Refresh the page to confirm the current copy.')
           pendingSaveReload.current = false
+          pendingSaveMessage.current = null
         }
       })
       .catch((error: unknown) => {
@@ -190,6 +204,7 @@ export default function AutomationDetailPage() {
         if (pendingSaveReload.current) {
           setFeedback('The save response succeeded, but the refreshed detail could not be loaded. Refresh the page to confirm it.')
           pendingSaveReload.current = false
+          pendingSaveMessage.current = null
         }
       })
       .finally(() => {
@@ -223,6 +238,8 @@ export default function AutomationDetailPage() {
     setPreviewHtml(null)
     setPreviewNote(null)
     setFeedback(null)
+    setApplyToQueued(false)
+    setQueuedPreview(null)
   }, [activeTemplate?.id, activeTemplate?.updated_at])
 
   React.useEffect(() => {
@@ -270,7 +287,41 @@ export default function AutomationDetailPage() {
     setDraft((current) => ({ ...current, [field]: value }))
     setPreviewHtml(null)
     setPreviewNote(null)
+    setQueuedPreview(null)
     setFeedback(null)
+  }
+
+  function toggleApplyToQueued(enabled: boolean) {
+    setApplyToQueued(enabled)
+    setQueuedPreview(null)
+    setFeedback(null)
+  }
+
+  async function reviewQueuedCopies() {
+    if (!activeTemplate || queuePreviewing || saving) return
+    setQueuePreviewing(true)
+    setQueuedPreview(null)
+    setFeedback(null)
+    try {
+      const response = await fetch('/api/marketing/automation-detail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'queued-copy-preview', templateId: activeTemplate.id }),
+      })
+      const payload = await response.json().catch(() => ({})) as QueuedCopyPreview & { error?: string }
+      if (!response.ok || !Array.isArray(payload.candidates) || !Number.isSafeInteger(payload.eligibleCount)
+        || payload.eligibleCount < 0 || typeof payload.limitExceeded !== 'boolean'
+        || payload.templateUpdatedAt !== activeTemplate.updated_at
+        || (!payload.limitExceeded && payload.candidates.length !== payload.eligibleCount)
+        || (payload.limitExceeded && payload.candidates.length !== 0)) {
+        throw new Error(payload.error || 'Matching queued emails could not be reviewed.')
+      }
+      setQueuedPreview(payload)
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Matching queued emails could not be reviewed.')
+    } finally {
+      setQueuePreviewing(false)
+    }
   }
 
   async function requestPreview() {
@@ -296,21 +347,45 @@ export default function AutomationDetailPage() {
 
   async function saveDraft() {
     if (!activeTemplate || !dirty) return
+    if (applyToQueued && (!queuedPreview || queuedPreview.templateUpdatedAt !== activeTemplate.updated_at || queuedPreview.limitExceeded)) {
+      setFeedback('Review the matching queued emails again before saving.')
+      return
+    }
+    if (applyToQueued) {
+      const count = queuedPreview?.eligibleCount ?? 0
+      const description = count === 1 ? '1 matching queued email' : `${count} matching queued emails`
+      if (!window.confirm(`Save this email and update the reviewed ${description}? Only still-queued, unattempted copies scheduled in the future will change. Recipients and send times stay the same; sent, claimed, attempted, stale, or ineligible emails will be skipped.`)) return
+    }
     setSaving(true)
     setFeedback(null)
     try {
       const response = await fetch('/api/marketing/automation-detail', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: activeTemplate.id, expectedUpdatedAt: activeTemplate.updated_at, updates: draft }),
+        body: JSON.stringify({
+          templateId: activeTemplate.id,
+          expectedUpdatedAt: activeTemplate.updated_at,
+          updates: draft,
+          ...(applyToQueued ? { applyToQueued: true, queuedPreview } : {}),
+        }),
       })
-      const payload = await response.json().catch(() => ({})) as { error?: string; template?: TemplateRow }
-      if (!response.ok) throw new Error(payload.error || 'The email could not be saved.')
+      const payload = await response.json().catch(() => ({})) as {
+        error?: string
+        template?: TemplateRow
+        queuedUpdate?: { updatedCount: number; skippedCount: number; requestedCount: number }
+      }
+      if (!response.ok) {
+        if (response.status === 409 && applyToQueued) setQueuedPreview(null)
+        throw new Error(payload.error || 'The email could not be saved.')
+      }
       if (payload.template) {
         setDraft(draftFromTemplate(payload.template))
         setPreviewHtml(null)
         setPreviewNote(null)
       }
+      pendingSaveMessage.current = payload.queuedUpdate
+        ? `Saved. Updated ${payload.queuedUpdate.updatedCount} queued email${payload.queuedUpdate.updatedCount === 1 ? '' : 's'}; skipped ${payload.queuedUpdate.skippedCount} that changed or became ineligible. Recipients and send times were preserved.`
+        : 'Saved and reloaded from the current configuration.'
       pendingSaveReload.current = true
       setFeedback('Saved. Reloading the saved step…')
       setReloadVersion((value) => value + 1)
@@ -325,6 +400,8 @@ export default function AutomationDetailPage() {
     if (activeTemplate) setDraft(draftFromTemplate(activeTemplate))
     setPreviewHtml(null)
     setPreviewNote(null)
+    setApplyToQueued(false)
+    setQueuedPreview(null)
     setFeedback('Unsaved changes were discarded.')
   }
 
@@ -375,9 +452,14 @@ export default function AutomationDetailPage() {
             feedback={feedback}
             previewing={previewing}
             saving={saving}
+            applyToQueued={applyToQueued}
+            queuedPreview={queuedPreview}
+            queuePreviewing={queuePreviewing}
             onPreview={requestPreview}
             onSave={saveDraft}
             onCancel={cancelDraft}
+            onToggleApplyToQueued={toggleApplyToQueued}
+            onReviewQueuedCopies={reviewQueuedCopies}
           />
         ) : detail?.kind === 'system' ? <TourNotificationDetail detail={detail} /> : entry ? <UnknownWorkflowDetail entry={entry} /> : null}
       </div>
@@ -401,9 +483,14 @@ function SavedWorkflowDetail(props: {
   feedback: string | null
   previewing: boolean
   saving: boolean
+  applyToQueued: boolean
+  queuedPreview: QueuedCopyPreview | null
+  queuePreviewing: boolean
   onPreview: () => void
   onSave: () => void
   onCancel: () => void
+  onToggleApplyToQueued: (enabled: boolean) => void
+  onReviewQueuedCopies: () => void
 }) {
   const { detail } = props
   return (
@@ -473,9 +560,23 @@ function SelectedStepPanel(props: Parameters<typeof SavedWorkflowDetail>[0]) {
         <Field label="Email body"><textarea value={props.draft.body} onChange={(event) => props.onDraftChange('body', event.target.value)} maxLength={12000} rows={9} className={`${inputClass} min-h-44 resize-y`} /><p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">Plain text is escaped into the existing Luxor branded email renderer. Keep any existing {'{{merge fields}}'} exactly as written.</p></Field>
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Primary button label"><input value={props.draft.cta_text} onChange={(event) => props.onDraftChange('cta_text', event.target.value)} maxLength={500} className={inputClass} /></Field><Field label="Primary button link"><input value={props.draft.cta_url} onChange={(event) => props.onDraftChange('cta_url', event.target.value)} maxLength={500} className={inputClass} placeholder="/visit or https://www.luxoratlaspalmas.com/visit" /></Field></div>
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Secondary button label"><input value={props.draft.secondary_cta_text} onChange={(event) => props.onDraftChange('secondary_cta_text', event.target.value)} maxLength={500} className={inputClass} /></Field><Field label="Secondary button link"><input value={props.draft.secondary_cta_url} onChange={(event) => props.onDraftChange('secondary_cta_url', event.target.value)} maxLength={500} className={inputClass} placeholder="/spaces or https://www.luxoratlaspalmas.com/spaces" /></Field></div>
+        {activeTemplate.automation_key === 'brochure_lead' && activeTemplate.step_key !== 'email_1' ? <div className="border-t border-[color:var(--portal-border)] pt-4">
+          <label className="flex min-h-11 cursor-pointer items-start gap-3 text-xs font-semibold text-[color:var(--portal-text)]">
+            <input type="checkbox" checked={props.applyToQueued} disabled={props.saving || props.queuePreviewing} onChange={(event) => props.onToggleApplyToQueued(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#caa24c]" />
+            <span>Also update eligible unsent emails already in the queue<span className="mt-1 block font-normal leading-5 text-[color:var(--portal-muted)]">Off by default. This applies only to matching brochure follow-up copies reviewed below. Existing recipients and scheduled send times are preserved.</span></span>
+          </label>
+          {props.applyToQueued ? <div className="mt-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3">
+            <button type="button" onClick={props.onReviewQueuedCopies} disabled={props.queuePreviewing || props.saving} className={secondaryButtonClass}>{props.queuePreviewing ? 'Checking queued emails…' : 'Review matching emails'}</button>
+            {props.queuedPreview ? <p role="status" className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">
+              {props.queuedPreview.limitExceeded
+                ? `${props.queuedPreview.eligibleCount.toLocaleString()} emails match, above the safe 500-email review limit. Save without applying to the queue or ask support for help.`
+                : `${props.queuedPreview.eligibleCount.toLocaleString()} eligible queued email${props.queuedPreview.eligibleCount === 1 ? '' : 's'} reviewed. The save confirmation will show the exact number.`}
+            </p> : <p className="mt-2 text-[11px] leading-5 text-[color:var(--portal-muted)]">Review first to see the exact current count. Only future-dated queued jobs with no delivery attempt or outbox payload can be changed.</p>}
+          </div> : null}
+        </div> : null}
         <div className="flex flex-wrap gap-2 border-t border-[color:var(--portal-border)] pt-4">
           <button type="button" onClick={props.onPreview} disabled={props.previewing || props.saving} className={secondaryButtonClass}><Mail size={14} aria-hidden="true" />{props.previewing ? 'Rendering…' : 'Preview'}</button>
-          <button type="button" onClick={props.onSave} disabled={!props.dirty || props.saving || props.previewing} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f] disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><Save size={14} aria-hidden="true" />{props.saving ? 'Saving…' : 'Save changes'}</button>
+          <button type="button" onClick={props.onSave} disabled={!props.dirty || props.saving || props.previewing || props.queuePreviewing || (props.applyToQueued && (!props.queuedPreview || props.queuedPreview.limitExceeded))} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f] disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><Save size={14} aria-hidden="true" />{props.saving ? 'Saving…' : 'Save changes'}</button>
           <button type="button" onClick={props.onCancel} disabled={!props.dirty || props.saving} className={secondaryButtonClass}>Cancel</button>
         </div>
         {props.feedback ? <p role="status" className="text-xs leading-5 text-[color:var(--portal-muted)]">{props.feedback}</p> : null}
