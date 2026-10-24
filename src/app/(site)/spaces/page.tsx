@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Camera, DoorOpen, Music, Utensils } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
+import { StaggerCards, StaggerCard } from '@/components/StaggerCards'
 
 const zones = [
   ['Arrival', 'A clear first impression for guests as they enter the room.', DoorOpen],
@@ -59,9 +60,9 @@ export default function SpacesPage() {
             <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">Think in zones, not just square footage.</h2>
           </Reveal>
 
-          <div className="mt-12 grid gap-4 md:grid-cols-4">
-            {zones.map(([title, copy, Icon], index) => (
-              <Reveal key={title} delay={index * 70}>
+          <StaggerCards className="mt-12 grid gap-4 md:grid-cols-4" stagger={0.08}>
+            {zones.map(([title, copy, Icon]) => (
+              <StaggerCard key={title} className="h-full">
                 <article className="h-full rounded-md border border-[#caa24c]/20 bg-white/[0.025] p-6">
                   <div className="flex items-center gap-3">
                     <Icon className="h-5 w-5 shrink-0 text-[#caa24c]" />
@@ -69,9 +70,9 @@ export default function SpacesPage() {
                   </div>
                   <p className="mt-4 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
                 </article>
-              </Reveal>
+              </StaggerCard>
             ))}
-          </div>
+          </StaggerCards>
         </div>
       </section>
 
@@ -85,25 +86,25 @@ export default function SpacesPage() {
             </p>
           </Reveal>
 
-          <div className="mt-12 grid gap-4 lg:grid-cols-12 lg:auto-rows-[19rem]">
-            <Reveal className="lg:col-span-7 lg:row-span-2" variant="scale" amount={18}>
+          <StaggerCards className="mt-12 grid gap-4 lg:grid-cols-12 lg:auto-rows-[19rem]" stagger={0.1}>
+            <StaggerCard className="lg:col-span-7 lg:row-span-2">
               <figure className="relative h-full min-h-[30rem] overflow-hidden rounded-md border border-[#caa24c]/22">
                 <Image src="/images/luxor-lounge/luxor-lounge-empty.png" alt="The Luxor Lounge furnished with cocktail tables and seating" fill sizes="(min-width: 1024px) 58vw, 100vw" className="object-cover" />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_45%,rgba(0,0,0,0.72))]" />
                 <figcaption className="absolute bottom-5 left-5 font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#fff2bf]">Cocktail-ready layout</figcaption>
               </figure>
-            </Reveal>
-            <Reveal className="lg:col-span-5" delay={90} variant="scale" amount={18}>
+            </StaggerCard>
+            <StaggerCard className="lg:col-span-5">
               <figure className="relative h-full min-h-[19rem] overflow-hidden rounded-md border border-[#caa24c]/22">
                 <Image src="/images/luxor-lounge/luxor-lounge-family.png" alt="Family gathering inside The Luxor Lounge" fill sizes="(min-width: 1024px) 42vw, 100vw" className="object-cover" />
               </figure>
-            </Reveal>
-            <Reveal className="lg:col-span-5" delay={150} variant="scale" amount={18}>
+            </StaggerCard>
+            <StaggerCard className="lg:col-span-5">
               <figure className="relative h-full min-h-[19rem] overflow-hidden rounded-md border border-[#caa24c]/22">
                 <Image src="/images/luxor-lounge/luxor-lounge-corporate.png" alt="Networking reception inside The Luxor Lounge" fill sizes="(min-width: 1024px) 42vw, 100vw" className="object-cover" />
               </figure>
-            </Reveal>
-          </div>
+            </StaggerCard>
+          </StaggerCards>
         </div>
       </section>
 

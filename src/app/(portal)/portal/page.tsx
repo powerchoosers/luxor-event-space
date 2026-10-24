@@ -655,9 +655,9 @@ export default async function PortalOverview() {
       </PortalStaggerGroup>
 
       {/* MIDDLE ROW: 3 Columns (Today's Priorities, This Week, Bills Due) */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3">
+      <PortalStaggerGroup className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3">
         {/* Today's Priorities */}
-        <div className="portal-card-surface flex flex-col justify-between p-6">
+        <PortalStaggerCard className="portal-card-surface flex flex-col justify-between p-6">
           <div>
             <div className="flex items-center gap-2.5 mb-6">
               <ListTodo className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -692,23 +692,23 @@ export default async function PortalOverview() {
               View all tasks <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
           </div>
-        </div>
+        </PortalStaggerCard>
 
         {/* This Week / Calendar Outlook */}
-        <div className="portal-card-surface relative flex flex-col justify-between overflow-hidden p-6">
+        <PortalStaggerCard className="portal-card-surface relative flex flex-col justify-between overflow-hidden p-6">
           <ThisWeekCalendar days={calendarDays} />
-        </div>
+        </PortalStaggerCard>
 
         {/* Bills Due */}
-        <div className="md:col-span-2 2xl:col-span-1">
+        <PortalStaggerCard className="md:col-span-2 2xl:col-span-1">
           <BillsDueCard initialBills={bills} />
-        </div>
-      </div>
+        </PortalStaggerCard>
+      </PortalStaggerGroup>
 
       {/* BOTTOM ROW: 3 Columns (Recent Activity, Month at a Glance, Quick Actions) */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3 items-stretch">
+      <PortalStaggerGroup className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3 items-stretch">
         {/* Recent Activity */}
-        <div className="portal-card-surface flex flex-col justify-between p-5">
+        <PortalStaggerCard className="portal-card-surface flex flex-col justify-between p-5">
           <div>
             <div className="flex items-center gap-2.5 mb-3.5">
               <Activity className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -761,10 +761,10 @@ export default async function PortalOverview() {
               View all activity <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
           </div>
-        </div>
+        </PortalStaggerCard>
 
         {/* This Month At A Glance */}
-        <div className="portal-card-surface flex flex-col justify-between p-5">
+        <PortalStaggerCard className="portal-card-surface flex flex-col justify-between p-5">
           <div>
             <div className="flex items-center gap-2.5 mb-3.5">
               <Eye className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -818,10 +818,10 @@ export default async function PortalOverview() {
               View full report <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
           </div>
-        </div>
+        </PortalStaggerCard>
 
         {/* Quick Actions */}
-        <div className="portal-card-surface flex flex-col justify-between p-5">
+        <PortalStaggerCard className="portal-card-surface flex flex-col justify-between p-5">
           <div>
             <div className="flex items-center gap-2.5 mb-3.5">
               <Zap className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -881,8 +881,8 @@ export default async function PortalOverview() {
               <span>Add Vendor</span>
             </Link>
           </div>
-        </div>
-      </div>
+        </PortalStaggerCard>
+      </PortalStaggerGroup>
 
       {/* Brand Tagline Footer */}
       <div className="flex flex-col items-center justify-center pt-8 border-t border-[color:var(--portal-border)] mt-12 mb-6">

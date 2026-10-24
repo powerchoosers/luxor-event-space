@@ -26,7 +26,9 @@ import {
   PortalStatusBadge,
   PortalSelect,
   PortalButton,
-  PortalTableSkeleton
+  PortalTableSkeleton,
+  PortalStaggerGroup,
+  PortalStaggerCard
 } from '@/components/portal/PortalUI'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment } from '@/lib/luxorInquiryTypes'
 
@@ -242,8 +244,8 @@ type LuxorBookingExpense = {
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="space-y-6">
             {/* Top Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between min-h-[140px]">
+            <PortalStaggerGroup className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between min-h-[140px]">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Gross Paid Revenue</p>
                   <p className="text-3xl font-extrabold text-white mt-2 font-mono">${netRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
@@ -251,9 +253,9 @@ type LuxorBookingExpense = {
                 <div className="flex items-center gap-1.5 text-xs text-emerald-400 mt-4 font-semibold">
                   <ArrowUpRight size={16} /> <span>+{invoices.length} billing items</span>
                 </div>
-              </div>
+              </PortalStaggerCard>
 
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between min-h-[140px]">
+              <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between min-h-[140px]">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Operational Expenses</p>
                   <p className="text-3xl font-extrabold text-white mt-2 font-mono">${totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
@@ -261,9 +263,9 @@ type LuxorBookingExpense = {
                 <div className="flex items-center gap-1.5 text-xs text-rose-400 mt-4 font-semibold">
                   <ArrowDownRight size={16} /> <span>-{expenses.length} payments out</span>
                 </div>
-              </div>
+              </PortalStaggerCard>
 
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between min-h-[140px]">
+              <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col justify-between min-h-[140px]">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Monthly Net Profit</p>
                   <p className="text-3xl font-extrabold text-[#f1d27a] mt-2 font-mono">${monthlyProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
@@ -271,12 +273,12 @@ type LuxorBookingExpense = {
                 <div className="flex items-center gap-1.5 text-xs text-[#caa24c] mt-4 font-semibold">
                   <span>Profit margin: {netRevenue > 0 ? ((monthlyProfit / netRevenue) * 100).toFixed(1) : 0}%</span>
                 </div>
-              </div>
-            </div>
+              </PortalStaggerCard>
+            </PortalStaggerGroup>
 
             {/* Invoicing summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
+            <PortalStaggerGroup className="grid grid-cols-1 md:grid-cols-2 gap-6" staggerDelay={0.07}>
+              <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Accounts Receivable</h3>
                 <div className="space-y-3 font-mono">
                   <div className="flex justify-between text-xs pb-2 border-b border-zinc-900">
@@ -292,9 +294,9 @@ type LuxorBookingExpense = {
                     <span className="text-[#caa24c] font-bold">${unpaidRetainers.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
-              </div>
+              </PortalStaggerCard>
 
-              <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4 flex flex-col justify-between">
+              <PortalStaggerCard className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4 flex flex-col justify-between">
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Tax Allocation Preview</h3>
                   <p className="text-xs text-zinc-500 mt-2">
@@ -303,8 +305,8 @@ type LuxorBookingExpense = {
                   <p className="text-xl font-mono font-bold text-white mt-2">${(netRevenue * 0.0825).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                 </div>
                 <p className="text-[10px] text-zinc-600 font-medium">calculated automatically based on paid invoices total.</p>
-              </div>
-            </div>
+              </PortalStaggerCard>
+            </PortalStaggerGroup>
           </div>
         </div>
       )}

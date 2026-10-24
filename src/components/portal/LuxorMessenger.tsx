@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } f
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
-import { PortalContactAvatar, PortalCloseButton } from './PortalUI'
+import { PortalContactAvatar, PortalCloseButton, PortalSkeleton, PortalSkeletonTransition } from './PortalUI'
 import { PortalSmsConsentBadge, type SmsConsentState } from './PortalSmsConsentBadge'
 import { useToast } from './ToastProvider'
 
@@ -295,27 +295,37 @@ export function LuxorMessenger() {
         </div>
 
         <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto">
-          {loading ? <LoadingConversations /> : visibleConversations.length ? visibleConversations.map((conversation) => (
-            <button key={conversation.key} type="button" onClick={() => selectConversation(conversation)} className={`flex w-full gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 text-left transition-colors ${selectedConversation?.key === conversation.key ? 'bg-[#caa24c]/10 shadow-[inset_3px_0_0_#caa24c]' : 'hover:bg-[color:var(--portal-soft)]'}`}>
-              <PortalContactAvatar name={conversation.contactName} inquiryId={conversation.inquiryId || undefined} size="md" />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-start justify-between gap-2">
-                  <span className={`truncate text-sm ${conversation.unreadCount ? 'font-black text-[color:var(--portal-text)]' : 'font-semibold text-[color:var(--portal-muted)]'}`}>{conversation.contactName}</span>
-                  <span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-muted)]">{conversation.latest ? formatConversationTime(conversation.latest.created_at) : 'New'}</span>
+          <PortalSkeletonTransition
+            loading={loading}
+            skeleton={<LoadingConversations />}
+          >
+            {visibleConversations.length ? visibleConversations.map((conversation) => (
+              <button key={conversation.key} type="button" onClick={() => selectConversation(conversation)} className={`flex w-full gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 text-left transition-colors ${selectedConversation?.key === conversation.key ? 'bg-[#caa24c]/10 shadow-[inset_3px_0_0_#caa24c]' : 'hover:bg-[color:var(--portal-soft)]'}`}>
+                <PortalContactAvatar name={conversation.contactName} inquiryId={conversation.inquiryId || undefined} size="md" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-start justify-between gap-2">
+                    <span className={`truncate text-sm ${conversation.unreadCount ? 'font-black text-[color:var(--portal-text)]' : 'font-semibold text-[color:var(--portal-muted)]'}`}>{conversation.contactName}</span>
+                    <span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-muted)]">{conversation.latest ? formatConversationTime(conversation.latest.created_at) : 'New'}</span>
+                  </span>
+                  <span className="mt-0.5 block font-mono text-[9px] text-[color:var(--portal-muted)]">{formatPhoneDisplay(conversation.phoneNumber)}</span>
+                  <span className="mt-1 flex items-center gap-2">
+                    <span className={`min-w-0 flex-1 truncate text-[11px] ${conversation.unreadCount ? 'font-semibold text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{conversation.latest?.direction === 'outbound' ? 'You: ' : ''}{conversation.latest?.body || 'Start a new conversation'}</span>
+                    {conversation.unreadCount ? <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#caa24c] px-1 font-mono text-[9px] font-black text-white">{conversation.unreadCount}</span> : null}
+                  </span>
                 </span>
-                <span className="mt-0.5 block font-mono text-[9px] text-[color:var(--portal-muted)]">{formatPhoneDisplay(conversation.phoneNumber)}</span>
-                <span className="mt-1 flex items-center gap-2">
-                  <span className={`min-w-0 flex-1 truncate text-[11px] ${conversation.unreadCount ? 'font-semibold text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{conversation.latest?.direction === 'outbound' ? 'You: ' : ''}{conversation.latest?.body || 'Start a new conversation'}</span>
-                  {conversation.unreadCount ? <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#caa24c] px-1 font-mono text-[9px] font-black text-white">{conversation.unreadCount}</span> : null}
-                </span>
-              </span>
-            </button>
-          )) : <div className="px-6 py-16 text-center"><MessageSquare size={24} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-xs font-bold text-[color:var(--portal-text)]">No conversations found</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Try another search or filter.</p></div>}
+              </button>
+            )) : <div className="px-6 py-16 text-center"><MessageSquare size={24} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-xs font-bold text-[color:var(--portal-text)]">No conversations found</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Try another search or filter.</p></div>}
+          </PortalSkeletonTransition>
         </div>
       </aside>
 
-      <main className={`${showThreadOnMobile ? 'flex' : 'hidden lg:flex'} min-h-0 min-w-0 flex-col`}>
-        {loading ? <LoadingMessagePane /> : newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={setContactQuery} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
+      <main className={`${showThreadOnMobile ? 'flex' : 'hidden lg:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
+        <PortalSkeletonTransition
+          loading={loading}
+          skeleton={<LoadingMessagePane />}
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+        >
+          {newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={setContactQuery} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
           <>
             <header className="flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-5">
               <div className="flex min-w-0 items-center gap-3">
@@ -371,6 +381,7 @@ export function LuxorMessenger() {
             </div>
           </>
         ) : <EmptyMessenger />}
+        </PortalSkeletonTransition>
       </main>
       <AnimatePresence>{mediaGalleryOpen ? <MediaGallery items={sharedMedia} onClose={() => setMediaGalleryOpen(false)} /> : null}</AnimatePresence>
     </section>
@@ -438,40 +449,69 @@ function DateDivider({ value }: { value: string }) { return <div className="my-5
 function TypingDots() { return <span className="flex items-center gap-0.5" aria-hidden="true">{[0, 1, 2].map((dot) => <motion.span key={dot} className="h-1 w-1 rounded-full bg-[#caa24c]" animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 0.75, repeat: Infinity, delay: dot * 0.12 }}/>)}</span> }
 function LoadingConversations() {
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }} className="space-y-1 p-3" aria-label="Loading conversations">
-      {Array.from({ length: 7 }, (_, index) => (
-        <motion.div key={index} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, delay: index * 0.035, ease: [0.23, 1, 0.32, 1] }} className="flex gap-3 rounded-xl border border-transparent p-3">
-          <span className="h-10 w-10 shrink-0 rounded-full luxor-skeleton" />
-          <span className="min-w-0 flex-1 space-y-2.5 pt-0.5">
-            <span className="flex items-center justify-between gap-3"><span className="block h-3 w-2/5 rounded luxor-skeleton"/><span className="block h-2 w-10 rounded luxor-skeleton"/></span>
-            <span className="block h-2 w-24 rounded luxor-skeleton"/>
-            <span className="block h-2.5 w-4/5 rounded luxor-skeleton"/>
-          </span>
-        </motion.div>
+    <div className="divide-y divide-[color:var(--portal-border)]" aria-label="Loading conversations">
+      {Array.from({ length: 12 }, (_, index) => (
+        <div key={index} className="flex min-h-[4.75rem] w-full items-start gap-3 px-4 py-4">
+          <PortalSkeleton className="h-10 w-10 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-1.5 pt-0.5">
+            <div className="flex items-start justify-between gap-2">
+              <PortalSkeleton className="h-4 w-32 rounded" />
+              <PortalSkeleton className="h-2.5 w-10 rounded" />
+            </div>
+            <PortalSkeleton className="h-2.5 w-24 rounded" />
+            <PortalSkeleton className="h-3 w-4/5 rounded" />
+          </div>
+        </div>
       ))}
-    </motion.div>
+    </div>
   )
 }
 
 function LoadingMessagePane() {
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.22 }} className="flex min-h-0 flex-1 flex-col" aria-label="Loading message thread">
-      <div className="flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-5 py-3">
-        <div className="flex items-center gap-3"><span className="h-10 w-10 rounded-full luxor-skeleton"/><span className="space-y-2"><span className="block h-3 w-32 rounded luxor-skeleton"/><span className="block h-2 w-24 rounded luxor-skeleton"/></span></div>
-        <div className="flex gap-2"><span className="h-9 w-20 rounded-lg luxor-skeleton"/><span className="h-9 w-9 rounded-lg luxor-skeleton"/></div>
+    <div className="flex min-h-0 flex-1 flex-col" aria-label="Loading message thread">
+      <div className="flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <PortalSkeleton className="h-10 w-10 shrink-0 rounded-full" />
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <PortalSkeleton className="h-4 w-36 rounded" />
+              <PortalSkeleton className="h-4 w-16 rounded-full" />
+            </div>
+            <PortalSkeleton className="h-2.5 w-24 rounded" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <PortalSkeleton className="h-11 w-20 rounded-lg" />
+          <PortalSkeleton className="h-11 w-11 rounded-lg" />
+        </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden px-5 py-7 sm:px-7">
-        <div className="mx-auto max-w-4xl space-y-5">
-          <div className="mx-auto h-2 w-24 rounded luxor-skeleton"/>
-          {[{ side: 'left', width: 'w-3/5' }, { side: 'right', width: 'w-2/5' }, { side: 'left', width: 'w-1/2' }, { side: 'right', width: 'w-3/5' }].map((item, index) => (
-            <motion.div key={index} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.06 + index * 0.05, ease: [0.23, 1, 0.32, 1] }} className={`flex ${item.side === 'right' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`${item.width} space-y-2`}><div className="h-16 rounded-2xl luxor-skeleton"/><div className={`h-2 w-16 rounded luxor-skeleton ${item.side === 'right' ? 'ml-auto' : ''}`}/></div>
-            </motion.div>
+      <div className="min-h-0 flex-1 overflow-hidden px-4 py-6 sm:px-7">
+        <div className="mx-auto max-w-4xl space-y-4">
+          <div className="mx-auto h-2.5 w-28 rounded luxor-skeleton" />
+          {[
+            { side: 'left', width: 'max-w-[80%] sm:max-w-[65%]', h: 'h-14' },
+            { side: 'right', width: 'max-w-[70%] sm:max-w-[50%]', h: 'h-11' },
+            { side: 'left', width: 'max-w-[85%] sm:max-w-[70%]', h: 'h-20' },
+            { side: 'right', width: 'max-w-[75%] sm:max-w-[55%]', h: 'h-14' },
+            { side: 'left', width: 'max-w-[60%] sm:max-w-[45%]', h: 'h-11' },
+            { side: 'right', width: 'max-w-[80%] sm:max-w-[60%]', h: 'h-16' },
+          ].map((item, index) => (
+            <div key={index} className={`flex ${item.side === 'right' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`${item.width} w-full space-y-1.5`}>
+                <PortalSkeleton className={`${item.h} w-full rounded-2xl`} />
+                <PortalSkeleton className={`h-2 w-14 rounded ${item.side === 'right' ? 'ml-auto' : ''}`} />
+              </div>
+            </div>
           ))}
         </div>
       </div>
-      <div className="shrink-0 border-t border-[color:var(--portal-border)] p-4"><div className="mx-auto h-14 max-w-4xl rounded-xl luxor-skeleton"/></div>
-    </motion.div>
+      <div className="shrink-0 border-t border-[color:var(--portal-border)] p-3 sm:p-4">
+        <div className="mx-auto h-14 max-w-4xl rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-2">
+          <PortalSkeleton className="h-full w-full rounded-lg" />
+        </div>
+      </div>
+    </div>
   )
 }
 function EmptyMessenger() { return <div className="flex flex-1 items-center justify-center p-8 text-center"><div><span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-[#caa24c]/15 bg-[#caa24c]/5 text-[#caa24c]"><MessageSquare size={22}/></span><p className="mt-4 text-sm font-bold text-[color:var(--portal-text)]">No text conversations yet</p><p className="mt-1 max-w-xs text-xs leading-5 text-[color:var(--portal-muted)]">Open a lead with a mobile number and choose Text Client to begin.</p></div></div> }

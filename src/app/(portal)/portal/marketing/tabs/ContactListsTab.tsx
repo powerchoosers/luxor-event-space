@@ -20,6 +20,7 @@ import {
   PortalModal,
   PortalSelect,
   PortalAnimatedTabs,
+  PortalTabTransition,
   PortalButton,
   PortalContactAvatar,
   PortalPagination,
@@ -537,6 +538,7 @@ export function ContactListsTab({
         />
       </div>
 
+      <PortalTabTransition activeKey={`${view}-${selectedList ? selectedList.id : 'index'}`} className="flex flex-col flex-1 min-h-0">
       {view === 'lists' && !selectedList ? (
         <PortalTableCard
           controls={
@@ -820,6 +822,7 @@ export function ContactListsTab({
           </PortalTableCard>
       </>
       )}
+      </PortalTabTransition>
 
       <PortalBulkActionDeck
         selectedCount={bulkSelectedCount}

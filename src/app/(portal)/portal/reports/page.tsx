@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { BarChart3, Calendar, Download, RefreshCw, TrendingUp } from 'lucide-react'
-import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
 import { isLuxorNonRevenueTestInquiry, type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice } from '@/lib/luxorInquiryTypes'
 
 type ReportData = {
@@ -74,12 +74,20 @@ export default function ReportsPage() {
       {error && <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-xs text-rose-300">{error}</div>}
 
       <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsPanel label="Average Booking Value" value={currency(metrics.averageBookingValue)} detail={`${metrics.confirmedBookings.length} confirmed or completed bookings`} loading={loading} />
-          <StatsPanel label="Lead-to-Booking Rate" value={`${metrics.conversionRate.toFixed(1)}%`} detail={`${metrics.bookedLeadIds.size} booked leads from ${metrics.totalLeads} total`} loading={loading} />
-          <StatsPanel label="Average Days to Book" value={metrics.averageDaysToBook === null ? 'Not enough data' : `${metrics.averageDaysToBook.toFixed(1)} days`} detail="From inquiry creation to booking" loading={loading} />
-          <StatsPanel label="Net Recorded Income" value={currency(metrics.netIncome)} detail={`${currency(metrics.paidRevenue)} paid less ${currency(metrics.recordedExpenses)} expenses`} loading={loading} />
-        </div>
+        <PortalStaggerGroup className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <PortalStaggerCard>
+            <StatsPanel label="Average Booking Value" value={currency(metrics.averageBookingValue)} detail={`${metrics.confirmedBookings.length} confirmed or completed bookings`} loading={loading} />
+          </PortalStaggerCard>
+          <PortalStaggerCard>
+            <StatsPanel label="Lead-to-Booking Rate" value={`${metrics.conversionRate.toFixed(1)}%`} detail={`${metrics.bookedLeadIds.size} booked leads from ${metrics.totalLeads} total`} loading={loading} />
+          </PortalStaggerCard>
+          <PortalStaggerCard>
+            <StatsPanel label="Average Days to Book" value={metrics.averageDaysToBook === null ? 'Not enough data' : `${metrics.averageDaysToBook.toFixed(1)} days`} detail="From inquiry creation to booking" loading={loading} />
+          </PortalStaggerCard>
+          <PortalStaggerCard>
+            <StatsPanel label="Net Recorded Income" value={currency(metrics.netIncome)} detail={`${currency(metrics.paidRevenue)} paid less ${currency(metrics.recordedExpenses)} expenses`} loading={loading} />
+          </PortalStaggerCard>
+        </PortalStaggerGroup>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ReportCard title="Paid Revenue by Month" icon={<TrendingUp size={16} />}>
@@ -90,11 +98,17 @@ export default function ReportsPage() {
           </ReportCard>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <SummaryCard label="Paid Revenue" value={currency(metrics.paidRevenue)} detail={`${metrics.paidInvoices.length} paid invoices`} />
-          <SummaryCard label="Outstanding Invoices" value={currency(metrics.outstandingRevenue)} detail={`${metrics.outstandingInvoices.length} sent or overdue invoices`} />
-          <SummaryCard label="Current-Month Event Days" value={String(metrics.currentMonthEventDays)} detail="Distinct confirmed or completed event dates" />
-        </div>
+        <PortalStaggerGroup className="grid grid-cols-1 md:grid-cols-3 gap-4" staggerDelay={0.06}>
+          <PortalStaggerCard>
+            <SummaryCard label="Paid Revenue" value={currency(metrics.paidRevenue)} detail={`${metrics.paidInvoices.length} paid invoices`} />
+          </PortalStaggerCard>
+          <PortalStaggerCard>
+            <SummaryCard label="Outstanding Invoices" value={currency(metrics.outstandingRevenue)} detail={`${metrics.outstandingInvoices.length} sent or overdue invoices`} />
+          </PortalStaggerCard>
+          <PortalStaggerCard>
+            <SummaryCard label="Current-Month Event Days" value={String(metrics.currentMonthEventDays)} detail="Distinct confirmed or completed event dates" />
+          </PortalStaggerCard>
+        </PortalStaggerGroup>
 
         <p className="text-[10px] leading-relaxed text-zinc-600">These reports only reflect records saved in the portal. They are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
       </div>

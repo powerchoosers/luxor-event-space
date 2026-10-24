@@ -1,24 +1,26 @@
 'use client'
 
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import React, { useRef } from 'react'
+import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion'
 import { usePathname } from 'next/navigation'
-import React, { useContext, useState } from 'react'
-import { LayoutRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
 
-// Freezes the Next.js App Router context to preserve the current page elements during exit transitions
-function FrozenRoute({ children }: { children: React.ReactNode }) {
-  const context = useContext(LayoutRouterContext)
-  const [frozen] = useState(context)
+const LUXOR_EASE = [0.22, 1, 0.36, 1] as const
 
-  if (!context) {
-    return <>{children}</>
+function isNodeLoading(node: React.ReactNode): boolean {
+  if (!React.isValidElement(node)) return false
+  const props = node.props as Record<string, unknown> | null | undefined
+  if (props?.['data-luxor-loading']) return true
+  const type = node.type
+  if (typeof type === 'function' && (type.name === 'Loading' || type.name === 'PortalLoading' || type.name === 'SiteLoading')) {
+    return true
   }
-
-  return (
-    <LayoutRouterContext.Provider value={frozen}>
-      {children}
-    </LayoutRouterContext.Provider>
-  )
+  if (typeof type === 'object' && type !== null && 'name' in type && (type as { name?: string }).name === 'Loading') {
+    return true
+  }
+  if (props && 'children' in props && React.isValidElement(props.children)) {
+    return isNodeLoading(props.children)
+  }
+  return false
 }
 
 export function RouteTransition({
@@ -33,44 +35,96 @@ export function RouteTransition({
   const pathname = usePathname()
   const reduceMotion = useReducedMotion()
   const isPortal = surface === 'portal'
+  const ref = useRef<HTMLDivElement>(null)
+
   const portalClass = fillAvailableHeight
     ? 'flex-1 min-h-0 min-w-0 h-full w-full flex flex-col overflow-hidden'
     : 'flex-1 min-h-full min-w-0 w-full flex flex-col'
 
   if (reduceMotion) {
-    return isPortal ? <div className={portalClass}>{children}</div> : <>{children}</>
+    return isPortal ? <div className={portalClass}>{children}</div> : <div className="min-h-screen">{children}</div>
   }
 
-  const initialState = isPortal
-    ? { opacity: 0, y: 4 }
-    : { opacity: 0, y: 16, filter: 'blur(6px)' }
-  const animateState = isPortal
-    ? { opacity: 1, y: 0 }
-    : { opacity: 1, y: 0, filter: 'blur(0px)' }
-  const exitState = isPortal
-    ? { opacity: 0, y: -2 }
-    : { opacity: 0, y: -10, filter: 'blur(4px)' }
+  const isLoading = isNodeLoading(children)
+  const transitionKey = `${pathname}-${isLoading ? 'loading' : 'content'}`
+
+  const portalVariants: Variants = {
+    initial: {
+      opacity: 0.65,
+      y: 6,
+      scale: 0.998,
+      filter: 'blur(10px)',
+    },
+    animate: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      filter: 'blur(0px)',
+      transition: {
+        duration: 0.28,
+        ease: LUXOR_EASE,
+      },
+    },
+    exit: {
+      opacity: 0,
+      y: -6,
+      scale: 0.985,
+      filter: 'blur(12px)',
+      transition: {
+        duration: 0.20,
+        ease: LUXOR_EASE,
+      },
+    },
+  }
+
+  const siteVariants: Variants = {
+    initial: {
+      opacity: 0.6,
+      y: 10,
+      scale: 0.997,
+      filter: 'blur(12px)',
+    },
+    animate: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      filter: 'blur(0px)',
+      transition: {
+        duration: 0.38,
+        ease: LUXOR_EASE,
+      },
+    },
+    exit: {
+      opacity: 0,
+      y: -8,
+      scale: 0.985,
+      filter: 'blur(14px)',
+      transition: {
+        duration: 0.22,
+        ease: LUXOR_EASE,
+      },
+    },
+  }
 
   return (
-    <AnimatePresence mode={isPortal ? 'sync' : 'wait'} initial={false}>
+    <AnimatePresence mode="wait" initial={false}>
       <motion.div
-        id={`route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`}
-        key={pathname}
-        className={isPortal ? portalClass : 'min-h-screen'}
-        initial={initialState}
-        animate={animateState}
-        exit={exitState}
-        transition={{ duration: isPortal ? 0.06 : 0.28, ease: [0.23, 1, 0.32, 1] }}
-        onAnimationComplete={() => {
-          const safeId = `route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`
-          const el = document.getElementById(safeId)
-          if (el) {
-            el.style.filter = ''
-            el.style.transform = ''
+        ref={ref}
+        key={transitionKey}
+        id={`route-transition-${transitionKey.replace(/[^a-zA-Z0-9-]/g, '_')}`}
+        className={`luxor-route-stage ${isPortal ? `surface-portal ${portalClass}` : 'surface-site min-h-screen'} transform-gpu`}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        variants={isPortal ? portalVariants : siteVariants}
+        onAnimationComplete={(definition) => {
+          if (definition === 'animate' && ref.current) {
+            ref.current.style.filter = 'none'
+            ref.current.style.transform = 'none'
           }
         }}
       >
-        <FrozenRoute>{children}</FrozenRoute>
+        {children}
       </motion.div>
     </AnimatePresence>
   )

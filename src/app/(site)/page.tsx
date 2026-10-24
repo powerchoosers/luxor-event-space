@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Reveal } from '@/components/Reveal'
+import { StaggerCards, StaggerCard } from '@/components/StaggerCards'
 import { VenueFilm } from '@/components/VenueFilm'
 import { LuxorBrochureForm } from '@/components/LuxorBrochureForm'
 import { LuxorCustomTimeStartingPrices } from '@/components/LuxorCustomTimeStartingPrices'
@@ -96,9 +97,9 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {curatedPhotos.map((photo, idx) => (
-              <Reveal key={photo.src} delay={idx * 70} variant="scale" amount={16}>
+          <StaggerCards className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4" stagger={0.09}>
+            {curatedPhotos.map((photo) => (
+              <StaggerCard key={photo.src}>
                 <div className="home-gallery-photo group relative aspect-[4/5] overflow-hidden rounded-xl border border-[#caa24c] bg-[#0f0c0a] shadow-lg transition-transform duration-300 hover:scale-[1.02]">
                   <Image
                     src={photo.src}
@@ -117,9 +118,9 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-              </Reveal>
+              </StaggerCard>
             ))}
-          </div>
+          </StaggerCards>
 
           <div className="mt-12 text-center">
             <Link

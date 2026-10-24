@@ -26,13 +26,20 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
   const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   useEffect(() => {
-    // Scroll today's card into view on mount
-    const todayElement = scrollContainerRef.current?.querySelector('[data-today="true"]');
+    // Horizontally scroll today's card into view inside the container without scrolling the page
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const todayElement = container.querySelector<HTMLElement>('[data-today="true"]');
     if (todayElement) {
-      todayElement.scrollIntoView({
+      const containerRect = container.getBoundingClientRect();
+      const elementRect = todayElement.getBoundingClientRect();
+      const relativeLeft = elementRect.left - containerRect.left + container.scrollLeft;
+      const targetScrollLeft = relativeLeft - (container.clientWidth / 2) + (elementRect.width / 2);
+
+      container.scrollTo({
+        left: Math.max(0, targetScrollLeft),
         behavior: 'auto',
-        block: 'nearest',
-        inline: 'center'
       });
     }
   }, []);

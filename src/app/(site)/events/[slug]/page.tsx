@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowRight, Check, Users } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
+import { StaggerCards, StaggerCard } from '@/components/StaggerCards'
 import { PublicFaqList } from '@/components/PublicFaqList'
 import { LUXOR_PUBLIC_EVENT_PAGES, getLuxorPublicEventPage } from '@/lib/luxorPublicContent'
 
@@ -58,9 +59,17 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
       <section className="bg-[#080706] py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <Reveal className="max-w-3xl"><p className="font-mono text-xs uppercase tracking-[.28em] text-[#caa24c]">The experience</p><h2 className="mt-4 font-serif text-4xl leading-none sm:text-6xl">Plan the story, not just the tables.</h2></Reveal>
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
-            {event.moments.map((moment, index) => <Reveal key={moment.title} delay={index * 80}><article className="h-full border-t border-[#caa24c]/35 py-6"><span className="font-serif text-3xl text-[#caa24c]">0{index + 1}</span><h3 className="mt-5 font-serif text-3xl">{moment.title}</h3><p className="mt-3 text-sm leading-6 text-[#d7c29a]/72">{moment.copy}</p></article></Reveal>)}
-          </div>
+          <StaggerCards className="mt-10 grid gap-5 md:grid-cols-3" stagger={0.09}>
+            {event.moments.map((moment, index) => (
+              <StaggerCard key={moment.title} className="h-full">
+                <article className="h-full border-t border-[#caa24c]/35 py-6">
+                  <span className="font-serif text-3xl text-[#caa24c]">0{index + 1}</span>
+                  <h3 className="mt-5 font-serif text-3xl">{moment.title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-[#d7c29a]/72">{moment.copy}</p>
+                </article>
+              </StaggerCard>
+            ))}
+          </StaggerCards>
         </div>
       </section>
 

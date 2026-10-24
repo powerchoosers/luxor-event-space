@@ -61,9 +61,16 @@ import {
   PortalContactAvatar,
   PortalPagination,
   PortalTableSkeleton,
+  PortalTourCardSkeleton,
+  PortalClientCardSkeleton,
+  PortalKanbanBoardSkeleton,
+  PortalSkeletonTransition,
+  PortalSkeleton,
   PortalFilterBar,
   PortalStatusBadge,
   type PortalStatusTone,
+  PortalStaggerGroup,
+  PortalStaggerCard,
 } from '@/components/portal/PortalUI'
 import {
   LeadLifecycleActionSheet,
@@ -699,11 +706,11 @@ export default function LeadsPage() {
 
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-visible mt-0">
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} loading={loading} />}
-        {activeTab === 'clients' && <LeadsClientsTab leads={leads} sort={clientSort} onSort={updateClientSort} onLifecycleAction={openLeadLifecycleAction} />}
-        {activeTab === 'lost' && <LeadsLostTab leads={leads} />}
+        {activeTab === 'clients' && <LeadsClientsTab leads={leads} loading={loading} sort={clientSort} onSort={updateClientSort} onLifecycleAction={openLeadLifecycleAction} />}
+        {activeTab === 'lost' && <LeadsLostTab leads={leads} loading={loading} />}
         {activeTab === 'followups' && <FollowUpsTab leads={leads} onLeadsRefresh={async () => { await fetchLeads() }} />}
-        {activeTab === 'tours' && <LeadsToursTab leads={leads} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} busyTourOutcomeIds={busyTourOutcomeIds} />}
-        {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} onLifecycleAction={openLeadLifecycleAction} />}
+        {activeTab === 'tours' && <LeadsToursTab leads={leads} loading={loading} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} busyTourOutcomeIds={busyTourOutcomeIds} />}
+        {activeTab === 'proposals' && <LeadsProposalsTab leads={leads} loading={loading} onLifecycleAction={openLeadLifecycleAction} />}
 
         {activeTab === 'pipeline' && (
           viewMode === 'list' || isMobileViewport ? (
@@ -785,7 +792,7 @@ export default function LeadsPage() {
             <tbody className="divide-y divide-[color:var(--portal-border)]">
               {!loading && activeTab === 'pipeline' && permanentTestLead ? <PinnedTestLeadTableRow lead={permanentTestLead} /> : null}
               {loading ? (
-                <PortalTableSkeleton cols={8} rows={6} />
+                <PortalTableSkeleton cols={8} rows={12} />
               ) : error ? (
                 <tr>
                   <td colSpan={8} className="px-8 py-12 text-sm text-red-300">
@@ -948,7 +955,11 @@ export default function LeadsPage() {
           />
         </PortalTableCard>
       ) : (
-        <div ref={boardRef} onScroll={handleBoardScroll} className="flex-1 min-h-0 overflow-x-auto portal-scrollbar -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pb-4 flex gap-4 select-none">
+        <PortalSkeletonTransition
+          loading={loading}
+          skeleton={<PortalKanbanBoardSkeleton />}
+        >
+          <div ref={boardRef} onScroll={handleBoardScroll} className="flex-1 min-h-0 overflow-x-auto portal-scrollbar -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pb-4 flex gap-4 select-none">
           {PIPELINE_COLUMNS.map((col, colIndex, colArray) => {
             const colLeads = sortedLeads.filter(l => getPipelineStage(l) === col.id)
             return (
@@ -1027,9 +1038,10 @@ export default function LeadsPage() {
               ))}
             </div>
           </div>
-        </div>
+          </div>
+        </PortalSkeletonTransition>
       )
-        )}
+    )}
       </PortalTabTransition>
 
       <LeadEntryDrawer isOpen={isLeadDrawerOpen} onClose={() => setIsLeadDrawerOpen(false)}>
@@ -1465,128 +1477,132 @@ function LeadsDashboard({ leads, loading }: { leads: LuxorInquiry[]; loading: bo
   return (
     <div className="h-full overflow-y-auto portal-scrollbar pr-1 space-y-6 pb-8">
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatsCard label="New Inquiries" value={newInquiries} subtitle="Awaiting response" tone="blue" />
-        <StatsCard label="Tours Scheduled" value={toursScheduled} subtitle="Active bookings" tone="blue" />
-        <StatsCard label="Tours Completed" value={toursCompleted} subtitle="Tours held" tone="green" />
-        <StatsCard label="Proposals Sent" value={proposalsSent} subtitle="Out for signature" tone="blue" />
-        <StatsCard label="Deposits Received" value={depositsReceived} subtitle="Booked clients" tone="green" />
-        <StatsCard label="Conversion Rate" value={`${conversionRate}%`} subtitle="Lead-to-booking" tone="neutral" />
-      </div>
+      <PortalStaggerGroup className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <PortalStaggerCard><StatsCard label="New Inquiries" value={newInquiries} subtitle="Awaiting response" tone="blue" /></PortalStaggerCard>
+        <PortalStaggerCard><StatsCard label="Tours Scheduled" value={toursScheduled} subtitle="Active bookings" tone="blue" /></PortalStaggerCard>
+        <PortalStaggerCard><StatsCard label="Tours Completed" value={toursCompleted} subtitle="Tours held" tone="green" /></PortalStaggerCard>
+        <PortalStaggerCard><StatsCard label="Proposals Sent" value={proposalsSent} subtitle="Out for signature" tone="blue" /></PortalStaggerCard>
+        <PortalStaggerCard><StatsCard label="Deposits Received" value={depositsReceived} subtitle="Booked clients" tone="green" /></PortalStaggerCard>
+        <PortalStaggerCard><StatsCard label="Conversion Rate" value={`${conversionRate}%`} subtitle="Lead-to-booking" tone="neutral" /></PortalStaggerCard>
+      </PortalStaggerGroup>
 
       {/* Charts & Lists Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <PortalStaggerGroup className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales Funnel */}
-        <div className="portal-card-surface p-6 lg:col-span-1">
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] mb-6 flex items-center gap-2">
-            <TrendingUp size={15} className="text-[#caa24c]" /> Sales Funnel Analysis
-          </h3>
-          <div className="space-y-6">
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1.5">
-                <span className="text-[color:var(--portal-text)]">1. New Inquiries</span>
-                <span className="font-mono text-zinc-400">{total} leads (100%)</span>
+        <PortalStaggerCard className="lg:col-span-1">
+          <div className="portal-card-surface p-6 h-full">
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] mb-6 flex items-center gap-2">
+              <TrendingUp size={15} className="text-[#caa24c]" /> Sales Funnel Analysis
+            </h3>
+            <div className="space-y-6">
+              <div>
+                <div className="flex justify-between text-xs font-bold mb-1.5">
+                  <span className="text-[color:var(--portal-text)]">1. New Inquiries</span>
+                  <span className="font-mono text-zinc-400">{total} leads (100%)</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                  <div className="h-full rounded-full bg-blue-500 w-full" />
+                </div>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
-                <div className="h-full rounded-full bg-blue-500 w-full" />
-              </div>
-            </div>
 
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1.5">
-                <span className="text-[color:var(--portal-text)]">2. Tours Booked</span>
-                <span className="font-mono text-[color:var(--portal-muted)]">{tourStageCount} ({tourPct}%)</span>
+              <div>
+                <div className="flex justify-between text-xs font-bold mb-1.5">
+                  <span className="text-[color:var(--portal-text)]">2. Tours Booked</span>
+                  <span className="font-mono text-[color:var(--portal-muted)]">{tourStageCount} ({tourPct}%)</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                  <div className="h-full rounded-full bg-sky-600 dark:bg-sky-400" style={{ width: `${tourPct}%` }} />
+                </div>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
-                <div className="h-full rounded-full bg-sky-600 dark:bg-sky-400" style={{ width: `${tourPct}%` }} />
-              </div>
-            </div>
 
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1.5">
-                <span className="text-[color:var(--portal-text)]">3. Proposals Out</span>
-                <span className="font-mono text-[color:var(--portal-muted)]">{proposalStageCount} ({proposalPct}%)</span>
+              <div>
+                <div className="flex justify-between text-xs font-bold mb-1.5">
+                  <span className="text-[color:var(--portal-text)]">3. Proposals Out</span>
+                  <span className="font-mono text-[color:var(--portal-muted)]">{proposalStageCount} ({proposalPct}%)</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                  <div className="h-full rounded-full bg-sky-600 dark:bg-sky-400" style={{ width: `${proposalPct}%` }} />
+                </div>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
-                <div className="h-full rounded-full bg-sky-600 dark:bg-sky-400" style={{ width: `${proposalPct}%` }} />
-              </div>
-            </div>
 
-            <div>
-              <div className="flex justify-between text-xs font-bold mb-1.5">
-                <span className="text-[color:var(--portal-text)]">4. Booked Event Days</span>
-                <span className="font-mono text-emerald-400">{bookedStageCount} ({bookedPct}%)</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
-                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${bookedPct}%` }} />
+              <div>
+                <div className="flex justify-between text-xs font-bold mb-1.5">
+                  <span className="text-[color:var(--portal-text)]">4. Booked Event Days</span>
+                  <span className="font-mono text-emerald-400">{bookedStageCount} ({bookedPct}%)</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${bookedPct}%` }} />
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </PortalStaggerCard>
 
         {/* Upcoming Tours */}
-        <PortalTableCard
-          className="lg:col-span-2"
-          controls={
-            <div className="flex items-center justify-between gap-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] flex items-center gap-2">
-                <Calendar size={15} className="text-[#caa24c]" /> Upcoming Scheduled Tours
-              </h3>
-              <Link href="/portal/calendar" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-colors hover:text-[#caa24c]">
-                View Calendar <ChevronRight size={13} />
-              </Link>
-            </div>
-          }
-        >
-          <PortalStickyTable minWidth="560px">
-            <PortalStickyThead>
-              <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
-                <th className="px-6 py-3.5">Client</th>
-                <th className="px-4 py-3.5">Event</th>
-                <th className="px-6 py-3.5 text-right">Date &amp; Time</th>
-              </tr>
-            </PortalStickyThead>
-            <tbody className="divide-y divide-[color:var(--portal-border)]">
-              {upcomingTours.length === 0 ? (
-                <tr><td colSpan={3} className="px-6 py-10 text-center text-xs text-[color:var(--portal-muted)]">No upcoming tours scheduled this week.</td></tr>
-              ) : upcomingTours.map((tour) => (
-                <tr
-                  key={tour.id}
-                  role="link"
-                  tabIndex={0}
-                  aria-label={`Open ${tour.full_name}`}
-                  onClick={() => router.push(`/portal/leads/${tour.id}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      router.push(`/portal/leads/${tour.id}`)
-                    }
-                  }}
-                  className="group cursor-pointer transition-colors hover:bg-[#caa24c]/7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/60"
-                >
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-3">
-                      <PortalContactAvatar
-                        name={tour.full_name}
-                        size="md"
-                        className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent"
-                      />
-                      <p className="text-sm font-semibold leading-tight text-[color:var(--portal-text)] transition-transform group-hover:translate-x-0.5">{tour.full_name}</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium text-[color:var(--portal-text)]">
-                    {tour.event_type || 'Event'} <span className="text-[color:var(--portal-muted)]">• {tour.guest_count || 'Flexible'} guests</span>
-                  </td>
-                  <td className="px-6 py-3 text-right">
-                    <p className="text-xs font-semibold text-[color:var(--portal-text)]">{formatTourDate(tour.preferred_tour_date || '')}</p>
-                    <p className="mt-0.5 text-[10px] font-medium text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Flexible'}</p>
-                  </td>
+        <PortalStaggerCard className="lg:col-span-2">
+          <PortalTableCard
+            className="h-full"
+            controls={
+              <div className="flex items-center justify-between gap-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] flex items-center gap-2">
+                  <Calendar size={15} className="text-[#caa24c]" /> Upcoming Scheduled Tours
+                </h3>
+                <Link href="/portal/calendar" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-colors hover:text-[#caa24c]">
+                  View Calendar <ChevronRight size={13} />
+                </Link>
+              </div>
+            }
+          >
+            <PortalStickyTable minWidth="560px">
+              <PortalStickyThead>
+                <tr className="bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+                  <th className="px-6 py-3.5">Client</th>
+                  <th className="px-4 py-3.5">Event</th>
+                  <th className="px-6 py-3.5 text-right">Date &amp; Time</th>
                 </tr>
-              ))}
-            </tbody>
-          </PortalStickyTable>
-        </PortalTableCard>
-      </div>
+              </PortalStickyThead>
+              <tbody className="divide-y divide-[color:var(--portal-border)]">
+                {upcomingTours.length === 0 ? (
+                  <tr><td colSpan={3} className="px-6 py-10 text-center text-xs text-[color:var(--portal-muted)]">No upcoming tours scheduled this week.</td></tr>
+                ) : upcomingTours.map((tour) => (
+                  <tr
+                    key={tour.id}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`Open ${tour.full_name}`}
+                    onClick={() => router.push(`/portal/leads/${tour.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        router.push(`/portal/leads/${tour.id}`)
+                      }
+                    }}
+                    className="group cursor-pointer transition-colors hover:bg-[#caa24c]/7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/60"
+                  >
+                    <td className="px-6 py-3">
+                      <div className="flex items-center gap-3">
+                        <PortalContactAvatar
+                          name={tour.full_name}
+                          size="md"
+                          className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent"
+                        />
+                        <p className="text-sm font-semibold leading-tight text-[color:var(--portal-text)] transition-transform group-hover:translate-x-0.5">{tour.full_name}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-[color:var(--portal-text)]">
+                      {tour.event_type || 'Event'} <span className="text-[color:var(--portal-muted)]">• {tour.guest_count || 'Flexible'} guests</span>
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <p className="text-xs font-semibold text-[color:var(--portal-text)]">{formatTourDate(tour.preferred_tour_date || '')}</p>
+                      <p className="mt-0.5 text-[10px] font-medium text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Flexible'}</p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </PortalStickyTable>
+          </PortalTableCard>
+        </PortalStaggerCard>
+      </PortalStaggerGroup>
 
       {/* Recent Activity / Inquiries List */}
       <PortalTableCard
@@ -1699,11 +1715,13 @@ function SortableHeader<Key extends string>({
 
 function LeadsClientsTab({
   leads,
+  loading = false,
   sort,
   onSort,
   onLifecycleAction,
 }: {
   leads: LuxorInquiry[]
+  loading?: boolean
   sort: TableSort<ClientSortKey>
   onSort: (key: ClientSortKey, direction?: SortDirection) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
@@ -1723,7 +1741,7 @@ function LeadsClientsTab({
       mobilePageScroll
       controls={
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients ({clients.length})</h3>
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients ({loading ? '…' : clients.length})</h3>
           <div className="w-full sm:w-60">
             <PortalSelect aria-label="Sort booked clients" value={sort.key + ':' + sort.direction} onChange={(value) => { const [key, direction] = value.split(':'); onSort(key as ClientSortKey, direction as SortDirection) }} options={[
               { value: 'name:asc', label: 'Client · A to Z' }, { value: 'name:desc', label: 'Client · Z to A' },
@@ -1735,35 +1753,46 @@ function LeadsClientsTab({
         </div>
       }
     >
-      {clients.length === 0 ? (
-        <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No booked clients in pipeline currently.</div>
-      ) : (
-        <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
-          {clients.map((client) => (
-            <LuxorCrmRecordCard
-              key={client.id}
-              lead={client}
-              badges={[{ label: 'Booked', tone: 'green' }]}
-              subtitle={<>{client.event_type || 'Quinceañera'} · {client.target_date || 'Date TBD'}{client.guest_count ? <> · {client.guest_count} guests</> : <> · Flexible guest count</>}</>}
-              contact={client.email || (client.phone ? formatPhoneDisplay(client.phone) : 'No contact details')}
-              actions={
-                <>
-                  <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><UserCheck size={14} /> Manage Dossier</Link>
-                  <LeadLifecycleActionsMenu lead={client} onAction={(action) => onLifecycleAction(client, action)} />
-                </>
-              }
-            >
-              <div className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
-                <div className="flex min-w-0 items-center gap-2"><Phone size={13} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" /><span className="break-all text-[color:var(--portal-text)]">{client.phone ? formatPhoneDisplay(client.phone) : 'No phone captured'}</span></div>
-                <div className="flex min-w-0 items-center gap-2"><Languages size={13} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" /><span className="text-[color:var(--portal-text)]">Tour language: {getRequestedTourLanguage(client) || 'Not specified'}</span></div>
-                {isMarketingLead(client) ? <div className="flex items-center gap-2 text-[#8c6529] dark:text-[#f1d27a]"><Star size={13} className="fill-current" aria-hidden="true" />Marketing lead</div> : null}
-                <div className="flex items-center justify-between gap-2"><span className="text-[color:var(--portal-muted)]">Booking status</span><span className="font-semibold text-[color:var(--portal-text)]">Active booked client</span></div>
-              </div>
-              <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]"><Eye size={14} /> View client record</Link>
-            </LuxorCrmRecordCard>
-          ))}
-        </div>
-      )}
+      <PortalSkeletonTransition
+        loading={loading}
+        skeleton={
+          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <PortalClientCardSkeleton key={i} />
+            ))}
+          </div>
+        }
+      >
+        {clients.length === 0 ? (
+          <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No booked clients in pipeline currently.</div>
+        ) : (
+          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+            {clients.map((client) => (
+              <LuxorCrmRecordCard
+                key={client.id}
+                lead={client}
+                badges={[{ label: 'Booked', tone: 'green' }]}
+                subtitle={<>{client.event_type || 'Quinceañera'} · {client.target_date || 'Date TBD'}{client.guest_count ? <> · {client.guest_count} guests</> : <> · Flexible guest count</>}</>}
+                contact={client.email || (client.phone ? formatPhoneDisplay(client.phone) : 'No contact details')}
+                actions={
+                  <>
+                    <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><UserCheck size={14} /> Manage Dossier</Link>
+                    <LeadLifecycleActionsMenu lead={client} onAction={(action) => onLifecycleAction(client, action)} />
+                  </>
+                }
+              >
+                <div className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
+                  <div className="flex min-w-0 items-center gap-2"><Phone size={13} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" /><span className="break-all text-[color:var(--portal-text)]">{client.phone ? formatPhoneDisplay(client.phone) : 'No phone captured'}</span></div>
+                  <div className="flex min-w-0 items-center gap-2"><Languages size={13} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" /><span className="text-[color:var(--portal-text)]">Tour language: {getRequestedTourLanguage(client) || 'Not specified'}</span></div>
+                  {isMarketingLead(client) ? <div className="flex items-center gap-2 text-[#8c6529] dark:text-[#f1d27a]"><Star size={13} className="fill-current" aria-hidden="true" />Marketing lead</div> : null}
+                  <div className="flex items-center justify-between gap-2"><span className="text-[color:var(--portal-muted)]">Booking status</span><span className="font-semibold text-[color:var(--portal-text)]">Active booked client</span></div>
+                </div>
+                <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]"><Eye size={14} /> View client record</Link>
+              </LuxorCrmRecordCard>
+            ))}
+          </div>
+        )}
+      </PortalSkeletonTransition>
     </PortalTableCard>
   )
 }
@@ -1906,7 +1935,7 @@ function MobileLeadCard({
     </LuxorCrmRecordCard>
   )
 }
-function LeadsLostTab({ leads }: { leads: LuxorInquiry[] }) {
+function LeadsLostTab({ leads, loading = false }: { leads: LuxorInquiry[]; loading?: boolean }) {
   const lostLeads = useMemo(
     () => leads
       .filter((lead) => getPipelineStage(lead) === 'closed_lost')
@@ -1923,65 +1952,78 @@ function LeadsLostTab({ leads }: { leads: LuxorInquiry[] }) {
             <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">A clear record of opportunities that were closed, without reopening them by accident.</p>
           </div>
           <span className="w-fit rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-1 font-mono text-[10px] font-bold text-[color:var(--portal-muted)]">
-            {lostLeads.length} {lostLeads.length === 1 ? 'record' : 'records'}
+            {loading ? '…' : `${lostLeads.length} ${lostLeads.length === 1 ? 'record' : 'records'}`}
           </span>
         </div>
       }
     >
-      {lostLeads.length === 0 ? (
-        <div className="px-8 py-16 text-center">
-                <X size={22} className="mx-auto text-[color:var(--portal-muted)]" aria-hidden="true" />
-                <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">No closed-lost opportunities</p>
-                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">When an opportunity is closed, its reason and any tour cancellation will appear here.</p>
-        </div>
-      ) : (
-        <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
-          {lostLeads.map((lead) => {
-            const dealLost = lead.metadata?.dealLost
-            const dealLostRecord = dealLost && typeof dealLost === 'object' && !Array.isArray(dealLost)
-              ? dealLost as Record<string, unknown>
-              : null
-            const lossReason = typeof dealLostRecord?.reason === 'string'
-              ? dealLostRecord.reason
-              : typeof lead.metadata?.deal_lost_reason === 'string'
-                ? lead.metadata.deal_lost_reason
-                : typeof lead.metadata?.loss_reason === 'string'
-                  ? lead.metadata.loss_reason
-                  : null
-            const tourStatus = lead.tour_attendance_status === 'cancelled'
-              ? 'Cancelled'
-              : lead.preferred_tour_date
-                ? 'Kept on record'
-                : 'Not scheduled'
+      <PortalSkeletonTransition
+        loading={loading}
+        skeleton={
+          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <PortalClientCardSkeleton key={i} />
+            ))}
+          </div>
+        }
+      >
+        {lostLeads.length === 0 ? (
+          <div className="px-8 py-16 text-center">
+                  <X size={22} className="mx-auto text-[color:var(--portal-muted)]" aria-hidden="true" />
+                  <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">No closed-lost opportunities</p>
+                  <p className="mt-1 text-xs text-[color:var(--portal-muted)]">When an opportunity is closed, its reason and any tour cancellation will appear here.</p>
+          </div>
+        ) : (
+          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+            {lostLeads.map((lead) => {
+              const dealLost = lead.metadata?.dealLost
+              const dealLostRecord = dealLost && typeof dealLost === 'object' && !Array.isArray(dealLost)
+                ? dealLost as Record<string, unknown>
+                : null
+              const lossReason = typeof dealLostRecord?.reason === 'string'
+                ? dealLostRecord.reason
+                : typeof lead.metadata?.deal_lost_reason === 'string'
+                  ? lead.metadata.deal_lost_reason
+                  : typeof lead.metadata?.loss_reason === 'string'
+                    ? lead.metadata.loss_reason
+                    : null
+              const tourStatus = lead.tour_attendance_status === 'cancelled'
+                ? 'Cancelled'
+                : lead.preferred_tour_date
+                  ? 'Kept on record'
+                  : 'Not scheduled'
 
-            return <LuxorCrmRecordCard
-              key={lead.id}
-              lead={lead}
-              badges={[{ label: 'Closed Lost', tone: 'neutral' }]}
-              subtitle={<>{lead.event_type || 'Event'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
-              contact={lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact detail')}
-              actions={<Link href={`/portal/leads/${lead.id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View dossier <ExternalLink size={14} aria-hidden="true" /></Link>}
-            >
-              <div className="grid gap-3 text-xs sm:grid-cols-2">
-                <div><p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Closed</p><p className="mt-1 font-medium text-[color:var(--portal-text)]">{formatDate(lead.updated_at || lead.created_at)}</p><p className="mt-1 max-w-[240px] truncate text-[10px] text-[color:var(--portal-muted)]" title={lossReason || undefined}>{lossReason || 'Reason saved in activity'}</p></div>
-                <div><p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Tour</p><p className="mt-1 font-medium text-[color:var(--portal-muted)]">{tourStatus}</p></div>
-              </div>
-            </LuxorCrmRecordCard>
-          })}
-        </div>
-      )}
+              return <LuxorCrmRecordCard
+                key={lead.id}
+                lead={lead}
+                badges={[{ label: 'Closed Lost', tone: 'neutral' }]}
+                subtitle={<>{lead.event_type || 'Event'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
+                contact={lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact detail')}
+                actions={<Link href={`/portal/leads/${lead.id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View dossier <ExternalLink size={14} aria-hidden="true" /></Link>}
+              >
+                <div className="grid gap-3 text-xs sm:grid-cols-2">
+                  <div><p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Closed</p><p className="mt-1 font-medium text-[color:var(--portal-text)]">{formatDate(lead.updated_at || lead.created_at)}</p><p className="mt-1 max-w-[240px] truncate text-[10px] text-[color:var(--portal-muted)]" title={lossReason || undefined}>{lossReason || 'Reason saved in activity'}</p></div>
+                  <div><p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Tour</p><p className="mt-1 font-medium text-[color:var(--portal-muted)]">{tourStatus}</p></div>
+                </div>
+              </LuxorCrmRecordCard>
+            })}
+          </div>
+        )}
+      </PortalSkeletonTransition>
     </PortalTableCard>
   )
 }
 
 function LeadsToursTab({
   leads,
+  loading = false,
   onMovePipelineStage,
   onLifecycleAction,
   onTourOutcome,
   busyTourOutcomeIds,
 }: {
   leads: LuxorInquiry[]
+  loading?: boolean
   onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
   onTourOutcome: (lead: LuxorInquiry, attendance: 'attended' | 'no_show') => void
@@ -2135,7 +2177,7 @@ function LeadsToursTab({
     <PortalTableCard
       controls={
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Scheduled Tours ({tours.length})</h3>
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Scheduled Tours ({loading ? '…' : tours.length})</h3>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="flex max-w-full flex-wrap items-center justify-start gap-1 rounded-lg border border-[color:var(--portal-border)] p-1 sm:justify-end" role="tablist" aria-label="Tour date filter">
               {(['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'] as TourView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => saveView(option)} className={`rounded-md px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${view === option ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{option === 'all' ? 'All' : `${categoryLabels[option]} (${grouped[option].length})`}</button>)}
@@ -2155,64 +2197,111 @@ function LeadsToursTab({
       }
       footer={listFooter}
     >
-      {viewMode === 'cards' ? (
-        <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
-          {(view === 'all' ? categoryOrder : [view]).map((category) => (
-            <section key={category} aria-labelledby={'tour-' + category + '-heading'}>
-              <div className="mb-3 flex items-center gap-3"><h4 id={'tour-' + category + '-heading'} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
-              {grouped[category].length === 0 ? <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{grouped[category].map(renderTourCard)}</div>}
-            </section>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-5 overflow-y-auto p-4 sm:p-6">
-          {view === 'all' ? categoryOrder.map((category) => {
-            const records = pageTours.filter((tour) => getLuxorTourSection(tour, todayKey) === category)
-            return records.length ? <section key={category} aria-label={categoryLabels[category]}><h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{categoryLabels[category]}</h4><div className="space-y-3">{records.map(renderTourCard)}</div></section> : null
-          }) : pageTours.length ? pageTours.map(renderTourCard) : <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-10 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p>}
-        </div>
-      )}
+      <PortalSkeletonTransition
+        loading={loading}
+        skeleton={
+          viewMode === 'cards' ? (
+            <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
+              <section aria-label="Loading scheduled tours">
+                <div className="mb-3 flex items-center gap-3">
+                  <PortalSkeleton className="h-3 w-28 rounded" />
+                  <PortalSkeleton className="h-3 w-6 rounded-full" />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <PortalTourCardSkeleton key={i} />
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : (
+            <div className="space-y-5 overflow-y-auto p-4 sm:p-6">
+              <section aria-label="Loading scheduled tours">
+                <div className="mb-3">
+                  <PortalSkeleton className="h-3 w-24 rounded" />
+                </div>
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <PortalTourCardSkeleton key={i} />
+                  ))}
+                </div>
+              </section>
+            </div>
+          )
+        }
+      >
+        {viewMode === 'cards' ? (
+          <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
+            {(view === 'all' ? categoryOrder : [view]).map((category) => (
+              <section key={category} aria-labelledby={'tour-' + category + '-heading'}>
+                <div className="mb-3 flex items-center gap-3"><h4 id={'tour-' + category + '-heading'} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
+                {grouped[category].length === 0 ? <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{grouped[category].map(renderTourCard)}</div>}
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-5 overflow-y-auto p-4 sm:p-6">
+            {view === 'all' ? categoryOrder.map((category) => {
+              const records = pageTours.filter((tour) => getLuxorTourSection(tour, todayKey) === category)
+              return records.length ? <section key={category} aria-label={categoryLabels[category]}><h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{categoryLabels[category]}</h4><div className="space-y-3">{records.map(renderTourCard)}</div></section> : null
+            }) : pageTours.length ? pageTours.map(renderTourCard) : <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-10 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p>}
+          </div>
+        )}
+      </PortalSkeletonTransition>
     </PortalTableCard>
   )
 }
 
 function LeadsProposalsTab({
   leads,
+  loading = false,
   onLifecycleAction,
 }: {
   leads: LuxorInquiry[]
+  loading?: boolean
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
 }) {
   const proposals = leads.filter((lead) => lead.status === 'proposal_sent')
   return (
-    <PortalTableCard controls={<h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Sent Proposals ({proposals.length})</h3>}>
-      {proposals.length === 0 ? (
-        <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No sent proposals are waiting for client review.</div>
-      ) : (
-        <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
-          {proposals.map((lead) => (
-            <LuxorCrmRecordCard
-              key={lead.id}
-              lead={lead}
-              badges={[{ label: 'Sent', tone: luxorCrmStatusTone('sent') }]}
-              subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
-              contact={lead.email || 'No email registered'}
-              actions={
-                <>
-                  <Link href={'/portal/leads/' + lead.id + '?stage=proposal'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><FileCheck size={14} /> Review Proposal</Link>
-                  <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
-                </>
-              }
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="text-[color:var(--portal-muted)]">Intake source</span>
-                <span className="font-semibold text-[color:var(--portal-text)]">{isGrandOpeningRsvp(lead) ? 'RSVP' : lead.source.replaceAll('_', ' ')}</span>
-              </div>
-              <Link href={'/portal/leads/' + lead.id} className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]"><Eye size={14} /> View lead record</Link>
-            </LuxorCrmRecordCard>
-          ))}
-        </div>
-      )}
+    <PortalTableCard controls={<h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Sent Proposals ({loading ? '…' : proposals.length})</h3>}>
+      <PortalSkeletonTransition
+        loading={loading}
+        skeleton={
+          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <PortalClientCardSkeleton key={i} />
+            ))}
+          </div>
+        }
+      >
+        {proposals.length === 0 ? (
+          <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No sent proposals are waiting for client review.</div>
+        ) : (
+          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+            {proposals.map((lead) => (
+              <LuxorCrmRecordCard
+                key={lead.id}
+                lead={lead}
+                badges={[{ label: 'Sent', tone: luxorCrmStatusTone('sent') }]}
+                subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
+                contact={lead.email || 'No email registered'}
+                actions={
+                  <>
+                    <Link href={'/portal/leads/' + lead.id + '?stage=proposal'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><FileCheck size={14} /> Review Proposal</Link>
+                    <LeadLifecycleActionsMenu lead={lead} onAction={(action) => onLifecycleAction(lead, action)} />
+                  </>
+                }
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-[color:var(--portal-muted)]">Intake source</span>
+                  <span className="font-semibold text-[color:var(--portal-text)]">{isGrandOpeningRsvp(lead) ? 'RSVP' : lead.source.replaceAll('_', ' ')}</span>
+                </div>
+                <Link href={'/portal/leads/' + lead.id} className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]"><Eye size={14} /> View lead record</Link>
+              </LuxorCrmRecordCard>
+            ))}
+          </div>
+        )}
+      </PortalSkeletonTransition>
     </PortalTableCard>
   )
 }

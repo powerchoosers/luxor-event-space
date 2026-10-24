@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Activity, ArrowUpRight, FlaskConical, Mail, Send, FileText, Wrench } from 'lucide-react'
 import { EmailQueueHealthWidget } from '@/components/portal/EmailQueueHealthWidget'
-import { PortalAnimatedTabs, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { PortalAnimatedTabs, PortalPageFrame, PortalPageHeader, PortalTabTransition } from '@/components/portal/PortalUI'
 import { EMAIL_TEMPLATES } from '@/app/(portal)/portal/marketing/emailTemplates'
 import type { LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
 import type { LuxorMailboxPageResult } from '@/lib/luxorMailboxPage'
@@ -51,12 +51,12 @@ function EmailToolsContent({ activeTab, onTabChange }: { activeTab: ToolsTab; on
       <div className="shrink-0 overflow-x-auto portal-scrollbar">
         <PortalAnimatedTabs tabs={tabs} activeTab={activeTab} onTabChange={(tab) => onTabChange(tab as ToolsTab)} ariaLabel="Email tools" />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto portal-scrollbar pb-4">
+      <PortalTabTransition activeKey={activeTab} className="min-h-0 flex-1 overflow-y-auto portal-scrollbar pb-4">
         {activeTab === 'queue' ? <EmailQueueHealthWidget /> : null}
         {activeTab === 'templates' ? <TemplatesPanel /> : null}
         {activeTab === 'activity' ? <ActivityPanel /> : null}
         {activeTab === 'test-tools' ? <TestToolsPanel /> : null}
-      </div>
+      </PortalTabTransition>
     </PortalPageFrame>
   )
 }

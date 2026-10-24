@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Check } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
+import { StaggerCards, StaggerCard } from '@/components/StaggerCards'
 
 const eventTypes = [
   {
@@ -89,33 +90,33 @@ export default function EventsPage() {
             <h2 className="mt-4 font-serif text-4xl leading-[0.95] sm:text-5xl lg:text-6xl">Choose the occasion. Shape the layout.</h2>
           </Reveal>
 
-          <div className="mt-12 grid gap-6 lg:grid-cols-2">
-            {eventTypes.map((event, index) => (
-                <Reveal key={event.title} delay={index * 70}>
-                  <article className="grid overflow-hidden rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)] sm:grid-cols-[0.92fr_1.08fr]">
-                    <div className="relative min-h-72 sm:min-h-full">
-                      <Image src={event.image} alt={event.title} fill sizes="(min-width: 1024px) 45vw, 100vw" className="object-cover" />
-                      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.52))]" />
-                    </div>
-                    <div className="p-6 sm:p-8">
-                      <h3 className="font-serif text-4xl leading-none text-[#f7efe3]">{event.title}</h3>
-                      <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72 sm:text-base">{event.copy}</p>
-                      <ul className="mt-6 grid gap-3">
-                        {event.points.map((point) => (
-                          <li key={point} className="flex items-center gap-3 text-sm text-[#d7c29a]/78">
-                            <Check className="h-4 w-4 shrink-0 text-[#caa24c]" />
-                            {point}
-                          </li>
-                        ))}
-                      </ul>
-                      <Link href={`/events/${event.slug}`} className="mt-7 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#f1d27a] transition hover:text-white">
-                        Explore {event.title} <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </div>
-                  </article>
-                </Reveal>
+          <StaggerCards className="mt-12 grid gap-6 lg:grid-cols-2" stagger={0.09}>
+            {eventTypes.map((event) => (
+              <StaggerCard key={event.title} className="h-full">
+                <article className="grid h-full overflow-hidden rounded-md border border-[#caa24c]/22 bg-[#0a0807] shadow-[0_34px_90px_-62px_rgba(0,0,0,1)] sm:grid-cols-[0.92fr_1.08fr]">
+                  <div className="relative min-h-72 sm:min-h-full">
+                    <Image src={event.image} alt={event.title} fill sizes="(min-width: 1024px) 45vw, 100vw" className="object-cover" />
+                    <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.52))]" />
+                  </div>
+                  <div className="p-6 sm:p-8">
+                    <h3 className="font-serif text-4xl leading-none text-[#f7efe3]">{event.title}</h3>
+                    <p className="mt-4 text-sm leading-6 text-[#d7c29a]/72 sm:text-base">{event.copy}</p>
+                    <ul className="mt-6 grid gap-3">
+                      {event.points.map((point) => (
+                        <li key={point} className="flex items-center gap-3 text-sm text-[#d7c29a]/78">
+                          <Check className="h-4 w-4 shrink-0 text-[#caa24c]" />
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                    <Link href={`/events/${event.slug}`} className="mt-7 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#f1d27a] transition hover:text-white">
+                      Explore {event.title} <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </article>
+              </StaggerCard>
             ))}
-          </div>
+          </StaggerCards>
         </div>
       </section>
 
@@ -132,16 +133,16 @@ export default function EventsPage() {
             </p>
           </Reveal>
 
-          <Reveal delay={120}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {planningSignals.map(([title, copy]) => (
-                <article key={title} className="rounded-md border border-[#caa24c]/18 bg-black/24 p-5">
+          <StaggerCards className="grid gap-3 sm:grid-cols-2" stagger={0.07}>
+            {planningSignals.map(([title, copy]) => (
+              <StaggerCard key={title} className="h-full">
+                <article className="h-full rounded-md border border-[#caa24c]/18 bg-black/24 p-5">
                   <h3 className="font-serif text-2xl leading-none text-[#f7efe3]">{title}</h3>
                   <p className="mt-3 text-sm leading-6 text-[#d7c29a]/68">{copy}</p>
                 </article>
-              ))}
-            </div>
-          </Reveal>
+              </StaggerCard>
+            ))}
+          </StaggerCards>
         </div>
       </section>
 

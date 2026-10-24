@@ -2,7 +2,8 @@
 
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+const LUXOR_PORTAL_EASE = [0.22, 1, 0.36, 1] as const
 import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check, Search, SlidersHorizontal } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -294,15 +295,33 @@ export function PortalTabTransition({
   children: React.ReactNode
   className?: string
 }) {
+  const shouldReduceMotion = useReducedMotion()
+  const ref = useRef<HTMLDivElement>(null)
+
+  if (shouldReduceMotion) {
+    return (
+      <div key={activeKey} className={className}>
+        {children}
+      </div>
+    )
+  }
+
   return (
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
+        ref={ref}
         key={activeKey}
-        initial={{ opacity: 0, y: 12, scale: 0.99 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 8, scale: 0.99 }}
-        transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
-        className={className}
+        initial={{ opacity: 0.65, y: 6, scale: 0.998, filter: 'blur(10px)' }}
+        animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+        exit={{ opacity: 0, y: -4, scale: 0.996, filter: 'blur(10px)' }}
+        transition={{ duration: 0.22, ease: LUXOR_PORTAL_EASE }}
+        className={`transform-gpu ${className}`}
+        onAnimationComplete={(definition) => {
+          if (definition === 'animate' && ref.current) {
+            ref.current.style.filter = 'none'
+            ref.current.style.transform = 'none'
+          }
+        }}
       >
         {children}
       </motion.div>
@@ -1491,12 +1510,20 @@ export function PortalContactAvatar({
 export function PortalStaggerGroup({
   children,
   className = '',
-  staggerDelay = 0.05,
+  staggerDelay = 0.045,
+  delayChildren = 0.01,
 }: {
   children: React.ReactNode
   className?: string
   staggerDelay?: number
+  delayChildren?: number
 }) {
+  const shouldReduceMotion = useReducedMotion()
+
+  if (shouldReduceMotion) {
+    return <div className={className}>{children}</div>
+  }
+
   return (
     <motion.div
       initial="hidden"
@@ -1506,6 +1533,7 @@ export function PortalStaggerGroup({
         show: {
           transition: {
             staggerChildren: staggerDelay,
+            delayChildren,
           },
         },
       }}
@@ -1523,51 +1551,303 @@ export function PortalStaggerCard({
   children: React.ReactNode
   className?: string
 }) {
+  const shouldReduceMotion = useReducedMotion()
+  const ref = useRef<HTMLDivElement>(null)
+
+  if (shouldReduceMotion) {
+    return <div className={className}>{children}</div>
+  }
+
   return (
     <motion.div
+      ref={ref}
       variants={{
-        hidden: { opacity: 0, y: 14, scale: 0.98 },
+        hidden: { opacity: 0.55, y: 8, scale: 0.994, filter: 'blur(10px)' },
         show: {
           opacity: 1,
           y: 0,
           scale: 1,
+          filter: 'blur(0px)',
           transition: {
-            duration: 0.35,
-            ease: [0.23, 1, 0.32, 1],
+            duration: 0.32,
+            ease: LUXOR_PORTAL_EASE,
           },
         },
       }}
-      className={className}
+      className={`transform-gpu ${className}`}
+      onAnimationComplete={(definition) => {
+        if (definition === 'show' && ref.current) {
+          ref.current.style.filter = 'none'
+          ref.current.style.transform = 'none'
+        }
+      }}
     >
       {children}
     </motion.div>
   )
 }
 
+export function PortalSkeletonTransition({
+  loading,
+  skeleton,
+  children,
+  className = '',
+}: {
+  loading: boolean
+  skeleton: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
+  const reduceMotion = useReducedMotion()
+
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      {loading ? (
+        <motion.div
+          key="portal-skeleton-state"
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, filter: 'blur(10px)' }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.985, filter: 'blur(12px)' }}
+          transition={{ duration: reduceMotion ? 0.05 : 0.20, ease: LUXOR_PORTAL_EASE }}
+          className={className}
+        >
+          {skeleton}
+        </motion.div>
+      ) : (
+        <motion.div
+          key="portal-content-state"
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, y: 6, scale: 0.998, filter: 'blur(10px)' }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.996, filter: 'blur(10px)' }}
+          transition={{ duration: reduceMotion ? 0.05 : 0.26, ease: LUXOR_PORTAL_EASE }}
+          onAnimationComplete={(definition) => {
+            if (definition === 'animate' && typeof document !== 'undefined') {
+              const elements = document.querySelectorAll('[data-portal-blur-cleanup="true"]')
+              elements.forEach((el) => {
+                ;(el as HTMLElement).style.filter = 'none'
+                ;(el as HTMLElement).style.transform = 'none'
+              })
+            }
+          }}
+          data-portal-blur-cleanup="true"
+          className={className}
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+export function PortalTourCardSkeleton() {
+  return (
+    <article className="portal-card-surface relative flex flex-col justify-between rounded-xl border border-[color:var(--portal-border)] p-4 shadow-sm">
+      <div className="relative z-10">
+        <div className="flex min-w-0 items-start gap-3">
+          <PortalSkeleton className="h-10 w-10 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <PortalSkeleton className="h-4 w-36 rounded" />
+                <PortalSkeleton className="h-3 w-48 rounded" />
+              </div>
+              <PortalSkeleton className="h-5 w-24 shrink-0 rounded-full" />
+            </div>
+            <PortalSkeleton className="mt-2 h-2.5 w-32 rounded" />
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-3">
+          <div className="space-y-1.5">
+            <PortalSkeleton className="h-2.5 w-16 rounded" />
+            <PortalSkeleton className="h-4 w-36 rounded" />
+            <PortalSkeleton className="h-3 w-28 rounded" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <PortalSkeleton className="h-11 w-full rounded-lg" />
+            <PortalSkeleton className="h-11 w-full rounded-lg" />
+          </div>
+        </div>
+      </div>
+
+      <div className="relative mt-3 flex flex-col gap-2.5 border-t border-[color:var(--portal-border)] pt-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <PortalSkeleton className="h-3 w-8 shrink-0 rounded" />
+          <PortalSkeleton className="h-11 flex-1 rounded-lg" />
+        </div>
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5">
+          <PortalSkeleton className="h-11 min-w-0 rounded-lg" />
+          <PortalSkeleton className="h-11 w-16 rounded-lg" />
+          <PortalSkeleton className="h-11 w-11 rounded-lg" />
+        </div>
+      </div>
+    </article>
+  )
+}
+
+export function PortalClientCardSkeleton() {
+  return (
+    <article className="portal-card-surface relative flex flex-col justify-between rounded-xl border border-[color:var(--portal-border)] p-4 shadow-sm">
+      <div className="relative z-10">
+        <div className="flex min-w-0 items-start gap-3">
+          <PortalSkeleton className="h-10 w-10 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <PortalSkeleton className="h-4 w-36 rounded" />
+                <PortalSkeleton className="h-3 w-44 rounded" />
+              </div>
+              <PortalSkeleton className="h-5 w-20 shrink-0 rounded-full" />
+            </div>
+            <PortalSkeleton className="mt-2 h-2.5 w-32 rounded" />
+          </div>
+        </div>
+        <div className="mt-3 grid gap-x-4 gap-y-2.5 sm:grid-cols-2">
+          <PortalSkeleton className="h-3 w-28 rounded" />
+          <PortalSkeleton className="h-3 w-32 rounded" />
+          <PortalSkeleton className="h-3 w-24 rounded" />
+          <PortalSkeleton className="h-3 w-36 rounded" />
+        </div>
+        <PortalSkeleton className="mt-3 h-3 w-28 rounded" />
+      </div>
+      <div className="relative mt-3 flex items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">
+        <PortalSkeleton className="h-11 flex-1 rounded-lg" />
+        <PortalSkeleton className="h-11 w-11 shrink-0 rounded-lg" />
+      </div>
+    </article>
+  )
+}
+
+export function PortalKanbanBoardSkeleton({
+  columns = [
+    { id: 'newsletter', short: 'Newsletter' },
+    { id: 'inquiry', short: 'Inquiry' },
+    { id: 'tour', short: 'Tour' },
+    { id: 'proposal', short: 'Proposal' },
+    { id: 'contract', short: 'Contract' },
+    { id: 'deposit', short: 'Deposit' },
+  ],
+}: {
+  columns?: { id: string; short: string }[]
+}) {
+  return (
+    <div className="flex flex-1 min-h-0 select-none gap-4 overflow-x-auto pb-4 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 portal-scrollbar">
+      {columns.map((col) => (
+        <div
+          key={col.id}
+          className="portal-card-surface flex h-full min-w-[280px] max-w-[340px] flex-1 flex-col overflow-hidden"
+        >
+          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+            <div className="flex items-center gap-2">
+              <PortalSkeleton className="h-2 w-2 rounded-full" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{col.short}</span>
+            </div>
+            <PortalSkeleton className="h-4 w-6 rounded-full" />
+          </div>
+          <div className="flex-1 space-y-3 overflow-y-auto p-3">
+            {[0, 1, 2].map((cardIndex) => (
+              <div
+                key={cardIndex}
+                className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3.5 space-y-2.5 shadow-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <PortalSkeleton className="h-9 w-9 shrink-0 rounded-full" />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <PortalSkeleton className="h-3.5 w-28 rounded" />
+                    <PortalSkeleton className="h-2.5 w-20 rounded" />
+                  </div>
+                </div>
+                <PortalSkeleton className="h-3 w-3/4 rounded" />
+                <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] pt-2.5">
+                  <PortalSkeleton className="h-2.5 w-16 rounded" />
+                  <PortalSkeleton className="h-7 w-7 rounded-lg" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function PortalTableSkeleton({
   cols = 6,
-  rows = 5,
+  rows = 10,
 }: {
   cols?: number
   rows?: number
 }) {
   return (
     <>
-      {Array.from({ length: rows }).map((_, rowIndex) => (
-        <tr key={rowIndex} className="border-b border-[color:var(--portal-border)]">
-          <td className="px-6 py-4" colSpan={cols}>
-            <div className="flex items-center gap-4">
-              <PortalSkeleton className="h-9 w-9 shrink-0 rounded-full" />
-              <div className="flex-1 space-y-2">
-                <PortalSkeleton className="h-4 w-48 rounded" />
-                <PortalSkeleton className="h-3 w-32 rounded" />
+      {Array.from({ length: rows }).map((_, rowIndex) => {
+        if (cols === 8) {
+          return (
+            <tr key={rowIndex} className="border-b border-[color:var(--portal-border)] h-[4.25rem]">
+              <td className="w-14 px-4 py-3 text-center">
+                <PortalSkeleton className="h-4 w-4 mx-auto rounded" />
+              </td>
+              <td className="min-w-[255px] px-4 py-3">
+                <div className="flex items-center gap-4">
+                  <PortalSkeleton className="h-10 w-10 shrink-0 rounded-full" />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <PortalSkeleton className="h-3.5 w-32 rounded" />
+                    <PortalSkeleton className="h-2.5 w-44 rounded" />
+                  </div>
+                </div>
+              </td>
+              <td className="min-w-[190px] px-4 py-3">
+                <PortalSkeleton className="h-7 w-28 rounded-lg" />
+              </td>
+              <td className="min-w-[185px] px-4 py-3">
+                <div className="space-y-1.5">
+                  <PortalSkeleton className="h-3.5 w-24 rounded" />
+                  <PortalSkeleton className="h-2.5 w-16 rounded" />
+                </div>
+              </td>
+              <td className="min-w-[120px] px-4 py-3">
+                <PortalSkeleton className="h-6 w-16 rounded" />
+              </td>
+              <td className="min-w-[145px] px-6 py-3">
+                <div className="space-y-1">
+                  <PortalSkeleton className="h-3.5 w-20 rounded" />
+                  <PortalSkeleton className="h-2 w-14 rounded" />
+                </div>
+              </td>
+              <td className="min-w-[150px] px-6 py-3">
+                <PortalSkeleton className="h-3.5 w-24 rounded" />
+              </td>
+              <td className="min-w-[235px] px-8 py-3 text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <PortalSkeleton className="h-8 w-8 rounded-lg" />
+                  <PortalSkeleton className="h-8 w-8 rounded-lg" />
+                  <PortalSkeleton className="h-8 w-8 rounded-lg" />
+                </div>
+              </td>
+            </tr>
+          )
+        }
+
+        return (
+          <tr key={rowIndex} className="border-b border-[color:var(--portal-border)] h-[4.25rem]">
+            <td className="px-6 py-3.5" colSpan={cols}>
+              <div className="flex items-center gap-4">
+                <PortalSkeleton className="h-10 w-10 shrink-0 rounded-full" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <PortalSkeleton className="h-3.5 w-48 rounded" />
+                  <PortalSkeleton className="h-2.5 w-32 rounded" />
+                </div>
+                <PortalSkeleton className="hidden sm:block h-6 w-24 rounded-full" />
+                <PortalSkeleton className="hidden md:block h-3.5 w-28 rounded" />
+                <div className="flex items-center gap-2">
+                  <PortalSkeleton className="h-8 w-8 rounded-lg" />
+                  <PortalSkeleton className="h-8 w-8 rounded-lg" />
+                </div>
               </div>
-              <PortalSkeleton className="h-6 w-20 rounded-full" />
-              <PortalSkeleton className="h-4 w-28 rounded" />
-            </div>
-          </td>
-        </tr>
-      ))}
+            </td>
+          </tr>
+        )
+      })}
     </>
   )
 }

@@ -38,7 +38,9 @@ import {
   PortalSelect,
   PortalButton,
   PortalCardSkeleton,
-  PortalTableSkeleton
+  PortalTableSkeleton,
+  PortalStaggerGroup,
+  PortalStaggerCard
 } from '@/components/portal/PortalUI'
 import {
   PortalBulkActionDeck,
@@ -656,12 +658,20 @@ function OperationsPageContent() {
             <p className="max-w-md text-[11px] leading-5 text-[color:var(--portal-muted)]">Current records across payments, facility work, inventory, and utilities.</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatsCard icon={<DollarSign size={16} />} label="Open bills" value={`$${unpaidBillsTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} subtitle={`${openBills.length} awaiting payment`} tone="gold" onClick={() => router.push('/portal/operations?tab=bills')} />
-            <StatsCard icon={<Wrench size={16} />} label="Maintenance" value={String(pendingMaintenance.length)} subtitle="Open facility tasks" tone={pendingMaintenance.length ? 'gold' : 'green'} onClick={() => router.push('/portal/operations?tab=maintenance')} />
-            <StatsCard icon={<Package size={16} />} label="Supply alerts" value={String(lowSupplyItems.length)} subtitle="Low-stock items" tone={lowSupplyItems.length ? 'gold' : 'green'} onClick={() => router.push('/portal/operations?tab=inventory')} />
-            <StatsCard icon={<Zap size={16} />} label="Utilities" value={sensorsOnline ? 'Reporting' : 'No data'} subtitle={sensorsOnline ? `${utilities.length} recent records` : 'Check utility setup'} tone={sensorsOnline ? 'green' : 'gold'} onClick={() => router.push('/portal/operations?tab=utilities')} />
-          </div>
+                    <PortalStaggerGroup className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <PortalStaggerCard>
+              <StatsCard icon={<DollarSign size={16} />} label="Open bills" value={`$${unpaidBillsTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} subtitle={`${openBills.length} awaiting payment`} tone="gold" onClick={() => router.push('/portal/operations?tab=bills')} />
+            </PortalStaggerCard>
+            <PortalStaggerCard>
+              <StatsCard icon={<Wrench size={16} />} label="Maintenance" value={String(pendingMaintenance.length)} subtitle="Open facility tasks" tone={pendingMaintenance.length ? 'gold' : 'green'} onClick={() => router.push('/portal/operations?tab=maintenance')} />
+            </PortalStaggerCard>
+            <PortalStaggerCard>
+              <StatsCard icon={<Package size={16} />} label="Supply alerts" value={String(lowSupplyItems.length)} subtitle="Low-stock items" tone={lowSupplyItems.length ? 'gold' : 'green'} onClick={() => router.push('/portal/operations?tab=inventory')} />
+            </PortalStaggerCard>
+            <PortalStaggerCard>
+              <StatsCard icon={<Zap size={16} />} label="Utilities" value={sensorsOnline ? 'Reporting' : 'No data'} subtitle={sensorsOnline ? `${utilities.length} recent records` : 'Check utility setup'} tone={sensorsOnline ? 'green' : 'gold'} onClick={() => router.push('/portal/operations?tab=utilities')} />
+            </PortalStaggerCard>
+          </PortalStaggerGroup>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(16rem,0.75fr)]">
             <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm sm:p-6">

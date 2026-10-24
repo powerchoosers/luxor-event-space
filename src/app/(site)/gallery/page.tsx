@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { AnimatePresence, animate, motion, type PanInfo, useMotionValue } from 'framer-motion'
 import { ArrowRight, ChevronLeft, ChevronRight, Maximize2, X } from 'lucide-react'
 import { Reveal } from '@/components/Reveal'
+import { StaggerCards, StaggerCard } from '@/components/StaggerCards'
 import { VenueFilm } from '@/components/VenueFilm'
 
 type GalleryCategory = 'All' | 'Room' | 'Lounge' | 'Weddings' | 'Celebrations' | 'Corporate'
@@ -406,20 +407,28 @@ export default function GalleryPage() {
             </div>
           </div>
 
-          <div className="mt-6 hidden gap-4 lg:grid lg:auto-rows-[18rem] lg:grid-cols-12">
+          <StaggerCards
+            key={`${activeFilter}-${desktopPage}`}
+            className="mt-6 hidden gap-4 lg:grid lg:auto-rows-[18rem] lg:grid-cols-12"
+            stagger={0.06}
+          >
             {desktopGallery.map((item, index) => {
               const sourceIndex = desktopPage * desktopPageSize + index
               return (
-                <GalleryCard
+                <StaggerCard
                   key={`${item.src}-${item.title}`}
-                  item={item}
-                  priority
-                  onOpen={() => setSelectedIndex(sourceIndex)}
                   className={activeFilter === 'All' ? `${item.span} ${item.aspect}` : 'aspect-[4/3] lg:col-span-6 lg:h-full'}
-                />
+                >
+                  <GalleryCard
+                    item={item}
+                    priority
+                    onOpen={() => setSelectedIndex(sourceIndex)}
+                    className="h-full w-full"
+                  />
+                </StaggerCard>
               )
             })}
-          </div>
+          </StaggerCards>
 
           <div className="mt-7 hidden items-center justify-between border-t border-[#caa24c]/18 pt-5 lg:flex" aria-label="Gallery pagination">
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#d7c29a]/55">
@@ -588,17 +597,17 @@ export default function GalleryPage() {
             </h2>
           </Reveal>
 
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
+          <StaggerCards className="mt-10 grid gap-4 md:grid-cols-3" stagger={0.08}>
             {photoUses.map(([title, copy], index) => (
-              <Reveal key={title} delay={index * 70}>
+              <StaggerCard key={title} className="h-full">
                 <article className="h-full rounded-md border border-[#caa24c]/20 bg-black/24 p-6">
                   <span className="font-serif text-3xl text-[#caa24c]">{String(index + 1).padStart(2, '0')}</span>
                   <h3 className="mt-5 font-serif text-3xl text-[#f7efe3]">{title}</h3>
                   <p className="mt-3 text-sm leading-6 text-[#d7c29a]/70">{copy}</p>
                 </article>
-              </Reveal>
+              </StaggerCard>
             ))}
-          </div>
+          </StaggerCards>
         </div>
       </section>
     </main>

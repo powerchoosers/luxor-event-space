@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { ArrowUpRight, CalendarClock, MailPlus, Users, Workflow } from 'lucide-react'
-import { PortalSelect } from '@/components/portal/PortalUI'
+import { PortalSelect, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import type { MarketingOverviewData } from '@/lib/luxorMarketingOverview'
 import type { MarketingTab } from '../page'
@@ -83,12 +83,20 @@ export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: Marketin
         </div>
       ) : null}
 
-      <section aria-label="Marketing summary" className="grid grid-cols-2 border-y border-[color:var(--portal-border)] xl:grid-cols-4">
-        <MetricCard label="Inquiries" value={data?.inquiryCount} detail="Non-test inquiry records by creation date" loading={loading} />
-        <MetricCard label="Campaign emails sent" value={data?.sentRecipientCount} detail="Recipient records marked sent with a non-test email job" loading={loading} />
-        <MetricCard label="Click events recorded" value={data?.clickEventCount} detail="Tracked click events in this date range" loading={loading} />
-        <MetricCard label="Upcoming campaigns" value={data?.upcomingCampaignCount} detail="Scheduled campaigns with future send dates" loading={loading} />
-      </section>
+      <PortalStaggerGroup aria-label="Marketing summary" className="grid grid-cols-2 border-y border-[color:var(--portal-border)] xl:grid-cols-4" staggerDelay={0.06}>
+        <PortalStaggerCard>
+          <MetricCard label="Inquiries" value={data?.inquiryCount} detail="Non-test inquiry records by creation date" loading={loading} />
+        </PortalStaggerCard>
+        <PortalStaggerCard>
+          <MetricCard label="Campaign emails sent" value={data?.sentRecipientCount} detail="Recipient records marked sent with a non-test email job" loading={loading} />
+        </PortalStaggerCard>
+        <PortalStaggerCard>
+          <MetricCard label="Click events recorded" value={data?.clickEventCount} detail="Tracked click events in this date range" loading={loading} />
+        </PortalStaggerCard>
+        <PortalStaggerCard>
+          <MetricCard label="Upcoming campaigns" value={data?.upcomingCampaignCount} detail="Scheduled campaigns with future send dates" loading={loading} />
+        </PortalStaggerCard>
+      </PortalStaggerGroup>
 
       {data && data.excludedUnlinkedSentCount > 0 ? (
         <p className="-mt-3 text-[11px] leading-5 text-[color:var(--portal-muted)]">
@@ -187,11 +195,17 @@ export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: Marketin
           </div>
           <p className="text-[10px] text-[color:var(--portal-muted)]">Automation editing arrives in a later phase.</p>
         </div>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <QuickAction icon={<MailPlus size={16} />} label="Create campaign" detail="Open the existing campaign editor." onClick={onCreateCampaign} />
-          <QuickAction icon={<Users size={16} />} label="Manage contacts" detail="Review existing contacts and lists." onClick={() => onTabChange('contact-lists')} />
-          <QuickAction icon={<Workflow size={16} />} label="View automations" detail="See what automation tools are available." onClick={() => onTabChange('automations')} />
-        </div>
+        <PortalStaggerGroup className="grid gap-2 sm:grid-cols-3" staggerDelay={0.06}>
+          <PortalStaggerCard>
+            <QuickAction icon={<MailPlus size={16} />} label="Create campaign" detail="Open the existing campaign editor." onClick={onCreateCampaign} />
+          </PortalStaggerCard>
+          <PortalStaggerCard>
+            <QuickAction icon={<Users size={16} />} label="Manage contacts" detail="Review existing contacts and lists." onClick={() => onTabChange('contact-lists')} />
+          </PortalStaggerCard>
+          <PortalStaggerCard>
+            <QuickAction icon={<Workflow size={16} />} label="View automations" detail="See what automation tools are available." onClick={() => onTabChange('automations')} />
+          </PortalStaggerCard>
+        </PortalStaggerGroup>
       </section>
     </div>
   )

@@ -59,7 +59,7 @@ body[data-portal-theme='dark'] .portal-overlay-surface {
 }
 
 html {
-  scroll-behavior: smooth;
+  /* Lenis manages smooth scrolling when active */
   scrollbar-color: rgba(160, 160, 170, 0.56) rgba(5, 5, 5, 0.76);
   scrollbar-width: thin;
 }
@@ -965,24 +965,26 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
   .luxor-skeleton {
     position: relative;
     overflow: hidden;
-    background: linear-gradient(90deg, rgba(39, 39, 42, 0.55), rgba(63, 63, 70, 0.34), rgba(39, 39, 42, 0.55));
+    background: linear-gradient(90deg, rgba(39, 39, 42, 0.58), rgba(63, 63, 70, 0.38), rgba(39, 39, 42, 0.58));
   }
 
   body[data-portal-theme='light'] .luxor-skeleton {
-    background: linear-gradient(90deg, rgba(228, 222, 212, 0.8), rgba(244, 240, 232, 0.95), rgba(228, 222, 212, 0.8)) !important;
+    background: linear-gradient(90deg, rgba(226, 220, 210, 0.82), rgba(244, 240, 233, 0.96), rgba(226, 220, 210, 0.82)) !important;
   }
 
   .luxor-skeleton::after {
     content: '';
     position: absolute;
     inset: 0;
-    transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgba(202, 162, 76, 0.18), transparent);
-    animation: luxor-skeleton-sheen 1.35s ease-in-out infinite;
+    transform: translate3d(-100%, 0, 0);
+    background: linear-gradient(90deg, transparent 0%, rgba(202, 162, 76, 0.22) 50%, transparent 100%);
+    animation: luxor-skeleton-sheen 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    pointer-events: none;
+    will-change: transform;
   }
 
   body[data-portal-theme='light'] .luxor-skeleton::after {
-    background: linear-gradient(90deg, transparent, rgba(168, 121, 47, 0.25), transparent) !important;
+    background: linear-gradient(90deg, transparent 0%, rgba(168, 121, 47, 0.24) 50%, transparent 100%) !important;
   }
 
   .luxor-loading-bar {
@@ -1081,8 +1083,11 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
 }
 
 @keyframes luxor-skeleton-sheen {
-  to {
-    transform: translateX(100%);
+  0% {
+    transform: translate3d(-100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(100%, 0, 0);
   }
 }
 
@@ -1257,9 +1262,11 @@ body[data-luxor-site] main [class*="text-[#d7b964]"] {
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#caa24c]"],
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#dfbd68]"],
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#f1d27a]"],
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#b98a3d]"],
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#caa24c]"]:hover,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#dfbd68]"]:hover,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#f1d27a]"]:hover,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#9d722e]"]:hover,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="group-hover:bg-[#caa24c]"]:is(:hover, :focus-visible),
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="focus-visible:bg-[#caa24c]"]:focus-visible {
   color: #ffffff !important;
@@ -1268,9 +1275,11 @@ body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role=
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#caa24c]"] *,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#dfbd68]"] *,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#f1d27a]"] *,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="bg-[#b98a3d]"] *,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#caa24c]"]:hover *,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#dfbd68]"]:hover *,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#f1d27a]"]:hover *,
+body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="hover:bg-[#9d722e]"]:hover *,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="group-hover:bg-[#caa24c]"]:is(:hover, :focus-visible) *,
 body[data-luxor-site] :is(main, footer.site-footer--light) :is(a, button, [role="button"])[class~="focus-visible:bg-[#caa24c]"]:focus-visible *,
 body[data-luxor-site] :is(main, footer.site-footer--light) .group:is(:hover, :focus-within) [class~="group-hover:bg-[#caa24c]"],
@@ -2025,5 +2034,78 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 
   body[data-portal-theme] .portal-contact-remove-action {
     opacity: 1;
+  }
+}
+
+/* ==========================================================================
+   Luxor Page Transitions & Motion Physics (Loadline Optical Blur & Ease)
+   ========================================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  .luxor-route-stage {
+    will-change: transform, opacity, filter;
+    transform: translateZ(0);
+    transition:
+      opacity var(--luxor-page-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1),
+      transform var(--luxor-page-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1),
+      filter var(--luxor-page-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .luxor-route-stage.surface-site {
+    --luxor-page-duration: 380ms;
+  }
+
+  .luxor-route-stage.surface-site[data-route-motion-paused] {
+    transition: none !important;
+    opacity: 0.65 !important;
+    transform: translateY(10px) scale(0.997) translateZ(0) !important;
+    filter: blur(12px) !important;
+  }
+
+  .luxor-route-stage.surface-portal {
+    --luxor-page-duration: 280ms;
+  }
+
+  .luxor-route-stage.surface-portal[data-route-motion-paused] {
+    transition: none !important;
+    opacity: 0.72 !important;
+    transform: translateY(6px) scale(0.998) translateZ(0) !important;
+    filter: blur(10px) !important;
+  }
+
+  /* Keyframes for content entrance and row entrance */
+  @keyframes luxor-content-in {
+    from {
+      opacity: 0.65;
+      transform: translateY(8px) scale(0.998);
+      filter: blur(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+  }
+
+  @keyframes luxor-row-blur-in {
+    from {
+      opacity: 0.5;
+      transform: translateY(5px);
+      filter: blur(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+      filter: blur(0);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .luxor-route-stage,
+  .luxor-route-stage * {
+    animation: none !important;
+    transition: none !important;
+    filter: none !important;
+    transform: none !important;
   }
 }

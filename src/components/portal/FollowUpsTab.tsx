@@ -6,7 +6,7 @@ import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
 import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask } from '@/lib/luxorFollowUpTaskPolicy'
-import { PortalButton, PortalDatePicker, PortalModal, PortalSelect, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
+import { PortalButton, PortalDatePicker, PortalModal, PortalSelect, PortalSkeletonTransition, PortalTourCardSkeleton, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import { LuxorCrmRecordCard } from '@/components/portal/LuxorCrmRecordCard'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
@@ -662,93 +662,104 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     <div className="flex flex-col gap-3"><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-[14rem] flex-1 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2"><Search size={15} className="text-[color:var(--portal-muted)]" /><input aria-label="Search leads or follow-ups" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads or follow-ups" className="w-full bg-transparent text-sm outline-none" /></div><PortalSelect value={eventType} onChange={setEventType} options={[{ value: 'all', label: 'All event types' }, ...eventTypes.map((value) => ({ value, label: value }))]} /></div><div className="flex flex-wrap items-center gap-2"><div className="flex flex-wrap gap-2" role="group" aria-label="Filter leads">{([{ id: 'all', label: 'All' }, { id: 'new', label: 'New Leads' }, { id: 'post_tour', label: 'Post-Tour' }, { id: 'overdue', label: 'Overdue' }] as const).map((item) => <button key={item.id} type="button" aria-pressed={filter === item.id} onClick={() => setFilter(item.id)} className={`min-h-9 rounded-full border px-4 text-xs font-semibold transition ${filter === item.id ? 'border-[#a8792f] bg-[#a8792f] text-white' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] hover:border-[#caa24c]/60'}`}>{item.label}</button>)}</div><div className="ml-auto"><PortalButton onClick={() => { if (leads[0]) openAddTask(leads[0].id) }}><Plus size={15} /> Add Follow-Up</PortalButton></div></div></div>
 
     <div className={`grid min-h-0 flex-1 gap-4 ${selected ? 'xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]' : ''}`}>
-      <div className="space-y-3">
-        {visibleRows.map((row) => {
-          const lead = leadById.get(row.inquiryId)!
-          const state = row.next.status
-          const stage = getStageLabel(lead)
-          const stageTone = followUpStageTone(stage)
-          const isExpanded = expandedRowIds.has(row.inquiryId)
-          const cardDetails = expandedCardDetails[row.inquiryId]
-          const additionalTaskHistory: Activity[] = followUpTasks
-            .filter((task) => task.inquiry_id === row.inquiryId && task.id !== row.next.id)
-            .map((task) => ({ id: `task-${task.id}`, at: task.completed_at || task.due_at || task.due_date || task.created_at, kind: taskChannel(task) === 'phone' ? 'call' : 'follow-up', label: `${task.title} · ${task.status}${task.call_outcome ? ` · ${task.call_outcome.replaceAll('_', ' ')}` : ''}`, detail: taskNotes(task) }))
-          const cardHistory = [...(cardDetails?.history ?? []), ...additionalTaskHistory].sort((a, b) => b.at.localeCompare(a.at))
-          const cardDetailsId = `follow-up-details-${row.inquiryId}`
-          return (
-            <LuxorCrmRecordCard
-              key={row.inquiryId}
-              lead={lead}
-              avatar={<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span>}
-              badges={[{ label: stage, tone: stageTone }]}
-              subtitle={<>{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</>}
-              onOpen={() => toggleExpandedRow(row.inquiryId)}
-              expanded={isExpanded}
-              expandedContentId={cardDetailsId}
-              interactionLabel={`${isExpanded ? 'Collapse' : 'Expand'} follow-up details for ${lead.full_name}`}
-              className={`cursor-pointer ${cardMenuLeadId === lead.id ? 'z-20' : ''} ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}
-              contentColumn
-              responsiveContentColumn
-            >
-              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className={`flex min-w-0 items-start gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>
-                    {row.next.channel === 'phone' ? <Phone className="mt-0.5 shrink-0" size={14} /> : <Mail className="mt-0.5 shrink-0" size={14} />}<span className="min-w-0 break-words [overflow-wrap:anywhere]">{row.next.title}</span>
+      <PortalSkeletonTransition
+        loading={loading}
+        skeleton={
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <PortalTourCardSkeleton key={i} />
+            ))}
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {visibleRows.map((row) => {
+            const lead = leadById.get(row.inquiryId)!
+            const state = row.next.status
+            const stage = getStageLabel(lead)
+            const stageTone = followUpStageTone(stage)
+            const isExpanded = expandedRowIds.has(row.inquiryId)
+            const cardDetails = expandedCardDetails[row.inquiryId]
+            const additionalTaskHistory: Activity[] = followUpTasks
+              .filter((task) => task.inquiry_id === row.inquiryId && task.id !== row.next.id)
+              .map((task) => ({ id: `task-${task.id}`, at: task.completed_at || task.due_at || task.due_date || task.created_at, kind: taskChannel(task) === 'phone' ? 'call' : 'follow-up', label: `${task.title} · ${task.status}${task.call_outcome ? ` · ${task.call_outcome.replaceAll('_', ' ')}` : ''}`, detail: taskNotes(task) }))
+            const cardHistory = [...(cardDetails?.history ?? []), ...additionalTaskHistory].sort((a, b) => b.at.localeCompare(a.at))
+            const cardDetailsId = `follow-up-details-${row.inquiryId}`
+            return (
+              <LuxorCrmRecordCard
+                key={row.inquiryId}
+                lead={lead}
+                avatar={<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span>}
+                badges={[{ label: stage, tone: stageTone }]}
+                subtitle={<>{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</>}
+                onOpen={() => toggleExpandedRow(row.inquiryId)}
+                expanded={isExpanded}
+                expandedContentId={cardDetailsId}
+                interactionLabel={`${isExpanded ? 'Collapse' : 'Expand'} follow-up details for ${lead.full_name}`}
+                className={`cursor-pointer ${cardMenuLeadId === lead.id ? 'z-20' : ''} ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}
+                contentColumn
+                responsiveContentColumn
+              >
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className={`flex min-w-0 items-start gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>
+                      {row.next.channel === 'phone' ? <Phone className="mt-0.5 shrink-0" size={14} /> : <Mail className="mt-0.5 shrink-0" size={14} />}<span className="min-w-0 break-words [overflow-wrap:anywhere]">{row.next.title}</span>
+                    </div>
+                    <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>
+                    {row.postTourStatus && <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
                   </div>
-                  <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>
-                  {row.postTourStatus && <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
+                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0" onClick={(event) => event.stopPropagation()}>
+                    {row.next.channel === 'phone' && <button type="button" onClick={() => dial(lead)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>}
+                    {row.next.channel === 'email' && row.next.assignee !== 'Automated' && <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white disabled:opacity-50"><Mail size={14} /> Email</button>}
+                    <button type="button" onClick={() => logCall(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Log</button>
+                    <div className="relative" data-follow-up-menu-root="true">
+                      <button id={`follow-up-menu-toggle-${row.inquiryId}`} type="button" aria-label={`More actions for ${lead.full_name}`} aria-haspopup="menu" aria-controls={`follow-up-menu-${row.inquiryId}`} aria-expanded={cardMenuLeadId === lead.id} onClick={(event) => toggleCardMenu(event, lead.id)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)]"><MoreHorizontal size={16} /></button>
+                      {cardMenuLeadId === lead.id && <div id={`follow-up-menu-${row.inquiryId}`} role="menu" aria-label={`Actions for ${lead.full_name}`} onKeyDown={(event) => {
+                        const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                        const currentIndex = items.indexOf(document.activeElement as HTMLElement)
+                        const nextIndex = event.key === 'ArrowDown' ? (currentIndex + 1) % items.length : event.key === 'ArrowUp' ? (currentIndex - 1 + items.length) % items.length : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : -1
+                        if (event.key === 'Escape') {
+                          event.preventDefault()
+                          setCardMenuLeadId(null)
+                          document.getElementById(`follow-up-menu-toggle-${row.inquiryId}`)?.focus()
+                        } else if (nextIndex >= 0 && items.length) {
+                          event.preventDefault()
+                          items[nextIndex]?.focus()
+                        }
+                      }} style={cardMenuPosition?.leadId === lead.id ? { left: cardMenuPosition.left, width: cardMenuPosition.width, ...(cardMenuPosition.above ? { bottom: 'calc(100% + 0.5rem)' } : { top: 'calc(100% + 0.5rem)' }) } : undefined} className="absolute z-30 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl">
+                        <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openLeadWorkspaceFromCard(lead) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View Full Workspace</button>
+                        <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openAddTask(lead.id) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Add Follow-Up</button>
+                      </div>}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0" onClick={(event) => event.stopPropagation()}>
-                  {row.next.channel === 'phone' && <button type="button" onClick={() => dial(lead)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>}
-                  {row.next.channel === 'email' && row.next.assignee !== 'Automated' && <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white disabled:opacity-50"><Mail size={14} /> Email</button>}
-                  <button type="button" onClick={() => logCall(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Log</button>
-                  <div className="relative" data-follow-up-menu-root="true">
-                    <button id={`follow-up-menu-toggle-${row.inquiryId}`} type="button" aria-label={`More actions for ${lead.full_name}`} aria-haspopup="menu" aria-controls={`follow-up-menu-${row.inquiryId}`} aria-expanded={cardMenuLeadId === lead.id} onClick={(event) => toggleCardMenu(event, lead.id)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)]"><MoreHorizontal size={16} /></button>
-                    {cardMenuLeadId === lead.id && <div id={`follow-up-menu-${row.inquiryId}`} role="menu" aria-label={`Actions for ${lead.full_name}`} onKeyDown={(event) => {
-                      const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-                      const currentIndex = items.indexOf(document.activeElement as HTMLElement)
-                      const nextIndex = event.key === 'ArrowDown' ? (currentIndex + 1) % items.length : event.key === 'ArrowUp' ? (currentIndex - 1 + items.length) % items.length : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : -1
-                      if (event.key === 'Escape') {
-                        event.preventDefault()
-                        setCardMenuLeadId(null)
-                        document.getElementById(`follow-up-menu-toggle-${row.inquiryId}`)?.focus()
-                      } else if (nextIndex >= 0 && items.length) {
-                        event.preventDefault()
-                        items[nextIndex]?.focus()
-                      }
-                    }} style={cardMenuPosition?.leadId === lead.id ? { left: cardMenuPosition.left, width: cardMenuPosition.width, ...(cardMenuPosition.above ? { bottom: 'calc(100% + 0.5rem)' } : { top: 'calc(100% + 0.5rem)' }) } : undefined} className="absolute z-30 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl">
-                      <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openLeadWorkspaceFromCard(lead) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View Full Workspace</button>
-                      <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openAddTask(lead.id) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Add Follow-Up</button>
-                    </div>}
-                  </div>
+                <div id={cardDetailsId} hidden={!isExpanded} className={isExpanded ? 'mt-3 border-t border-[color:var(--portal-border)] pt-3' : 'hidden'}>
+                  {isExpanded ? <div className="space-y-3">
+                    {cardDetails?.loading && <p className="text-xs text-[color:var(--portal-muted)]">Loading additional details…</p>}
+                    {cardDetails?.error && <p role="status" className="text-xs text-red-700 dark:text-red-300">{cardDetails.error}</p>}
+                    <div className="grid min-w-0 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
+                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Email</p><p className="mt-0.5 break-words">{lead.email || 'Not provided'}</p></div>
+                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Phone</p><p className="mt-0.5 break-words">{lead.phone ? formatPhoneDisplay(lead.phone) : 'Not provided'}</p></div>
+                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Location</p><p className="mt-0.5 break-words">{typeof lead.metadata?.location === 'string' ? lead.metadata.location : typeof lead.metadata?.address === 'string' ? lead.metadata.address : 'Not provided'}</p></div>
+                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Guests</p><p className="mt-0.5 break-words">{lead.guest_count ? `${lead.guest_count} guests` : 'Not provided'}</p></div>
+                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Budget</p><p className="mt-0.5 break-words">{lead.budget || 'Not provided'}</p></div>
+                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Lead source</p><p className="mt-0.5 break-words">{lead.source?.replaceAll('_', ' ') || 'Not provided'}</p></div>
+                    </div>
+                    {(cardDetails?.contacts.length ?? 0) > 0 && <section className="space-y-2"><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Other event contacts</h4><ul className="grid gap-2 sm:grid-cols-2">{cardDetails!.contacts.map((contact) => <li key={contact.id} className="min-w-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-xs"><p className="break-words font-semibold">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="mt-1 break-words text-[color:var(--portal-muted)]">{[contact.email, contact.phone ? formatPhoneDisplay(contact.phone) : null].filter(Boolean).join(' · ') || 'No contact details'}</p></li>)}</ul></section>}
+                    {lead.message && <section><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Inquiry notes</h4><p className="mt-1 whitespace-pre-wrap break-words text-xs">{lead.message}</p></section>}
+                    <section className="space-y-2">
+                      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">History &amp; activity</h4>
+                      {cardHistory.length ? <ol className="space-y-2">{cardHistory.map((item) => <li key={item.id} className="min-w-0 border-l-2 border-[#caa24c]/50 pl-3"><div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1"><strong className="break-words text-xs">{item.label}</strong>{item.at && <time className="shrink-0 text-[10px] text-[color:var(--portal-muted)]">{new Date(item.at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium' })}</time>}</div>{item.detail && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[color:var(--portal-muted)]">{item.detail}</p>}</li>)}</ol> : !cardDetails?.loading ? <p className="text-xs text-[color:var(--portal-muted)]">No earlier activity is recorded.</p> : null}
+                      {cardDetails?.hasMoreHistory && <button type="button" onClick={() => void loadExpandedCardDetails(row.inquiryId, cardDetails.historyPage + 1, true)} disabled={cardDetails.loading} className="min-h-9 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Load earlier activity</button>}
+                    </section>
+                  </div> : null}
                 </div>
-              </div>
-              <div id={cardDetailsId} hidden={!isExpanded} className={isExpanded ? 'mt-3 border-t border-[color:var(--portal-border)] pt-3' : 'hidden'}>
-                {isExpanded ? <div className="space-y-3">
-                  {cardDetails?.loading && <p className="text-xs text-[color:var(--portal-muted)]">Loading additional details…</p>}
-                  {cardDetails?.error && <p role="status" className="text-xs text-red-700 dark:text-red-300">{cardDetails.error}</p>}
-                  <div className="grid min-w-0 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
-                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Email</p><p className="mt-0.5 break-words">{lead.email || 'Not provided'}</p></div>
-                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Phone</p><p className="mt-0.5 break-words">{lead.phone ? formatPhoneDisplay(lead.phone) : 'Not provided'}</p></div>
-                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Location</p><p className="mt-0.5 break-words">{typeof lead.metadata?.location === 'string' ? lead.metadata.location : typeof lead.metadata?.address === 'string' ? lead.metadata.address : 'Not provided'}</p></div>
-                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Guests</p><p className="mt-0.5 break-words">{lead.guest_count ? `${lead.guest_count} guests` : 'Not provided'}</p></div>
-                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Budget</p><p className="mt-0.5 break-words">{lead.budget || 'Not provided'}</p></div>
-                    <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Lead source</p><p className="mt-0.5 break-words">{lead.source?.replaceAll('_', ' ') || 'Not provided'}</p></div>
-                  </div>
-                  {(cardDetails?.contacts.length ?? 0) > 0 && <section className="space-y-2"><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Other event contacts</h4><ul className="grid gap-2 sm:grid-cols-2">{cardDetails!.contacts.map((contact) => <li key={contact.id} className="min-w-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-xs"><p className="break-words font-semibold">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="mt-1 break-words text-[color:var(--portal-muted)]">{[contact.email, contact.phone ? formatPhoneDisplay(contact.phone) : null].filter(Boolean).join(' · ') || 'No contact details'}</p></li>)}</ul></section>}
-                  {lead.message && <section><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Inquiry notes</h4><p className="mt-1 whitespace-pre-wrap break-words text-xs">{lead.message}</p></section>}
-                  <section className="space-y-2">
-                    <h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">History &amp; activity</h4>
-                    {cardHistory.length ? <ol className="space-y-2">{cardHistory.map((item) => <li key={item.id} className="min-w-0 border-l-2 border-[#caa24c]/50 pl-3"><div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1"><strong className="break-words text-xs">{item.label}</strong>{item.at && <time className="shrink-0 text-[10px] text-[color:var(--portal-muted)]">{new Date(item.at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium' })}</time>}</div>{item.detail && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[color:var(--portal-muted)]">{item.detail}</p>}</li>)}</ol> : !cardDetails?.loading ? <p className="text-xs text-[color:var(--portal-muted)]">No earlier activity is recorded.</p> : null}
-                    {cardDetails?.hasMoreHistory && <button type="button" onClick={() => void loadExpandedCardDetails(row.inquiryId, cardDetails.historyPage + 1, true)} disabled={cardDetails.loading} className="min-h-9 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Load earlier activity</button>}
-                  </section>
-                </div> : null}
-              </div>
-            </LuxorCrmRecordCard>
-          )
-        })}
-        {!visibleRows.length && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-12 text-center text-sm text-[color:var(--portal-muted)]">{loading ? 'Loading follow-ups…' : filter === 'post_tour' ? 'No completed tours match these filters.' : 'No matching follow-up leads. Add a task to keep the next step with its lead.'}</div>}
-      </div>
+              </LuxorCrmRecordCard>
+            )
+          })}
+          {!visibleRows.length && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-12 text-center text-sm text-[color:var(--portal-muted)]">{filter === 'post_tour' ? 'No completed tours match these filters.' : 'No matching follow-up leads. Add a task to keep the next step with its lead.'}</div>}
+        </div>
+      </PortalSkeletonTransition>
 
       {selected && <aside className="min-h-[28rem] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
         <>

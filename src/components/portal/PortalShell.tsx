@@ -261,6 +261,12 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
   const reduceMotion = useReducedMotion()
   const contentScrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollTop = 0
+    }
+  }, [pathname])
   const sidebarHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sidebarHoverSuppressedRef = useRef(false)
   const sidebarCollapsedRef = useRef(initialSidebarCollapsed)
@@ -510,7 +516,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     : composeLead?.email
       ? `email:${composeLead.email.trim().toLowerCase()}`
       : 'global'
-  const persistComposeDraft = useCallback((draft: EmailComposeDraft) => setComposeDraft(draft), [])
+  const persistComposeDraft = useCallback((draft: EmailComposeDraft) => setComposeDraft(draft), [setComposeDraft])
 
   useEffect(() => {
     const handleComposeEvent = (e: Event) => {

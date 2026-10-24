@@ -229,17 +229,17 @@ export function LuxorContactForm({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-xl bg-[#b98a3d] px-6 text-sm font-bold uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-[#9d722e] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-xl bg-[#b98a3d] px-6 text-sm font-bold uppercase tracking-[0.14em] !text-white shadow-sm transition hover:bg-[#9d722e] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>{spanish ? 'Enviando...' : 'Sending...'}</span>
+                      <Loader2 className="h-4 w-4 animate-spin !text-white text-white" />
+                      <span className="!text-white text-white">{spanish ? 'Enviando...' : 'Sending...'}</span>
                     </>
                   ) : (
                     <>
-                      <Send className="h-4 w-4" />
-                      <span>{spanish ? 'Enviar mensaje' : 'Send Message'}</span>
+                      <Send className="h-4 w-4 !text-white text-white stroke-white" />
+                      <span className="!text-white text-white">{spanish ? 'Enviar mensaje' : 'Send Message'}</span>
                     </>
                   )}
                 </button>
