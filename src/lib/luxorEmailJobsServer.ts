@@ -18,6 +18,7 @@ import { luxorMailProvider } from './luxorMailConfig'
 import { luxorTestEmailAcceptedPatch, sendLuxorTestEmail } from './luxorTestEmailDelivery'
 import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
 import { processDueLuxorCustomWorkflowOrchestration } from './luxorCustomWorkflowRuntimeServer'
+import { cleanBrochureFollowUpEmailSnapshot, customerFacingFollowUpTitle, isBrochureFollowUpEmailSnapshot } from './luxorFollowUpEmailContent'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -167,18 +168,19 @@ export function buildBrochureDeliveryEmailHtml(inquiry: LuxorInquiry) {
 
 export function buildLuxorFollowUpEmailHtml(
   inquiry: LuxorInquiry,
-  template: { name: string; subject: string | null; body: string | null; cta_text: string | null; cta_url: string | null; secondary_cta_text: string | null; secondary_cta_url: string | null },
+  template: { step_key?: string; name: string; subject: string | null; body: string | null; cta_text: string | null; cta_url: string | null; secondary_cta_text: string | null; secondary_cta_url: string | null },
   unsubscribeUrl: string,
 ) {
   const firstName = inquiry.full_name.split(' ')[0] || inquiry.full_name
+  const customerTitle = customerFacingFollowUpTitle(template.name, template.step_key || '')
   const actions = [
     template.cta_text && template.cta_url ? { label: template.cta_text, url: template.cta_url.startsWith('/') ? absoluteUrl(template.cta_url) : template.cta_url } : null,
     template.secondary_cta_text && template.secondary_cta_url ? { label: template.secondary_cta_text, url: template.secondary_cta_url.startsWith('/') ? absoluteUrl(template.secondary_cta_url) : template.secondary_cta_url, tone: 'secondary' as const } : null,
   ].filter((action): action is NonNullable<typeof action> => Boolean(action))
   return renderLuxorSystemEmail({
-    previewText: template.subject || template.name,
+    previewText: template.subject || customerTitle,
     eyebrow: 'A note from Luxor',
-    title: template.name,
+    title: customerTitle,
     greeting: `Hi ${escapeHtml(firstName)},`,
     actions,
     note: 'Reply to this email if you have questions.',
@@ -204,7 +206,7 @@ export async function createLuxorFollowUpEmailJob(
         job_type: 'marketing_campaign',
         status: 'queued',
         recipient_email: inquiry.email,
-        subject: template.subject || template.name,
+        subject: template.subject || customerFacingFollowUpTitle(template.name, template.step_key),
         body: buildLuxorFollowUpEmailHtml(inquiry, template, absoluteUrl(`/api/follow-ups/unsubscribe/${encodeURIComponent(enrollment.unsubscribe_token)}`)),
         scheduled_for: scheduledAt,
         metadata: {
@@ -1238,6 +1240,9 @@ export async function processLuxorEmailJobs(
           continue
         }
       }
+      if (isBrochureFollowUpEmailSnapshot(job) && job.automation_step_key) {
+        job = { ...job, body: cleanBrochureFollowUpEmailSnapshot(job.body, job.automation_step_key) }
+      }
       assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
       if (isCustomWorkflowJob && !await authorizeCustomWorkflowEmailJob(job.id)) {
         results.push({ id: job.id, status: 'skipped' })
@@ -1275,7 +1280,7 @@ export async function processLuxorEmailJobs(
       if (isCustomWorkflowJob) {
         await recordCustomWorkflowEmailOutcome(job, 'accepted', providerMessageReference)
       } else {
-        await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
+        await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null, body: job.body })
       }
       if (job.test_run_id) {
         await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(job.id)}`, {
