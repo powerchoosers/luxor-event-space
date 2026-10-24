@@ -2126,33 +2126,95 @@ function ThreadMessage({
     const scrollContainer = frame.closest<HTMLElement>('[data-email-thread-scroll]')
     if (scrollContainer) {
       let lastTouchY: number | null = null
+      let lastTouchAt = 0
+      let touchVelocity = 0
+      let momentumFrame = 0
+      let momentumAt = 0
+      const stopMomentum = () => {
+        if (momentumFrame) window.cancelAnimationFrame(momentumFrame)
+        momentumFrame = 0
+      }
+      const startMomentum = () => {
+        stopMomentum()
+        if (Math.abs(touchVelocity) < 0.04) return
+        momentumAt = 0
+        const step = (now: number) => {
+          if (!momentumAt) momentumAt = now
+          const elapsed = Math.max(0, Math.min(now - momentumAt, 40))
+          momentumAt = now
+          const previousTop = scrollContainer.scrollTop
+          scrollContainer.scrollTop += touchVelocity * elapsed
+          if (elapsed > 0 && scrollContainer.scrollTop === previousTop) {
+            momentumFrame = 0
+            return
+          }
+          touchVelocity *= Math.pow(0.92, elapsed / 16)
+          if (Math.abs(touchVelocity) < 0.02) {
+            momentumFrame = 0
+            return
+          }
+          momentumFrame = window.requestAnimationFrame(step)
+        }
+        momentumFrame = window.requestAnimationFrame(step)
+      }
       const handOffWheel = (event: WheelEvent) => {
+        stopMomentum()
+        touchVelocity = 0
         scrollContainer.scrollTop += event.deltaY
         event.preventDefault()
       }
       const beginTouch = (event: TouchEvent) => {
-        lastTouchY = event.touches[0]?.clientY ?? null
+        stopMomentum()
+        touchVelocity = 0
+        lastTouchY = event.touches.length === 1 ? event.touches[0]?.clientY ?? null : null
+        lastTouchAt = event.timeStamp
       }
       const handOffTouch = (event: TouchEvent) => {
+        if (event.touches.length !== 1) {
+          lastTouchY = null
+          touchVelocity = 0
+          stopMomentum()
+          return
+        }
         const nextTouchY = event.touches[0]?.clientY
-        if (lastTouchY === null || nextTouchY === undefined) return
-        scrollContainer.scrollTop += lastTouchY - nextTouchY
+        if (nextTouchY === undefined) return
+        if (lastTouchY === null) {
+          lastTouchY = nextTouchY
+          lastTouchAt = event.timeStamp
+          return
+        }
+        const delta = lastTouchY - nextTouchY
+        const elapsed = event.timeStamp - lastTouchAt
+        scrollContainer.scrollTop += delta
+        touchVelocity = elapsed > 0 && elapsed < 160
+          ? Math.max(-3, Math.min(3, delta / elapsed))
+          : 0
         lastTouchY = nextTouchY
+        lastTouchAt = event.timeStamp
         event.preventDefault()
       }
-      const endTouch = () => { lastTouchY = null }
+      const endTouch = () => {
+        lastTouchY = null
+        startMomentum()
+      }
+      const cancelTouch = () => {
+        lastTouchY = null
+        touchVelocity = 0
+        stopMomentum()
+      }
 
       document.addEventListener('wheel', handOffWheel, { passive: false })
       document.addEventListener('touchstart', beginTouch, { passive: true })
       document.addEventListener('touchmove', handOffTouch, { passive: false })
       document.addEventListener('touchend', endTouch, { passive: true })
-      document.addEventListener('touchcancel', endTouch, { passive: true })
+      document.addEventListener('touchcancel', cancelTouch, { passive: true })
       frameInteractionCleanupRef.current = () => {
+        stopMomentum()
         document.removeEventListener('wheel', handOffWheel)
         document.removeEventListener('touchstart', beginTouch)
         document.removeEventListener('touchmove', handOffTouch)
         document.removeEventListener('touchend', endTouch)
-        document.removeEventListener('touchcancel', endTouch)
+        document.removeEventListener('touchcancel', cancelTouch)
       }
     }
   }
