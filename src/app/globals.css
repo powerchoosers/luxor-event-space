@@ -2055,14 +2055,16 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
   .luxor-route-stage {
     will-change: transform, opacity, filter;
     transform: translateZ(0);
+  }
+
+  /* Portal stages use Motion's inline initial state and frame updates. CSS
+     transitions on those same properties would interpolate them a second time. */
+  .luxor-route-stage.surface-site {
+    --luxor-page-duration: 380ms;
     transition:
       opacity var(--luxor-page-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1),
       transform var(--luxor-page-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1),
       filter var(--luxor-page-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .luxor-route-stage.surface-site {
-    --luxor-page-duration: 380ms;
   }
 
   .luxor-route-stage.surface-site[data-route-motion-paused] {
@@ -2112,6 +2114,10 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .luxor-route-stage {
+    opacity: 1 !important;
+  }
+
   .luxor-route-stage,
   .luxor-route-stage * {
     animation: none !important;

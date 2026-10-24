@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react'
+import React, { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -154,6 +154,7 @@ export default function LeadsPage() {
   
   // Tab control
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'>('dashboard')
+  const [viewPreferencesReady, setViewPreferencesReady] = useState(false)
   
   // View mode toggle
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
@@ -208,8 +209,8 @@ export default function LeadsPage() {
     }
   }, [])
 
-  // Load view preferences from cache on mount
-  useEffect(() => {
+  // Restore the saved view before the route's first client paint.
+  useLayoutEffect(() => {
     if (typeof window !== 'undefined') {
       const savedTab = localStorage.getItem('luxor_leads_active_tab')
       const savedViewMode = localStorage.getItem('luxor_leads_view_mode')
@@ -232,9 +233,10 @@ export default function LeadsPage() {
         // Ignore stale or malformed local preferences and use the defaults.
       }
     }
+    setViewPreferencesReady(true)
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 767px)')
     const syncViewport = () => {
       setIsMobileViewport(mediaQuery.matches)
@@ -704,7 +706,7 @@ export default function LeadsPage() {
         />
       </div>
 
-      <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-visible mt-0">
+      {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-visible mt-0">
         {activeTab === 'dashboard' && <LeadsDashboard leads={leads} loading={loading} />}
         {activeTab === 'clients' && <LeadsClientsTab leads={leads} loading={loading} sort={clientSort} onSort={updateClientSort} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'lost' && <LeadsLostTab leads={leads} loading={loading} />}
@@ -1042,7 +1044,7 @@ export default function LeadsPage() {
         </PortalSkeletonTransition>
       )
     )}
-      </PortalTabTransition>
+      </PortalTabTransition> : null}
 
       <LeadEntryDrawer isOpen={isLeadDrawerOpen} onClose={() => setIsLeadDrawerOpen(false)}>
           <form onSubmit={handleCreateLead} className="flex min-h-full flex-col space-y-5">

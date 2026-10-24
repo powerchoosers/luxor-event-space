@@ -1,10 +1,13 @@
 'use client'
 
-import React, { useRef } from 'react'
+import React, { useRef, useSyncExternalStore } from 'react'
 import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion'
 import { usePathname } from 'next/navigation'
 
 const LUXOR_EASE = [0.22, 1, 0.36, 1] as const
+const subscribeToHydration = () => () => {}
+const clientSnapshot = () => true
+const serverSnapshot = () => false
 
 function isNodeLoading(node: React.ReactNode): boolean {
   if (!React.isValidElement(node)) return false
@@ -34,6 +37,8 @@ export function RouteTransition({
 }) {
   const pathname = usePathname()
   const reduceMotion = useReducedMotion()
+  // Keep the first client tree identical to the server, then honor the device preference.
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot)
   const isPortal = surface === 'portal'
   const ref = useRef<HTMLDivElement>(null)
 
@@ -41,8 +46,8 @@ export function RouteTransition({
     ? 'flex-1 min-h-0 min-w-0 h-full w-full flex flex-col overflow-hidden'
     : 'flex-1 min-h-full min-w-0 w-full flex flex-col'
 
-  if (reduceMotion) {
-    return isPortal ? <div className={portalClass}>{children}</div> : <div className="min-h-screen">{children}</div>
+  if (reduceMotion && hydrated && !isPortal) {
+    return <div className="min-h-screen">{children}</div>
   }
 
   const isLoading = isNodeLoading(children)
@@ -64,17 +69,37 @@ export function RouteTransition({
         duration: 0.28,
         ease: LUXOR_EASE,
       },
-    },
-    exit: {
-      opacity: 0,
-      y: -6,
-      scale: 0.985,
-      filter: 'blur(12px)',
-      transition: {
-        duration: 0.20,
-        ease: LUXOR_EASE,
+      transitionEnd: {
+        filter: 'none',
+        transform: 'none',
       },
     },
+    reduced: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      filter: 'none',
+      transition: { duration: 0 },
+      transitionEnd: { transform: 'none' },
+    },
+  }
+
+  // Next's router child updates even inside an exiting presence wrapper.
+  // Replace the portal stage atomically so the destination's first frame is
+  // already blurred, instead of showing it in the outgoing page first.
+  if (isPortal) {
+    return (
+      <motion.div
+        key={pathname}
+        id={`route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`}
+        className={`luxor-route-stage surface-portal ${portalClass}`}
+        initial="initial"
+        animate={reduceMotion && hydrated ? 'reduced' : 'animate'}
+        variants={portalVariants}
+      >
+        {children}
+      </motion.div>
+    )
   }
 
   const siteVariants: Variants = {
@@ -112,11 +137,11 @@ export function RouteTransition({
         ref={ref}
         key={transitionKey}
         id={`route-transition-${transitionKey.replace(/[^a-zA-Z0-9-]/g, '_')}`}
-        className={`luxor-route-stage ${isPortal ? `surface-portal ${portalClass}` : 'surface-site min-h-screen'} transform-gpu`}
+        className="luxor-route-stage surface-site min-h-screen transform-gpu"
         initial="initial"
         animate="animate"
         exit="exit"
-        variants={isPortal ? portalVariants : siteVariants}
+        variants={siteVariants}
         onAnimationComplete={(definition) => {
           if (definition === 'animate' && ref.current) {
             ref.current.style.filter = 'none'
