@@ -122,6 +122,11 @@ body {
   /* Anchor the app navigation to the expanded standalone shell as well. */
   .portal-mobile-nav {
     position: absolute;
+    padding-bottom: max(0.375rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .portal-shell {
+    --portal-mobile-nav-height: calc(3.375rem + 1px + max(0.375rem, env(safe-area-inset-bottom, 0px)));
   }
 
   /* Keep the unread badge crisp over the standalone app's translucent header. */
