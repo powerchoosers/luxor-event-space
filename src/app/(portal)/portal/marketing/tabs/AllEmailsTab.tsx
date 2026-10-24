@@ -1355,7 +1355,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           animate={{ x: 0 }}
           exit={{ x: '-100%' }}
           transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32 }}
-          className="portal-overlay-surface absolute inset-y-0 left-0 z-50 flex w-[min(88vw,22rem)] flex-col overflow-y-auto border-r border-[color:var(--portal-border)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl lg:hidden"
+          className="portal-overlay-surface absolute inset-y-0 left-0 z-50 flex w-full flex-col overflow-y-auto border-r border-[color:var(--portal-border)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl lg:hidden"
         >
           {renderMailboxNav(true)}
         </motion.aside>
@@ -1393,7 +1393,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           <SquarePen size={19} aria-hidden="true" />
         </button>
       </div> : null}
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-none border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)] shadow-sm lg:rounded-2xl">
+      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-none border-x border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)] shadow-none lg:rounded-2xl lg:border lg:shadow-sm">
       {/* PANE 1: Mailbox Navigation (Desktop collapsible column) */}
       <AnimatePresence initial={false}>
       {mailboxDrawerOpen && !readerExpanded && (
@@ -1574,9 +1574,16 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
       <div className={`min-h-0 min-w-0 flex-1 overflow-hidden bg-[color:var(--portal-card)] flex-col ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}>
         <div className="flex min-h-11 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-1.5 sm:px-4">
-          <button type="button" onClick={closeReader} aria-label="Back to email list" title="Back to email list" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
-            <ArrowLeft size={17} aria-hidden="true" /> <span className="hidden lg:inline">Back to list</span>
+          <button type="button" onClick={closeReader} aria-label="Back to email list" title="Back to email list" className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${readerExpanded ? '' : 'lg:hidden'}`}>
+            <ArrowLeft size={17} aria-hidden="true" /> <span className={readerExpanded ? 'hidden lg:inline' : 'hidden'}>Back to list</span>
           </button>
+          {selectedId && messageDetail ? (
+            <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-[color:var(--portal-text)] sm:text-sm lg:text-base" title={decodeHtmlEntities(messageDetail.subject)}>
+              {decodeHtmlEntities(messageDetail.subject)}
+            </h2>
+          ) : selectedId && loadingDetail ? (
+            <PortalSkeleton className="h-3.5 w-2/5 min-w-24 rounded sm:h-4" />
+          ) : null}
           <div className="flex min-w-0 items-center gap-1">
             <span className="max-w-28 truncate pr-1 text-[10px] text-[color:var(--portal-muted)] sm:hidden">{mailboxName || 'Luxor Email'}</span>
             {selectedId && messageDetail ? (
@@ -1734,21 +1741,23 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)' }}
             animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(8px)' }}
-            transition={{ duration: reduceMotion ? 0.08 : 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="flex-1 flex flex-col p-8 space-y-6"
+            transition={{ duration: isMobileReader ? 0 : reduceMotion ? 0.08 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="flex min-h-0 flex-1 flex-col"
             aria-label="Loading email"
           >
-            <div className="space-y-3 border-b border-[color:var(--portal-border)] pb-6">
-              <PortalSkeleton className="h-7 w-3/4 rounded-lg" />
-              <div className="flex items-center gap-3">
-                <PortalSkeleton className="h-10 w-10 rounded-full" />
-                <div className="space-y-1.5 min-w-0 flex-1">
-                  <PortalSkeleton className="h-3.5 w-36 rounded" />
-                  <PortalSkeleton className="h-2.5 w-48 rounded" />
+            <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 pb-2 pt-2 sm:px-6 sm:pb-3 sm:pt-3">
+              <div className="flex items-center justify-between gap-3 sm:gap-4">
+                <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                  <PortalSkeleton className="h-11 w-11 shrink-0 rounded-full" />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <PortalSkeleton className="h-3.5 w-36 max-w-full rounded" />
+                    <PortalSkeleton className="h-2.5 w-48 max-w-full rounded" />
+                  </div>
                 </div>
+                <PortalSkeleton className="h-3 w-28 max-w-[35%] shrink-0 rounded" />
               </div>
             </div>
-            <div className="space-y-3 pt-2">
+            <div className="min-h-0 flex-1 space-y-3 overflow-hidden px-4 py-5 sm:px-6 sm:py-6">
               <PortalSkeleton className="h-3.5 w-full rounded" />
               <PortalSkeleton className="h-3.5 w-11/12 rounded" />
               <PortalSkeleton className="h-3.5 w-4/5 rounded" />
@@ -1767,7 +1776,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(8px)' }}
             animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(8px)' }}
-            transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: isMobileReader ? 0 : reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
             onAnimationComplete={(definition) => {
               syncReplyBounds()
               if (definition === 'animate' && typeof document !== 'undefined') {
@@ -1779,10 +1788,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             className="flex min-h-0 flex-1 flex-col"
           >
             {/* Email Header Bar */}
-            <div className="shrink-0 space-y-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 pb-3 pt-3 sm:px-6 sm:pb-4">
+            <div className="shrink-0 space-y-1 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 pb-2 pt-2 sm:px-6 sm:pb-3 sm:pt-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <h2 className="break-words text-lg font-semibold leading-snug text-[color:var(--portal-text)] sm:text-[23px] sm:leading-7">{decodeHtmlEntities(messageDetail.subject)}</h2>
                   {messageDetail.direction === 'outgoing' && messageDetail.deliveryStatus ? (
                     <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">{luxorMailDeliveryLabel(messageDetail.deliveryStatus)}</p>
                   ) : null}
@@ -1801,7 +1809,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               {messageDetail.deliveryError && (
                 <p role="status" className="text-xs text-[color:var(--portal-text)]">{messageDetail.deliveryError}</p>
               )}
-              <div className="flex items-center justify-between gap-3 border-t border-[color:var(--portal-border)] pt-2.5 sm:gap-4">
+              <div className="flex items-center justify-between gap-3 sm:gap-4">
                 <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                   <PortalContactAvatar name={mailboxLabel(messageDetail.from, inquiryByEmail)} size="lg" className="!h-11 !w-11" />
                   <div className="min-w-0">
@@ -2274,7 +2282,7 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:0;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:0;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}table.luxor-card{border-radius:16px!important;overflow:hidden!important}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
 }
 
 function hasDarkEmailSurface(html: string) {
