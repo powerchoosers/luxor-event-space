@@ -5,7 +5,7 @@ import twilio from 'twilio'
 import { assertAllowedOutboundNumber } from './luxorCallsServer'
 import { createOrUpdateLuxorMessage } from './luxorMessagesServer'
 import { getActiveLuxorPhoneNumber } from './luxorPhoneNumbersServer'
-import { assertLuxorSmsAllowed } from './luxorTextAutomationsServer'
+import { assertLuxorSmsAllowed, beginLuxorSmsConsentRequest, finishLuxorSmsConsentRequest } from './luxorTextAutomationsServer'
 import { buildTwilioCallbackUrl, getLuxorTwilioMessagingConfig } from './luxorTwilioServer'
 import { getLuxorInquiry } from './luxorInquiriesServer'
 import { recordLuxorTestSmsSimulation } from './luxorTestLeadServer'
@@ -90,4 +90,68 @@ function normalizeMessageStatus(value: string | undefined) {
   return ['accepted', 'queued', 'sending', 'sent', 'delivered', 'read', 'undelivered', 'failed', 'received'].includes(value || '')
     ? value as import('./luxorMessageTypes').LuxorMessageStatus
     : 'queued'
+}
+
+export async function sendLuxorSmsConsentRequest(input: {
+  to: string
+  inquiryId?: string | null
+  contactName?: string | null
+  ownerEmail?: string | null
+  fromNumber?: string | null
+}) {
+  const destination = assertAllowedOutboundNumber(input.to)
+  const inquiry = input.inquiryId ? await getLuxorInquiry(input.inquiryId) : null
+  const isTestDestination = destination.replace(/\D/g, '') === LUXOR_TEST_PHONE_E164_DIGITS
+  const body = 'Luxor Event Space: May we text you about your inquiry, tour, and event planning? Reply YES to agree. Message frequency varies; msg and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not required to book.'
+
+  if (inquiry?.is_test || isTestDestination) {
+    if (!isTestDestination || (inquiry && inquiry.id !== LUXOR_PERMANENT_TEST_LEAD_ID)) {
+      throw new Error('Consent requests to the permanent test lead are limited to its verified test number.')
+    }
+    const simulation = await recordLuxorTestSmsSimulation({
+      inquiryId: inquiry?.id || LUXOR_PERMANENT_TEST_LEAD_ID,
+      body,
+      source: 'sms_consent_request',
+    })
+    if (!simulation) throw new Error('No active enabled test run is available for SMS consent-request simulation.')
+    return { simulated: true as const, message: null }
+  }
+
+  const selectedPhoneNumber = input.fromNumber || await getActiveLuxorPhoneNumber()
+  const config = getLuxorTwilioMessagingConfig()
+  const client = twilio(config.accountSid, config.authToken)
+  const requestId = randomUUID()
+  await beginLuxorSmsConsentRequest(destination, requestId, selectedPhoneNumber)
+
+  let sent: Awaited<ReturnType<typeof client.messages.create>>
+  try {
+    sent = await client.messages.create({
+      to: destination,
+      ...(config.messagingServiceSid
+        ? { messagingServiceSid: config.messagingServiceSid, fallbackFrom: selectedPhoneNumber }
+        : { from: selectedPhoneNumber }),
+      body,
+      statusCallback: buildTwilioCallbackUrl('/api/twilio/messaging/status'),
+    })
+  } catch (error) {
+    await finishLuxorSmsConsentRequest(destination, requestId, { status: 'failed' })
+    throw error
+  }
+
+  // Persist the successful provider receipt before storing message history so
+  // retries cannot send a second request if history storage has a transient error.
+  await finishLuxorSmsConsentRequest(destination, requestId, { status: 'pending', messageSid: sent.sid })
+  const message = await createOrUpdateLuxorMessage({
+    sid: sent.sid,
+    direction: 'outbound',
+    status: normalizeMessageStatus(sent.status),
+    from: selectedPhoneNumber,
+    to: destination,
+    body,
+    inquiryId: input.inquiryId,
+    contactName: input.contactName || inquiry?.full_name,
+    ownerEmail: input.ownerEmail,
+    isRead: true,
+  })
+  return { simulated: false as const, message }
 }

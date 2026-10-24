@@ -29,7 +29,6 @@ import {
   Megaphone,
   MoreHorizontal,
   SlidersHorizontal,
-  X,
   ArrowUpRight,
   Loader2,
 } from 'lucide-react'
@@ -45,7 +44,7 @@ import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import type { PortalPermission, PortalRole } from '@/lib/luxorPortalAccess'
 import Image from 'next/image'
 import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
-import { PortalContactAvatar } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalContactAvatar } from '@/components/portal/PortalUI'
 import { PortalViewportDiagnostics } from '@/components/portal/PortalViewportDiagnostics'
 import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
@@ -157,8 +156,9 @@ const mobilePrimaryNavItems = [
   { href: '/portal', icon: <LayoutDashboard size={19} />, label: 'Home' },
   { href: '/portal/leads', icon: <Users size={19} />, label: 'Leads' },
   { href: '/portal/calendar', icon: <Calendar size={19} />, label: 'Calendar' },
-  { href: '/portal/messages', icon: <MessageSquare size={19} />, label: 'Messages' },
 ]
+const mobileEmailNavItem = { href: '/portal/emails', icon: <Mail size={19} />, label: 'Emails' }
+const mobileMessagesNavItem = { href: '/portal/messages', icon: <MessageSquare size={19} />, label: 'Messages' }
 
 const operationsSubItems = [
   { href: '/portal/operations?tab=dashboard', label: 'Dashboard', icon: Gauge },
@@ -218,6 +218,10 @@ export function PortalShell({ children, session, initialProfile, initialTheme, i
 function PortalShellContent({ children, session, initialProfile, initialTheme, initialSidebarCollapsed, permissions, role, buildId }: { children: React.ReactNode; session: LuxorPortalSession; initialProfile: PortalUserProfile; initialTheme: PortalTheme; initialSidebarCollapsed: boolean; permissions: PortalPermission[]; role: PortalRole; buildId?: string }) {
   const pathname = usePathname()
   const canAccess = useCallback((permission: PortalPermission) => role === 'owner' || permissions.includes(permission), [permissions, role])
+  const accessibleMobilePrimaryNavItems = [
+    ...mobilePrimaryNavItems,
+    ...(canAccess('emails') ? [mobileEmailNavItem] : canAccess('messages') ? [mobileMessagesNavItem] : []),
+  ]
   const isLeadDetailPage = pathname.startsWith('/portal/leads/')
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -663,12 +667,12 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   return (
     <body data-portal-theme={portalTheme} className="portal-shell h-[100dvh] overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <PortalVoiceProvider>
-      <aside onWheelCapture={handOffWheelToPage} onClick={handleSidebarEmptyClick} className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-xl shadow-[24px_0_60px_-36px_rgba(0,0,0,0.85)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-visible ${
+      <aside onWheelCapture={handOffWheelToPage} onClick={handleSidebarEmptyClick} className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-visible ${
         portalTheme === 'light'
-          ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
-          : 'border-transparent bg-[radial-gradient(circle_at_18%_-8%,rgba(202,162,76,0.04),transparent_22rem),linear-gradient(180deg,rgba(11,10,9,0.995)_0%,rgba(6,6,6,0.995)_100%)]'
-      } ${sidebarIsCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className="flex flex-col min-h-full px-3 py-5">
+          ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-[24px_0_60px_-36px_rgba(0,0,0,0.18)]'
+          : 'border-transparent bg-[#050505]'
+      } ${sidebarIsCollapsed ? 'w-16' : 'w-60'}`}>
+        <div className="flex flex-col min-h-full px-2 py-5">
           <div className={`mb-5 flex items-center justify-between transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
             sidebarIsCollapsed ? 'px-1.5' : 'px-1'
           }`}>
@@ -758,15 +762,15 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                       }}
                       title={sidebarIsCollapsed ? item.label : undefined}
                       aria-label={item.label}
-                      className={`group relative flex w-full items-center justify-between rounded-lg border py-2.5 text-sm font-medium transition-all cursor-pointer ${
-                        sidebarIsCollapsed ? 'px-[18px]' : 'px-3'
+                      className={`group relative flex items-center justify-between rounded-lg border py-2.5 text-sm font-medium transition-all cursor-pointer ${
+                        sidebarIsCollapsed ? 'mx-auto h-11 w-11 justify-center p-0' : 'w-full px-3'
                       } ${
                         isCurrentGroup
                           ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
                           : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className={`flex min-w-0 items-center ${sidebarIsCollapsed ? 'gap-0' : 'gap-3'}`}>
                         {isCurrentGroup && (
                           <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c]" />
                         )}
@@ -786,7 +790,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                       <span
                         className={`text-zinc-500 mr-1 shrink-0 transition-[max-width,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                           sidebarIsCollapsed
-                            ? 'max-w-0 opacity-0 pointer-events-none'
+                            ? 'hidden'
                             : 'max-w-[20px] opacity-100'
                         }`}
                       >
@@ -890,11 +894,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         </div>
       </aside>
 
-      <main onWheelCapture={handOffWheelToPage} className={`portal-main flex h-[100dvh] min-w-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+      <main onWheelCapture={handOffWheelToPage} style={{ backgroundColor: 'var(--portal-frame)' }} className={`portal-main flex h-[100dvh] min-w-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'lg:ml-16' : 'lg:ml-60'}`}>
         <header className={`z-50 grid h-14 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 border-b px-4 backdrop-blur-md sm:h-16 sm:gap-x-4 sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
-            : 'border-[#caa24c]/10 bg-[#050505]/75'
+            : 'border-b-0 bg-[#050505]'
         }`}>
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/portal" className="flex min-w-0 items-center rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 lg:hidden" aria-label="Luxor portal overview">
@@ -1064,10 +1068,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         </header>
 
         {/* The shell reserves the bottom bar; detail pages also reserve their action row. */}
-        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-24 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 sm:p-6 lg:p-8'} ${
+        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-24 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 sm:p-6 lg:p-8'} ${
           portalTheme === 'light'
-            ? 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
-            : 'bg-[radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem),var(--portal-bg)]'
+            ? 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
+            : 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
         }`}>
           <RouteTransition surface="portal" fillAvailableHeight={usesInternalTableScroll}>{children}</RouteTransition>
         </div>
@@ -1082,7 +1086,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           }`}
           aria-label="Primary portal navigation"
         >
-          {mobilePrimaryNavItems.filter((item) => canAccess(item.href === '/portal' ? 'overview' : item.href === '/portal/leads' ? 'leads' : item.href === '/portal/calendar' ? 'calendar' : 'messages')).map((item) => {
+          {accessibleMobilePrimaryNavItems.filter((item) => canAccess(item.href === '/portal' ? 'overview' : item.href === '/portal/leads' ? 'leads' : item.href === '/portal/calendar' ? 'calendar' : item.href === '/portal/emails' ? 'emails' : 'messages')).map((item) => {
             const active = isActivePath(pathname, item.href, searchParams)
             return (
               <Link
@@ -1102,7 +1106,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             type="button"
             onClick={() => setMobileMoreOpen(true)}
             className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
-              !mobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams))
+              !accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams))
                 ? 'bg-[#caa24c]/10 text-[#caa24c]'
                 : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
             }`}
@@ -1127,7 +1131,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               role="dialog"
               aria-modal="true"
               aria-label="More portal sections"
-              className="portal-sheet max-h-full w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] bg-[#fffdf9]/95 p-4 shadow-2xl backdrop-blur-2xl dark:bg-[#12110f]/95 sm:max-w-xl"
+              className="portal-overlay-surface portal-sheet backdrop-blur-2xl max-h-full w-full overflow-y-auto rounded-2xl border border-[color:var(--portal-border)] p-4 shadow-2xl sm:max-w-xl"
               initial={reduceMotion ? false : { opacity: 0, y: 28 }}
               animate={{ opacity: 1, y: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 28 }}
@@ -1139,12 +1143,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   <p className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">More at Luxor</p>
                   <p className="text-xs text-[color:var(--portal-muted)]">Operations, communication, and account tools.</p>
                 </div>
-                <button type="button" onClick={() => setMobileMoreOpen(false)} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close more sections">
-                  <X size={19} />
-                </button>
+                <PortalCloseButton onClick={() => setMobileMoreOpen(false)} aria-label="Close more sections" />
               </div>
               <div className="grid grid-cols-3 gap-2">
-                {navItems.filter((item) => canAccess(item.permission as PortalPermission) && !mobilePrimaryNavItems.some((primary) => primary.href === item.href)).map((item) => {
+                {navItems.filter((item) => canAccess(item.permission as PortalPermission) && !accessibleMobilePrimaryNavItems.some((primary) => primary.href === item.href)).map((item) => {
                   const active = isActivePath(pathname, item.href, searchParams)
                   return (
                     <Link
@@ -1243,8 +1245,8 @@ function SidebarLink({
       }}
       title={collapsed ? label : undefined}
       aria-label={label}
-      className={`group relative flex items-center gap-3 rounded-lg border py-2.5 text-sm font-medium transition-all ${
-        collapsed ? 'px-[18px]' : 'px-3'
+      className={`group relative flex items-center rounded-lg border py-2.5 text-sm font-medium transition-all ${
+        collapsed ? 'mx-auto h-11 w-11 justify-center gap-0 p-0' : 'w-full gap-3 px-3'
       } ${
         active || isPending
           ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'

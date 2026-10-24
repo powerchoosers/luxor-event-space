@@ -33,6 +33,20 @@
   }
 }
 
+.portal-overlay-surface {
+  background-color: rgba(255, 253, 249, 0.95);
+}
+
+body[data-portal-theme='dark'] .portal-overlay-surface {
+  background-color: rgba(18, 17, 15, 0.95);
+}
+
+.portal-close-button::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -113,6 +127,7 @@ body {
 
 body[data-portal-theme='dark'] {
   --portal-bg: #080706;
+  --portal-frame: #050505;
   --portal-card: rgba(0, 0, 0, 0.36);
   --portal-soft: rgba(9, 9, 11, 0.7);
   --portal-text: rgba(255, 255, 255, 0.9);
@@ -123,6 +138,7 @@ body[data-portal-theme='dark'] {
 
 body[data-portal-theme='light'] {
   --portal-bg: #fbfaf6;
+  --portal-frame: #ffffff;
   --portal-card: #ffffff;
   --portal-soft: #f4efe7;
   --portal-text: #18130d;
@@ -199,6 +215,13 @@ body[data-portal-theme='light'] .portal-surface {
   box-shadow:
     0 18px 45px -36px rgba(48, 33, 14, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+@media (min-width: 1024px) {
+  body[data-portal-theme='light'] .portal-main > header {
+    box-shadow: none !important;
+    border-bottom-width: 0 !important;
+  }
 }
 
 body[data-portal-theme='light'] .portal-activity-icon {
@@ -332,6 +355,10 @@ body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="subm
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-500 *,
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-600,
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-600 * {
+  color: #ffffff !important;
+}
+
+body[data-portal-theme='light'] button[class~='bg-[#a8792f]'] {
   color: #ffffff !important;
 }
 

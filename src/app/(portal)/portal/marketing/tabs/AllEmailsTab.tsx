@@ -1165,8 +1165,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     </>
   ) : (
     <>
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#eee9e0] px-3 py-2.5 sm:px-4">
-        <p className="min-w-0 truncate text-xs font-semibold text-zinc-800">To: {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail?.direction === 'incoming' ? messageDetail.from : messageDetail?.to || ''), inquiryByEmail)} <span className="font-normal text-zinc-500">{thread?.clientEmail || (messageDetail?.direction === 'incoming' ? firstMailboxEmail(messageDetail.from) : firstMailboxEmail(messageDetail?.to || ''))}</span></p>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] px-3 py-2.5 sm:px-4">
+        <p className="min-w-0 truncate text-xs font-semibold text-[color:var(--portal-text)]">To: {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail?.direction === 'incoming' ? messageDetail.from : messageDetail?.to || ''), inquiryByEmail)} <span className="font-normal text-[color:var(--portal-muted)]">{thread?.clientEmail || (messageDetail?.direction === 'incoming' ? firstMailboxEmail(messageDetail.from) : firstMailboxEmail(messageDetail?.to || ''))}</span></p>
         <div className="flex shrink-0 items-center gap-3">
           {currentInquiry && (
             <Link href={`/portal/leads/${currentInquiry.id}`} className={`${mobile ? 'hidden sm:inline-flex' : ''} text-[9px] font-bold uppercase tracking-wider text-[#a8792f] hover:underline dark:text-[#f1d27a]`}>
@@ -1197,13 +1197,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             value={replyInstruction}
             onChange={(event) => setReplyInstruction(event.target.value)}
             placeholder="Optional direction for Elena"
-            className="min-h-10 min-w-0 flex-1 rounded-lg border border-[#e8e2d9] bg-white px-3 text-xs text-zinc-800 outline-none placeholder:text-zinc-400 focus:border-[#caa24c]/50"
+            className="min-h-10 min-w-0 flex-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50"
           />
           <button
             type="button"
             onClick={() => void draftWithElena()}
             disabled={draftingReply || loadingThread}
-            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#e8e2d9] px-3 text-xs font-medium text-[#a8792f] hover:bg-[#f8f5ef] disabled:opacity-50"
+            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-medium text-[#a8792f] hover:bg-[color:var(--portal-soft)] disabled:opacity-50 dark:text-[#f1d27a]"
           >
             {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <FilePenLine size={13} />}
             Draft with Elena
@@ -1214,7 +1214,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             title="Reply preview"
             srcDoc={buildEmailReplyPreviewDocument(replyText)}
             sandbox="allow-popups"
-            className={`${mobile ? 'min-h-[8rem]' : 'min-h-[11rem]'} flex-1 rounded-lg border border-[#e8e2d9] bg-white`}
+            className={`${mobile ? 'min-h-[8rem]' : 'min-h-[11rem]'} flex-1 rounded-lg border border-[color:var(--portal-border)] bg-white`}
           />
         ) : (
           <EmailRichTextEditor
@@ -1226,10 +1226,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             className="min-h-[280px]"
           />
         )}
-        <div className={mobile ? "sticky bottom-0 -mx-3 -mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#eee9e0] bg-white/95 px-3 py-2 backdrop-blur" : "flex shrink-0 flex-wrap items-center justify-between gap-3"}>
-          <p role={replyStatus ? 'status' : undefined} className="min-h-4 min-w-0 flex-1 text-[10px] text-zinc-500">{replyStatus}</p>
+        <div className={mobile ? "sticky bottom-0 -mx-3 -mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-3 py-2 backdrop-blur" : "flex shrink-0 flex-wrap items-center justify-between gap-3"}>
+          <p role={replyStatus ? 'status' : undefined} className="min-h-4 min-w-0 flex-1 text-[10px] text-[color:var(--portal-muted)]">{replyStatus}</p>
           <div className="flex shrink-0 items-center gap-2">
-            <button type="button" onClick={() => setReplyPreviewOpen((open) => !open)} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-medium text-zinc-600 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+            <button type="button" onClick={() => setReplyPreviewOpen((open) => !open)} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
               <Eye size={14} /> {replyPreviewOpen ? 'Back to editor' : 'Preview'}
             </button>
             <button
@@ -1250,10 +1250,27 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   return (
     <>
     <div className="relative flex h-full min-h-0 w-full flex-col">
-      {mailboxDrawerOpen ? <>
-        <button type="button" aria-label="Close mailbox navigation" onClick={() => onMailboxDrawerOpenChange(false)} className="absolute inset-0 z-40 cursor-default bg-black/40 xl:bg-black/25" />
-        <aside ref={mailboxDrawerRef} role="dialog" aria-modal="true" aria-labelledby="mailbox-drawer-title" tabIndex={-1}
-          className="absolute inset-y-0 left-0 z-50 flex w-full flex-col overflow-y-auto border-r border-[color:var(--portal-border)] bg-[color:var(--portal-card)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl lg:w-[min(88vw,22rem)]">
+      <AnimatePresence initial={false}>
+      {mailboxDrawerOpen && (
+        <motion.button
+          key="mailbox-drawer-backdrop"
+          type="button"
+          aria-label="Close mailbox navigation"
+          onClick={() => onMailboxDrawerOpenChange(false)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
+          className="absolute inset-0 z-40 cursor-default bg-black/40 xl:bg-black/25"
+        />
+      )}
+      {mailboxDrawerOpen && (
+        <motion.aside key="mailbox-drawer" ref={mailboxDrawerRef} role="dialog" aria-modal="true" aria-labelledby="mailbox-drawer-title" tabIndex={-1}
+          initial={{ x: '-100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '-100%' }}
+          transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32 }}
+          className="portal-overlay-surface backdrop-blur-2xl absolute inset-y-0 left-0 z-50 flex w-full flex-col overflow-y-auto border-r border-[color:var(--portal-border)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-2xl lg:w-[min(88vw,22rem)]">
           <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] px-5 py-4">
             <div className="min-w-0">
               <p id="mailbox-drawer-title" className="font-serif text-lg tracking-[0.2em] text-[#a8792f] dark:text-[#f1d27a]">LUXOR</p>
@@ -1282,8 +1299,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               <FileText size={16} className="text-[#a8792f] dark:text-[#f1d27a]" /> Email Tools
             </Link>
           </div>
-        </aside>
-      </> : null}
+        </motion.aside>
+      )}
+      </AnimatePresence>
       {!compactReaderOpen ? <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 lg:hidden">
         <button
           type="button"
@@ -1450,13 +1468,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       </AnimatePresence>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
-      <div className={`min-h-0 min-w-0 flex-1 overflow-hidden bg-white flex-col ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}>
-        <div className="flex min-h-11 shrink-0 items-center justify-between border-b border-[#e8e2d9] bg-white px-2 py-1.5 sm:px-4">
-          <button type="button" onClick={closeReader} aria-label="Back to email list" title="Back to email list" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-zinc-700 hover:bg-[#f6f2eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
+      <div className={`min-h-0 min-w-0 flex-1 overflow-hidden bg-[color:var(--portal-card)] flex-col ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}>
+        <div className="flex min-h-11 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-1.5 sm:px-4">
+          <button type="button" onClick={closeReader} aria-label="Back to email list" title="Back to email list" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
             <ArrowLeft size={17} aria-hidden="true" /> <span className="hidden lg:inline">Back to list</span>
           </button>
           <div className="flex min-w-0 items-center gap-1">
-            <span className="max-w-28 truncate pr-1 text-[10px] text-zinc-500 sm:hidden">{mailboxName || 'Luxor Email'}</span>
+            <span className="max-w-28 truncate pr-1 text-[10px] text-[color:var(--portal-muted)] sm:hidden">{mailboxName || 'Luxor Email'}</span>
             {selectedId && messageDetail ? (
                 <div className="flex shrink-0 items-center gap-1">
                   <button
@@ -1636,23 +1654,23 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         ) : selectedId && messageDetail ? (
           <motion.div
             key={selectedMessageKey || detailCacheKey(messageDetail.id, messageDetail.folderId)}
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 12 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -8 }}
-            transition={{ duration: reduceMotion ? 0.1 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.16, ease: 'easeOut' }}
             onAnimationComplete={syncReplyBounds}
             className="flex min-h-0 flex-1 flex-col"
           >
             {/* Email Header Bar */}
-            <div className="shrink-0 space-y-2 border-b border-[#e8e2d9] bg-white px-4 pb-3 pt-3 sm:px-6 sm:pb-4">
+            <div className="shrink-0 space-y-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 pb-3 pt-3 sm:px-6 sm:pb-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <h2 className="break-words text-lg font-semibold leading-snug text-zinc-900 sm:text-[23px] sm:leading-7">{decodeHtmlEntities(messageDetail.subject)}</h2>
+                  <h2 className="break-words text-lg font-semibold leading-snug text-[color:var(--portal-text)] sm:text-[23px] sm:leading-7">{decodeHtmlEntities(messageDetail.subject)}</h2>
                   {messageDetail.direction === 'outgoing' && messageDetail.deliveryStatus ? (
-                    <p className="mt-1 text-[11px] text-zinc-500">{luxorMailDeliveryLabel(messageDetail.deliveryStatus)}</p>
+                    <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">{luxorMailDeliveryLabel(messageDetail.deliveryStatus)}</p>
                   ) : null}
                   {messageDetail.folderPath && (
-                    <p className="mt-1 truncate text-[11px] text-zinc-500">Folder: {messageDetail.folderPath}</p>
+                    <p className="mt-1 truncate text-[11px] text-[color:var(--portal-muted)]">Folder: {messageDetail.folderPath}</p>
                   )}
                 </div>
 
@@ -1666,12 +1684,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               {messageDetail.deliveryError && (
                 <p role="status" className="text-xs text-[color:var(--portal-text)]">{messageDetail.deliveryError}</p>
               )}
-              <div className="flex items-center justify-between gap-3 border-t border-[#eee9e0] pt-2.5 sm:gap-4">
+              <div className="flex items-center justify-between gap-3 border-t border-[color:var(--portal-border)] pt-2.5 sm:gap-4">
                 <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                   <PortalContactAvatar name={mailboxLabel(messageDetail.from, inquiryByEmail)} size="lg" className="!h-11 !w-11" />
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
-                      <p className="truncate text-sm font-semibold text-zinc-900" title={messageDetail.from}>{mailboxLabel(messageDetail.from, inquiryByEmail)}</p>
+                      <p className="truncate text-sm font-semibold text-[color:var(--portal-text)]" title={messageDetail.from}>{mailboxLabel(messageDetail.from, inquiryByEmail)}</p>
                       {currentInquiry && (
                         <Link
                           href={`/portal/leads/${currentInquiry.id}`}
@@ -1681,14 +1699,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                         </Link>
                       )}
                     </div>
-                    <p className="mt-0.5 truncate text-[11px] text-zinc-500">
+                    <p className="mt-0.5 truncate text-[11px] text-[color:var(--portal-muted)]">
                       To: {mailboxLabel(messageDetail.to, inquiryByEmail, 'Client')} {selectedCcLabel ? `| CC: ${selectedCcLabel}` : ''}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <div className="max-w-32 text-right text-[10px] leading-4 text-zinc-500 sm:max-w-none sm:text-[11px]">
+                  <div className="max-w-32 text-right text-[10px] leading-4 text-[color:var(--portal-muted)] sm:max-w-none sm:text-[11px]">
                     <p>{formatEmailDateDetailed(messageDetail.receivedAt)}</p>
                   </div>
                 </div>
@@ -1698,7 +1716,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
             <div className="flex min-h-0 flex-1 flex-col">
             {/* Scrollable email thread — grows to fill, reply pinned below */}
-            <div ref={threadScrollRef} data-email-thread-scroll className="portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-white p-2 [overflow-anchor:none] sm:px-6 sm:py-4 lg:px-8">
+            <div ref={threadScrollRef} data-email-thread-scroll className="portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-bg)] p-2 [overflow-anchor:none] sm:px-6 sm:py-4 lg:px-8">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {loadingThread && !thread && (
                   <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">
@@ -1751,7 +1769,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.99 }}
                       transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
-                      className="overflow-hidden rounded-xl border border-[#e8e2d9] bg-white shadow-sm"
+                      className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm"
                     >
                       {renderReplyComposerContent(false)}
                     </motion.div>
@@ -1766,8 +1784,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               {isMobileReader ? (
                 <div ref={setMobileReplyAnchor} className="h-11 w-full" aria-hidden="true" />
               ) : (
-                <button type="button" onClick={() => setReplyOpen(true)} aria-label="Open reply editor" className="flex min-h-11 w-full items-center gap-3 rounded-full border border-[#e8e2d9] bg-[#fffdf9] px-3 text-left text-sm text-zinc-500 shadow-sm hover:border-[#d8c8a8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-                  <Reply size={17} className="shrink-0 text-zinc-500" />
+                <button type="button" onClick={() => setReplyOpen(true)} aria-label="Open reply editor" className="flex min-h-11 w-full items-center gap-3 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-left text-sm text-[color:var(--portal-muted)] shadow-sm hover:border-[#caa24c]/40 hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                  <Reply size={17} className="shrink-0" />
                   <span className="min-w-0 flex-1 truncate">Reply to {currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}…</span>
                   <Send size={17} className="shrink-0 text-[#caa24c]" />
                 </button>
@@ -1823,7 +1841,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                     >
                       <Download size={12} /> Download
                     </a>
-                    <PortalCloseButton onClick={closeAttachmentPreview} aria-label="Close attachment preview" size={15} />
+                    <PortalCloseButton onClick={closeAttachmentPreview} aria-label="Close attachment preview" />
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 bg-white">
@@ -1923,21 +1941,52 @@ function ThreadMessage({
   const reduceMotion = useReducedMotion()
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [frameHeight, setFrameHeight] = useState(260)
+  const [readyFrameKey, setReadyFrameKey] = useState<string | null>(null)
   const frameObserverRef = useRef<ResizeObserver | null>(null)
+  const frameResizeRequestRef = useRef<number>(0)
   const frameInteractionCleanupRef = useRef<(() => void) | null>(null)
-  const html = useMemo(() => buildMessageDocument(message, blockExternalImages), [message, blockExternalImages])
+  const portalTheme = useSyncExternalStore<'light' | 'dark'>(
+    (callback) => {
+      window.addEventListener('storage', callback)
+      window.addEventListener('luxor-portal-theme', callback)
+      return () => {
+        window.removeEventListener('storage', callback)
+        window.removeEventListener('luxor-portal-theme', callback)
+      }
+    },
+    () => {
+      const savedTheme = window.localStorage.getItem('luxor-portal-theme')
+      if (savedTheme === 'dark' || savedTheme === 'light') return savedTheme
+      return document.body.dataset.portalTheme === 'dark' ? 'dark' : 'light'
+    },
+    () => 'light',
+  )
+  const html = useMemo(() => buildMessageDocument(message, blockExternalImages, portalTheme), [message, blockExternalImages, portalTheme])
+  const frameKey = `${messageKey(message)}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`
   const ccLabel = message.cc ? mailboxLabel(message.cc, inquiryByEmail, '') : ''
 
   const resizeFrame = (frame: HTMLIFrameElement) => {
     const document = frame.contentDocument
     if (!document) return
+    if (frameResizeRequestRef.current) window.cancelAnimationFrame(frameResizeRequestRef.current)
+    const bodyBackground = document.body ? getComputedStyle(document.body).backgroundColor : ''
+    if (bodyBackground && bodyBackground !== 'rgba(0, 0, 0, 0)' && bodyBackground !== 'transparent') {
+      document.documentElement.style.backgroundColor = bodyBackground
+    }
     const updateHeight = () => {
-      const height = Math.max(
-        document.body?.scrollHeight || 0,
-        document.documentElement?.scrollHeight || 0,
-        220,
-      )
-      setFrameHeight(height + 8)
+      if (frameResizeRequestRef.current) return
+      frameResizeRequestRef.current = window.requestAnimationFrame(() => {
+        frameResizeRequestRef.current = 0
+        const bodyHeight = document.body
+          ? Math.max(document.body.scrollHeight, Math.ceil(document.body.getBoundingClientRect().height))
+          : 0
+        const rootHeight = document.documentElement?.scrollHeight || 0
+        const rootViewportHeight = document.documentElement?.clientHeight || 0
+        const overflowingDocumentHeight = rootHeight > rootViewportHeight + 1 ? rootHeight : 0
+        const height = Math.max(bodyHeight, overflowingDocumentHeight, 64)
+        const nextHeight = height + 8
+        if (Math.abs(frame.clientHeight - nextHeight) > 1) setFrameHeight(nextHeight)
+      })
     }
 
     frameObserverRef.current?.disconnect()
@@ -1947,7 +1996,6 @@ function ThreadMessage({
     if (document.body) observer.observe(document.body)
     frameObserverRef.current = observer
     updateHeight()
-    window.requestAnimationFrame(updateHeight)
     void document.fonts?.ready.then(updateHeight)
 
     const scrollContainer = frame.closest<HTMLElement>('[data-email-thread-scroll]')
@@ -1986,11 +2034,12 @@ function ThreadMessage({
 
   useEffect(() => () => {
     frameObserverRef.current?.disconnect()
+    if (frameResizeRequestRef.current) window.cancelAnimationFrame(frameResizeRequestRef.current)
     frameInteractionCleanupRef.current?.()
   }, [])
 
   return (
-    <article className={currentMessage ? 'w-full bg-white' : `overflow-hidden rounded-xl border transition-colors sm:rounded-2xl ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}>
+    <article className={currentMessage ? 'w-full bg-[color:var(--portal-bg)]' : `overflow-hidden rounded-xl border transition-colors sm:rounded-2xl ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}>
       {!currentMessage && <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full cursor-pointer items-center gap-2.5 p-3 text-left sm:gap-3 sm:p-4">
         <PortalContactAvatar name={mailboxLabel(message.from, inquiryByEmail)} size="md" />
         <div className="min-w-0 flex-1">
@@ -2007,27 +2056,37 @@ function ThreadMessage({
       <AnimatePresence initial={false}>
       {expanded && (
         <motion.div
-          layout="size"
-          initial={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          animate={{ height: 'auto', opacity: 1 }}
-          exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
-          className={currentMessage ? 'bg-white' : 'overflow-hidden border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]'}
+          layout={currentMessage ? false : 'size'}
+          initial={currentMessage ? false : reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          animate={currentMessage ? undefined : { height: 'auto', opacity: 1 }}
+          exit={currentMessage ? undefined : reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          transition={currentMessage ? { duration: 0 } : { duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
+          className={currentMessage ? 'bg-[color:var(--portal-bg)]' : 'overflow-hidden border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]'}
           style={{ willChange: 'height, opacity' }}
         >
           {viewMode === 'html' ? (
             <iframe
-              key={`${messageKey(message)}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`}
+              key={frameKey}
               srcDoc={html}
               title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
               className="w-full border-0 bg-transparent"
-              style={{ height: frameHeight }}
+              style={{
+                height: frameHeight,
+                opacity: readyFrameKey === frameKey ? 1 : 0,
+                transition: reduceMotion ? 'none' : 'opacity 160ms ease-out',
+              }}
               scrolling="no"
-              onLoad={(event) => resizeFrame(event.currentTarget)}
+              onLoad={(event) => {
+                const frame = event.currentTarget
+                const loadedDocument = frame.contentDocument
+                if (!loadedDocument?.body?.innerHTML.trim()) return
+                resizeFrame(frame)
+                window.requestAnimationFrame(() => window.requestAnimationFrame(() => setReadyFrameKey(frameKey)))
+              }}
               sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
             />
           ) : (
-            <div className="min-h-36 whitespace-pre-wrap bg-white p-4 font-mono text-xs leading-relaxed text-zinc-800 sm:p-6">
+            <div className="min-h-36 whitespace-pre-wrap bg-[color:var(--portal-bg)] p-4 font-mono text-xs leading-relaxed text-[color:var(--portal-text)] sm:p-6">
               {message.content || message.summary || 'No message body available.'}
             </div>
           )}
@@ -2084,12 +2143,39 @@ function EngagementIndicators({ engagement }: { engagement?: EmailMessageItem['e
   )
 }
 
-function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean) {
-  let content = stripTrackingPixels(message.htmlContent || message.content || `<p>${escapeHtml(message.summary || 'No message body available.')}</p>`)
+function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean, portalTheme: 'light' | 'dark') {
+  const hasHtmlBody = Boolean(message.htmlContent?.trim())
+  const adaptHtmlForDarkTheme = hasHtmlBody && portalTheme === 'dark' && !hasDarkEmailSurface(message.htmlContent || '')
+  const documentBackground = hasHtmlBody ? (adaptHtmlForDarkTheme ? '#f7f8f9' : '#fff') : portalTheme === 'dark' ? '#080706' : '#fbfaf6'
+  const textColor = !hasHtmlBody && portalTheme === 'dark' ? '#f5f2ea' : '#18181b'
+  const darkThemeFilter = adaptHtmlForDarkTheme
+    ? 'html{filter:invert(1) hue-rotate(180deg)}img,svg,video{filter:invert(1) hue-rotate(180deg)}'
+    : ''
+  const messageContent = message.htmlContent
+    || (message.content ? plainTextToEmailHtml(message.content) : `<p>${escapeHtml(message.summary || 'No message body available.')}</p>`)
+  let content = stripTrackingPixels(messageContent)
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;background:#fff}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:0;color:#18181b;background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:768px){body{font-size:15px;line-height:1.55}}</style></head><body>${content}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:0;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
+}
+
+function hasDarkEmailSurface(html: string) {
+  const backgrounds = [...html.matchAll(/(?:background(?:-color)?\s*:\s*([^;"'}]+)|bgcolor\s*=\s*["']?([^"'\s>]+))/gi)]
+  return backgrounds.some((match) => isDarkEmailColor(match[1] || match[2] || ''))
+}
+
+function isDarkEmailColor(value: string) {
+  const color = value.trim().toLowerCase()
+  if (color === 'black') return true
+  const hex = color.match(/#([\da-f]{3}|[\da-f]{6})\b/i)?.[1]
+  if (hex) {
+    const normalized = hex.length === 3 ? [...hex].map((digit) => digit + digit).join('') : hex
+    return (parseInt(normalized.slice(0, 2), 16) + parseInt(normalized.slice(2, 4), 16) + parseInt(normalized.slice(4, 6), 16)) / 3 < 96
+  }
+  const rgb = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
+  if (rgb) return (Number(rgb[1]) + Number(rgb[2]) + Number(rgb[3])) / 3 < 96
+  return false
 }
 
 function buildEmailReplyPreviewDocument(html: string) {

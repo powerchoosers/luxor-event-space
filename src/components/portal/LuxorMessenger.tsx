@@ -9,7 +9,7 @@ import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { PortalContactAvatar, PortalCloseButton } from './PortalUI'
-import { PortalSmsConsentBadge } from './PortalSmsConsentBadge'
+import { PortalSmsConsentBadge, type SmsConsentState } from './PortalSmsConsentBadge'
 import { useToast } from './ToastProvider'
 
 type Conversation = {
@@ -47,6 +47,8 @@ export function LuxorMessenger() {
   const [searchingContacts, setSearchingContacts] = useState(false)
   const [draftConversation, setDraftConversation] = useState<Conversation | null>(null)
   const [optionsOpen, setOptionsOpen] = useState(false)
+  const [loadedSmsConsent, setLoadedSmsConsent] = useState<{ phone: string; state: SmsConsentState } | null>(null)
+  const [consentRequestSending, setConsentRequestSending] = useState(false)
   const [lineOptionsOpen, setLineOptionsOpen] = useState(false)
   const [mediaGalleryOpen, setMediaGalleryOpen] = useState(false)
   const threadEndRef = useRef<HTMLDivElement>(null)
@@ -112,6 +114,32 @@ export function LuxorMessenger() {
   }, [conversations, filter, deferredQuery])
   const selectedConversation = conversations.find((conversation) => conversation.key === selectedKey) ?? (draftConversation?.key === selectedKey ? draftConversation : null) ?? conversations[0] ?? null
   const isComposing = Boolean(body.trim())
+  const smsConsent = loadedSmsConsent && loadedSmsConsent.phone === selectedConversation?.phoneNumber
+    ? loadedSmsConsent.state
+    : null
+
+  useEffect(() => {
+    const phone = selectedConversation?.phoneNumber
+    if (!phone) return
+    let active = true
+    const refreshConsent = async () => {
+      try {
+        const response = await fetch(`/api/twilio/consent?phone=${encodeURIComponent(phone)}`, { cache: 'no-store' })
+        const data = await response.json() as SmsConsentState & { error?: string }
+        if (active && response.ok && !data.error) setLoadedSmsConsent({ phone, state: data })
+      } catch {
+        if (active) setLoadedSmsConsent((current) => current?.phone === phone ? null : current)
+      }
+    }
+    void refreshConsent()
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshConsent()
+    }, 15_000)
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+    }
+  }, [selectedConversation?.phoneNumber])
 
   useEffect(() => {
     if (!newMessageOpen || contactQuery.trim().length < 2) {
@@ -192,6 +220,37 @@ export function LuxorMessenger() {
     }
   }
 
+  const requestSmsConsent = async () => {
+    if (!selectedConversation || consentRequestSending) return
+    setConsentRequestSending(true)
+    try {
+      const response = await fetch('/api/twilio/consent-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: selectedConversation.phoneNumber,
+          inquiryId: selectedConversation.inquiryId,
+          contactName: selectedConversation.contactName,
+          fromNumber: selectedLine === 'all' ? businessLines.find((line) => line.isActive)?.phoneNumber : selectedLine,
+        }),
+      })
+      const payload = await response.json() as { simulated?: boolean; message?: LuxorMessage | null; error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to request SMS consent.')
+      setOptionsOpen(false)
+      if (payload.simulated) {
+        notify({ title: 'Test simulation recorded', description: 'No SMS was sent to this test contact.', variant: 'success' })
+      } else {
+        if (payload.message) setMessages((current) => [payload.message!, ...current.filter((message) => message.id !== payload.message!.id)])
+        setLoadedSmsConsent({ phone: selectedConversation.phoneNumber, state: { status: 'unknown', consent_request_status: 'pending' } })
+        notify({ title: 'Consent request sent', description: `Asked ${selectedConversation.contactName} to reply YES.`, variant: 'success' })
+      }
+    } catch (error) {
+      notify({ title: 'Consent request not sent', description: error instanceof Error ? error.message : 'Unable to request SMS consent.', variant: 'error' })
+    } finally {
+      setConsentRequestSending(false)
+    }
+  }
+
   const startNewConversation = (contact: ContactResult) => {
     const existing = conversations.find((conversation) => conversation.inquiryId === contact.id || conversation.phoneNumber === contact.phoneNumber)
     if (existing) {
@@ -265,7 +324,7 @@ export function LuxorMessenger() {
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                     <p className="min-w-0 break-words text-sm font-black leading-tight text-[color:var(--portal-text)]">{selectedConversation.contactName}</p>
-                    <PortalSmsConsentBadge phone={selectedConversation.phoneNumber} compact />
+                    <PortalSmsConsentBadge phone={selectedConversation.phoneNumber} initialConsent={smsConsent} compact />
                   </div>
                   <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)] transition-colors hover:text-emerald-500">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
                 </div>
@@ -278,6 +337,10 @@ export function LuxorMessenger() {
                   <AnimatePresence>{optionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl">
                     <button type="button" onClick={() => { setOptionsOpen(false); setMediaGalleryOpen(true) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Images size={14}/> Media gallery <span className="ml-auto font-mono text-[color:var(--portal-muted)]">{sharedMedia.length}</span></button>
                     {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} onClick={() => setOptionsOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-[10px] font-bold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Info size={14}/> Contact details</Link> : null}
+                    {smsConsent?.status === 'opted_in' ? <p className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400"><Check size={14}/> SMS consent is active</p>
+                      : smsConsent?.status === 'opted_out' ? <p className="px-3 py-2.5 text-[10px] leading-4 text-red-600 dark:text-red-400">SMS opted out. The contact must text START to opt in again.</p>
+                      : smsConsent?.consent_request_status === 'pending' ? <p className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-[10px] font-bold text-[color:var(--portal-muted)]"><MessageSquare size={14}/> Consent request sent · waiting for YES</p>
+                        : <button type="button" onClick={() => void requestSmsConsent()} disabled={!smsConsent || !selectedConversation.phoneNumber || consentRequestSending} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-50"><MessageSquare size={14}/>{consentRequestSending ? 'Sending consent request…' : smsConsent?.consent_request_status === 'failed' ? 'Retry SMS consent request' : 'Request SMS consent'}</button>}
                     <div className="my-1 h-px bg-[color:var(--portal-border)]"/>
                     <button type="button" disabled className="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-faint)] opacity-60"><UserPlus size={14}/> Add a member</button>
                     <p className="px-3 pb-2 text-[9px] leading-4 text-[color:var(--portal-faint)]">Twilio RCS does not support group messaging.</p>

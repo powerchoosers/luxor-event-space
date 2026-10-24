@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { readTwilioForm, validateTwilioWebhook } from '@/lib/luxorTwilioServer'
 import { saveInboundLuxorMessage } from '@/lib/luxorMessagesServer'
 import { getLuxorPhoneRoutingSettings } from '@/lib/luxorPhoneRoutingServer'
-import { getSmsControlType, recordLuxorSmsConsent, sendLuxorAutomatedText } from '@/lib/luxorTextAutomationsServer'
+import { getSmsControlType, recordLuxorSmsConsent, recordLuxorSmsConsentReply, sendLuxorAutomatedText } from '@/lib/luxorTextAutomationsServer'
 import { recordTextCampaignReply } from '@/lib/luxorTextCampaignsServer'
 
 export const runtime = 'nodejs'
@@ -12,8 +12,27 @@ export async function POST(request: NextRequest) {
   if (!validateTwilioWebhook(request, params)) return new Response('<Response/>', { status: 403, headers: { 'Content-Type': 'text/xml' } })
   const mediaUrls = Array.from({ length: Number.parseInt(params.NumMedia || '0', 10) || 0 }, (_, index) => params[`MediaUrl${index}`]).filter((url): url is string => Boolean(url))
   const message = await saveInboundLuxorMessage({ sid: params.MessageSid, from: params.From, to: params.To, body: params.Body || '', mediaUrls })
-  const controlType = getSmsControlType(params.Body || '', params.OptOutType)
+  const bodyIsConsentYes = (params.Body || '').trim().toUpperCase() === 'YES'
+  const incomingControlType = getSmsControlType(params.Body || '', params.OptOutType)
+  const consentReplyRecorded = bodyIsConsentYes && params.MessageSid
+    ? await recordLuxorSmsConsentReply(params.From, params.MessageSid)
+    : false
+  // Twilio Advanced Opt-Out may classify YES as START. Only an outstanding
+  // Luxor consent request can turn YES into scoped consent; START/UNSTOP remain
+  // the only keywords that can restore a number after STOP.
+  const controlType = bodyIsConsentYes && incomingControlType === 'START' ? null : incomingControlType
   await recordTextCampaignReply(params.From, controlType === 'STOP')
+  if (consentReplyRecorded) {
+    // Advanced Opt-Out already sent its configured opt-in reply when it
+    // supplied OptOutType. Otherwise confirm the scoped customer-care opt-in.
+    if (!params.OptOutType) {
+      return new Response(
+        '<Response><Message>Luxor Event Space: You are opted in to texts about your inquiry, tour, and event planning. Message frequency varies; msg and data rates may apply. Reply STOP to opt out or HELP for help.</Message></Response>',
+        { headers: { 'Content-Type': 'text/xml; charset=utf-8' } },
+      )
+    }
+    return new Response('<Response/>', { headers: { 'Content-Type': 'text/xml; charset=utf-8' } })
+  }
   if (controlType === 'STOP' || controlType === 'START') {
     await recordLuxorSmsConsent(params.From, controlType, params.OptOutType ? 'twilio_advanced_opt_out' : 'inbound_keyword')
   } else if (controlType === 'HELP') {

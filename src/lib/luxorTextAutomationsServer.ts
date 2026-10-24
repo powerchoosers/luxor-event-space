@@ -22,6 +22,17 @@ type ConsentRow = {
 }
 type AutomationEvent = { id: string; status: 'pending' | 'sent' | 'skipped' | 'failed' }
 
+const LUXOR_SMS_CONSENT_REQUEST_SCOPES = ['customer_care', 'tour', 'event']
+
+type SmsConsentRequestProof = {
+  request_id?: string
+  status?: 'pending' | 'failed' | 'confirmed'
+  requested_at?: string
+  from_number?: string
+  message_sid?: string
+  scopes?: string[]
+}
+
 export function getSmsControlType(body: string, twilioOptOutType?: string | null) {
   const provided = twilioOptOutType?.trim().toUpperCase()
   if (provided === 'STOP' || provided === 'START' || provided === 'HELP') return provided
@@ -135,6 +146,115 @@ export async function getLuxorSmsConsent(phone: string) {
     `luxor_sms_consents?select=phone_number,status,updated_at,consent_scopes,proof,last_confirmed_at&phone_number=eq.${encodeURIComponent(phoneNumber)}&limit=1`,
   )
   return consent ?? null
+}
+
+export async function beginLuxorSmsConsentRequest(phone: string, requestId: string, fromNumber: string) {
+  const phoneNumber = normalizePhoneNumber(phone)
+  if (!phoneNumber) throw new Error('Enter a valid mobile phone number.')
+  const existing = await getLuxorSmsConsent(phoneNumber)
+  if (existing?.status === 'opted_out') throw new Error('This person opted out. They must text START before Luxor can message them again.')
+  if (existing?.status === 'opted_in') throw new Error('This person has already opted in to Luxor SMS.')
+
+  const previousRequest = existing?.proof?.sms_consent_request as SmsConsentRequestProof | undefined
+  if (previousRequest?.status === 'pending') throw new Error('A consent request is already awaiting a reply.')
+
+  const timestamp = new Date().toISOString()
+  const consentRequest: SmsConsentRequestProof = {
+    request_id: requestId,
+    status: 'pending',
+    requested_at: timestamp,
+    from_number: normalizePhoneNumber(fromNumber) || fromNumber,
+    scopes: LUXOR_SMS_CONSENT_REQUEST_SCOPES,
+  }
+  const proof = { ...(existing?.proof || {}), sms_consent_request: consentRequest }
+
+  if (existing) {
+    const updated = await supabaseRest<ConsentRow[]>(
+      `luxor_sms_consents?phone_number=eq.${encodeURIComponent(phoneNumber)}&status=eq.unknown&updated_at=eq.${encodeURIComponent(existing.updated_at)}&select=*`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ source: 'manual_sms_consent_request', proof, updated_at: timestamp }),
+      },
+    )
+    if (updated[0]) return updated[0]
+    throw new Error('SMS consent changed while preparing the request. Refresh this conversation and try again.')
+  }
+
+  const inserted = await supabaseRest<ConsentRow[]>('luxor_sms_consents?on_conflict=phone_number&select=*', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+    body: JSON.stringify({ phone_number: phoneNumber, status: 'unknown', source: 'manual_sms_consent_request', proof, updated_at: timestamp }),
+  })
+  if (inserted[0]) return inserted[0]
+
+  const raced = await getLuxorSmsConsent(phoneNumber)
+  if (raced?.status === 'opted_out') throw new Error('This person opted out. They must text START before Luxor can message them again.')
+  if (raced?.status === 'opted_in') throw new Error('This person has already opted in to Luxor SMS.')
+  throw new Error('A consent request was started in another session. Refresh this conversation before trying again.')
+}
+
+export async function finishLuxorSmsConsentRequest(phone: string, requestId: string, result: { status: 'pending' | 'failed'; messageSid?: string }) {
+  const phoneNumber = normalizePhoneNumber(phone)
+  if (!phoneNumber) return
+  const current = await getLuxorSmsConsent(phoneNumber)
+  const request = current?.proof?.sms_consent_request as SmsConsentRequestProof | undefined
+  if (!current || current.status !== 'unknown' || request?.request_id !== requestId || request.status !== 'pending') return
+
+  const timestamp = new Date().toISOString()
+  const proof = {
+    ...(current.proof || {}),
+    sms_consent_request: { ...request, status: result.status, ...(result.messageSid ? { message_sid: result.messageSid } : {}) },
+  }
+  await supabaseRest(
+    `luxor_sms_consents?phone_number=eq.${encodeURIComponent(phoneNumber)}&status=eq.unknown&updated_at=eq.${encodeURIComponent(current.updated_at)}`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ proof, updated_at: timestamp }),
+    },
+  )
+}
+
+export async function recordLuxorSmsConsentReply(phone: string, messageSid: string) {
+  const phoneNumber = normalizePhoneNumber(phone)
+  if (!phoneNumber) return false
+  const current = await getLuxorSmsConsent(phoneNumber)
+  if (!current || current.status !== 'unknown') return false
+
+  const request = current.proof?.sms_consent_request as SmsConsentRequestProof | undefined
+  if (request?.status !== 'pending' || !request.request_id) return false
+
+  const timestamp = new Date().toISOString()
+  const proof = {
+    ...(current.proof || {}),
+    sms_consent_request: { ...request, status: 'confirmed' as const },
+    sms_consent_reply: {
+      keyword: 'YES',
+      message_sid: messageSid,
+      request_id: request.request_id,
+      request_message_sid: request.message_sid || null,
+      confirmed_at: timestamp,
+    },
+  }
+  const [saved] = await supabaseRest<ConsentRow[]>(
+    `luxor_sms_consents?phone_number=eq.${encodeURIComponent(phoneNumber)}&status=eq.unknown&updated_at=eq.${encodeURIComponent(current.updated_at)}&select=*`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        status: 'opted_in',
+        source: 'inbound_sms_consent_keyword',
+        opted_in_at: timestamp,
+        opted_out_at: null,
+        consent_scopes: request.scopes || LUXOR_SMS_CONSENT_REQUEST_SCOPES,
+        proof,
+        last_confirmed_at: timestamp,
+        updated_at: timestamp,
+      }),
+    },
+  )
+  return Boolean(saved)
 }
 
 export async function assertLuxorSmsAllowed(phone: string) {

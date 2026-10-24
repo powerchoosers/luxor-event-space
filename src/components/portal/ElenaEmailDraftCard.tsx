@@ -374,7 +374,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
                 <Eye size={16} className="text-[#caa24c]" />
                 <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Outgoing Email Preview</h3>
               </div>
-              <PortalCloseButton onClick={() => setIsPreviewOpen(false)} aria-label="Close preview" size={16} />
+              <PortalCloseButton onClick={() => setIsPreviewOpen(false)} aria-label="Close preview" />
             </div>
 
             {/* Rendered HTML Iframe Preview */}

@@ -7,6 +7,7 @@ export type SmsConsentState = {
   status: 'opted_in' | 'opted_out' | 'unknown'
   updated_at?: string | null
   consent_scopes?: string[]
+  consent_request_status?: 'pending' | 'failed' | 'confirmed' | null
 }
 
 interface PortalSmsConsentBadgeProps {
@@ -21,7 +22,8 @@ export function PortalSmsConsentBadge({
   initialConsent,
   compact = false,
 }: PortalSmsConsentBadgeProps) {
-  const [consent, setConsent] = useState<SmsConsentState | null>(initialConsent || null)
+  const [fetchedConsent, setFetchedConsent] = useState<SmsConsentState | null>(null)
+  const consent = initialConsent || fetchedConsent
   const [loading, setLoading] = useState(!initialConsent && Boolean(phone))
 
   useEffect(() => {
@@ -38,17 +40,17 @@ export function PortalSmsConsentBadge({
       .then((data) => {
         if (!isMounted) return
         if (data && typeof data.status === 'string') {
-          setConsent({
+          setFetchedConsent({
             status: data.status,
             updated_at: data.updated_at ?? null,
             consent_scopes: Array.isArray(data.consent_scopes) ? data.consent_scopes : [],
           })
         } else {
-          setConsent({ status: 'unknown' })
+          setFetchedConsent({ status: 'unknown' })
         }
       })
       .catch(() => {
-        if (isMounted) setConsent({ status: 'unknown' })
+        if (isMounted) setFetchedConsent({ status: 'unknown' })
       })
       .finally(() => {
         if (isMounted) setLoading(false)
@@ -96,6 +98,20 @@ export function PortalSmsConsentBadge({
       >
         <ShieldCheck size={compact ? 10 : 12} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
         <span>SMS Opted In</span>
+      </span>
+    )
+  }
+
+  if (consent?.consent_request_status === 'pending') {
+    return (
+      <span
+        title="A one-time SMS consent request was sent. Waiting for the client to reply YES."
+        className={`inline-flex items-center gap-1 rounded-md border border-[#caa24c]/25 bg-[#caa24c]/10 ${
+          compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]'
+        } font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a]`}
+      >
+        <HelpCircle size={compact ? 10 : 12} className="shrink-0" />
+        <span>Consent Requested</span>
       </span>
     )
   }
