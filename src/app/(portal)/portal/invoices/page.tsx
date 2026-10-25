@@ -21,6 +21,9 @@ import {
   PortalSelect,
   PortalTableSkeleton
 } from '@/components/portal/PortalUI'
+import { MagicCard } from '@/components/ui/magic-card'
+import { BorderBeam } from '@/components/ui/border-beam'
+import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import {
   PortalBulkActionDeck,
   PortalBulkChoiceDialog,
@@ -195,18 +198,22 @@ export default function InvoicesPage() {
           label="Net Revenue Paid"
           value={`$${netRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           trend={`${paidInvoices.length} paid`}
+          highlight
+          gaugePercent={netRevenue + outstandingAR > 0 ? (netRevenue / (netRevenue + outstandingAR)) * 100 : 100}
         />
         <StatsPanel
           label="Outstanding A/R"
           value={`$${outstandingAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           trend={`${outstandingInvoices.length} unpaid`}
           isNegative={outstandingAR > 0}
+          progress={netRevenue + outstandingAR > 0 ? (outstandingAR / (netRevenue + outstandingAR)) * 100 : 0}
         />
         <StatsPanel
           label="Overdue Receivables"
           value={`$${overdueAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           trend={`${overdueInvoices.length} overdue`}
           isNegative={overdueAR > 0}
+          progress={outstandingAR > 0 ? (overdueAR / outstandingAR) * 100 : 0}
         />
       </div>
 
@@ -214,13 +221,13 @@ export default function InvoicesPage() {
         controls={
           <div className="flex items-center justify-between gap-4">
             <div className="relative w-full md:w-96 group">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-650" />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Filter by ID, Client name, or Event type..."
-                className="w-full bg-[#080808] border border-zinc-900 rounded-lg pl-10 pr-4 py-2.5 text-xs text-zinc-400 focus:outline-none focus:border-blue-700/50 transition-all font-mono"
+                className="w-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] rounded-lg pl-10 pr-4 py-2.5 text-xs text-[color:var(--portal-text)] focus:outline-none focus:border-[#caa24c]/50 transition-all"
               />
             </div>
           </div>
@@ -228,7 +235,7 @@ export default function InvoicesPage() {
       >
         <PortalStickyTable minWidth="980px">
           <PortalStickyThead>
-            <tr className="text-[10px] uppercase font-bold text-zinc-600 tracking-[0.2em] border-b border-zinc-900/50 bg-[#0c0c0c]">
+            <tr className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em] border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/80">
               <th className="w-14 px-4 py-5 text-center"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(matchingInvoiceIds)} onChange={() => bulkSelection.selectPage(matchingInvoiceIds)} /></th>
               <th className="px-4 py-5">Invoice ID</th>
               <th className="px-6 py-5">Client Portfolio</th>
@@ -238,26 +245,26 @@ export default function InvoicesPage() {
               <th className="px-8 py-5 text-right">Lifecycle status</th>
             </tr>
           </PortalStickyThead>
-          <tbody className="divide-y divide-zinc-900/30">
+          <tbody className="divide-y divide-[color:var(--portal-border)]/50">
             {loading ? (
               <PortalTableSkeleton cols={7} rows={5} />
             ) : error ? (
               <tr>
-                <td colSpan={7} className="px-8 py-12 text-sm text-red-350">
+                <td colSpan={7} className="px-8 py-12 text-sm text-rose-600 dark:text-rose-400">
                   {error}
                 </td>
               </tr>
             ) : filteredInvoices.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-8 py-12 text-sm text-zinc-550 text-center">
+                <td colSpan={7} className="px-8 py-12 text-sm text-[color:var(--portal-muted)] text-center">
                   No invoice records match search parameters.
                 </td>
               </tr>
             ) : (
               filteredInvoices.map((inv, rowIndex) => (
-                <tr key={inv.id} className={`hover:bg-zinc-900/40 transition-colors group ${bulkSelection.isSelected(inv.id) ? 'bg-[#caa24c]/5' : ''}`}>
+                <tr key={inv.id} className={`hover:bg-[color:var(--portal-soft)]/50 transition-colors group ${bulkSelection.isSelected(inv.id) ? 'bg-[#caa24c]/5' : ''}`}>
                   <td className="px-4 py-6 text-center"><PortalBulkRowSelector checked={bulkSelection.isSelected(inv.id)} index={rowIndex + 1} onChange={() => bulkSelection.toggle(inv.id)} label={`invoice ${inv.id.slice(0, 8)}`} /></td>
-                  <td className="px-4 py-6 font-mono text-sm text-zinc-400 group-hover:text-[#caa24c] transition-colors">
+                  <td className="px-4 py-6 tabular-nums font-bold text-xs text-[color:var(--portal-muted)] group-hover:text-[#caa24c] transition-colors">
                     {inv.id.slice(0, 8).toUpperCase()}
                   </td>
                   <td className="px-6 py-6">
@@ -265,23 +272,23 @@ export default function InvoicesPage() {
                       {inv.inquiry_id ? (
                         <Link
                           href={`/portal/leads/${inv.inquiry_id}`}
-                          className="text-sm font-semibold text-white/90 leading-none mb-1 hover:text-blue-400 inline-flex items-center gap-1.5"
+                          className="text-sm font-bold text-[color:var(--portal-text)] leading-none mb-1 hover:text-[#caa24c] inline-flex items-center gap-1.5"
                         >
-                          {inv.client_name} <ExternalLink size={12} className="text-zinc-650" />
+                          {inv.client_name} <ExternalLink size={12} className="text-[color:var(--portal-muted)]" />
                         </Link>
                       ) : (
-                        <p className="text-sm font-semibold text-white/90 leading-none mb-1">{inv.client_name}</p>
+                        <p className="text-sm font-bold text-[color:var(--portal-text)] leading-none mb-1">{inv.client_name}</p>
                       )}
-                      <p className="text-[10px] text-zinc-500 font-medium italic mt-1">{inv.event_type || 'Custom Booking'}</p>
+                      <p className="text-[10px] text-[color:var(--portal-muted)] font-medium italic mt-1">{inv.event_type || 'Custom Booking'}</p>
                     </div>
                   </td>
-                  <td className="px-6 py-6 font-mono text-sm text-white/90 font-bold tracking-tight">
+                  <td className="px-6 py-6 tabular-nums text-sm text-[color:var(--portal-text)] font-bold tracking-tight">
                     ${inv.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td className="px-6 py-6">
-                    <div className="flex flex-col">
-                      <span className="text-xs text-zinc-400 font-medium">{new Date(inv.created_at).toLocaleDateString()}</span>
-                      <span className="text-[10px] text-zinc-600 font-medium uppercase tracking-tighter mt-1">
+                    <div className="flex flex-col tabular-nums">
+                      <span className="text-xs text-[color:var(--portal-text)] font-medium">{new Date(inv.created_at).toLocaleDateString()}</span>
+                      <span className="text-[10px] text-[color:var(--portal-muted)] font-medium uppercase tracking-tight mt-1">
                         Due: {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : 'Immediate'}
                       </span>
                     </div>
@@ -370,32 +377,57 @@ function StatsPanel({
   value,
   trend,
   isNegative = false,
+  highlight = false,
+  gaugePercent,
+  progress,
 }: {
   label: string
   value: string
   trend: string
   isNegative?: boolean
+  highlight?: boolean
+  gaugePercent?: number
+  progress?: number
 }) {
-  const isPaid = label.toLowerCase().includes('paid')
-  const glowClass = isPaid ? 'luxor-glow-green' : 'luxor-glow-gold'
-
   return (
-    <div className={`luxor-glass-card rounded-2xl p-6 ${glowClass} overflow-hidden group shadow-xl`}>
-      <div className="flex items-center justify-between mb-3 relative z-10">
-        <p className="text-[10px] uppercase font-black text-zinc-500 tracking-[0.2em]">{label}</p>
-        <span
-          className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
-            isNegative
-              ? 'bg-rose-500/5 text-rose-400 border-rose-500/10'
-              : 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10'
-          }`}
-        >
-          {trend}
-        </span>
+    <MagicCard className="relative flex flex-row items-center justify-between gap-4 rounded-2xl p-6 overflow-hidden group">
+      {highlight ? <BorderBeam size={85} duration={10} borderWidth={1.2} /> : null}
+      <div className="min-w-0 flex-1 pr-2">
+        <div className="flex items-center justify-between gap-2 mb-3 relative z-10">
+          <p className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em]">{label}</p>
+          <span
+            className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider tabular-nums shrink-0 ${
+              isNegative
+                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
+            }`}
+          >
+            {trend}
+          </span>
+        </div>
+        <h3 className="text-2xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight relative z-10">
+          {value}
+        </h3>
+        {progress !== undefined ? (
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${isNegative ? 'bg-gradient-to-r from-rose-500 to-rose-400' : 'bg-gradient-to-r from-[#caa24c] to-[#f1d27a]'}`}
+              style={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
+            />
+          </div>
+        ) : null}
       </div>
-      <h3 className="text-2xl font-bold text-[color:var(--portal-text)] font-mono tracking-tight group-hover:translate-x-1 transition-transform duration-300 relative z-10">
-        {value}
-      </h3>
-    </div>
+      {gaugePercent !== undefined ? (
+        <div className="ml-auto shrink-0">
+          <AnimatedCircularProgressBar
+            value={gaugePercent}
+            size={52}
+            strokeWidth={4.5}
+            gaugePrimaryColor="#caa24c"
+            subLabel="Collected"
+          />
+        </div>
+      ) : null}
+    </MagicCard>
   )
 }

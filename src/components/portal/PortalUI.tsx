@@ -272,7 +272,7 @@ export function PortalAnimatedTabs<T extends string>({
             {tab.label}
             {typeof tab.count === 'number' ? (
               <span
-                className={`rounded-full px-1.5 py-0.5 font-mono text-[8px] ${
+                className={`rounded-full px-1.5 py-0.5 tabular-nums font-bold text-[9px] ${
                   isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'
                 }`}
               >
@@ -433,7 +433,7 @@ export function PortalFilterBar({
             <SlidersHorizontal size={13} />
             Filters
             {activeFilters.length ? (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#caa24c]/15 px-1.5 font-mono text-[9px] text-[#9a712e] dark:text-[#f1d27a]">
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#caa24c]/15 px-1.5 tabular-nums font-bold text-[9px] text-[#9a712e] dark:text-[#f1d27a]">
                 {activeFilters.length}
               </span>
             ) : null}
@@ -442,7 +442,7 @@ export function PortalFilterBar({
         ) : null}
 
         {resultLabel ? (
-          <span className="shrink-0 px-1 font-mono text-[9px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+          <span className="shrink-0 px-1 tabular-nums text-[9px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
             {resultLabel}
           </span>
         ) : null}
@@ -541,7 +541,7 @@ export function PortalPagination({
         onChange={(value) => onPageChange(Number(value))}
         options={pageOptions}
         className="!min-w-0 w-[5.5rem] sm:w-[124px]"
-        buttonClassName="h-11 rounded-md bg-[color:var(--portal-card)] px-2 font-mono text-[10px] font-semibold sm:h-8"
+        buttonClassName="h-11 rounded-md bg-[color:var(--portal-card)] px-2 tabular-nums text-[10px] font-semibold sm:h-8"
       />
       <button type="button" aria-label="Next page" title="Next page" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} className={buttonClass}>
         <ChevronRight size={15} strokeWidth={2.25} aria-hidden="true" />
@@ -587,9 +587,9 @@ export function PortalEmptyState({
 }) {
   return (
     <div className="portal-render-surface flex flex-col items-center justify-center rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-10 text-center">
-      {icon ? <div className="mb-4 text-zinc-700">{icon}</div> : null}
-      <h3 className="text-base font-bold text-white/90">{title}</h3>
-      <p className="mt-2 max-w-md text-xs leading-5 text-zinc-500">{description}</p>
+      {icon ? <div className="mb-4 text-[color:var(--portal-muted)]">{icon}</div> : null}
+      <h3 className="text-base font-bold text-[color:var(--portal-text)]">{title}</h3>
+      <p className="mt-2 max-w-md text-xs leading-5 text-[color:var(--portal-muted)]">{description}</p>
       {action ? <div className="mt-6">{action}</div> : null}
     </div>
   )
@@ -663,11 +663,11 @@ export function PortalTimelineItem({
       </div>
       <div>
         <div className="flex flex-wrap items-baseline gap-2">
-          <h4 className="text-xs font-bold text-white/90 uppercase tracking-widest">{title}</h4>
-          <span className="text-[10px] text-zinc-600 font-mono">{time}</span>
+          <h4 className="text-xs font-bold text-[color:var(--portal-text)] uppercase tracking-widest">{title}</h4>
+          <span className="text-[10px] text-[color:var(--portal-muted)] tabular-nums font-semibold">{time}</span>
           {badge ? <div className="ml-auto">{badge}</div> : null}
         </div>
-        {children ? <div className="mt-2 text-xs leading-relaxed text-zinc-400">{children}</div> : null}
+        {children ? <div className="mt-2 text-xs leading-relaxed text-[color:var(--portal-muted)]">{children}</div> : null}
       </div>
     </div>
   )
@@ -1216,7 +1216,7 @@ export function PortalDatePicker({
         }}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
-        className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border px-4 py-2.5 text-xs font-mono font-bold uppercase tracking-wider transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[#caa24c]/50 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] text-[color:var(--portal-text,#f7efe3)]'}`}
+        className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border px-4 py-2.5 text-xs tabular-nums font-bold uppercase tracking-wider transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[#caa24c]/50 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] bg-[color:var(--portal-soft,rgba(10,9,8,0.96))] text-[color:var(--portal-text,#f7efe3)]'}`}
       >
         <span>{formattedDisplay}</span>
         <Calendar size={13} className="text-[#caa24c]/80" />
@@ -1302,7 +1302,7 @@ export function PortalDatePicker({
                           onClick={() => handleSelectDay(day)}
                           disabled={disabled}
                           aria-label={`Choose ${day.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`}
-                          className={`relative flex h-11 w-full min-w-0 items-center justify-center rounded-md border font-mono transition-all sm:h-7 sm:w-7 ${disabled ? 'cursor-not-allowed border-transparent text-[#b9ad9f] opacity-55' : 'cursor-pointer'} ${
+                          className={`relative flex h-11 w-full min-w-0 items-center justify-center rounded-md border tabular-nums transition-all sm:h-7 sm:w-7 ${disabled ? 'cursor-not-allowed border-transparent text-[#b9ad9f] opacity-55' : 'cursor-pointer'} ${
                             isSelected
                               ? isLight ? 'border-[#b98a3d]/50 bg-[#f5ead8] font-bold text-[#6f4d1f] shadow' : 'border-[#caa24c]/40 hover:border-[#caa24c]/60 bg-[#caa24c]/20 font-bold text-[#f1d27a] shadow'
                               : isToday

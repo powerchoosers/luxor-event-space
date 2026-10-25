@@ -3,6 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { BarChart3, Calendar, Download, RefreshCw, TrendingUp } from 'lucide-react'
 import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
+import { MagicCard } from '@/components/ui/magic-card'
+import { BorderBeam } from '@/components/ui/border-beam'
+import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { isLuxorNonRevenueTestInquiry, type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice } from '@/lib/luxorInquiryTypes'
 
 type ReportData = {
@@ -71,21 +74,46 @@ export default function ReportsPage() {
         actions={<div className="flex gap-2"><PortalButton onClick={() => void loadReports()}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh</PortalButton><PortalButton onClick={downloadCsv}><Download size={13} /> Export CSV</PortalButton></div>}
       />
 
-      {error && <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-xs text-rose-300">{error}</div>}
+      {error && <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-xs text-rose-700 dark:text-rose-300">{error}</div>}
 
       <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-        <PortalStaggerGroup className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <PortalStaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <PortalStaggerCard>
-            <StatsPanel label="Average Booking Value" value={currency(metrics.averageBookingValue)} detail={`${metrics.confirmedBookings.length} confirmed or completed bookings`} loading={loading} />
+            <StatsPanel
+              label="Average Booking Value"
+              value={currency(metrics.averageBookingValue)}
+              detail={`${metrics.confirmedBookings.length} confirmed or completed bookings`}
+              loading={loading}
+              progress={Math.min(100, (metrics.averageBookingValue / 10000) * 100)}
+            />
           </PortalStaggerCard>
           <PortalStaggerCard>
-            <StatsPanel label="Lead-to-Booking Rate" value={`${metrics.conversionRate.toFixed(1)}%`} detail={`${metrics.bookedLeadIds.size} booked leads from ${metrics.totalLeads} total`} loading={loading} />
+            <StatsPanel
+              label="Lead-to-Booking Rate"
+              value={`${metrics.conversionRate.toFixed(1)}%`}
+              detail={`${metrics.bookedLeadIds.size} booked leads from ${metrics.totalLeads} total`}
+              loading={loading}
+              gaugePercent={metrics.conversionRate}
+            />
           </PortalStaggerCard>
           <PortalStaggerCard>
-            <StatsPanel label="Average Days to Book" value={metrics.averageDaysToBook === null ? 'Not enough data' : `${metrics.averageDaysToBook.toFixed(1)} days`} detail="From inquiry creation to booking" loading={loading} />
+            <StatsPanel
+              label="Average Days to Book"
+              value={metrics.averageDaysToBook === null ? 'Not enough data' : `${metrics.averageDaysToBook.toFixed(1)} days`}
+              detail="From inquiry creation to booking"
+              loading={loading}
+              progress={metrics.averageDaysToBook === null ? 0 : Math.min(100, Math.max(12, 100 - metrics.averageDaysToBook * 2))}
+            />
           </PortalStaggerCard>
           <PortalStaggerCard>
-            <StatsPanel label="Net Recorded Income" value={currency(metrics.netIncome)} detail={`${currency(metrics.paidRevenue)} paid less ${currency(metrics.recordedExpenses)} expenses`} loading={loading} />
+            <StatsPanel
+              label="Net Recorded Income"
+              value={currency(metrics.netIncome)}
+              detail={`${currency(metrics.paidRevenue)} paid less ${currency(metrics.recordedExpenses)} expenses`}
+              loading={loading}
+              highlight
+              progress={metrics.paidRevenue > 0 ? Math.max(0, Math.min(100, (metrics.netIncome / metrics.paidRevenue) * 100)) : 0}
+            />
           </PortalStaggerCard>
         </PortalStaggerGroup>
 
@@ -94,23 +122,40 @@ export default function ReportsPage() {
             {metrics.months.map((month) => <ProgressRow key={month.key} label={month.label} value={currency(month.revenue)} percent={metrics.maxMonthlyRevenue ? (month.revenue / metrics.maxMonthlyRevenue) * 100 : 0} />)}
           </ReportCard>
           <ReportCard title="Confirmed Bookings by Event Type" icon={<Calendar size={16} />}>
-            {metrics.eventTypes.length ? metrics.eventTypes.map((item) => <ProgressRow key={item.label} label={item.label} value={`${item.count} booking${item.count === 1 ? '' : 's'}`} percent={metrics.confirmedBookings.length ? (item.count / metrics.confirmedBookings.length) * 100 : 0} tone="purple" />) : <EmptyState text="No confirmed bookings are recorded yet." />}
+            {metrics.eventTypes.length ? metrics.eventTypes.map((item) => <ProgressRow key={item.label} label={item.label} value={`${item.count} booking${item.count === 1 ? '' : 's'}`} percent={metrics.confirmedBookings.length ? (item.count / metrics.confirmedBookings.length) * 100 : 0} tone="emerald" />) : <EmptyState text="No confirmed bookings are recorded yet." />}
           </ReportCard>
         </div>
 
         <PortalStaggerGroup className="grid grid-cols-1 md:grid-cols-3 gap-4" staggerDelay={0.06}>
           <PortalStaggerCard>
-            <SummaryCard label="Paid Revenue" value={currency(metrics.paidRevenue)} detail={`${metrics.paidInvoices.length} paid invoices`} />
+            <SummaryCard
+              label="Paid Revenue"
+              value={currency(metrics.paidRevenue)}
+              detail={`${metrics.paidInvoices.length} paid invoices`}
+              progress={metrics.paidRevenue + metrics.outstandingRevenue > 0 ? (metrics.paidRevenue / (metrics.paidRevenue + metrics.outstandingRevenue)) * 100 : 100}
+              tone="emerald"
+            />
           </PortalStaggerCard>
           <PortalStaggerCard>
-            <SummaryCard label="Outstanding Invoices" value={currency(metrics.outstandingRevenue)} detail={`${metrics.outstandingInvoices.length} sent or overdue invoices`} />
+            <SummaryCard
+              label="Outstanding Invoices"
+              value={currency(metrics.outstandingRevenue)}
+              detail={`${metrics.outstandingInvoices.length} sent or overdue invoices`}
+              progress={metrics.paidRevenue + metrics.outstandingRevenue > 0 ? (metrics.outstandingRevenue / (metrics.paidRevenue + metrics.outstandingRevenue)) * 100 : 0}
+              tone="gold"
+            />
           </PortalStaggerCard>
           <PortalStaggerCard>
-            <SummaryCard label="Current-Month Event Days" value={String(metrics.currentMonthEventDays)} detail="Distinct confirmed or completed event dates" />
+            <SummaryCard
+              label="Current-Month Event Days"
+              value={String(metrics.currentMonthEventDays)}
+              detail="Distinct confirmed or completed event dates"
+              gaugePercent={Math.min(100, (metrics.currentMonthEventDays / 12) * 100)}
+            />
           </PortalStaggerCard>
         </PortalStaggerGroup>
 
-        <p className="text-[10px] leading-relaxed text-zinc-600">These reports only reflect records saved in the portal. They are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
+        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports only reflect records saved in the portal. They are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
       </div>
     </PortalPageFrame>
   )
@@ -155,8 +200,96 @@ function monthKey(value: string) { const date = new Date(value); return Number.i
 function currency(value: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value) }
 function csvCell(value: string) { return `"${value.replaceAll('"', '""')}"` }
 
-function StatsPanel({ label, value, detail, loading }: { label: string; value: string; detail: string; loading: boolean }) { return <div className="luxor-glass-card rounded-xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] min-h-[118px]"><p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">{label}</p><p className="font-mono text-xl font-bold text-white mt-2">{loading ? 'Loading…' : value}</p><p className="text-[10px] text-zinc-600 mt-3">{detail}</p></div> }
-function ReportCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) { return <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4"><h3 className="text-xs font-black uppercase tracking-[0.2em] text-white flex items-center gap-2"><span className="text-[#caa24c]">{icon}</span>{title}</h3><div className="space-y-4 pt-2 text-xs">{children}</div></div> }
-function ProgressRow({ label, value, percent, tone = 'gold' }: { label: string; value: string; percent: number; tone?: 'gold' | 'purple' }) { return <div className="space-y-1.5"><div className="flex justify-between gap-4 font-bold"><span className="text-white">{label}</span><span className="font-mono text-zinc-400">{value}</span></div><div className="h-2 w-full rounded-full bg-zinc-950 border border-zinc-900 overflow-hidden"><div className={`h-full rounded-full ${tone === 'purple' ? 'bg-purple-500' : 'bg-[#caa24c]'}`} style={{ width: `${Math.max(0, Math.min(percent, 100))}%` }} /></div></div> }
-function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) { return <div className="luxor-glass-card rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]"><p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{label}</p><p className="mt-2 font-mono text-xl font-bold text-white">{value}</p><p className="mt-2 text-[10px] text-zinc-600">{detail}</p></div> }
-function EmptyState({ text }: { text: string }) { return <p className="rounded-xl border border-dashed border-zinc-800 px-4 py-8 text-center text-xs text-zinc-600">{text}</p> }
+function StatsPanel({ label, value, detail, loading, gaugePercent, progress, highlight }: { label: string; value: string; detail: string; loading: boolean; gaugePercent?: number; progress?: number; highlight?: boolean }) {
+  return (
+    <MagicCard className="relative flex flex-row items-center justify-between gap-3 rounded-xl p-5 min-h-[126px] h-full">
+      {highlight ? <BorderBeam size={80} duration={10} borderWidth={1.2} /> : null}
+      <div className="min-w-0 flex-1 pr-2">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
+        <p className={`text-2xl font-extrabold tabular-nums tracking-tight mt-2 ${highlight ? 'text-[#a37d2c] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)]'}`}>
+          {loading ? 'Loading…' : value}
+        </p>
+        {progress !== undefined ? (
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
+            <div className="h-full rounded-full bg-gradient-to-r from-[#caa24c] to-[#f1d27a] transition-all duration-700" style={{ width: `${Math.max(4, Math.min(100, progress))}%` }} />
+          </div>
+        ) : null}
+        <p className="text-[11px] text-[color:var(--portal-muted)] mt-2">{detail}</p>
+      </div>
+      {gaugePercent !== undefined ? (
+        <div className="ml-auto shrink-0">
+          <AnimatedCircularProgressBar
+            value={gaugePercent}
+            size={52}
+            strokeWidth={5}
+            gaugePrimaryColor="#caa24c"
+            subLabel="Rate"
+          />
+        </div>
+      ) : null}
+    </MagicCard>
+  )
+}
+
+function ReportCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <MagicCard className="rounded-2xl p-6 space-y-4">
+      <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)] flex items-center gap-2">
+        <span className="text-[#caa24c]">{icon}</span>{title}
+      </h3>
+      <div className="space-y-4 pt-2 text-xs">{children}</div>
+    </MagicCard>
+  )
+}
+
+function ProgressRow({ label, value, percent, tone = 'gold' }: { label: string; value: string; percent: number; tone?: 'gold' | 'emerald' }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between gap-4 font-bold">
+        <span className="text-[color:var(--portal-text)]">{label}</span>
+        <span className="tabular-nums font-bold text-[color:var(--portal-muted)]">{value}</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)]/60 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${tone === 'emerald' ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : 'bg-gradient-to-r from-[#b8892e] to-[#e2c16b]'}`}
+          style={{ width: `${Math.max(0, Math.min(percent, 100))}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, detail, progress, gaugePercent, tone = 'gold' }: { label: string; value: string; detail: string; progress?: number; gaugePercent?: number; tone?: 'gold' | 'emerald' }) {
+  return (
+    <MagicCard className="flex flex-row items-center justify-between gap-3 rounded-2xl p-5 h-full">
+      <div className="min-w-0 flex-1 pr-2">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
+        <p className="mt-2 text-2xl font-extrabold tabular-nums tracking-tight text-[color:var(--portal-text)]">{value}</p>
+        {progress !== undefined ? (
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${tone === 'emerald' ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : 'bg-gradient-to-r from-[#caa24c] to-[#f1d27a]'}`}
+              style={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
+            />
+          </div>
+        ) : null}
+        <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">{detail}</p>
+      </div>
+      {gaugePercent !== undefined ? (
+        <div className="ml-auto shrink-0">
+          <AnimatedCircularProgressBar
+            value={gaugePercent}
+            size={48}
+            strokeWidth={4.5}
+            gaugePrimaryColor="#caa24c"
+            subLabel="Goal"
+          />
+        </div>
+      ) : null}
+    </MagicCard>
+  )
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-8 text-center text-xs text-[color:var(--portal-muted)]">{text}</p>
+}

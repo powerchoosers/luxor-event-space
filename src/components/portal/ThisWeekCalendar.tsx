@@ -159,7 +159,7 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
                   )}
 
                   {totalEventsCount === 0 && (
-                    <span className="text-[8px] text-[color:var(--portal-muted)]/40 block font-mono italic">
+                    <span className="text-[8px] text-[color:var(--portal-muted)]/50 block italic">
                       No schedule
                     </span>
                   )}

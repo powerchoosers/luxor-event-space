@@ -54,6 +54,8 @@ import type { LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 import { BillsPayableLedger } from '@/components/portal/BillsPayableLedger'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
+import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
+import { MagicCard } from '@/components/ui/magic-card'
 
 type SubTab =
   | 'dashboard'
@@ -685,9 +687,15 @@ function OperationsPageContent() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-[10px] font-semibold text-[color:var(--portal-muted)]">
-                  <span>{completedCount} of {readinessTasks.length} complete</span>
-                  <span className="rounded-md border border-[#caa24c]/20 bg-[#caa24c]/8 px-2 py-1 font-mono text-[#8a652b] dark:text-[#dfbd68]">{readinessScore}%</span>
+                <div className="flex items-center gap-3 text-[11px] font-bold text-[color:var(--portal-muted)] ml-auto shrink-0">
+                  <span className="tabular-nums">{completedCount} of {readinessTasks.length} complete</span>
+                  <AnimatedCircularProgressBar
+                    value={readinessScore}
+                    size={46}
+                    strokeWidth={4.5}
+                    gaugePrimaryColor="#caa24c"
+                    subLabel="Ready"
+                  />
                 </div>
               </div>
 
@@ -1808,16 +1816,18 @@ function StatsCard({
   }
 
   return (
-    <button type="button" onClick={onClick} className="group flex min-h-28 flex-col justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#caa24c]/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/35">
-      <div className="flex items-start justify-between gap-3">
-        <span className={`flex h-8 w-8 items-center justify-center rounded-lg border ${styles[tone]}`}>{icon}</span>
-        <ChevronRight size={14} className="mt-1 text-[color:var(--portal-faint)] transition-transform group-hover:translate-x-0.5 group-hover:text-[color:var(--portal-muted)]" />
-      </div>
-      <div className="mt-4">
-        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{label}</p>
-        <p className="mt-1 font-mono text-lg font-bold text-[color:var(--portal-text)]">{value}</p>
-        <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{subtitle}</p>
-      </div>
+    <button type="button" onClick={onClick} className="group w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/35 rounded-xl">
+      <MagicCard className="flex min-h-28 flex-col justify-between rounded-xl p-4 transition-all hover:-translate-y-0.5 hover:border-[#caa24c]/30">
+        <div className="flex items-start justify-between gap-3 w-full">
+          <span className={`flex h-8 w-8 items-center justify-center rounded-lg border ${styles[tone]}`}>{icon}</span>
+          <ChevronRight size={14} className="mt-1 text-[color:var(--portal-faint)] transition-transform group-hover:translate-x-0.5 group-hover:text-[color:var(--portal-muted)]" />
+        </div>
+        <div className="mt-4 w-full">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
+          <p className="mt-1 tabular-nums text-xl font-extrabold tracking-tight text-[color:var(--portal-text)]">{value}</p>
+          <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{subtitle}</p>
+        </div>
+      </MagicCard>
     </button>
   )
 }

@@ -1000,11 +1000,11 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
 
   return (
     <PortalModal isOpen={!!detail} onClose={onClose} maxWidth="max-w-5xl font-sans">
-      <div className="flex items-start justify-between gap-4 border-b border-zinc-800 bg-zinc-900/60 px-6 py-4">
+      <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
         <div className="min-w-0">
-          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Campaign Report</p>
-          <h3 className="mt-1 truncate text-lg font-bold text-white">{decodeHtmlEntities(campaign.name)}</h3>
-          <p className="mt-1 truncate text-xs text-zinc-500">{decodeHtmlEntities(campaign.subject)}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Campaign Report</p>
+          <h3 className="mt-1 truncate text-lg font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(campaign.name)}</h3>
+          <p className="mt-1 truncate text-xs text-[color:var(--portal-muted)]">{decodeHtmlEntities(campaign.subject)}</p>
         </div>
         <PortalCloseButton onClick={onClose} aria-label="Close report" />
       </div>
@@ -1034,7 +1034,7 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
             {campaignLinks.length ? campaignLinks.map((link, index) => (
               <div key={`${link.url}-${index}`} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5">
                 <p className="text-xs font-semibold text-[color:var(--portal-text)]">{link.label || `Link ${index + 1}`}</p>
-                <a href={link.url} target="_blank" rel="noreferrer" className="mt-1 block break-all font-mono text-[10px] text-[#b8924a] underline underline-offset-2">
+                <a href={link.url} target="_blank" rel="noreferrer" className="mt-1 block break-all text-[10px] text-[#b8924a] underline underline-offset-2">
                   {link.url}
                 </a>
               </div>
@@ -1045,23 +1045,23 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-650">Recipients</h4>
-              <span className="text-[10px] text-zinc-600 font-mono">{recipients.length} total</span>
+              <h4 className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Recipients</h4>
+              <span className="text-[10px] text-[color:var(--portal-muted)] tabular-nums font-semibold">{recipients.length} total</span>
             </div>
-            <div className="overflow-hidden rounded-xl border border-zinc-900 bg-zinc-950/20">
+            <div className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50">
               <div className="max-h-96 overflow-y-auto portal-scrollbar">
                 {recipients.map((recipient) => (
-                  <div key={recipient.id} className="grid grid-cols-12 gap-3 border-b border-zinc-900 px-4 py-3 last:border-b-0">
+                  <div key={recipient.id} className="grid grid-cols-12 gap-3 border-b border-[color:var(--portal-border)]/60 px-4 py-3 last:border-b-0">
                     <div className="col-span-6 min-w-0">
-                      <p className="truncate text-xs font-bold text-zinc-200">{recipient.name || recipient.email}</p>
-                      <p className="truncate text-[10px] text-zinc-600">{recipient.email}</p>
+                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{recipient.name || recipient.email}</p>
+                      <p className="truncate text-[10px] text-[color:var(--portal-muted)]">{recipient.email}</p>
                     </div>
                     <div className="col-span-2">
                       <PortalStatusBadge status={recipient.status} />
                     </div>
-                    <div className="col-span-2 text-right font-mono text-xs text-zinc-400">{recipient.open_count} opens</div>
-                    <div className="col-span-2 text-right font-mono text-xs text-zinc-400">{recipient.click_count} clicks</div>
-                    {recipient.last_error ? <p className="col-span-12 text-[10px] text-rose-300">{recipient.last_error}</p> : null}
+                    <div className="col-span-2 text-right tabular-nums font-semibold text-xs text-[color:var(--portal-muted)]">{recipient.open_count} opens</div>
+                    <div className="col-span-2 text-right tabular-nums font-semibold text-xs text-[color:var(--portal-muted)]">{recipient.click_count} clicks</div>
+                    {recipient.last_error ? <p className="col-span-12 text-[10px] text-rose-500">{recipient.last_error}</p> : null}
                   </div>
                 ))}
               </div>
@@ -1070,29 +1070,29 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
 
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-650">Recent Events</h4>
-              <span className="text-[10px] text-zinc-650 font-mono">{events.length}</span>
+              <h4 className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Recent Events</h4>
+              <span className="text-[10px] text-[color:var(--portal-muted)] tabular-nums font-semibold">{events.length}</span>
             </div>
             <div className="space-y-3">
               {events.length ? events.slice(0, 12).map((event) => (
-                <div key={event.id} className="rounded-xl border border-zinc-900 bg-zinc-950/20 p-3">
+                <div key={event.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <span className={`rounded px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${
                       event.event_type === 'click'
-                        ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
                         : event.event_type === 'unsubscribe'
-                        ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
-                        : 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                        ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20'
+                        : 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20'
                     }`}>
                       {event.event_type}
                     </span>
-                    <span className="text-[9px] text-zinc-600 font-mono">{new Date(event.created_at).toLocaleTimeString()}</span>
+                    <span className="text-[9px] text-[color:var(--portal-muted)] tabular-nums">{new Date(event.created_at).toLocaleTimeString()}</span>
                   </div>
-                  {event.url ? <p className="mt-2 break-all text-[9px] leading-4 text-zinc-500">{event.url}</p> : null}
-                  <p className="mt-2 text-[9px] text-zinc-650 font-mono">{event.device_type || 'unknown device'}</p>
+                  {event.url ? <p className="mt-2 break-all text-[9px] leading-4 text-[color:var(--portal-muted)]">{event.url}</p> : null}
+                  <p className="mt-2 text-[9px] text-[color:var(--portal-muted)]">{event.device_type || 'unknown device'}</p>
                 </div>
               )) : (
-                <div className="rounded-xl border border-zinc-900 bg-zinc-950/20 p-5 text-xs leading-5 text-zinc-600">
+                <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-5 text-xs leading-5 text-[color:var(--portal-muted)]">
                   No opens or clicks recorded yet.
                 </div>
               )}
@@ -1106,9 +1106,9 @@ function CampaignReportModal({ detail, onClose }: { detail: CampaignDetail | nul
 
 function ReportMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-zinc-900 bg-zinc-950/20 p-4">
-      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-550">{label}</p>
-      <p className="mt-2 font-mono text-base font-bold text-white">{value}</p>
+    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
+      <p className="mt-2 tabular-nums text-lg font-extrabold tracking-tight text-[color:var(--portal-text)]">{value}</p>
     </div>
   )
 }

@@ -7,31 +7,39 @@ interface AnimatedCircularProgressBarProps {
   max?: number
   min?: number
   value: number
-  gaugePrimaryColor: string
-  gaugeSecondaryColor: string
+  gaugePrimaryColor?: string
+  gaugeSecondaryColor?: string
   className?: string
   label?: string
+  subLabel?: string
+  size?: number
+  strokeWidth?: number
 }
 
 export function AnimatedCircularProgressBar({
   max = 100,
   min = 0,
   value = 0,
-  gaugePrimaryColor,
-  gaugeSecondaryColor,
+  gaugePrimaryColor = "#caa24c",
+  gaugeSecondaryColor = "rgba(202, 162, 76, 0.16)",
   className,
   label,
+  subLabel,
+  size,
+  strokeWidth,
 }: AnimatedCircularProgressBarProps) {
   const circumference = 2 * Math.PI * 42
   const percentPx = circumference / 100
   const clamped = Math.max(min, Math.min(max, value))
   const currentPercent = Math.round(((clamped - min) / Math.max(1, max - min)) * 100)
+  const effectiveStrokeWidth = strokeWidth ? Math.max(6, Math.min(12, strokeWidth * 2)) : 10
 
   return (
     <div
       className={cn("relative size-16 text-xs font-extrabold tabular-nums select-none", className)}
       style={
         {
+          ...(size ? { width: `${size}px`, height: `${size}px` } : {}),
           "--circle-size": "100px",
           "--circumference": circumference,
           "--percent-to-px": `${percentPx}px`,
@@ -55,7 +63,7 @@ export function AnimatedCircularProgressBar({
           cx="50"
           cy="50"
           r="42"
-          strokeWidth="10"
+          strokeWidth={effectiveStrokeWidth}
           strokeDashoffset="0"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -67,7 +75,7 @@ export function AnimatedCircularProgressBar({
           cx="50"
           cy="50"
           r="42"
-          strokeWidth="10"
+          strokeWidth={effectiveStrokeWidth}
           strokeDashoffset="0"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -88,9 +96,14 @@ export function AnimatedCircularProgressBar({
       </svg>
       <span
         data-current-value={currentPercent}
-        className="absolute inset-0 m-auto flex flex-col items-center justify-center size-fit text-[color:var(--portal-text)]"
+        className="absolute inset-0 m-auto flex flex-col items-center justify-center size-fit leading-none text-[color:var(--portal-text)]"
       >
         <span>{label ?? `${currentPercent}%`}</span>
+        {subLabel ? (
+          <span className="mt-0.5 text-[7px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
+            {subLabel}
+          </span>
+        ) : null}
       </span>
     </div>
   )

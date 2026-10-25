@@ -132,7 +132,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-red-400 font-bold font-mono">
+                      <span className="text-red-500 dark:text-red-400 font-bold tabular-nums">
                         $
                         {Number(bill.amount).toLocaleString('en-US', {
                           minimumFractionDigits: 2,
@@ -170,7 +170,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[color:var(--portal-muted)] font-mono font-normal">
+                      <span className="text-[color:var(--portal-muted)] tabular-nums font-normal">
                         $
                         {Number(bill.amount).toLocaleString('en-US', {
                           minimumFractionDigits: 2,
@@ -228,8 +228,8 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                         className={`${
                           bill.status === 'paid'
                             ? 'text-[color:var(--portal-muted)]/50 font-normal'
-                            : 'text-[color:var(--portal-text)] font-semibold'
-                        } font-mono`}
+                            : 'text-[color:var(--portal-text)] font-bold'
+                        } tabular-nums`}
                       >
                         $
                         {Number(bill.amount).toLocaleString('en-US', {
@@ -297,8 +297,8 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                         className={`${
                           bill.status === 'paid'
                             ? 'text-[color:var(--portal-muted)]/50 font-normal'
-                            : 'text-[color:var(--portal-text)] font-semibold'
-                        } font-mono`}
+                            : 'text-[color:var(--portal-text)] font-bold'
+                        } tabular-nums`}
                       >
                         $
                         {Number(bill.amount).toLocaleString('en-US', {
@@ -366,8 +366,8 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                         className={`${
                           bill.status === 'paid'
                             ? 'text-[color:var(--portal-muted)]/50 font-normal'
-                            : 'text-[color:var(--portal-text)] font-semibold'
-                        } font-mono`}
+                            : 'text-[color:var(--portal-text)] font-bold'
+                        } tabular-nums`}
                       >
                         $
                         {Number(bill.amount).toLocaleString('en-US', {

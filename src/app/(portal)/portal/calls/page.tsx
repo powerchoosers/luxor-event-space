@@ -311,10 +311,10 @@ export default function CallsPage() {
                       {!call.is_read && call.direction === 'inbound' && <span className="h-2 w-2 rounded-full bg-[#caa24c]" />}
                     </div>
                   </div>
-                  <p className="mt-1 truncate font-mono text-[10px] text-[color:var(--portal-faint)]">
+                  <p className="mt-1 truncate tabular-nums font-medium text-[11px] text-[color:var(--portal-muted)]">
                     {formatPhoneDisplay(call.direction === 'inbound' ? call.caller_number : call.callee_number)}
                   </p>
-                  <div className="mt-2 flex items-center justify-between gap-3 text-[9px] text-[color:var(--portal-faint)]">
+                  <div className="mt-2 flex items-center justify-between gap-3 text-[10px] tabular-nums text-[color:var(--portal-faint)]">
                     <span className="capitalize">{call.status.replace('-', ' ')}</span>
                     <span>{formatRelativeDate(call.created_at)}</span>
                   </div>
@@ -334,7 +334,7 @@ export default function CallsPage() {
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">{selectedCall.direction} call</p>
                   <h2 className="mt-2 text-xl font-black text-[color:var(--portal-text)]">{selectedCall.contact_name || 'Unknown caller'}</h2>
-                  <p className="mt-1 font-mono text-xs text-[color:var(--portal-muted)]">
+                  <p className="mt-1 tabular-nums font-medium text-xs text-[color:var(--portal-muted)]">
                     {formatPhoneDisplay(selectedCall.direction === 'inbound' ? selectedCall.caller_number : selectedCall.callee_number)}
                   </p>
                 </div>
@@ -379,7 +379,7 @@ export default function CallsPage() {
                       <p className="text-xs font-black text-[color:var(--portal-text)]">
                         {selectedCall.is_voicemail ? 'Voicemail Recording' : 'Call Recording'}
                       </p>
-                      <p className="text-[10px] font-mono text-[color:var(--portal-muted)] mt-0.5">
+                      <p className="text-[10px] tabular-nums font-medium text-[color:var(--portal-muted)] mt-0.5">
                         {selectedCall.recording_duration_seconds != null
                           ? `${formatDuration(selectedCall.recording_duration_seconds)} · MP3`
                           : 'Duration unknown · MP3'}
@@ -504,12 +504,12 @@ export default function CallsPage() {
 
 function MetricCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
+    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 transition-all hover:border-[#caa24c]/30">
       <div className="flex items-center justify-between text-[#caa24c]">
         {icon}
-        <span className="font-mono text-xl font-black text-[color:var(--portal-text)]">{value}</span>
+        <span className="tabular-nums text-2xl font-extrabold tracking-tight text-[color:var(--portal-text)]">{value}</span>
       </div>
-      <p className="mt-2 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{label}</p>
+      <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
     </div>
   )
 }

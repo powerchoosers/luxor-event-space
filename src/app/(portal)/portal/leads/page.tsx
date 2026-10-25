@@ -30,6 +30,8 @@ import {
   List,
   Languages,
   Star,
+  Menu,
+  ChevronDown,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -155,6 +157,7 @@ export default function LeadsPage() {
   // Tab control
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'>('dashboard')
   const [viewPreferencesReady, setViewPreferencesReady] = useState(false)
+  const [isTabMenuOpen, setIsTabMenuOpen] = useState(false)
   
   // View mode toggle
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
@@ -685,8 +688,34 @@ export default function LeadsPage() {
         }
       />
 
-      {/* Sub-tab navigation */}
-      <div className="portal-scrollbar flex min-w-0 w-full max-w-full shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2">
+      {/* Mobile-only condensed view picker button (matches Settings browse experience) */}
+      <div className="md:hidden">
+        <button
+          type="button"
+          onClick={() => setIsTabMenuOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={isTabMenuOpen}
+          className="flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45"
+        >
+          <Menu size={18} className="text-[#a8792f] shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse views</span>
+            <span className="mt-0.5 block truncate text-sm font-bold">
+              {activeTab === 'dashboard' && 'Funnel Dashboard'}
+              {activeTab === 'pipeline' && 'Pipeline Board'}
+              {activeTab === 'tours' && 'Tours'}
+              {activeTab === 'followups' && 'Follow Ups'}
+              {activeTab === 'proposals' && 'Proposals & Contracts'}
+              {activeTab === 'clients' && 'Booked Clients'}
+              {activeTab === 'lost' && `Closed Lost (${closedLostCount})`}
+            </span>
+          </span>
+          <ChevronDown size={17} className="text-[color:var(--portal-muted)] shrink-0" aria-hidden="true" />
+        </button>
+      </div>
+
+      {/* Desktop & tablet sub-tab navigation */}
+      <div className="hidden md:flex portal-scrollbar min-w-0 w-full max-w-full shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2">
         <PortalAnimatedTabs
           tabs={[
           { id: 'dashboard', label: 'Funnel Dashboard', icon: <TrendingUp size={15} /> },
@@ -1209,6 +1238,120 @@ export default function LeadsPage() {
         }}
         onCompleted={handleLeadLifecycleCompleted}
       />
+
+      {/* Mobile Browse Views Dialog */}
+      {typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence initial={false}>
+          {isTabMenuOpen ? (
+            <motion.div
+              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onMouseDown={() => setIsTabMenuOpen(false)}
+            >
+              <motion.section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="leads-view-menu-title"
+                className="flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+                initial={{ opacity: 0, y: 56, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 40, scale: 0.985 }}
+                transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-5 py-4 backdrop-blur-xl">
+                  <div>
+                    <h2 id="leads-view-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse views</h2>
+                    <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a workspace view.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsTabMenuOpen(false)}
+                    aria-label="Close views menu"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
+                  <nav aria-label="Leads and client views" className="space-y-4">
+                    <section>
+                      <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Pipeline & Stages</h3>
+                      <div className="divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)] overflow-hidden">
+                        {[
+                          { id: 'dashboard', label: 'Funnel Dashboard', description: 'Funnel volume, conversion rate, and pipeline value', icon: <TrendingUp size={16} /> },
+                          { id: 'pipeline', label: 'Pipeline Board', description: 'Kanban view of active prospects and bookings pace', icon: <Users size={16} /> },
+                          { id: 'tours', label: 'Tours', description: 'Scheduled, upcoming, and completed venue visits', icon: <Calendar size={16} /> },
+                          { id: 'followups', label: 'Follow Ups', description: 'Pending client actions, calls, and next steps', icon: <Phone size={16} /> },
+                          { id: 'proposals', label: 'Proposals & Contracts', description: 'Quotes and draft agreements awaiting signature', icon: <FileCheck size={16} /> },
+                        ].map((item) => {
+                          const selected = activeTab === item.id
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                const nextTab = item.id as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'
+                                setActiveTab(nextTab)
+                                localStorage.setItem('luxor_leads_active_tab', nextTab)
+                                setIsTabMenuOpen(false)
+                              }}
+                              className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}
+                            >
+                              <span className="shrink-0">{item.icon}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-bold">{item.label}</span>
+                                <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{item.description}</span>
+                              </span>
+                              <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </section>
+
+                    <section>
+                      <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Accounts & History</h3>
+                      <div className="divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)] overflow-hidden">
+                        {[
+                          { id: 'clients', label: 'Booked Clients', description: 'Confirmed bookings and completed venue agreements', icon: <UserCheck size={16} /> },
+                          { id: 'lost', label: `Closed Lost (${closedLostCount})`, description: 'Archived leads, passed dates, and declined proposals', icon: <X size={16} /> },
+                        ].map((item) => {
+                          const selected = activeTab === item.id
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                const nextTab = item.id as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'
+                                setActiveTab(nextTab)
+                                localStorage.setItem('luxor_leads_active_tab', nextTab)
+                                setIsTabMenuOpen(false)
+                              }}
+                              className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}
+                            >
+                              <span className="shrink-0">{item.icon}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-bold">{item.label}</span>
+                                <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{item.description}</span>
+                              </span>
+                              <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </section>
+                  </nav>
+                </div>
+              </motion.section>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>,
+        document.body,
+      ) : null}
     </PortalPageFrame>
   )
 }

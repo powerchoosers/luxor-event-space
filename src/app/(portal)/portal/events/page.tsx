@@ -223,7 +223,7 @@ export default function EventsPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Active Contracts</span>
-                  <span className="text-[10px] font-mono text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded">
+                  <span className="text-[10px] tabular-nums font-bold text-[#a37d2c] dark:text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-0.5 rounded">
                     {confirmedCount} Confirmed / {bookings.length} Total
                   </span>
                 </div>
@@ -234,19 +234,19 @@ export default function EventsPage() {
                   </div>
                 ) : null}
                 <div className="relative group">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-650" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search by client or type..."
-                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-lg pl-9 pr-4 py-2 text-xs text-zinc-350 outline-none focus:border-[#caa24c]/50 transition-all"
+                    className="w-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] rounded-lg pl-9 pr-4 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 transition-all"
                   />
                 </div>
               </div>
             }
           >
-            <div className="divide-y divide-zinc-900/30">
+            <div className="divide-y divide-[color:var(--portal-border)]/50">
               {loading ? (
                 <div className="p-4 space-y-4">
                   {Array.from({ length: 5 }).map((_, i) => (
@@ -257,7 +257,7 @@ export default function EventsPage() {
                   ))}
                 </div>
               ) : filteredBookings.length === 0 ? (
-                <div className="p-8 text-center text-xs text-zinc-500">No events matched search criteria.</div>
+                <div className="p-8 text-center text-xs text-[color:var(--portal-muted)]">No events matched search criteria.</div>
               ) : (
                 filteredBookings.map((b, rowIndex) => {
                   const active = b.id === selectedEventId
@@ -266,29 +266,29 @@ export default function EventsPage() {
                       key={b.id}
                       className={`group flex w-full items-start border-l-2 transition-all ${
                         active
-                          ? 'bg-[#caa24c]/5 border-[#caa24c]'
-                          : 'border-transparent hover:bg-zinc-950/20'
+                          ? 'bg-[#caa24c]/8 border-[#caa24c]'
+                          : 'border-transparent hover:bg-[color:var(--portal-soft)]/60'
                       } ${bulkSelection.isSelected(b.id) ? 'bg-[#caa24c]/5' : ''}`}
                     >
                       <div className="shrink-0 py-4 pl-3"><PortalBulkRowSelector checked={bulkSelection.isSelected(b.id)} index={rowIndex + 1} onChange={() => bulkSelection.toggle(b.id)} label={b.client_name} /></div>
                       <button type="button" onClick={() => setSelectedEventId(b.id)} className="flex min-w-0 flex-1 flex-col gap-2 p-4 text-left">
                       <div className="flex items-start justify-between gap-3">
                         <div className="truncate">
-                          <p className={`text-xs font-bold leading-none truncate transition-colors ${active ? 'text-[#f1d27a]' : 'text-white/90'}`}>
+                          <p className={`text-xs font-bold leading-none truncate transition-colors ${active ? 'text-[#a37d2c] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)]'}`}>
                             {b.client_name}
                           </p>
-                          <p className="text-[10px] text-zinc-500 truncate mt-1">
+                          <p className="text-[10px] text-[color:var(--portal-muted)] truncate mt-1">
                             {b.event_type || 'Quinceañera'}
                           </p>
                         </div>
                         <PortalStatusBadge status={b.status} />
                       </div>
-                      <div className="flex items-center justify-between text-[10px] font-mono mt-1 text-zinc-500">
+                      <div className="flex items-center justify-between text-[10px] tabular-nums font-medium mt-1 text-[color:var(--portal-muted)]">
                         <div className="flex items-center gap-1">
-                          <Calendar size={11} className="text-zinc-650" />
+                          <Calendar size={11} className="text-[color:var(--portal-muted)]" />
                           <span>{b.event_date || 'Date Pending'}</span>
                         </div>
-                        <div className="flex items-center gap-1 font-bold text-zinc-400">
+                        <div className="flex items-center gap-1 font-bold text-[color:var(--portal-text)]">
                           <span>${Number(b.contract_total || 0).toLocaleString()}</span>
                         </div>
                       </div>
@@ -368,46 +368,46 @@ export default function EventsPage() {
                 {activeDetailTab === 'payments' && (
                   <div className="space-y-4">
                     <h3 className="text-[10px] font-black uppercase tracking-widest text-[#caa24c]">Financial Balance</h3>
-                    <div className="grid grid-cols-1 gap-3 font-mono sm:grid-cols-3 sm:gap-4">
-                      <div className="bg-zinc-950 border border-zinc-900 p-4 rounded-xl">
-                        <p className="text-[8px] font-bold uppercase tracking-wider text-zinc-500">Contract Total</p>
-                        <p className="text-sm font-bold text-white mt-1">${Number(selectedEvent.contract_total || 0).toLocaleString()}</p>
+                    <div className="grid grid-cols-1 gap-3 tabular-nums sm:grid-cols-3 sm:gap-4">
+                      <div className="bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] p-4 rounded-xl">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Contract Total</p>
+                        <p className="text-base font-extrabold text-[color:var(--portal-text)] mt-1">${Number(selectedEvent.contract_total || 0).toLocaleString()}</p>
                       </div>
-                      <div className="bg-zinc-950 border border-zinc-900 p-4 rounded-xl">
-                        <p className="text-[8px] font-bold uppercase tracking-wider text-zinc-500">Paid To Date</p>
-                        <p className="text-sm font-bold text-emerald-450 mt-1">${Number(selectedEvent.paid_total || 0).toLocaleString()}</p>
+                      <div className="bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] p-4 rounded-xl">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Paid To Date</p>
+                        <p className="text-base font-extrabold text-emerald-700 dark:text-emerald-400 mt-1">${Number(selectedEvent.paid_total || 0).toLocaleString()}</p>
                       </div>
-                      <div className="bg-zinc-950 border border-zinc-900 p-4 rounded-xl">
-                        <p className="text-[8px] font-bold uppercase tracking-wider text-zinc-500">Balance Due</p>
-                        <p className={`text-sm font-bold mt-1 ${Number(selectedEvent.balance_due || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      <div className="bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] p-4 rounded-xl">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Balance Due</p>
+                        <p className={`text-base font-extrabold mt-1 ${Number(selectedEvent.balance_due || 0) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
                           ${Number(selectedEvent.balance_due || 0).toLocaleString()}
                         </p>
                       </div>
                     </div>
 
                     <div className="mt-4">
-                      <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Invoice & Receipts History</p>
+                      <p className="text-[9px] font-bold text-[color:var(--portal-muted)] uppercase tracking-widest mb-3">Invoice & Receipts History</p>
                       <div className="space-y-2.5">
-                        <div className="flex justify-between text-xs items-center bg-[#050505]/20 border border-[color:var(--portal-border)]/60 rounded-lg p-3">
+                        <div className="flex justify-between text-xs items-center bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)]/70 rounded-lg p-3">
                           <div className="flex items-center gap-3">
                             <FileText size={16} className="text-[#caa24c]" />
                             <div>
-                              <p className="font-bold text-white">Retainer Deposit Paid</p>
-                              <p className="text-[10px] text-zinc-500">Receipt Ref: #PAY-33108</p>
+                              <p className="font-bold text-[color:var(--portal-text)]">Retainer Deposit Paid</p>
+                              <p className="text-[10px] text-[color:var(--portal-muted)]">Receipt Ref: #PAY-33108</p>
                             </div>
                           </div>
-                          <span className="font-mono text-xs font-bold text-emerald-400">+${Number(selectedEvent.deposit_required || 0).toLocaleString()}</span>
+                          <span className="tabular-nums text-xs font-bold text-emerald-700 dark:text-emerald-400">+${Number(selectedEvent.deposit_required || 0).toLocaleString()}</span>
                         </div>
 
-                        <div className="flex justify-between text-xs items-center bg-[#050505]/20 border border-[color:var(--portal-border)]/60 rounded-lg p-3">
+                        <div className="flex justify-between text-xs items-center bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)]/70 rounded-lg p-3">
                           <div className="flex items-center gap-3">
                             <FileText size={16} className="text-[#caa24c]" />
                             <div>
-                              <p className="font-bold text-white">Final Event Balance Invoice</p>
-                              <p className="text-[10px] text-zinc-500">Due date: {selectedEvent.final_payment_due_date || 'TBD'}</p>
+                              <p className="font-bold text-[color:var(--portal-text)]">Final Event Balance Invoice</p>
+                              <p className="text-[10px] text-[color:var(--portal-muted)]">Due date: {selectedEvent.final_payment_due_date || 'TBD'}</p>
                             </div>
                           </div>
-                          <span className="font-mono text-xs font-bold text-zinc-400">${Number(selectedEvent.balance_due || 0).toLocaleString()}</span>
+                          <span className="tabular-nums text-xs font-bold text-[color:var(--portal-text)]">${Number(selectedEvent.balance_due || 0).toLocaleString()}</span>
                         </div>
                       </div>
                     </div>

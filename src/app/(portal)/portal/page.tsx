@@ -31,6 +31,9 @@ import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
 import { BillsDueCard } from "@/components/portal/BillsDueCard";
 import { PortalMarketingSalesSection } from "@/components/portal/PortalMarketingSalesSection";
+import { MagicCard } from "@/components/ui/magic-card";
+import { BorderBeam } from "@/components/ui/border-beam";
+import { AnimatedCircularProgressBar } from "@/components/ui/animated-circular-progress-bar";
 import { fetchMarketingAndSalesMetrics, getDateRangeFromPreset } from "@/lib/luxorAnalyticsServer";
 import { luxorTodayKey } from "@/lib/luxorTourMetrics";
 
@@ -546,111 +549,126 @@ export default async function PortalOverview() {
       </div>
 
       {/* TOP ROW: 4 Metric Cards */}
-      <PortalStaggerGroup className="grid auto-rows-fr grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-4">
+      <PortalStaggerGroup className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-4">
         {/* Bookings Card */}
-        <PortalStaggerCard className="portal-card-surface flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
-          <div>
-            <span className="text-[#caa24c] mb-4 block">
-              <Calendar size={22} strokeWidth={1.5} />
-
-            </span>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">BOOKINGS</p>
-            <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tracking-tight">
-              {bookingsCount} <span className="text-xl font-normal text-[color:var(--portal-muted)]">/ {bookingsGoal}</span>
-            </p>
-            <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">monthly goal</p>
-          </div>
-          <div className="mt-4">
-            <div className="h-2 w-full rounded-full bg-[#f4efe7] dark:bg-white/5 overflow-hidden">
-              <div className="h-full rounded-full bg-[#caa24c]" style={{ width: `${bookingsPercentage}%` }} />
+        <PortalStaggerCard className="min-w-0 w-full h-full">
+          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
+            <div className="flex items-start justify-between gap-3 w-full">
+              <div className="min-w-0 flex-1 pr-2">
+                <span className="text-[#caa24c] mb-3 block">
+                  <Calendar size={22} strokeWidth={1.5} />
+                </span>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">BOOKINGS</p>
+                <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">
+                  {bookingsCount} <span className="text-xl font-normal text-[color:var(--portal-muted)]">/ {bookingsGoal}</span>
+                </p>
+                <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">monthly goal</p>
+              </div>
+              <div className="ml-auto shrink-0">
+                <AnimatedCircularProgressBar
+                  value={bookingsPercentage}
+                  size={56}
+                  strokeWidth={5}
+                  gaugePrimaryColor="#caa24c"
+                  subLabel="Goal"
+                />
+              </div>
             </div>
-            <p className="text-[10px] font-bold text-[color:var(--portal-muted)] mt-2">{bookingsPercentage}% to goal</p>
-          </div>
+            <div className="mt-4 w-full">
+              <div className="h-2 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b] transition-all duration-700" style={{ width: `${bookingsPercentage}%` }} />
+              </div>
+              <p className="text-[10px] font-bold text-[color:var(--portal-muted)] mt-2 tabular-nums">{bookingsPercentage}% to monthly goal</p>
+            </div>
+          </MagicCard>
         </PortalStaggerCard>
 
         {/* Cash Flow Card */}
-        <PortalStaggerCard className="portal-card-surface relative flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between overflow-hidden p-4 sm:min-h-[180px] sm:p-6">
-          <div className="flex justify-between items-start z-10 relative">
-            <div>
-              <span className="text-[#caa24c] mb-4 block">
-                <DollarSign size={22} strokeWidth={1.5} />
-
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">
-                CASH FLOW <span className="text-[9px] font-medium opacity-85">(THIS MONTH)</span>
-              </p>
-              <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tracking-tight">
-                {netCashFlowStr}
-              </p>
-              <p className="text-xs text-[color:var(--portal-muted)] mt-0.5 font-medium">projected profit</p>
+        <PortalStaggerCard className="min-w-0 w-full h-full">
+          <MagicCard className="relative flex h-full min-h-[156px] w-full flex-col justify-between overflow-hidden p-4 sm:min-h-[180px] sm:p-6">
+            <BorderBeam size={95} duration={11} borderWidth={1.2} />
+            <div className="flex justify-between items-start z-10 relative w-full">
+              <div>
+                <span className="text-[#caa24c] mb-3 block">
+                  <DollarSign size={22} strokeWidth={1.5} />
+                </span>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">
+                  CASH FLOW <span className="text-[9px] font-medium opacity-85">(THIS MONTH)</span>
+                </p>
+                <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">
+                  {netCashFlowStr}
+                </p>
+                <p className="text-xs text-[color:var(--portal-muted)] mt-0.5 font-medium">projected profit</p>
+              </div>
             </div>
-          </div>
-          
-          {/* Integrated Real Line Graph / Sparkline */}
-          <div className="relative z-20 mt-3 h-14 w-full overflow-visible">
-            <CashFlowSparkline data={sparklineData} />
-          </div>
+            
+            {/* Integrated Real Line Graph / Sparkline */}
+            <div className="relative z-20 mt-3 h-14 w-full overflow-visible">
+              <CashFlowSparkline data={sparklineData} />
+            </div>
 
-          <div className="flex items-center gap-2 mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-bold z-10 relative">
-            <span className="text-emerald-800 dark:text-emerald-300">${totalInflow.toLocaleString()} in</span>
-            <span className="text-[color:var(--portal-muted)]/40">•</span>
-            <span className="text-[color:var(--portal-muted)]">${totalOutflow.toLocaleString()} out</span>
-          </div>
+            <div className="flex items-center gap-2 mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-bold tabular-nums z-10 relative w-full">
+              <span className="text-emerald-800 dark:text-emerald-300">${totalInflow.toLocaleString()} in</span>
+              <span className="text-[color:var(--portal-muted)]/40">•</span>
+              <span className="text-[color:var(--portal-muted)]">${totalOutflow.toLocaleString()} out</span>
+            </div>
+          </MagicCard>
         </PortalStaggerCard>
 
         {/* Next Event Card */}
-        <PortalStaggerCard className="portal-card-surface flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
-          {nextBooking ? (
-            <>
-              <div>
-                <span className="text-[#caa24c] mb-4 block">
-                  <Calendar size={22} strokeWidth={1.5} />
-
-                </span>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
-                <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">
-                  {nextBookingDisplayTitle}
-                </p>
-                <p className="text-xs font-bold text-[#caa24c] mt-1">{nextBookingRelativeStr}</p>
-              </div>
-              <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">
-                {nextBookingDateFormatted}
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <span className="text-[#caa24c] mb-4 block">
-                  <Calendar size={22} strokeWidth={1.5} />
-
-                </span>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
-                <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug">No Upcoming Events</p>
-                <p className="text-xs text-[color:var(--portal-muted)] mt-1">None scheduled</p>
-              </div>
-              <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">
-                --
-              </div>
-            </>
-          )}
+        <PortalStaggerCard className="min-w-0 w-full h-full">
+          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
+            {nextBooking ? (
+              <>
+                <div>
+                  <span className="text-[#caa24c] mb-3 block">
+                    <Calendar size={22} strokeWidth={1.5} />
+                  </span>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
+                  <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">
+                    {nextBookingDisplayTitle}
+                  </p>
+                  <p className="text-xs font-bold text-[#caa24c] mt-1">{nextBookingRelativeStr}</p>
+                </div>
+                <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">
+                  {nextBookingDateFormatted}
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <span className="text-[#caa24c] mb-3 block">
+                    <Calendar size={22} strokeWidth={1.5} />
+                  </span>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
+                  <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug">No Upcoming Events</p>
+                  <p className="text-xs text-[color:var(--portal-muted)] mt-1">None scheduled</p>
+                </div>
+                <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">
+                  --
+                </div>
+              </>
+            )}
+          </MagicCard>
         </PortalStaggerCard>
 
         {/* Needs Attention Card */}
-        <PortalStaggerCard className="portal-card-surface flex h-full min-h-[156px] min-w-0 w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
-          <div>
-            <span className="text-[#caa24c] mb-4 block">
-              <Bell size={22} strokeWidth={1.5} />
-
-            </span>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEEDS ATTENTION</p>
-            <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tracking-tight">{needsAttentionCount}</p>
-            <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">items</p>
-          </div>
-          <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50">
-            <Link href="/portal/leads" className="text-[#caa24c] hover:text-[#b0883b] transition-colors inline-flex items-center gap-1 font-bold text-xs">
-              View my tasks <ChevronRight size={14} className="translate-y-[0.5px]" />
-            </Link>
-          </div>
+        <PortalStaggerCard className="min-w-0 w-full h-full">
+          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
+            <div>
+              <span className="text-[#caa24c] mb-3 block">
+                <Bell size={22} strokeWidth={1.5} />
+              </span>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEEDS ATTENTION</p>
+              <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">{needsAttentionCount}</p>
+              <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">items</p>
+            </div>
+            <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50">
+              <Link href="/portal/leads" className="text-[#caa24c] hover:text-[#b0883b] transition-colors inline-flex items-center gap-1 font-bold text-xs">
+                View my tasks <ChevronRight size={14} className="translate-y-[0.5px]" />
+              </Link>
+            </div>
+          </MagicCard>
         </PortalStaggerCard>
       </PortalStaggerGroup>
 
@@ -766,47 +784,63 @@ export default async function PortalOverview() {
         {/* This Month At A Glance */}
         <PortalStaggerCard className="portal-card-surface flex flex-col justify-between p-5">
           <div>
-            <div className="flex items-center gap-2.5 mb-3.5">
-              <Eye className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">THIS MONTH AT A GLANCE</h3>
+            <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-[color:var(--portal-border)]/60">
+              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                <Eye className="h-5 w-5 text-[#caa24c] shrink-0" strokeWidth={1.5} />
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">THIS MONTH AT A GLANCE</h3>
+                  <p className="text-[10px] font-medium text-[color:var(--portal-muted)] mt-0.5">82% monthly venue occupancy</p>
+                </div>
+              </div>
+              <div className="ml-auto shrink-0">
+                <AnimatedCircularProgressBar
+                  value={82}
+                  size={48}
+                  strokeWidth={4.5}
+                  gaugePrimaryColor="#caa24c"
+                  subLabel="Occup."
+                />
+              </div>
             </div>
             
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
-                <div className="flex items-center gap-3">
-                  <FileText size={16} strokeWidth={1.5} className="text-[#caa24c]" />
-                  <span className="text-[color:var(--portal-muted)] font-medium">Booked Revenue</span>
+            <div className="space-y-3">
+              <div className="space-y-1.5 border-b border-[color:var(--portal-border)]/30 pb-2.5 border-dashed">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <FileText size={15} strokeWidth={1.5} className="text-[#caa24c]" />
+                    <span className="text-[color:var(--portal-muted)] font-medium">Booked Revenue</span>
+                  </div>
+                  <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">$48,500</span>
                 </div>
-                <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">$48,500</span>
+                <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]" style={{ width: "84%" }} />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 border-b border-[color:var(--portal-border)]/30 pb-2.5 border-dashed">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <Calendar size={15} strokeWidth={1.5} className="text-[#caa24c]" />
+                    <span className="text-[color:var(--portal-muted)] font-medium">Events</span>
+                  </div>
+                  <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">8</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400" style={{ width: "80%" }} />
+                </div>
               </div>
 
               <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
-                <div className="flex items-center gap-3">
-                  <Calendar size={16} strokeWidth={1.5} className="text-[#caa24c]" />
-                  <span className="text-[color:var(--portal-muted)] font-medium">Events</span>
-                </div>
-                <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">8</span>
-              </div>
-
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
-                <div className="flex items-center gap-3">
-                  <Users size={16} strokeWidth={1.5} className="text-[#caa24c]" />
-                  <span className="text-[color:var(--portal-muted)] font-medium">Occupancy</span>
-                </div>
-                <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">82%</span>
-              </div>
-
-              <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
-                <div className="flex items-center gap-3">
-                  <DollarSign size={16} strokeWidth={1.5} className="text-[#caa24c]" />
+                <div className="flex items-center gap-2.5">
+                  <DollarSign size={15} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Average Booking Value</span>
                 </div>
                 <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">$6,062</span>
               </div>
 
               <div className="flex items-center justify-between text-xs pb-0.5">
-                <div className="flex items-center gap-3">
-                  <Clock size={16} strokeWidth={1.5} className="text-[#caa24c]" />
+                <div className="flex items-center gap-2.5">
+                  <Clock size={15} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Average Days to Book</span>
                 </div>
                 <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">11</span>
@@ -814,7 +848,7 @@ export default async function PortalOverview() {
             </div>
           </div>
           <div className="mt-3.5 pt-3 border-t border-[color:var(--portal-border)]/50">
-            <Link href="/portal/leads" className="text-[#caa24c] hover:text-[#b0883b] transition-colors flex items-center justify-center gap-1 font-bold text-xs">
+            <Link href="/portal/reports" className="text-[#caa24c] hover:text-[#b0883b] transition-colors flex items-center justify-center gap-1 font-bold text-xs">
               View full report <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
           </div>
