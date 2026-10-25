@@ -8,7 +8,10 @@ export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
-  return NextResponse.json(await listLuxorMessages({ inquiryId: request.nextUrl.searchParams.get('inquiryId'), limit: Number(request.nextUrl.searchParams.get('limit') || 200) }), { headers: { 'Cache-Control': 'no-store' } })
+  const inquiryId = request.nextUrl.searchParams.get('inquiryId')
+  const phone = request.nextUrl.searchParams.get('phone')
+  const limit = Number(request.nextUrl.searchParams.get('limit') || 200)
+  return NextResponse.json(await listLuxorMessages({ inquiryId, phone, limit }), { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function POST(request: NextRequest) {

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { ArrowUpRight, MapPin, TrendingUp, Users } from 'lucide-react'
 import { PortalStickyTable, PortalStickyThead, PortalTableCard } from '@/components/portal/PortalUI'
 import { isLuxorNonRevenueTestInquiry, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
@@ -206,7 +207,13 @@ export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: L
                       <span className="shrink-0 font-mono text-[color:var(--portal-muted)]">{row.leads} · {totals.leads ? Math.round((row.leads / totals.leads) * 1000) / 10 : 0}%</span>
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-border)]">
-                      <div className="h-full rounded-full bg-[color:var(--portal-accent)]" style={{ width: `${maxLeads ? (row.leads / maxLeads) * 100 : 0}%` }} />
+                      <motion.div
+                        className="h-full rounded-full bg-[color:var(--portal-accent)]"
+                        initial={{ width: '0%' }}
+                        whileInView={{ width: `${maxLeads ? (row.leads / maxLeads) * 100 : 0}%` }}
+                        viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                        transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+                      />
                     </div>
                   </div>
                 ))}

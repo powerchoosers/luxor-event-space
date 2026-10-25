@@ -65,7 +65,8 @@ function MetricSparkBar({
       <motion.div
         className={`h-full rounded-full ${barColor}`}
         initial={{ width: prefersReducedMotion ? `${clamped}%` : '0%' }}
-        animate={{ width: `${clamped}%` }}
+        whileInView={{ width: `${clamped}%` }}
+        viewport={{ once: true, margin: '0px 0px -30px 0px' }}
         transition={{
           duration: prefersReducedMotion ? 0 : 0.85,
           delay: prefersReducedMotion ? 0 : delay,
@@ -356,14 +357,16 @@ export function PortalMarketingSalesSection({
                     <motion.div
                       className="h-full rounded-l-full bg-[#caa24c]"
                       initial={{ width: prefersReducedMotion ? '75%' : '0%' }}
-                      animate={{ width: '75%' }}
-                      transition={{ duration: 0.8 }}
+                      whileInView={{ width: '75%' }}
+                      viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
                     />
                     <motion.div
                       className="h-full rounded-r-full bg-emerald-500"
                       initial={{ width: prefersReducedMotion ? '25%' : '0%' }}
-                      animate={{ width: '25%' }}
-                      transition={{ duration: 0.8, delay: 0.15 }}
+                      whileInView={{ width: '25%' }}
+                      viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                      transition={{ duration: 0.8, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
                     />
                   </div>
                 </div>
@@ -1060,8 +1063,9 @@ export function PortalMarketingSalesSection({
                                 <motion.div
                                   className="h-full rounded-full bg-[#caa24c]/80"
                                   initial={{ width: prefersReducedMotion ? `${viewSharePct}%` : '0%' }}
-                                  animate={{ width: `${viewSharePct}%` }}
-                                  transition={{ duration: 0.7, delay: idx * 0.05 }}
+                                  whileInView={{ width: `${viewSharePct}%` }}
+                                  viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                                  transition={{ duration: 0.7, delay: idx * 0.05, ease: [0.22, 1, 0.36, 1] }}
                                 />
                               </div>
                             )}

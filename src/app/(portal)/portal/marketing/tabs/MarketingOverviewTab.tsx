@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { motion } from 'framer-motion'
 import { ArrowUpRight, CalendarClock, MailPlus, Users, Workflow } from 'lucide-react'
 import { PortalSelect, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
@@ -259,7 +260,13 @@ function SourceBreakdown({ sources, total }: { sources: MarketingOverviewData['s
               <span className="shrink-0 font-mono text-[color:var(--portal-muted)]">{source.count.toLocaleString()}</span>
             </div>
             <div aria-label={`${source.source}: ${source.count} of ${total} inquiries`} role="img" className="h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-soft)]">
-              <span className="block h-full rounded-full bg-[#caa24c]" style={{ width: `${width}%` }} />
+              <motion.span
+                className="block h-full rounded-full bg-[#caa24c]"
+                initial={{ width: '0%' }}
+                whileInView={{ width: `${width}%` }}
+                viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+              />
             </div>
           </li>
         )

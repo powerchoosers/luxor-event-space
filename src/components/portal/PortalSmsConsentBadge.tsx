@@ -27,37 +27,57 @@ export function PortalSmsConsentBadge({
   const [loading, setLoading] = useState(!initialConsent && Boolean(phone))
 
   useEffect(() => {
-    if (initialConsent) return
-
     if (!phone) return
 
     let isMounted = true
 
-    fetch(`/api/twilio/consent?phone=${encodeURIComponent(phone)}`, {
-      cache: 'no-store',
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!isMounted) return
-        if (data && typeof data.status === 'string') {
-          setFetchedConsent({
-            status: data.status,
-            updated_at: data.updated_at ?? null,
-            consent_scopes: Array.isArray(data.consent_scopes) ? data.consent_scopes : [],
-          })
+    const fetchConsent = () => {
+      fetch(`/api/twilio/consent?phone=${encodeURIComponent(phone)}`, {
+        cache: 'no-store',
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!isMounted) return
+          if (data && typeof data.status === 'string') {
+            setFetchedConsent({
+              status: data.status,
+              updated_at: data.updated_at ?? null,
+              consent_scopes: Array.isArray(data.consent_scopes) ? data.consent_scopes : [],
+              consent_request_status: data.consent_request_status ?? null,
+            })
+          } else {
+            setFetchedConsent({ status: 'unknown', consent_request_status: null })
+          }
+        })
+        .catch(() => {
+          if (isMounted) setFetchedConsent({ status: 'unknown', consent_request_status: null })
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false)
+        })
+    }
+
+    if (!initialConsent) {
+      fetchConsent()
+    }
+
+    const handleConsentUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ phone?: string; state?: SmsConsentState }>
+      const updatedPhone = customEvent.detail?.phone
+      if (!updatedPhone || updatedPhone === phone || updatedPhone.replace(/\D/g, '') === phone.replace(/\D/g, '')) {
+        if (customEvent.detail?.state) {
+          setFetchedConsent(customEvent.detail.state)
         } else {
-          setFetchedConsent({ status: 'unknown' })
+          fetchConsent()
         }
-      })
-      .catch(() => {
-        if (isMounted) setFetchedConsent({ status: 'unknown' })
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false)
-      })
+      }
+    }
+
+    window.addEventListener('luxor-sms-consent-updated', handleConsentUpdated)
 
     return () => {
       isMounted = false
+      window.removeEventListener('luxor-sms-consent-updated', handleConsentUpdated)
     }
   }, [phone, initialConsent])
 

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useMemo, useDeferredValue } from 'react'
+import { motion } from 'framer-motion'
 import Link from 'next/link'
 import {
   FileText,
@@ -254,9 +255,12 @@ type LuxorBookingExpense = {
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Gross Paid Revenue</p>
                     <p className="text-3xl font-extrabold text-[color:var(--portal-text)] mt-2 tabular-nums tracking-tight">${netRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                     <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-700"
-                        style={{ width: `${netRevenue + outstandingAR > 0 ? Math.max(8, Math.min(100, (netRevenue / (netRevenue + outstandingAR)) * 100)) : 100}%` }}
+                      <motion.div
+                        className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
+                        initial={{ width: '0%' }}
+                        whileInView={{ width: `${netRevenue + outstandingAR > 0 ? Math.max(8, Math.min(100, (netRevenue / (netRevenue + outstandingAR)) * 100)) : 100}%` }}
+                        viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                        transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
                       />
                     </div>
                   </div>
@@ -272,9 +276,12 @@ type LuxorBookingExpense = {
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Operational Expenses</p>
                     <p className="text-3xl font-extrabold text-[color:var(--portal-text)] mt-2 tabular-nums tracking-tight">${totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                     <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-400 transition-all duration-700"
-                        style={{ width: `${netRevenue > 0 ? Math.max(6, Math.min(100, (totalExpenses / netRevenue) * 100)) : 20}%` }}
+                      <motion.div
+                        className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-400"
+                        initial={{ width: '0%' }}
+                        whileInView={{ width: `${netRevenue > 0 ? Math.max(6, Math.min(100, (totalExpenses / netRevenue) * 100)) : 20}%` }}
+                        viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                        transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
                       />
                     </div>
                   </div>
@@ -321,7 +328,13 @@ type LuxorBookingExpense = {
                         <span className="text-[color:var(--portal-text)] font-bold tabular-nums">${outstandingAR.toLocaleString()}</span>
                       </div>
                       <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
-                        <div className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]" style={{ width: `${outstandingAR > 0 ? 75 : 6}%` }} />
+                        <motion.div
+                          className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]"
+                          initial={{ width: '0%' }}
+                          whileInView={{ width: `${outstandingAR > 0 ? 75 : 6}%` }}
+                          viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+                        />
                       </div>
                     </div>
                     <div className="space-y-1.5 pb-2.5 border-b border-[color:var(--portal-border)]/60">
@@ -330,7 +343,13 @@ type LuxorBookingExpense = {
                         <span className="text-rose-600 dark:text-rose-400 font-bold tabular-nums">${overdueAR.toLocaleString()}</span>
                       </div>
                       <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
-                        <div className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-400" style={{ width: `${outstandingAR > 0 ? Math.max(4, Math.min(100, (overdueAR / outstandingAR) * 100)) : 4}%` }} />
+                        <motion.div
+                          className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-400"
+                          initial={{ width: '0%' }}
+                          whileInView={{ width: `${outstandingAR > 0 ? Math.max(4, Math.min(100, (overdueAR / outstandingAR) * 100)) : 4}%` }}
+                          viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+                        />
                       </div>
                     </div>
                     <div className="flex justify-between text-xs pt-0.5">
@@ -350,7 +369,13 @@ type LuxorBookingExpense = {
                     </p>
                     <p className="text-2xl tabular-nums font-extrabold tracking-tight text-[color:var(--portal-text)] mt-2">${(netRevenue * 0.0825).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                     <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-                      <div className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]" style={{ width: '8.25%' }} />
+                      <motion.div
+                        className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]"
+                        initial={{ width: '0%' }}
+                        whileInView={{ width: '8.25%' }}
+                        viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                        transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+                      />
                     </div>
                   </div>
                   <p className="text-[11px] text-[color:var(--portal-muted)] font-medium">Calculated automatically based on paid invoices total.</p>

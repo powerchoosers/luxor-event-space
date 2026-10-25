@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 
 interface AnimatedCircularProgressBarProps {
@@ -28,30 +29,20 @@ export function AnimatedCircularProgressBar({
   size,
   strokeWidth,
 }: AnimatedCircularProgressBarProps) {
+  const prefersReducedMotion = useReducedMotion()
   const circumference = 2 * Math.PI * 42
-  const percentPx = circumference / 100
   const clamped = Math.max(min, Math.min(max, value))
   const currentPercent = Math.round(((clamped - min) / Math.max(1, max - min)) * 100)
   const effectiveStrokeWidth = strokeWidth ? Math.max(6, Math.min(12, strokeWidth * 2)) : 10
+  const targetOffset = circumference - (currentPercent / 100) * circumference
 
   return (
     <div
       className={cn("relative size-16 text-xs font-extrabold tabular-nums select-none", className)}
-      style={
-        {
-          ...(size ? { width: `${size}px`, height: `${size}px` } : {}),
-          "--circle-size": "100px",
-          "--circumference": circumference,
-          "--percent-to-px": `${percentPx}px`,
-          "--gap-percent": "5",
-          "--offset-factor": "0",
-          "--transition-length": "900ms",
-          "--transition-step": "200ms",
-          "--delay": "0s",
-          "--percent-to-deg": "3.6deg",
-          transform: "translateZ(0)",
-        } as React.CSSProperties
-      }
+      style={{
+        ...(size ? { width: `${size}px`, height: `${size}px` } : {}),
+        transform: "translateZ(0)",
+      }}
     >
       <svg
         fill="none"
@@ -71,27 +62,32 @@ export function AnimatedCircularProgressBar({
             stroke: gaugeSecondaryColor,
           }}
         />
-        <circle
+        <motion.circle
           cx="50"
           cy="50"
           r="42"
           strokeWidth={effectiveStrokeWidth}
-          strokeDashoffset="0"
           strokeLinecap="round"
           strokeLinejoin="round"
           className="opacity-100"
-          style={
-            {
-              stroke: gaugePrimaryColor,
-              "--stroke-percent": currentPercent,
-              strokeDasharray:
-                "calc(var(--stroke-percent) * var(--percent-to-px)) var(--circumference)",
-              transition:
-                "stroke-dasharray var(--transition-length) cubic-bezier(0.22, 1, 0.36, 1) var(--delay)",
-              transform: "rotate(-90deg)",
-              transformOrigin: "50px 50px",
-            } as React.CSSProperties
-          }
+          style={{
+            stroke: gaugePrimaryColor,
+            transform: "rotate(-90deg)",
+            transformOrigin: "50px 50px",
+          }}
+          strokeDasharray={circumference}
+          initial={{
+            strokeDashoffset: prefersReducedMotion ? targetOffset : circumference,
+          }}
+          whileInView={{
+            strokeDashoffset: targetOffset,
+          }}
+          viewport={{ once: true, margin: "0px 0px -30px 0px" }}
+          transition={{
+            duration: prefersReducedMotion ? 0 : 0.95,
+            ease: [0.22, 1, 0.36, 1],
+            delay: prefersReducedMotion ? 0 : 0.1,
+          }}
         />
       </svg>
       <span

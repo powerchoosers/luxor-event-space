@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   CalendarDays,
   Check,
@@ -76,12 +77,14 @@ export function TourAvailabilityManager({
   title = 'Tour availability',
   description = 'Choose when clients can book a private venue tour.',
   onUpdated,
+  hideHeader = false,
 }: {
   title?: string
   description?: string
   publishLabel?: string
   onUpdated?: () => void | Promise<void>
   defaultExpanded?: boolean
+  hideHeader?: boolean
 } = {}) {
   const { notify } = useToast()
   const [loading, setLoading] = useState(true)
@@ -430,18 +433,42 @@ export function TourAvailabilityManager({
 
   if (loading) {
     return (
-      <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center">
-        <Loader2 size={24} className="animate-spin text-[#caa24c]" />
-        <p className="text-xs font-medium text-[color:var(--portal-muted)]">Loading tour availability & schedule settings...</p>
+      <div className="min-h-[70vh] sm:min-h-[75vh] space-y-6">
+        {/* Top status card skeleton */}
+        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="h-4 w-32 rounded luxor-skeleton" />
+            <div className="h-6 w-44 rounded-full luxor-skeleton" />
+          </div>
+          <div className="h-4 w-72 rounded luxor-skeleton" />
+        </div>
+        {/* Method selector skeleton */}
+        <div className="space-y-2">
+          <div className="h-3 w-28 rounded luxor-skeleton" />
+          <div className="grid grid-cols-2 gap-2 sm:max-w-md">
+            <div className="h-10 rounded-lg luxor-skeleton" />
+            <div className="h-10 rounded-lg luxor-skeleton" />
+          </div>
+        </div>
+        {/* Days skeleton */}
+        <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-4">
+          <div className="h-4 w-52 rounded luxor-skeleton" />
+          <div className="h-3 w-80 rounded luxor-skeleton" />
+          <div className="space-y-3 pt-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-16 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 luxor-skeleton" />
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div initial={{ opacity: 0, filter: 'blur(10px)', y: 8 }} animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }} transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }} className="space-y-6 min-h-[70vh] sm:min-h-[75vh]">
       {/* SECTION HEADER & PUBLIC STATUS BANNER */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div className={hideHeader ? 'hidden' : undefined}>
           <span className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">
             {title}
           </span>
@@ -1040,18 +1067,28 @@ export function TourAvailabilityManager({
       )}
 
       {/* GUEST BOOKING FORM PREVIEW MODAL (Prompt Req 7) */}
-      {previewOpen && typeof document !== 'undefined' ? createPortal((
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Guest booking form preview"
-          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 px-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-sm sm:items-center sm:p-4"
-          onClick={() => setPreviewOpen(false)}
-        >
-          <div
-            className="relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full flex-col overflow-hidden rounded-t-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl sm:max-h-[90vh] sm:max-w-2xl sm:rounded-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
+      {typeof document !== 'undefined' ? createPortal((
+        <AnimatePresence>
+          {previewOpen && (
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Guest booking form preview"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+              className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 px-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-sm sm:items-center sm:p-4"
+              onClick={() => setPreviewOpen(false)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 12, filter: 'blur(8px)' }}
+                animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, scale: 0.95, y: 12, filter: 'blur(8px)' }}
+                transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                className="relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full flex-col overflow-hidden rounded-t-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl sm:max-h-[90vh] sm:max-w-2xl sm:rounded-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] px-4 py-3 sm:p-6 sm:pb-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -1161,10 +1198,12 @@ export function TourAvailabilityManager({
                 Close Preview
               </PortalButton>
             </div>
-          </div>
-        </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       ), document.body) : null}
-    </div>
+    </motion.div>
   )
 }
 

@@ -469,6 +469,34 @@ body[data-portal-theme='light'] *::-webkit-scrollbar-thumb:hover {
     linear-gradient(180deg, rgba(202, 162, 76, 0.9), rgba(160, 120, 50, 0.9));
 }
 
+/* Keep the portal's mobile scroll indicator quiet and unobtrusive. */
+@media (max-width: 640px) {
+  body[data-portal-theme] * {
+    scrollbar-color: rgba(180, 139, 59, 0.72) transparent;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar {
+    width: 0.32rem;
+    height: 0.32rem;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar-track {
+    border: 0;
+    background: transparent;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar-thumb {
+    border: 0;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #d7b45f, #aa7d32);
+    box-shadow: none;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #e3c575, #b88c40);
+  }
+}
+
 /* Public Luxor site: restrained gold hardware against the dark venue palette. */
 html:has(body[data-luxor-site]),
 body[data-luxor-site] {
@@ -1393,6 +1421,12 @@ thead.sticky th,
   -webkit-backdrop-filter: blur(24px) !important;
 }
 
+.portal-loading-backdrop {
+  background-color: color-mix(in srgb, var(--portal-bg, #080706) 85%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
 /* Keep every owner-portal data table visually aligned with the polished lead list. */
 .portal-data-table {
   color: var(--portal-text);
@@ -2124,5 +2158,35 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
     transition: none !important;
     filter: none !important;
     transform: none !important;
+  }
+}
+
+/* Text Messages: simple blur-in for pane changes. CSS animations replay when a
+   pane goes from display:none to visible (mobile list/thread and back), and
+   `backwards` fill leaves no residual filter once finished. */
+@keyframes luxor-pane-enter {
+  from {
+    opacity: 0.35;
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.luxor-pane-enter-desktop {
+  animation: luxor-pane-enter 0.38s cubic-bezier(0.33, 1, 0.68, 1) backwards;
+}
+
+@media (max-width: 1023px) {
+  .luxor-pane-enter-desktop {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .luxor-pane-enter-desktop {
+    animation: none;
   }
 }

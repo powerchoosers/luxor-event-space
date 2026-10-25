@@ -1,12 +1,12 @@
 'use client'
 
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, MessageSquare, MoreVertical, Phone, Plus, Search, Send, UserPlus, UserRound, X } from 'lucide-react'
+import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, UserPlus, UserRound, X } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
-import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
+import { formatPhoneDisplay, normalizePhoneNumber } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { PortalContactAvatar, PortalCloseButton, PortalSkeleton, PortalSkeletonTransition } from './PortalUI'
 import { PortalSmsConsentBadge, type SmsConsentState } from './PortalSmsConsentBadge'
@@ -49,11 +49,27 @@ export function LuxorMessenger() {
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [loadedSmsConsent, setLoadedSmsConsent] = useState<{ phone: string; state: SmsConsentState } | null>(null)
   const [consentRequestSending, setConsentRequestSending] = useState(false)
+  const [manualOptInLoading, setManualOptInLoading] = useState(false)
   const [lineOptionsOpen, setLineOptionsOpen] = useState(false)
   const [mediaGalleryOpen, setMediaGalleryOpen] = useState(false)
   const threadEndRef = useRef<HTMLDivElement>(null)
   const lineOptionsRef = useRef<HTMLDivElement>(null)
   const optionsRef = useRef<HTMLDivElement>(null)
+  const listPaneRef = useRef<HTMLElement>(null)
+  const threadPaneRef = useRef<HTMLElement>(null)
+  const mobilePaneMounted = useRef(false)
+
+  // Mobile shows either the list or the thread. Play a simple blur-in on the
+  // pane that just became visible (opening a thread and pressing back).
+  useEffect(() => {
+    if (!mobilePaneMounted.current) { mobilePaneMounted.current = true; return }
+    if (!window.matchMedia('(max-width: 1023px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const pane = showThreadOnMobile ? threadPaneRef.current : listPaneRef.current
+    pane?.animate(
+      [{ opacity: 0.35, filter: 'blur(10px)' }, { opacity: 1, filter: 'blur(0px)' }],
+      { duration: 420, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' },
+    )
+  }, [showThreadOnMobile])
 
   const loadMessages = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -112,8 +128,7 @@ export function LuxorMessenger() {
       return `${conversation.contactName} ${conversation.phoneNumber} ${conversation.latest?.body || ''}`.toLowerCase().includes(normalizedQuery)
     })
   }, [conversations, filter, deferredQuery])
-  const selectedConversation = conversations.find((conversation) => conversation.key === selectedKey) ?? (draftConversation?.key === selectedKey ? draftConversation : null) ?? conversations[0] ?? null
-  const isComposing = Boolean(body.trim())
+  const selectedConversation = conversations.find((conversation) => conversation.key === selectedKey || (selectedKey && conversation.inquiryId === selectedKey)) ?? (draftConversation?.key === selectedKey ? draftConversation : null) ?? conversations[0] ?? null
   const smsConsent = loadedSmsConsent && loadedSmsConsent.phone === selectedConversation?.phoneNumber
     ? loadedSmsConsent.state
     : null
@@ -178,16 +193,6 @@ export function LuxorMessenger() {
     threadEndRef.current?.scrollIntoView({ block: 'end' })
   }, [selectedConversation?.key, selectedConversation?.messages.length])
 
-  useEffect(() => {
-    if (!isComposing || !selectedConversation?.phoneNumber) return
-    const sendTypingIndicator = () => void fetch('/api/twilio/messaging/typing', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: selectedConversation.phoneNumber }),
-    })
-    sendTypingIndicator()
-    const intervalId = window.setInterval(sendTypingIndicator, 15_000)
-    return () => window.clearInterval(intervalId)
-  }, [isComposing, selectedConversation?.phoneNumber])
-
   const selectConversation = (conversation: Conversation) => {
     setSelectedKey(conversation.key)
     setShowThreadOnMobile(true)
@@ -241,7 +246,9 @@ export function LuxorMessenger() {
         notify({ title: 'Test simulation recorded', description: 'No SMS was sent to this test contact.', variant: 'success' })
       } else {
         if (payload.message) setMessages((current) => [payload.message!, ...current.filter((message) => message.id !== payload.message!.id)])
-        setLoadedSmsConsent({ phone: selectedConversation.phoneNumber, state: { status: 'unknown', consent_request_status: 'pending' } })
+        const nextState: SmsConsentState = { status: 'unknown', consent_request_status: 'pending' }
+        setLoadedSmsConsent({ phone: selectedConversation.phoneNumber, state: nextState })
+        window.dispatchEvent(new CustomEvent('luxor-sms-consent-updated', { detail: { phone: selectedConversation.phoneNumber, state: nextState } }))
         notify({ title: 'Consent request sent', description: `Asked ${selectedConversation.contactName} to reply YES.`, variant: 'success' })
       }
     } catch (error) {
@@ -251,12 +258,51 @@ export function LuxorMessenger() {
     }
   }
 
+  const manualOptIn = async () => {
+    if (!selectedConversation || manualOptInLoading) return
+    setManualOptInLoading(true)
+    try {
+      const response = await fetch('/api/twilio/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: selectedConversation.phoneNumber,
+          reason: 'Manual opt-in from text messaging page',
+        }),
+      })
+      const payload = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to record SMS opt-in.')
+      const newState: SmsConsentState = {
+        status: 'opted_in',
+        consent_request_status: null,
+        consent_scopes: ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice', 'marketing'],
+      }
+      setLoadedSmsConsent({ phone: selectedConversation.phoneNumber, state: newState })
+      setOptionsOpen(false)
+      window.dispatchEvent(new CustomEvent('luxor-sms-consent-updated', { detail: { phone: selectedConversation.phoneNumber, state: newState } }))
+      notify({
+        title: 'SMS opt-in recorded',
+        description: `Marked ${selectedConversation.contactName} as opted in to text messages.`,
+        variant: 'success',
+      })
+    } catch (error) {
+      notify({
+        title: 'Opt-in not recorded',
+        description: error instanceof Error ? error.message : 'Unable to record SMS opt-in.',
+        variant: 'error',
+      })
+    } finally {
+      setManualOptInLoading(false)
+    }
+  }
+
   const startNewConversation = (contact: ContactResult) => {
-    const existing = conversations.find((conversation) => conversation.inquiryId === contact.id || conversation.phoneNumber === contact.phoneNumber)
+    const contactKey = normalizePhoneNumber(contact.phoneNumber) || contact.phoneNumber
+    const existing = conversations.find((conversation) => conversation.key === contactKey || conversation.inquiryId === contact.id || conversation.phoneNumber === contact.phoneNumber)
     if (existing) {
       selectConversation(existing)
     } else {
-      const draft: Conversation = { key: `draft:${contact.id}`, inquiryId: contact.id, contactName: contact.fullName, phoneNumber: contact.phoneNumber, messages: [], latest: null, unreadCount: 0 }
+      const draft: Conversation = { key: contactKey || `draft:${contact.id}`, inquiryId: contact.id, contactName: contact.fullName, phoneNumber: contact.phoneNumber, messages: [], latest: null, unreadCount: 0 }
       setDraftConversation(draft)
       setSelectedKey(draft.key)
       setShowThreadOnMobile(true)
@@ -270,7 +316,7 @@ export function LuxorMessenger() {
 
   return (
     <section className="portal-card-surface portal-surface relative grid min-h-0 h-full min-w-0 flex-1 overflow-hidden lg:grid-cols-[22rem_minmax(0,1fr)]">
-      <aside className={`${showThreadOnMobile ? 'hidden lg:flex' : 'flex'} min-h-0 min-w-0 flex-col border-r border-[color:var(--portal-border)]`}>
+      <aside ref={listPaneRef} className={`${showThreadOnMobile ? 'hidden lg:flex' : 'flex'} min-h-0 min-w-0 flex-col border-r border-[color:var(--portal-border)]`}>
         <div className="border-b border-[color:var(--portal-border)] p-4">
           <div className="flex items-center justify-between gap-3">
             <h1 className="font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Text Messages</h1>
@@ -319,68 +365,110 @@ export function LuxorMessenger() {
         </div>
       </aside>
 
-      <main className={`${showThreadOnMobile ? 'flex' : 'hidden lg:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
+      <main ref={threadPaneRef} className={`${showThreadOnMobile ? 'flex' : 'hidden lg:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
         <PortalSkeletonTransition
           loading={loading}
           skeleton={<LoadingMessagePane />}
           className="flex min-h-0 min-w-0 flex-1 flex-col"
         >
-          {newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={setContactQuery} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
-          <>
-            <header className="flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-5">
-              <div className="flex min-w-0 items-center gap-3">
-                <button type="button" onClick={() => setShowThreadOnMobile(false)} className="rounded-lg p-2 text-[color:var(--portal-muted)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] lg:hidden" aria-label="Back to conversations"><ArrowLeft size={18}/></button>
-                <PortalContactAvatar name={selectedConversation.contactName} inquiryId={selectedConversation.inquiryId || undefined} size="md" />
-                <div className="min-w-0">
-                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <p className="min-w-0 break-words text-sm font-black leading-tight text-[color:var(--portal-text)]">{selectedConversation.contactName}</p>
-                    <PortalSmsConsentBadge phone={selectedConversation.phoneNumber} initialConsent={smsConsent} compact />
+          <div
+            key={newMessageOpen ? 'new-message' : selectedConversation ? selectedConversation.key : 'empty'}
+            className="luxor-pane-enter-desktop flex min-h-0 min-w-0 flex-1 flex-col"
+          >
+            {newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={setContactQuery} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
+            <>
+              <header className="flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <button type="button" onClick={() => setShowThreadOnMobile(false)} className="rounded-lg p-2 text-[color:var(--portal-muted)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] lg:hidden" aria-label="Back to conversations"><ArrowLeft size={18}/></button>
+                  <PortalContactAvatar name={selectedConversation.contactName} inquiryId={selectedConversation.inquiryId || undefined} size="md" />
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <p className="min-w-0 break-words text-sm font-black leading-tight text-[color:var(--portal-text)]">{selectedConversation.contactName}</p>
+                      <PortalSmsConsentBadge phone={selectedConversation.phoneNumber} initialConsent={smsConsent} compact />
+                    </div>
+                    <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)] transition-colors hover:text-emerald-500">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
                   </div>
-                  <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="mt-0.5 font-mono text-[10px] text-[color:var(--portal-muted)] transition-colors hover:text-emerald-500">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:border-emerald-500/35 hover:text-emerald-500"><Phone size={13}/> <span className="hidden sm:inline">Call</span></button>
+                  {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:bg-[#caa24c]/15"><UserRound size={13}/> <span className="hidden sm:inline">View Lead</span></Link> : null}
+                  <div className="relative" ref={optionsRef}>
+                    <button type="button" onClick={() => setOptionsOpen((current) => !current)} className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] opacity-80 transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Conversation options" aria-expanded={optionsOpen}><MoreVertical size={16}/></button>
+                    <AnimatePresence>{optionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl">
+                      <button type="button" onClick={() => { setOptionsOpen(false); setMediaGalleryOpen(true) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Images size={14}/> Media gallery <span className="ml-auto font-mono text-[color:var(--portal-muted)]">{sharedMedia.length}</span></button>
+                      {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} onClick={() => setOptionsOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-[10px] font-bold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Info size={14}/> Contact details</Link> : null}
+                      {smsConsent?.status === 'opted_in' ? (
+                        <p className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                          <Check size={14}/> SMS consent is active
+                        </p>
+                      ) : (
+                        <>
+                          {smsConsent?.status === 'opted_out' ? (
+                            <p className="px-3 py-1.5 text-[10px] leading-4 text-red-600 dark:text-red-400">
+                              SMS opted out (STOP keyword).
+                            </p>
+                          ) : null}
+                          {smsConsent?.consent_request_status === 'pending' ? (
+                            <p className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold text-[color:var(--portal-muted)]">
+                              <MessageSquare size={14}/> Verification text sent · waiting for YES
+                            </p>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void requestSmsConsent()}
+                              disabled={!smsConsent || !selectedConversation.phoneNumber || consentRequestSending}
+                              className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <MessageSquare size={14}/>
+                              {consentRequestSending ? 'Sending verification text…' : smsConsent?.consent_request_status === 'failed' ? 'Retry verification text' : 'Send verification text'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void manualOptIn()}
+                            disabled={manualOptInLoading || !selectedConversation.phoneNumber}
+                            className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <ShieldCheck size={14} className="text-emerald-600 dark:text-emerald-400" />
+                            {manualOptInLoading ? 'Recording opt-in…' : 'Manually opt in to SMS'}
+                          </button>
+                        </>
+                      )}
+                      <div className="my-1 h-px bg-[color:var(--portal-border)]"/>
+                      <button type="button" disabled className="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-faint)] opacity-60"><UserPlus size={14}/> Add a member</button>
+                      <p className="px-3 pb-2 text-[9px] leading-4 text-[color:var(--portal-faint)]">Twilio RCS does not support group messaging.</p>
+                    </motion.div> : null}</AnimatePresence>
+                  </div>
+                </div>
+              </header>
+
+              <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7">
+                <div className="mx-auto max-w-4xl space-y-3">
+                  {selectedConversation.messages.length ? selectedConversation.messages.map((message, index, thread) => {
+                    const previous = thread[index - 1]
+                    const showDate = !previous || dayKey(previous.created_at) !== dayKey(message.created_at)
+                    return <div key={message.id}>{showDate ? <DateDivider value={message.created_at}/> : null}<MessageBubble message={message}/></div>
+                  }) : <div className="py-16 text-center"><MessageSquare size={22} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-bold text-[color:var(--portal-text)]">Start your conversation with {selectedConversation.contactName}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Messages send through Luxor’s approved Twilio sender.</p></div>}
+                  <div ref={threadEndRef}/>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:border-emerald-500/35 hover:text-emerald-500"><Phone size={13}/> <span className="hidden sm:inline">Call</span></button>
-                {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:bg-[#caa24c]/15"><UserRound size={13}/> <span className="hidden sm:inline">View Lead</span></Link> : null}
-                <div className="relative" ref={optionsRef}>
-                  <button type="button" onClick={() => setOptionsOpen((current) => !current)} className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] opacity-80 transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Conversation options" aria-expanded={optionsOpen}><MoreVertical size={16}/></button>
-                  <AnimatePresence>{optionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl">
-                    <button type="button" onClick={() => { setOptionsOpen(false); setMediaGalleryOpen(true) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Images size={14}/> Media gallery <span className="ml-auto font-mono text-[color:var(--portal-muted)]">{sharedMedia.length}</span></button>
-                    {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} onClick={() => setOptionsOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-[10px] font-bold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Info size={14}/> Contact details</Link> : null}
-                    {smsConsent?.status === 'opted_in' ? <p className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400"><Check size={14}/> SMS consent is active</p>
-                      : smsConsent?.status === 'opted_out' ? <p className="px-3 py-2.5 text-[10px] leading-4 text-red-600 dark:text-red-400">SMS opted out. The contact must text START to opt in again.</p>
-                      : smsConsent?.consent_request_status === 'pending' ? <p className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-[10px] font-bold text-[color:var(--portal-muted)]"><MessageSquare size={14}/> Consent request sent · waiting for YES</p>
-                        : <button type="button" onClick={() => void requestSmsConsent()} disabled={!smsConsent || !selectedConversation.phoneNumber || consentRequestSending} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-50"><MessageSquare size={14}/>{consentRequestSending ? 'Sending consent request…' : smsConsent?.consent_request_status === 'failed' ? 'Retry SMS consent request' : 'Request SMS consent'}</button>}
-                    <div className="my-1 h-px bg-[color:var(--portal-border)]"/>
-                    <button type="button" disabled className="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-faint)] opacity-60"><UserPlus size={14}/> Add a member</button>
-                    <p className="px-3 pb-2 text-[9px] leading-4 text-[color:var(--portal-faint)]">Twilio RCS does not support group messaging.</p>
-                  </motion.div> : null}</AnimatePresence>
-                </div>
-              </div>
-            </header>
-
-            <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7">
-              <div className="mx-auto max-w-4xl space-y-3">
-                {selectedConversation.messages.length ? selectedConversation.messages.map((message, index, thread) => {
-                  const previous = thread[index - 1]
-                  const showDate = !previous || dayKey(previous.created_at) !== dayKey(message.created_at)
-                  return <div key={message.id}>{showDate ? <DateDivider value={message.created_at}/> : null}<MessageBubble message={message}/></div>
-                }) : <div className="py-16 text-center"><MessageSquare size={22} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-bold text-[color:var(--portal-text)]">Start your conversation with {selectedConversation.contactName}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Messages send through Luxor’s approved Twilio sender.</p></div>}
-                <div ref={threadEndRef}/>
-              </div>
-            </div>
-
+            </>
+          ) : <EmptyMessenger />}
+          </div>
+          {selectedConversation && !newMessageOpen ? (
             <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:p-4">
               <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 focus-within:border-[#caa24c]/45">
                 <div className="min-w-0 flex-1 px-2 py-1">
-                  <textarea value={body} onChange={(event) => setBody(event.target.value.slice(0, 1600))} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} rows={1} placeholder={`Message ${selectedConversation.contactName}`} className="portal-input-transparent max-h-32 min-h-7 w-full resize-none bg-transparent text-sm leading-6 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]" />
-                  <div className="mt-1 flex items-center justify-between gap-2"><p className="font-mono text-[8px] text-[color:var(--portal-muted)]">{body.length} / 1600 · Enter to send · Shift+Enter for a new line</p><AnimatePresence>{isComposing ? <motion.span initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex items-center gap-1 text-[8px] text-[#caa24c]">Typing <TypingDots/></motion.span> : null}</AnimatePresence></div>
+                  <div className="relative">
+                    {!body ? <span key={selectedConversation.key} aria-hidden="true" className="luxor-pane-enter-desktop pointer-events-none absolute inset-x-0 top-0 truncate text-sm leading-6 text-[color:var(--portal-faint)]">Message {selectedConversation.contactName}</span> : null}
+                    <textarea value={body} onChange={(event) => setBody(event.target.value.slice(0, 1600))} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} rows={1} aria-label={`Message ${selectedConversation.contactName}`} className="portal-input-transparent relative max-h-32 min-h-7 w-full resize-none bg-transparent text-sm leading-6 text-[color:var(--portal-text)] outline-none" />
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2"><p className="font-mono text-[8px] text-[color:var(--portal-muted)]">{body.length} / 1600 · Enter to send · Shift+Enter for a new line</p></div>
                 </div>
                 <button type="button" onClick={() => void sendMessage()} disabled={!body.trim() || sending} className="flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-white transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-45">{sending ? <Loader2 size={15} className="animate-spin"/> : <><Send size={14}/><span className="hidden sm:inline">Send</span></>}</button>
               </div>
             </div>
-          </>
-        ) : <EmptyMessenger />}
+          ) : null}
         </PortalSkeletonTransition>
       </main>
       <AnimatePresence>{mediaGalleryOpen ? <MediaGallery items={sharedMedia} onClose={() => setMediaGalleryOpen(false)} /> : null}</AnimatePresence>
@@ -391,27 +479,41 @@ export function LuxorMessenger() {
 function buildConversations(messages: LuxorMessage[]) {
   const grouped = new Map<string, LuxorMessage[]>()
   for (const message of messages) {
-    const phoneNumber = message.direction === 'inbound' ? message.from_number : message.to_number
-    const key = message.inquiry_id || phoneNumber
+    const rawPhone = message.direction === 'inbound' ? message.from_number : message.to_number
+    const key = normalizePhoneNumber(rawPhone) || rawPhone || message.inquiry_id || 'unknown'
     grouped.set(key, [...(grouped.get(key) || []), message])
   }
   return Array.from(grouped, ([key, groupedMessages]) => {
     const sorted = groupedMessages.toSorted((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     const latest = sorted[sorted.length - 1]
-    const phoneNumber = latest.direction === 'inbound' ? latest.from_number : latest.to_number
-    return { key, inquiryId: latest.inquiry_id, contactName: latest.contact_name || formatPhoneDisplay(phoneNumber) || 'Unknown contact', phoneNumber, messages: sorted, latest, unreadCount: sorted.filter((message) => message.direction === 'inbound' && !message.is_read).length }
+    const rawPhone = latest.direction === 'inbound' ? latest.from_number : latest.to_number
+    const canonicalPhone = normalizePhoneNumber(rawPhone) || rawPhone
+    const latestWithInquiry = [...sorted].reverse().find((message) => message.inquiry_id)
+    const latestWithName = [...sorted].reverse().find((message) => message.contact_name)
+    const inquiryId = latestWithInquiry?.inquiry_id || latest.inquiry_id
+    const contactName = latestWithName?.contact_name || latest.contact_name || formatPhoneDisplay(canonicalPhone) || 'Unknown contact'
+
+    return {
+      key,
+      inquiryId,
+      contactName,
+      phoneNumber: canonicalPhone,
+      messages: sorted,
+      latest,
+      unreadCount: sorted.filter((message) => message.direction === 'inbound' && !message.is_read).length,
+    }
   }).toSorted((a, b) => new Date(b.latest.created_at).getTime() - new Date(a.latest.created_at).getTime())
 }
 
 function MessageBubble({ message }: { message: LuxorMessage }) {
   const outbound = message.direction === 'outbound'
-  return <motion.div layout initial={{ opacity: 0, y: 34, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }} className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
+  return <div className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
     <div className={`max-w-[88%] sm:max-w-[72%] ${outbound ? 'text-right' : 'text-left'}`}>
       <div className={`inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-6 ${outbound ? 'rounded-br-md bg-[#caa24c] !text-white shadow-md' : 'rounded-bl-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{message.body || '(Media message)'}</div>
       <p className={`mt-1 flex items-center gap-1 font-mono text-[8px] uppercase tracking-wider text-[color:var(--portal-muted)] ${outbound ? 'justify-end' : 'justify-start'}`}>{message.owner_email === 'luxor-automation' ? <><span>Automated</span><span>·</span></> : null}{formatMessageTime(message.created_at)}{outbound ? <><span>·</span><span>{message.status}</span>{message.status === 'delivered' || message.status === 'read' ? <CheckCheck size={11} className={message.status === 'read' ? 'text-emerald-500' : 'text-[#caa24c]'}/> : null}</> : null}</p>
       {message.error_message ? <p className="mt-1 text-[9px] text-red-400">{message.error_message}</p> : null}
     </div>
-  </motion.div>
+  </div>
 }
 
 function NewMessagePane({ query, results, searching, onQueryChange, onSelect, onClose }: { query: string; results: ContactResult[]; searching: boolean; onQueryChange: (value: string) => void; onSelect: (contact: ContactResult) => void; onClose: () => void }) {
@@ -446,7 +548,6 @@ function MediaGallery({ items, onClose }: { items: Array<{ url: string; message:
 }
 
 function DateDivider({ value }: { value: string }) { return <div className="my-5 flex items-center gap-3"><span className="h-px flex-1 bg-[color:var(--portal-border)]"/><span className="font-mono text-[8px] uppercase tracking-wider text-[color:var(--portal-muted)]">{new Date(value).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span><span className="h-px flex-1 bg-[color:var(--portal-border)]"/></div> }
-function TypingDots() { return <span className="flex items-center gap-0.5" aria-hidden="true">{[0, 1, 2].map((dot) => <motion.span key={dot} className="h-1 w-1 rounded-full bg-[#caa24c]" animate={{ y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 0.75, repeat: Infinity, delay: dot * 0.12 }}/>)}</span> }
 function LoadingConversations() {
   return (
     <div className="divide-y divide-[color:var(--portal-border)]" aria-label="Loading conversations">

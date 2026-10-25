@@ -86,6 +86,31 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false)
   const [visualViewportMetrics, setVisualViewportMetrics] = useState<{ height: number; top: number } | null>(null)
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ id: number; x: number; y: number; left: number; top: number } | null>(null)
+
+  const fit = useCallback((x: number, y: number) => {
+    if (typeof window === 'undefined') return { x, y }
+    const width = drawerRef.current?.offsetWidth || (isExpanded ? 1100 : 820)
+    const height = drawerRef.current?.offsetHeight || (isMinimized ? 48 : 760)
+    return {
+      x: Math.max(12, Math.min(x, window.innerWidth - width - 12)),
+      y: Math.max(12, Math.min(y, window.innerHeight - height - 12)),
+    }
+  }, [isExpanded, isMinimized])
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window !== 'undefined' && window.innerWidth >= 640) {
+        setPosition((prev) => (prev ? fit(prev.x, prev.y) : null))
+      } else {
+        setPosition(null)
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [fit])
 
   useEffect(() => {
     const viewport = window.visualViewport
@@ -517,26 +542,72 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   return (
     <>
     <motion.div
+      ref={drawerRef}
       initial={{ y: '100%', opacity: 0 }}
       animate={isClosing ? { y: '100%', opacity: 0 } : { y: 0, opacity: 1 }}
       exit={{ y: '100%', opacity: 0 }}
-      transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+      transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
       onAnimationComplete={() => {
         if (isClosing) onClose()
       }}
       style={{
         '--email-compose-height': isMinimized ? 'calc(3.5rem + env(safe-area-inset-top))' : visualViewportMetrics ? `${visualViewportMetrics.height}px` : '100dvh',
         '--email-compose-top': visualViewportMetrics ? `${visualViewportMetrics.top}px` : '0px',
+        left: position ? `${position.x}px` : undefined,
+        top: position ? `${position.y}px` : undefined,
+        right: position ? 'auto' : undefined,
+        bottom: position ? 'auto' : undefined,
+        transform: position ? 'none' : undefined,
       } as React.CSSProperties}
       className={drawerClasses}
     >
-      {/* Header Bar */}
-      <div className={`relative z-20 flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 sm:px-4 ${isMinimized ? 'min-h-14 sm:min-h-12' : 'min-h-14'}`}>
+      {/* Header Bar with Drag Handle */}
+      <div
+        onPointerDown={(e) => {
+          if (typeof window !== 'undefined' && window.innerWidth < 640) return
+          if (e.button !== 0 || (e.target as HTMLElement).closest('button, a, input, textarea, select, [role="menu"], [role="menuitem"]')) return
+          if (!drawerRef.current) return
+          const rect = drawerRef.current.getBoundingClientRect()
+          dragRef.current = {
+            id: e.pointerId,
+            x: e.clientX,
+            y: e.clientY,
+            left: rect.left,
+            top: rect.top,
+          }
+          e.currentTarget.setPointerCapture(e.pointerId)
+        }}
+        onPointerMove={(e) => {
+          const d = dragRef.current
+          if (d && d.id === e.pointerId) {
+            setPosition(fit(d.left + e.clientX - d.x, d.top + e.clientY - d.y))
+          }
+        }}
+        onPointerUp={() => {
+          dragRef.current = null
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null
+        }}
+        className={`relative z-20 flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 sm:px-4 sm:cursor-grab sm:active:cursor-grabbing select-none ${isMinimized ? 'min-h-14 sm:min-h-12' : 'min-h-14'}`}
+      >
         <div className="flex min-w-0 items-center gap-2">
+          <span className="hidden sm:inline-block font-mono text-xs text-[color:var(--portal-muted)] opacity-60 tracking-tighter" aria-hidden="true">
+            ⠿
+          </span>
           <PortalCloseButton onClick={requestClose} aria-label="Close composer" />
-          {isMinimized && <button type="button" onClick={() => setIsMinimized(false)} aria-label="Restore composer" className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]"><Maximize2 size={15} /></button>}
-          <div className="absolute left-1/2 min-w-0 max-w-[calc(100%-8rem)] -translate-x-1/2 text-center sm:static sm:translate-x-0 sm:text-left">
-            <p className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{isMinimized ? `Draft to ${lead?.full_name || toAddress || 'Client'}` : 'New Message'}</p>
+          <button
+            type="button"
+            onClick={() => setIsMinimized(!isMinimized)}
+            aria-label={isMinimized ? 'Restore composer' : 'Minimize composer'}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors"
+          >
+            {isMinimized ? <Maximize2 size={13} /> : <Minus size={14} />}
+          </button>
+          <div className="min-w-0">
+            <p className="truncate text-xs sm:text-sm font-bold text-[color:var(--portal-text)]">
+              {isMinimized ? `Draft: ${lead?.full_name || toAddress || 'Client'}` : 'New Message'}
+            </p>
           </div>
         </div>
         {!isMinimized && <div className="ml-auto flex shrink-0 items-center gap-1.5">

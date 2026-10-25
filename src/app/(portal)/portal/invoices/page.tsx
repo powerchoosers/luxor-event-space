@@ -9,6 +9,7 @@ import {
   Trash2,
   Sparkles
 } from 'lucide-react'
+import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { LuxorInvoice, LuxorInvoiceStatus } from '@/lib/luxorInquiryTypes'
 import {
@@ -410,9 +411,12 @@ function StatsPanel({
         </h3>
         {progress !== undefined ? (
           <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-            <div
-              className={`h-full rounded-full transition-all duration-700 ${isNegative ? 'bg-gradient-to-r from-rose-500 to-rose-400' : 'bg-gradient-to-r from-[#caa24c] to-[#f1d27a]'}`}
-              style={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
+            <motion.div
+              className={`h-full rounded-full ${isNegative ? 'bg-gradient-to-r from-rose-500 to-rose-400' : 'bg-gradient-to-r from-[#caa24c] to-[#f1d27a]'}`}
+              initial={{ width: '0%' }}
+              whileInView={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
+              viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+              transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
             />
           </div>
         ) : null}

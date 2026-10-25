@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getLuxorSmsConsent } from '@/lib/luxorTextAutomationsServer'
+import { getLuxorSmsConsent, recordLuxorManualSmsConsent } from '@/lib/luxorTextAutomationsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 export async function GET(request: Request) {
@@ -36,5 +36,36 @@ export async function GET(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to check SMS consent.'
     return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+export async function POST(request: Request) {
+  const session = await getLuxorPortalSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const body = await request.json() as { phone?: string; reason?: string }
+    if (!body?.phone) {
+      return NextResponse.json({ error: 'Phone number is required.' }, { status: 400 })
+    }
+
+    const saved = await recordLuxorManualSmsConsent(body.phone, session.email, body.reason)
+    if (!saved) {
+      return NextResponse.json({ error: 'Could not record SMS opt-in for this phone number.' }, { status: 400 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      status: saved.status,
+      phone_number: saved.phone_number,
+      updated_at: saved.updated_at,
+      consent_scopes: saved.consent_scopes || [],
+      consent_request_status: null,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to record SMS opt-in.'
+    return NextResponse.json({ error: message }, { status: 400 })
   }
 }

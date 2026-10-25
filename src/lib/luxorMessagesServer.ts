@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { findLuxorInquiryByPhone } from './luxorCallsServer'
+import { findLuxorInquiryByPhone, normalizePhoneNumber } from './luxorCallsServer'
 import type { LuxorMessage, LuxorMessageDirection, LuxorMessageStatus } from './luxorMessageTypes'
 import { supabaseRest } from './supabaseRestServer'
 
@@ -20,9 +20,14 @@ export async function saveInboundLuxorMessage(input: { sid: string; from: string
   return createOrUpdateLuxorMessage({ ...input, direction: 'inbound', status: 'received', inquiryId: inquiry?.id, contactName: inquiry?.full_name, isRead: false })
 }
 
-export async function listLuxorMessages(options: { inquiryId?: string | null; limit?: number } = {}) {
+export async function listLuxorMessages(options: { inquiryId?: string | null; phone?: string | null; limit?: number } = {}) {
   const params = new URLSearchParams({ select: '*', order: 'created_at.desc', limit: String(Math.min(Math.max(options.limit ?? 200, 1), 1000)) })
-  if (options.inquiryId) params.set('inquiry_id', `eq.${options.inquiryId}`)
+  const normalizedPhone = normalizePhoneNumber(options.phone)
+  if (normalizedPhone) {
+    params.set('or', `(from_number.eq.${normalizedPhone},to_number.eq.${normalizedPhone})`)
+  } else if (options.inquiryId) {
+    params.set('inquiry_id', `eq.${options.inquiryId}`)
+  }
   return supabaseRest<LuxorMessage[]>(`luxor_messages?${params}`)
 }
 

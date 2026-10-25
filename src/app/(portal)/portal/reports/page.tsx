@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import { BarChart3, Calendar, Download, RefreshCw, TrendingUp } from 'lucide-react'
 import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
 import { MagicCard } from '@/components/ui/magic-card'
@@ -211,7 +212,13 @@ function StatsPanel({ label, value, detail, loading, gaugePercent, progress, hig
         </p>
         {progress !== undefined ? (
           <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-            <div className="h-full rounded-full bg-gradient-to-r from-[#caa24c] to-[#f1d27a] transition-all duration-700" style={{ width: `${Math.max(4, Math.min(100, progress))}%` }} />
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-[#caa24c] to-[#f1d27a]"
+              initial={{ width: '0%' }}
+              whileInView={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
+              viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+              transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+            />
           </div>
         ) : null}
         <p className="text-[11px] text-[color:var(--portal-muted)] mt-2">{detail}</p>
@@ -250,9 +257,12 @@ function ProgressRow({ label, value, percent, tone = 'gold' }: { label: string; 
         <span className="tabular-nums font-bold text-[color:var(--portal-muted)]">{value}</span>
       </div>
       <div className="h-2 w-full rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)]/60 overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${tone === 'emerald' ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : 'bg-gradient-to-r from-[#b8892e] to-[#e2c16b]'}`}
-          style={{ width: `${Math.max(0, Math.min(percent, 100))}%` }}
+        <motion.div
+          className={`h-full rounded-full ${tone === 'emerald' ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : 'bg-gradient-to-r from-[#b8892e] to-[#e2c16b]'}`}
+          initial={{ width: '0%' }}
+          whileInView={{ width: `${Math.max(0, Math.min(percent, 100))}%` }}
+          viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
         />
       </div>
     </div>
@@ -267,9 +277,12 @@ function SummaryCard({ label, value, detail, progress, gaugePercent, tone = 'gol
         <p className="mt-2 text-2xl font-extrabold tabular-nums tracking-tight text-[color:var(--portal-text)]">{value}</p>
         {progress !== undefined ? (
           <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-            <div
-              className={`h-full rounded-full transition-all duration-700 ${tone === 'emerald' ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : 'bg-gradient-to-r from-[#caa24c] to-[#f1d27a]'}`}
-              style={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
+            <motion.div
+              className={`h-full rounded-full ${tone === 'emerald' ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : 'bg-gradient-to-r from-[#caa24c] to-[#f1d27a]'}`}
+              initial={{ width: '0%' }}
+              whileInView={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
+              viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+              transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
             />
           </div>
         ) : null}

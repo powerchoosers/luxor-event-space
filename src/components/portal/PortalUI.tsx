@@ -704,6 +704,7 @@ export function PortalModal({
   footer,
   maxWidth = 'max-w-lg',
   zIndex,
+  className = '',
 }: {
   isOpen: boolean
   onClose: () => void
@@ -714,6 +715,7 @@ export function PortalModal({
   footer?: React.ReactNode
   maxWidth?: string
   zIndex?: number
+  className?: string
 }) {
   const depth = React.useContext(ModalDepthContext)
   const computedZIndex = zIndex ?? (200 + depth * 10)
@@ -806,7 +808,7 @@ export function PortalModal({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
           style={{ zIndex: computedZIndex }}
-          className="fixed inset-0 flex items-end justify-center px-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:items-center sm:p-4"
+          className="fixed inset-0 flex items-center justify-center p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4"
         >
           <motion.div
             initial={{ opacity: 0 }}
@@ -823,11 +825,11 @@ export function PortalModal({
             aria-labelledby={title ? titleId : undefined}
             aria-label={title ? undefined : ariaLabel ?? 'Portal dialog'}
             tabIndex={-1}
-            initial={{ opacity: 0, scale: 0.95, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+            initial={{ opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }}
+            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }}
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className={`relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1rem)] w-full ${maxWidth} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh]`}
+            className={`relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full ${maxWidth} ${className} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh]`}
           >
             <ModalDepthContext.Provider value={depth + 1}>
               {title ? (
@@ -1908,6 +1910,47 @@ export function PortalCalculationSkeleton({
           <PortalSkeleton className="h-3.5 w-16 shrink-0 rounded" />
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Animated linear progress bar that animates its width smoothly from 0 to the target
+ * percentage as it scrolls into view throughout the portal.
+ */
+export function PortalProgressBar({
+  value,
+  max = 100,
+  min = 0,
+  className = 'h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50',
+  barClassName = 'h-full rounded-full bg-gradient-to-r from-[#caa24c] to-[#f1d27a]',
+  delay = 0,
+  duration = 0.85,
+}: {
+  value: number
+  max?: number
+  min?: number
+  className?: string
+  barClassName?: string
+  delay?: number
+  duration?: number
+}) {
+  const prefersReducedMotion = useReducedMotion()
+  const clamped = Math.max(0, Math.min(100, ((value - min) / Math.max(1, max - min)) * 100))
+
+  return (
+    <div className={className}>
+      <motion.div
+        className={barClassName}
+        initial={{ width: prefersReducedMotion ? `${clamped}%` : '0%' }}
+        whileInView={{ width: `${clamped}%` }}
+        viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+        transition={{
+          duration: prefersReducedMotion ? 0 : duration,
+          delay: prefersReducedMotion ? 0 : delay,
+          ease: LUXOR_PORTAL_EASE,
+        }}
+      />
     </div>
   )
 }

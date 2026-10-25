@@ -95,10 +95,10 @@ export function MagicCard({
         `,
       }}
     >
-      <div className="bg-[color:var(--portal-card)] absolute inset-px z-10 rounded-[inherit]" />
+      <div className="pointer-events-none bg-[color:var(--portal-card)] absolute inset-px -z-20 rounded-[inherit]" />
       <motion.div
         suppressHydrationWarning
-        className="pointer-events-none absolute inset-px z-20 rounded-[inherit] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        className="pointer-events-none absolute inset-px -z-10 rounded-[inherit] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         style={{
           background: useMotionTemplate`
             radial-gradient(${gradientSize}px circle at ${mouseX}px ${mouseY}px,
@@ -109,7 +109,7 @@ export function MagicCard({
           opacity: gradientOpacity,
         }}
       />
-      <div className={cn("relative z-30 h-full w-full", className?.includes("flex-row") ? "flex flex-row items-center justify-between w-full" : "")}>{children}</div>
+      <div className={cn("h-full w-full rounded-[inherit]", className?.includes("flex-row") ? "flex flex-row items-center justify-between w-full" : "")}>{children}</div>
     </motion.div>
   )
 }

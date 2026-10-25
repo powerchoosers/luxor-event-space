@@ -56,6 +56,13 @@ export async function recordLuxorSmsConsent(
   const consentScopes = status === 'opted_in'
     ? options.scopes || ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice']
     : []
+  const existing = await getLuxorSmsConsent(phoneNumber)
+  const existingProof = (existing?.proof && typeof existing.proof === 'object') ? existing.proof : {}
+  const request = existingProof.sms_consent_request as SmsConsentRequestProof | undefined
+  const updatedRequest = status === 'opted_in' && request?.status === 'pending'
+    ? { ...request, status: 'confirmed' as const }
+    : request
+
   const [saved] = await supabaseRest<ConsentRow[]>('luxor_sms_consents?on_conflict=phone_number&select=*', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
@@ -67,6 +74,8 @@ export async function recordLuxorSmsConsent(
       opted_in_at: status === 'opted_in' ? timestamp : null,
       consent_scopes: consentScopes,
       proof: {
+        ...existingProof,
+        ...(updatedRequest ? { sms_consent_request: updatedRequest } : {}),
         ...(options.proof || {}),
         source,
         captured_at: timestamp,
@@ -76,6 +85,23 @@ export async function recordLuxorSmsConsent(
     }),
   })
   return saved ?? null
+}
+
+export async function recordLuxorManualSmsConsent(
+  phone: string,
+  ownerEmail: string,
+  reason?: string,
+) {
+  const phoneNumber = normalizePhoneNumber(phone)
+  if (!phoneNumber) throw new Error('Enter a valid mobile phone number.')
+  return recordLuxorSmsConsent(phoneNumber, 'START', 'portal_manual_opt_in', {
+    scopes: ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice', 'marketing'],
+    proof: {
+      method: 'portal_manual_opt_in',
+      opted_in_by: ownerEmail,
+      reason: reason || 'Manual opt-in via portal',
+    },
+  })
 }
 
 /**

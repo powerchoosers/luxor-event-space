@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { PortalSelect } from './PortalUI'
 import { luxorAvailabilityStatusLabel, type LuxorAvailabilityCalendar, type LuxorAvailabilityDay } from '@/lib/luxorAvailability'
@@ -169,27 +170,50 @@ export function LuxorAvailabilityCalendar({
               <span className="truncate">{MONTHS[activeMonth]} {activeYear}</span>
               <ChevronDown size={15} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
             </button>
-            {monthYearOpen ? (
-              <>
-                <button type="button" aria-label="Close month and year selector" onClick={closeMonthYear} className="fixed inset-0 z-40 bg-black/25 sm:bg-transparent" />
-                <div ref={monthYearDialogRef} role="dialog" aria-modal="true" aria-labelledby={monthYearDialogTitleId} tabIndex={-1} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeMonthYear() } }} className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-12 sm:w-[22rem] sm:rounded-xl sm:p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p id={monthYearDialogTitleId} className="text-xs font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Choose a month and year</p>
-                    <button type="button" onClick={closeMonthYear} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-[#8c6529] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">Done</button>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="min-w-0 space-y-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Month</span>
-                      <PortalSelect value={String(activeMonth)} onChange={(value) => setViewDate(new Date(activeYear, Number(value), 1))} options={MONTHS.map((month, index) => ({ value: String(index), label: month }))} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" />
-                    </label>
-                    <label className="min-w-0 space-y-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Year</span>
-                      <PortalSelect value={String(activeYear)} onChange={(value) => setViewDate(new Date(Number(value), activeMonth, 1))} options={years.map((year) => ({ value: year, label: year }))} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" />
-                    </label>
-                  </div>
-                </div>
-              </>
-            ) : null}
+            <AnimatePresence>
+              {monthYearOpen && (
+                <>
+                  <motion.button
+                    type="button"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    aria-label="Close month and year selector"
+                    onClick={closeMonthYear}
+                    className="fixed inset-0 z-40 bg-black/25 sm:bg-transparent"
+                  />
+                  <motion.div
+                    ref={monthYearDialogRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby={monthYearDialogTitleId}
+                    tabIndex={-1}
+                    initial={{ opacity: 0, scale: 0.95, y: -6, filter: 'blur(6px)' }}
+                    animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, scale: 0.95, y: -6, filter: 'blur(6px)' }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeMonthYear() } }}
+                    className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-12 sm:w-[22rem] sm:rounded-xl sm:p-4 backdrop-blur-md"
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <p id={monthYearDialogTitleId} className="text-xs font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Choose a month and year</p>
+                      <button type="button" onClick={closeMonthYear} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-[#8c6529] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">Done</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="min-w-0 space-y-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Month</span>
+                        <PortalSelect value={String(activeMonth)} onChange={(value) => setViewDate(new Date(activeYear, Number(value), 1))} options={MONTHS.map((month, index) => ({ value: String(index), label: month }))} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" />
+                      </label>
+                      <label className="min-w-0 space-y-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Year</span>
+                        <PortalSelect value={String(activeYear)} onChange={(value) => setViewDate(new Date(Number(value), activeMonth, 1))} options={years.map((year) => ({ value: year, label: year }))} className="w-full" buttonClassName="min-h-11 px-3 text-sm font-semibold normal-case tracking-normal" />
+                      </label>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
           <button type="button" aria-label="Next month" onClick={() => moveMonth(1)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
             <ChevronRight size={17} aria-hidden="true" />

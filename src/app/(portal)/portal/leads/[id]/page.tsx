@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -36,6 +37,7 @@ import {
   ChevronDown,
   ChevronRight,
   MoreVertical,
+  ShieldCheck,
   Eye,
   MousePointerClick,
   RefreshCw,
@@ -50,6 +52,9 @@ import {
   Loader2,
   Upload,
   Languages,
+  Menu,
+  PanelRightClose,
+  PanelRightOpen,
   X,
 } from 'lucide-react'
 import { isLuxorTestInquiry, LUXOR_MAX_GUESTS, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
@@ -57,6 +62,9 @@ import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
+import { MagicCard } from '@/components/ui/magic-card'
+import { BorderBeam } from '@/components/ui/border-beam'
+import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { LUXOR_GRAND_OPENING } from '@/lib/luxorGrandOpening'
@@ -101,7 +109,7 @@ import {
 } from '@/components/portal/ProposalBuilderModal'
 import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
 import { LayoutReviewPanel } from '@/components/portal/LayoutReviewPanel'
-import { PortalSmsConsentBadge } from '@/components/portal/PortalSmsConsentBadge'
+import { PortalSmsConsentBadge, type SmsConsentState } from '@/components/portal/PortalSmsConsentBadge'
 import { catalogItemToLineItem, LUXOR_PACKAGE_INTEREST_OPTIONS, LUXOR_SERVICE_CATALOG } from '@/lib/luxorServiceCatalog'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPreview'
@@ -636,7 +644,9 @@ export default function LeadDetailPage({
   const actionsMenuTriggerRef = useRef<HTMLButtonElement | null>(null)
   const actionsMenuRef = useRef<HTMLDivElement | null>(null)
   const [eventPickerPosition, setEventPickerPosition] = useState({ top: 0, left: 8, maxHeight: 360 })
-  const [actionsMenuPosition, setActionsMenuPosition] = useState({ top: 0, left: 8, maxHeight: 360 })
+  const [smsConsent, setSmsConsent] = useState<SmsConsentState | null>(null)
+  const [consentRequestSending, setConsentRequestSending] = useState(false)
+  const [manualOptInLoading, setManualOptInLoading] = useState(false)
   const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false)
   const [newEventType, setNewEventType] = useState('')
   const [newEventDate, setNewEventDate] = useState('')
@@ -891,6 +901,8 @@ export default function LeadDetailPage({
   const [summarySetupTime, setSummarySetupTime] = useState('')
   const [summaryBreakdownTime, setSummaryBreakdownTime] = useState('')
   const [savingSummary, setSavingSummary] = useState(false)
+  const [mobileSectionDrawerOpen, setMobileSectionDrawerOpen] = useState(false)
+  const [showClientSidebar, setShowClientSidebar] = useState(true)
 
   // Tour Attendance states
   const [isEditingTourAttendance, setIsEditingTourAttendance] = useState(false)
@@ -1577,9 +1589,14 @@ export default function LeadDetailPage({
   }
 
   useEffect(() => {
-    if (!showEventPicker && !showActionsMenu) return
+    if (!showEventPicker) return
     const updatePopoverPositions = () => {
-      const place = (anchor: HTMLButtonElement | null, menu: HTMLDivElement | null, width: number, set: (value: { top: number; left: number; maxHeight: number }) => void) => {
+      const place = (
+        anchor: HTMLButtonElement | null,
+        menu: HTMLDivElement | null,
+        width: number,
+        set: (value: { top: number; left: number; maxHeight: number }) => void,
+      ) => {
         const rect = anchor?.getBoundingClientRect()
         if (!rect) return
         const margin = 8
@@ -1596,7 +1613,6 @@ export default function LeadDetailPage({
         })
       }
       if (showEventPicker) place(eventPickerTriggerRef.current, eventPickerMenuRef.current, 340, setEventPickerPosition)
-      if (showActionsMenu) place(actionsMenuTriggerRef.current, actionsMenuRef.current, 256, setActionsMenuPosition)
     }
     const frame = window.requestAnimationFrame(updatePopoverPositions)
     window.addEventListener('resize', updatePopoverPositions)
@@ -1624,6 +1640,126 @@ export default function LeadDetailPage({
       document.removeEventListener('pointerdown', handlePointerDown)
     }
   }, [showActionsMenu, showEventPicker])
+
+  useEffect(() => {
+    if (!lead?.phone) {
+      setSmsConsent(null)
+      return
+    }
+    let isMounted = true
+    const fetchConsent = () => {
+      fetch(`/api/twilio/consent?phone=${encodeURIComponent(lead.phone!)}`, { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!isMounted) return
+          if (data && typeof data.status === 'string') {
+            setSmsConsent({
+              status: data.status,
+              updated_at: data.updated_at ?? null,
+              consent_scopes: Array.isArray(data.consent_scopes) ? data.consent_scopes : [],
+              consent_request_status: data.consent_request_status ?? null,
+            })
+          } else {
+            setSmsConsent({ status: 'unknown', consent_request_status: null })
+          }
+        })
+        .catch(() => {
+          if (isMounted) setSmsConsent({ status: 'unknown', consent_request_status: null })
+        })
+    }
+    fetchConsent()
+
+    const handleConsentUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ phone?: string; state?: SmsConsentState }>
+      const updatedPhone = customEvent.detail?.phone
+      if (
+        !updatedPhone ||
+        updatedPhone === lead.phone ||
+        updatedPhone.replace(/\D/g, '') === lead.phone?.replace(/\D/g, '')
+      ) {
+        if (customEvent.detail?.state) {
+          setSmsConsent(customEvent.detail.state)
+        } else {
+          fetchConsent()
+        }
+      }
+    }
+    window.addEventListener('luxor-sms-consent-updated', handleConsentUpdated)
+
+    return () => {
+      isMounted = false
+      window.removeEventListener('luxor-sms-consent-updated', handleConsentUpdated)
+    }
+  }, [lead?.phone])
+
+  const requestSmsConsent = async () => {
+    if (!lead?.phone || consentRequestSending) return
+    setConsentRequestSending(true)
+    try {
+      const response = await fetch('/api/twilio/consent-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: lead.phone,
+          inquiryId: lead.id,
+          contactName: lead.full_name,
+        }),
+      })
+      const payload = await response.json() as { simulated?: boolean; message?: unknown; error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to request SMS consent.')
+      setShowActionsMenu(false)
+      if (payload.simulated) {
+        notify({ title: 'Test simulation recorded', description: 'No SMS was sent to this test contact.', variant: 'success' })
+      } else {
+        const nextState: SmsConsentState = { status: 'unknown', consent_request_status: 'pending' }
+        setSmsConsent(nextState)
+        window.dispatchEvent(new CustomEvent('luxor-sms-consent-updated', { detail: { phone: lead.phone, state: nextState } }))
+        notify({ title: 'Consent request sent', description: `Verification text sent to ${lead.full_name || lead.phone}.`, variant: 'success' })
+      }
+    } catch (error) {
+      notify({ title: 'Consent request not sent', description: error instanceof Error ? error.message : 'Unable to request SMS consent.', variant: 'error' })
+    } finally {
+      setConsentRequestSending(false)
+    }
+  }
+
+  const manualOptIn = async () => {
+    if (!lead?.phone || manualOptInLoading) return
+    setManualOptInLoading(true)
+    try {
+      const response = await fetch('/api/twilio/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: lead.phone,
+          reason: `Manual opt-in from lead #${lead.id}`,
+        }),
+      })
+      const payload = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to record SMS opt-in.')
+      const nextState: SmsConsentState = {
+        status: 'opted_in',
+        consent_request_status: null,
+        consent_scopes: ['customer_care', 'transactional', 'tour', 'event', 'payment', 'invoice', 'marketing'],
+      }
+      setSmsConsent(nextState)
+      setShowActionsMenu(false)
+      window.dispatchEvent(new CustomEvent('luxor-sms-consent-updated', { detail: { phone: lead.phone, state: nextState } }))
+      notify({
+        title: 'SMS opt-in recorded',
+        description: `Marked ${lead.full_name || lead.phone} as opted in to text messages.`,
+        variant: 'success',
+      })
+    } catch (error) {
+      notify({
+        title: 'Opt-in not recorded',
+        description: error instanceof Error ? error.message : 'Unable to record SMS opt-in.',
+        variant: 'error',
+      })
+    } finally {
+      setManualOptInLoading(false)
+    }
+  }
 
   const fetchAllData = async (showPageLoader = true, refreshEmailHistory = showPageLoader) => {
     try {
@@ -4531,12 +4667,12 @@ export default function LeadDetailPage({
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <h1 className="break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
                 {lead.phone ? (
-                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-mono font-medium text-[color:var(--portal-text)]">
+                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)]">
                     <Phone size={11} className="text-[#caa24c]" /> {formatPhoneDisplay(lead.phone)}
                   </span>
                 ) : null}
                 {lead.email ? (
-                  <span className="inline-flex min-w-0 max-w-full items-start gap-1.5 break-all rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-mono font-medium text-[color:var(--portal-text)]">
+                  <span className="inline-flex min-w-0 max-w-full items-start gap-1.5 break-all rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-semibold text-[color:var(--portal-text)]">
                     <Mail size={11} className="text-[#caa24c]" /> {lead.email}
                   </span>
                 ) : null}
@@ -4622,79 +4758,71 @@ export default function LeadDetailPage({
                   </div>
                 )}
               </div>
-              {isNewsletter ? (
-                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
+              <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs text-[color:var(--portal-muted)]">
+                {isNewsletter ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                     Newsletter
                   </span>
-                </div>
-              ) : (
-                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2.5 text-xs font-semibold text-[color:var(--portal-muted)]">
-                  {leadEvents.length ? (
-                    <div className="relative">
-                      <button
-                        ref={eventPickerTriggerRef}
-                        type="button"
-                        onClick={() => setShowEventPicker((current) => !current)}
-                        aria-expanded={showEventPicker}
-                        aria-haspopup="listbox"
-                        className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-left text-[10px] font-black uppercase tracking-[0.08em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
-                      >
-                        <EventTypeIcon eventType={displayEventType} />
-                        <span className="truncate">{displayEventType}</span>
-                        <ChevronDown size={11} className="shrink-0 text-[#caa24c]" />
-                      </button>
-                      <AnimatePresence>
-                        {showEventPicker ? (
-                          <motion.div
-                            initial={{ opacity: 0, y: -5, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -5, scale: 0.98 }}
-                            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-                            role="listbox"
-                            ref={eventPickerMenuRef}
-                            style={{ position: 'fixed', top: eventPickerPosition.top, left: eventPickerPosition.left, maxHeight: eventPickerPosition.maxHeight, width: 'min(340px, calc(100vw - 1rem))' }}
-                            className="portal-dropdown z-[71] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
-                          >
-                            <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
-                            {leadEvents.map((event) => (
-                              <button
-                                key={event.id}
-                                type="button"
-                                role="option"
-                                aria-selected={event.id === selectedLeadEvent?.id}
-                                onClick={() => selectLeadEvent(event.id)}
-                                className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${event.id === selectedLeadEvent?.id ? 'bg-[#caa24c]/15' : 'hover:bg-[color:var(--portal-soft)]'}`}
-                              >
-                                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#caa24c]/10 text-[#caa24c]"><EventTypeIcon eventType={event.event_type} /></span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-[11px] font-bold text-[color:var(--portal-text)]">{event.event_type || 'Event'}</span>
-                                  <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">
-                                    {event.target_date ? formatDisplayDate(event.target_date) : 'Date TBD'} · {event.guest_count ? `${event.guest_count} guests` : 'Guest count open'} · {(event.pipeline_stage || 'inquiry').replaceAll('_', ' ')}
-                                  </span>
+                ) : leadEvents.length > 0 ? (
+                  <div className="relative">
+                    <button
+                      ref={eventPickerTriggerRef}
+                      type="button"
+                      onClick={() => setShowEventPicker((current) => !current)}
+                      aria-expanded={showEventPicker}
+                      aria-haspopup="listbox"
+                      className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-left text-[10px] font-black uppercase tracking-[0.08em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                    >
+                      <EventTypeIcon eventType={displayEventType} />
+                      <span className="truncate">{displayEventType}{leadEvents.length > 1 ? ` · ${leadEvents.length} events` : ''}</span>
+                      <ChevronDown size={11} className="shrink-0 text-[#caa24c]" />
+                    </button>
+                    <AnimatePresence>
+                      {showEventPicker ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                          role="listbox"
+                          ref={eventPickerMenuRef}
+                          style={{ position: 'fixed', top: eventPickerPosition.top, left: eventPickerPosition.left, maxHeight: eventPickerPosition.maxHeight, width: 'min(340px, calc(100vw - 1rem))' }}
+                          className="portal-dropdown z-[71] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                        >
+                          <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
+                          {leadEvents.map((event) => (
+                            <button
+                              key={event.id}
+                              type="button"
+                              role="option"
+                              aria-selected={event.id === selectedLeadEvent?.id}
+                              onClick={() => selectLeadEvent(event.id)}
+                              className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${event.id === selectedLeadEvent?.id ? 'bg-[#caa24c]/15' : 'hover:bg-[color:var(--portal-soft)]'}`}
+                            >
+                              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#caa24c]/10 text-[#caa24c]"><EventTypeIcon eventType={event.event_type} /></span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[11px] font-bold text-[color:var(--portal-text)]">{event.event_type || 'Event'}</span>
+                                <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">
+                                  {event.target_date ? formatDisplayDate(event.target_date) : 'Date TBD'} · {event.guest_count ? `${event.guest_count} guests` : 'Guest count open'} · {(event.pipeline_stage || 'inquiry').replaceAll('_', ' ')}
                                 </span>
-                                {event.id === selectedLeadEvent?.id ? <Check size={13} className="mt-1 shrink-0 text-[#caa24c]" /> : null}
-                              </button>
-                            ))}
-                          </motion.div>
-                        ) : null}
-                      </AnimatePresence>
-                    </div>
-                  ) : <span>{displayEventType}</span>}
-                  <span className="text-zinc-700 font-normal select-none">•</span>
-                  <span>{displayEventDate ? formatDisplayDate(displayEventDate) : 'Date TBD'}</span>
-                  <span className="text-zinc-700 font-normal select-none">•</span>
-                  <span>{displayGuestCount ? `${displayGuestCount} Guests` : 'Guest count open'}</span>
-                </div>
-              )}
-              <p className="mt-2 text-xs leading-5 text-zinc-500">
-                Captured via <span className="capitalize">{formatSourceLabel(lead)}</span> on {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
-              </p>
+                              </span>
+                              {event.id === selectedLeadEvent?.id ? <Check size={13} className="mt-1 shrink-0 text-[#caa24c]" /> : null}
+                            </button>
+                          ))}
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  </div>
+                ) : null}
+                <p className="text-xs leading-5 text-[color:var(--portal-muted)]">
+                  Captured via <span className="capitalize font-medium text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</span> on {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
+                </p>
+              </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-            <PortalSmsConsentBadge phone={lead.phone} />
+            <PortalSmsConsentBadge phone={lead.phone} initialConsent={smsConsent} />
             {lead.email && (
               <button 
                 type="button"
@@ -4720,7 +4848,13 @@ export default function LeadDetailPage({
             {lead.phone && (
               <button
                 type="button"
-                onClick={() => setTextPopupOpen(true)}
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('luxor-open-text', {
+                      detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.full_name },
+                    })
+                  )
+                }}
                 className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
                 aria-label="Text client"
                 title="Text client"
@@ -4748,14 +4882,13 @@ export default function LeadDetailPage({
                     <div className="fixed inset-0 z-[70]" onClick={() => setShowActionsMenu(false)} />
                     <motion.div
                       ref={actionsMenuRef}
-                      initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                      initial={{ opacity: 0, y: -4, scale: 0.98 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -5, scale: 0.98 }}
-                      transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                      transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
                       role="menu"
                       data-portal-dropdown="true"
-                      style={{ position: 'fixed', top: actionsMenuPosition.top, left: actionsMenuPosition.left, maxHeight: actionsMenuPosition.maxHeight, width: 'min(15rem, calc(100vw - 1rem))' }}
-                      className="portal-dropdown z-[71] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                      className="portal-dropdown absolute right-0 top-full mt-2 z-[71] w-64 max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-8rem)] overflow-y-auto portal-scrollbar rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 pb-2.5 shadow-2xl backdrop-blur-xl"
                     >
                       <button type="button" role="menuitem" onClick={openAddEventModal} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <Plus size={13} className="text-[#caa24c]" />
@@ -4774,6 +4907,58 @@ export default function LeadDetailPage({
                           <Calendar size={13} className="text-[#caa24c]" />
                           <span>Cancel scheduled tour</span>
                         </button>
+                      ) : null}
+                      {lead.phone ? (
+                        <div className="mt-1 border-t border-[color:var(--portal-border)] pt-1">
+                          <p className="px-3 py-1 font-mono text-[8px] uppercase tracking-widest text-[color:var(--portal-muted)]">SMS Messaging</p>
+                          {smsConsent?.status === 'opted_in' ? (
+                            <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                              <Check size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                              <span>SMS consent active</span>
+                            </div>
+                          ) : (
+                            <>
+                              {smsConsent?.status === 'opted_out' ? (
+                                <p className="px-3 py-1 text-[9px] leading-tight text-red-600 dark:text-red-400">
+                                  Client opted out (STOP keyword).
+                                </p>
+                              ) : null}
+                              {smsConsent?.consent_request_status === 'pending' ? (
+                                <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold text-[color:var(--portal-muted)]">
+                                  <MessageSquare size={13} className="shrink-0 text-[#caa24c]" />
+                                  <span>Verification text sent · waiting for YES</span>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => void requestSmsConsent()}
+                                  disabled={consentRequestSending}
+                                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a] disabled:opacity-50"
+                                >
+                                  <MessageSquare size={13} className="shrink-0 text-[#caa24c]" />
+                                  <span>
+                                    {consentRequestSending
+                                      ? 'Sending verification…'
+                                      : smsConsent?.consent_request_status === 'failed'
+                                      ? 'Retry verification text'
+                                      : 'Send verification text'}
+                                  </span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => void manualOptIn()}
+                                disabled={manualOptInLoading}
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 transition-colors hover:bg-emerald-500/10 disabled:opacity-50"
+                              >
+                                <ShieldCheck size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                <span>{manualOptInLoading ? 'Recording opt-in…' : 'Manually opt in to SMS'}</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
                       ) : null}
                       {lead.status !== 'closed_lost' && lead.pipeline_stage !== 'closed_lost' ? (
                         <div className="mt-1 border-t border-[color:var(--portal-border)] pt-1.5">
@@ -4847,102 +5032,101 @@ export default function LeadDetailPage({
       </section>
 
       <div
-        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-10"
+        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-8"
         style={{
           backgroundColor: 'color-mix(in srgb, var(--portal-bg) 97%, transparent)',
           backdropFilter: 'blur(50px)',
           WebkitBackdropFilter: 'blur(50px)',
         }}
       >
-        <div className="lg:hidden px-3 py-2.5">
-          <div role="tablist" aria-label="Client sections" className="grid grid-cols-4 gap-1 rounded-xl bg-[color:var(--portal-soft)] p-1">
-            {primaryLeadTabs.map((item) => {
-              const isActive = activeLeadTab === item.id
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => selectLeadTab(item)}
-                  className={`inline-flex min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1 py-2 text-[9px] font-black uppercase tracking-[0.08em] transition-colors ${isActive ? 'bg-[color:var(--portal-card)] text-[#a8792f] shadow-sm dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
-                >
-                  <span className="truncate">{item.label}</span>
-                  {typeof item.count === 'number' ? <span className="shrink-0 font-mono text-[8px] opacity-70">{item.count}</span> : null}
-                </button>
-              )
-            })}
-          </div>
-          <div className="mt-1.5 flex items-center justify-between px-1">
-            <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[color:var(--portal-faint)]">More sections</span>
-            <button
-              type="button"
-              onClick={() => setShowLeadTabOverflow((current) => !current)}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-black uppercase tracking-[0.1em] text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]"
-              aria-expanded={showLeadTabOverflow}
-            >
-              {showLeadTabOverflow ? 'Hide' : 'Show all'}
-              <ChevronDown size={12} className={showLeadTabOverflow ? 'rotate-180 transition-transform' : 'transition-transform'} />
-            </button>
-          </div>
-          {showLeadTabOverflow ? (
-            <div role="tablist" aria-label="Additional lead detail sections" className="mt-1 grid grid-cols-2 gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 sm:grid-cols-4">
-              {secondaryLeadTabs.map((item) => {
+        {/* Mobile Condensed Section Selector */}
+        <div className="md:hidden px-3 py-2.5">
+          {(() => {
+            const activeItem = tabItems.find((item) => item.id === activeLeadTab) || tabItems[0]
+            return (
+              <button
+                type="button"
+                onClick={() => setMobileSectionDrawerOpen(true)}
+                aria-haspopup="dialog"
+                aria-expanded={mobileSectionDrawerOpen}
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-2 text-left shadow-sm transition-colors hover:border-[#caa24c]/45"
+              >
+                <span className="min-w-0">
+                  <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Dossier section</span>
+                  <span className="mt-0.5 flex items-center gap-2 truncate text-xs font-bold text-[color:var(--portal-text)]">
+                    <span>{activeItem.label}</span>
+                    {typeof activeItem.count === 'number' ? (
+                      <span className="rounded-full bg-[#caa24c]/15 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-[#a8792f] dark:text-[#f1d27a]">
+                        {activeItem.count}
+                      </span>
+                    ) : null}
+                  </span>
+                </span>
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] dark:text-[#f1d27a]">
+                  <Menu size={13} />
+                  Browse sections
+                  <ChevronDown size={13} />
+                </span>
+              </button>
+            )
+          })()}
+        </div>
+
+        {/* Tablet (iPad) & Desktop Tab Bar */}
+        <div className="hidden md:block bg-transparent px-4">
+          <div className="flex items-center justify-between gap-3">
+            <div role="tablist" aria-label="Client sections" className="relative flex min-w-0 flex-1 gap-5 overflow-x-auto portal-scrollbar">
+              <span
+                className="absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
+                style={{ left: tabIndicator.left, width: tabIndicator.width }}
+              />
+              {primaryLeadTabs.map((item) => {
                 const isActive = activeLeadTab === item.id
                 return (
                   <button
                     key={item.id}
+                    ref={(node) => {
+                      tabButtonRefs.current[item.id] = node
+                    }}
                     type="button"
                     role="tab"
                     aria-selected={isActive}
                     onClick={() => selectLeadTab(item)}
-                    className={`inline-flex min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-2 py-2 text-[9px] font-black uppercase tracking-[0.08em] transition-colors ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+                    className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${isActive ? 'text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
                   >
-                    <span className="truncate">{item.label}</span>
-                    {typeof item.count === 'number' ? <span className="shrink-0 font-mono text-[8px] opacity-70">{item.count}</span> : null}
+                    {item.label}
+                    {typeof item.count === 'number' ? <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold tabular-nums ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{item.count}</span> : null}
                   </button>
                 )
               })}
             </div>
-          ) : null}
-        </div>
-        <div className="hidden lg:block bg-transparent px-4">
-          <div className="flex items-center justify-between gap-4">
-          <div role="tablist" aria-label="Client sections" className="relative flex min-w-0 flex-1 gap-5 overflow-x-auto portal-scrollbar">
-            <span
-              className="absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
-              style={{ left: tabIndicator.left, width: tabIndicator.width }}
-            />
-            {primaryLeadTabs.map((item) => {
-              const isActive = activeLeadTab === item.id
-              return (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button type="button" onClick={() => setShowLeadTabOverflow((current) => !current)} aria-expanded={showLeadTabOverflow} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">
+                {showLeadTabOverflow ? 'Hide sections' : 'More sections'} <ChevronDown size={12} className={showLeadTabOverflow ? 'rotate-180 transition-transform' : 'transition-transform'} />
+              </button>
+              {(activeLeadTab === 'overview' || activeLeadTab === 'planning') ? (
                 <button
-                  key={item.id}
-                  ref={(node) => {
-                    tabButtonRefs.current[item.id] = node
-                  }}
                   type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => selectLeadTab(item)}
-                  className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${isActive ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
+                  onClick={() => setShowClientSidebar((current) => !current)}
+                  title={showClientSidebar ? 'Hide Client Summary sidebar for full-width presentation view' : 'Show Client Summary sidebar'}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] transition-colors ${
+                    !showClientSidebar
+                      ? 'border-[#caa24c]/45 bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]'
+                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]'
+                  }`}
                 >
-                  {item.label}
-                  {typeof item.count === 'number' ? <span className={`rounded-full px-1.5 py-0.5 font-mono text-[8px] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'}`}>{item.count}</span> : null}
+                  {showClientSidebar ? <PanelRightClose size={13} /> : <PanelRightOpen size={13} />}
+                  <span className="hidden sm:inline">{showClientSidebar ? 'Focus View' : 'Show Summary'}</span>
                 </button>
-              )
-            })}
-          </div>
-          <button type="button" onClick={() => setShowLeadTabOverflow((current) => !current)} aria-expanded={showLeadTabOverflow} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">
-            {showLeadTabOverflow ? 'Hide sections' : 'More sections'} <ChevronDown size={12} className={showLeadTabOverflow ? 'rotate-180 transition-transform' : 'transition-transform'} />
-          </button>
+              ) : null}
+            </div>
           </div>
           {showLeadTabOverflow ? (
-            <div role="tablist" aria-label="Additional client sections" className="mt-1 flex flex-wrap gap-1 border-t border-[color:var(--portal-border)] py-1">
+            <div role="tablist" aria-label="Additional client sections" className="mt-1 flex flex-wrap gap-1 border-t border-[color:var(--portal-border)] py-1.5">
               {secondaryLeadTabs.map((item) => {
                 const isActive = activeLeadTab === item.id
                 return <button key={item.id} ref={(node) => { tabButtonRefs.current[item.id] = node }} type="button" role="tab" aria-selected={isActive} onClick={() => selectLeadTab(item)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
-                  {item.label}{typeof item.count === 'number' ? <span className="font-mono text-[8px] opacity-70">{item.count}</span> : null}
+                  {item.label}{typeof item.count === 'number' ? <span className="text-[8px] font-bold tabular-nums opacity-70">{item.count}</span> : null}
                 </button>
               })}
             </div>
@@ -4950,10 +5134,73 @@ export default function LeadDetailPage({
         </div>
       </div>
 
+      {/* Mobile Dossier Section Bottom-Sheet Modal */}
+      {mobileSectionDrawerOpen && typeof document !== 'undefined' ? createPortal(
+        <div
+          className="fixed inset-0 z-[70] flex items-end bg-black/60 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-xs md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Browse dossier sections"
+          onClick={() => setMobileSectionDrawerOpen(false)}
+        >
+          <div
+            className="max-h-[75dvh] w-full overflow-y-auto rounded-t-2xl border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 pb-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#f1d27a]">Client Dossier</p>
+                <h2 className="mt-0.5 text-sm font-bold text-[color:var(--portal-text)]">Choose a section</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileSectionDrawerOpen(false)}
+                aria-label="Close sections menu"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {tabItems.map((item) => {
+                const isActive = activeLeadTab === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      selectLeadTab(item)
+                      setMobileSectionDrawerOpen(false)
+                    }}
+                    className={`flex min-h-12 items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                      isActive
+                        ? 'border-[#caa24c]/50 bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]'
+                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
+                    }`}
+                  >
+                    <span className="truncate text-[11px] font-black uppercase tracking-[0.08em]">{item.label}</span>
+                    {typeof item.count === 'number' ? (
+                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums ${
+                        isActive ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
+                      }`}>
+                        {item.count}
+                      </span>
+                    ) : isActive ? (
+                      <Check size={13} className="shrink-0 text-[#caa24c]" />
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
+
       {activeLeadTab === 'overview' || activeLeadTab === 'planning' ? (
-        <div className="mt-3 grid grid-cols-1 gap-6 pb-12 sm:pb-16 lg:sticky lg:top-[3.25rem] lg:h-[calc(100dvh-7.25rem)] lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:pb-0">
+        <div className="mt-4 flex flex-col gap-6 pb-12 sm:pb-16 xl:flex-row xl:items-start xl:gap-0">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
-          <div className="space-y-6 px-2.5 pt-2 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-3 lg:pt-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
+          <div className="min-w-0 flex-1 space-y-6">
             {activeLeadTab === 'planning' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="planning" onOpenProposal={() => openProposalBuilder()} /> : null}
             
             {/* Stage-specific Content Router */}
@@ -4964,7 +5211,11 @@ export default function LeadDetailPage({
                 return (
                   <>
                     {/* Next Move */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <MagicCard
+                      className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                      gradientColor="rgba(202, 162, 76, 0.08)"
+                    >
+                      <BorderBeam size={75} duration={12} colorFrom="#caa24c" colorTo="#f1d27a" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs">
@@ -4990,7 +5241,7 @@ export default function LeadDetailPage({
                           </div>
                           <div className="min-w-0 sm:min-w-[86px]">
                             <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Marketing</p>
-                            <p className="mt-1 text-[10px] font-bold text-emerald-500">Subscribed</p>
+                            <p className="mt-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Subscribed</p>
                           </div>
                         </div>
 
@@ -5013,7 +5264,7 @@ export default function LeadDetailPage({
                           </button>
                         </div>
                       </div>
-                    </section>
+                    </MagicCard>
 
                     {/* Subscriber Details Card */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-3 luxor-soft-enter">
@@ -5025,11 +5276,11 @@ export default function LeadDetailPage({
                         </div>
                         <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
                           <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Email Address</p>
-                          <p className="mt-1 font-mono font-bold text-[color:var(--portal-text)]">{lead.email || 'None'}</p>
+                          <p className="mt-1 font-bold text-[color:var(--portal-text)]">{lead.email || 'None'}</p>
                         </div>
                         <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
                           <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Phone Number</p>
-                          <p className="mt-1 font-mono font-bold text-[color:var(--portal-text)]">{lead.phone ? formatPhoneDisplay(lead.phone) : 'Not provided'}</p>
+                          <p className="mt-1 font-bold tabular-nums text-[color:var(--portal-text)]">{lead.phone ? formatPhoneDisplay(lead.phone) : 'Not provided'}</p>
                         </div>
                         <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
                           <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Language Preference</p>
@@ -5041,7 +5292,7 @@ export default function LeadDetailPage({
                         </div>
                         <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 p-3">
                           <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Pipeline Stage</p>
-                          <p className="mt-1 font-bold text-emerald-500">Newsletter</p>
+                          <p className="mt-1 font-bold text-emerald-600 dark:text-emerald-400">Newsletter</p>
                         </div>
                       </div>
                     </section>
@@ -5053,7 +5304,11 @@ export default function LeadDetailPage({
                 return (
                   <>
                     {/* Next Move */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <MagicCard
+                      className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                      gradientColor="rgba(202, 162, 76, 0.08)"
+                    >
+                      <BorderBeam size={75} duration={12} colorFrom="#caa24c" colorTo="#f1d27a" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -5077,7 +5332,7 @@ export default function LeadDetailPage({
                           </div>
                           <div className="min-w-0 sm:min-w-[86px]">
                             <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Lead Score</p>
-                            <p className="mt-1 text-[10px] font-bold text-emerald-400">High / Hot</p>
+                            <p className="mt-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">High / Hot</p>
                           </div>
                         </div>
 
@@ -5097,13 +5352,13 @@ export default function LeadDetailPage({
                             disabled={updatingStatus || !lead.preferred_tour_date || !lead.preferred_tour_time}
                             aria-label="Move to the next step without sending an invite"
                             title={lead.preferred_tour_date && lead.preferred_tour_time ? 'Tour already scheduled — move to the next step without sending an invite' : 'Add a tour date and time first'}
-                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/5 text-[#d8b568] transition-colors hover:bg-[#caa24c]/10 hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40"
+                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/5 text-[#a8792f] dark:text-[#d8b568] transition-colors hover:bg-[#caa24c]/10 hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <CheckCircle2 size={15} className={updatingStatus ? 'animate-pulse' : ''} />
                           </button>
                         </div>
                       </div>
-                    </section>
+                    </MagicCard>
 
                     {/* Event Details */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
@@ -5274,22 +5529,22 @@ export default function LeadDetailPage({
                           <div className="space-y-3.5">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <p className="text-[9px] uppercase font-bold text-zinc-500">Target Budget</p>
-                                <p className="font-semibold text-white mt-0.5">{tourBudget || 'Not captured'}</p>
+                                <p className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Target Budget</p>
+                                <p className="font-semibold text-[color:var(--portal-text)] mt-0.5">{tourBudget || 'Not captured'}</p>
                               </div>
                               <div>
-                                <p className="text-[9px] uppercase font-bold text-zinc-500">Guests on Tour</p>
-                                <p className="font-semibold text-zinc-300 mt-0.5">{tourGuests || 'None specified'}</p>
+                                <p className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Guests on Tour</p>
+                                <p className="font-semibold text-[color:var(--portal-text)] mt-0.5">{tourGuests || 'None specified'}</p>
                               </div>
                             </div>
                             <div>
-                              <p className="text-[9px] uppercase font-bold text-zinc-500">Catering Preferences</p>
-                              <p className="font-semibold text-zinc-300 mt-0.5">{cateringPreferences || 'Not captured'}</p>
+                              <p className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Catering Preferences</p>
+                              <p className="font-semibold text-[color:var(--portal-text)] mt-0.5">{cateringPreferences || 'Not captured'}</p>
                             </div>
                           </div>
                           <div className="border-t sm:border-t-0 sm:border-l border-[color:var(--portal-border)] pt-3.5 sm:pt-0 sm:pl-4 space-y-2">
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Intake / Specific Requirements</p>
-                            <p className="text-zinc-400 italic leading-relaxed mt-0.5">&ldquo;{tourNotes || 'No tour notes captured yet.'}&rdquo;</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Intake / Specific Requirements</p>
+                            <p className="text-[color:var(--portal-muted)] italic leading-relaxed mt-0.5">&ldquo;{tourNotes || 'No tour notes captured yet.'}&rdquo;</p>
                           </div>
                         </div>
                       )}
@@ -5298,7 +5553,7 @@ export default function LeadDetailPage({
                     {/* Recent Activity */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Recent Activity</p>
                         <button
                           type="button"
                           onClick={() => setActiveLeadTab('activity')}
@@ -5310,25 +5565,25 @@ export default function LeadDetailPage({
 
                       <div className="space-y-4">
                         {allActivityEntries.length === 0 ? (
-                          <p className="text-xs text-zinc-500 italic py-4">No recent activity logged yet.</p>
+                          <p className="text-xs text-[color:var(--portal-muted)] italic py-4">No recent activity logged yet.</p>
                         ) : (
                           allActivityEntries.slice(0, 5).map((entry) => {
                             const isEmail = entry.kind === 'email'
                             const isCall = entry.kind === 'call'
                             return (
-                              <div key={entry.id} className={`group relative flex items-center justify-between rounded-lg border-b border-zinc-100/5 px-2 py-2 dark:border-zinc-850/50 last:border-0 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${isEmail ? 'cursor-pointer hover:-translate-y-px hover:bg-[#caa24c]/10 hover:shadow-sm hover:shadow-[#caa24c]/10' : 'hover:bg-[color:var(--portal-soft)]'}`}>
+                              <div key={entry.id} className={`group relative flex items-center justify-between rounded-lg border-b border-[color:var(--portal-border)]/50 px-2 py-2 last:border-0 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${isEmail ? 'cursor-pointer hover:-translate-y-px hover:bg-[#caa24c]/10 hover:shadow-sm hover:shadow-[#caa24c]/10' : 'hover:bg-[color:var(--portal-soft)]'}`}>
                                 {isEmail ? (
                                   <Link href={emailReaderUrl(entry.email)} aria-label={`Open email: ${decodeHtmlEntities(entry.email.subject)}`} className="absolute inset-0 z-10 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" />
                                 ) : null}
                                 <div className="flex items-center gap-3 min-w-0">
                                   <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-105 ${
                                     isEmail
-                                      ? 'bg-purple-500/10 text-purple-400' 
+                                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400' 
                                       : isCall || entry.note.note_type === 'call_log'
-                                      ? 'bg-emerald-500/10 text-emerald-400'
+                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                                       : entry.note.note_type === 'email_log'
-                                      ? 'bg-purple-500/10 text-purple-400'
-                                      : 'bg-zinc-500/10 text-zinc-500'
+                                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                                      : 'bg-zinc-500/10 text-[color:var(--portal-muted)]'
                                   }`}>
                                     {isEmail ? (
                                       <Mail size={13} />
@@ -5345,7 +5600,7 @@ export default function LeadDetailPage({
                                   </div>
                                 </div>
                                 <div className="ml-2 flex shrink-0 items-center gap-1.5">
-                                  <span className="text-[10px] font-mono text-zinc-500 transition-transform duration-200 group-hover:-translate-x-0.5">
+                                  <span className="text-[10px] font-semibold tabular-nums text-[color:var(--portal-muted)] transition-transform duration-200 group-hover:-translate-x-0.5">
                                     {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                   </span>
                                   {isEmail ? <ChevronRight size={14} className="-translate-x-1 text-[#a8792f] opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 dark:text-[#f1d27a]" /> : null}
@@ -5359,10 +5614,10 @@ export default function LeadDetailPage({
 
                     {/* RSVP / Inquiry Message */}
                     <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-messages">
-                      <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
+                      <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">
                         {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
                       </h4>
-                      <p className="text-xs leading-relaxed text-zinc-300 font-medium italic">
+                      <p className="text-xs leading-relaxed text-[color:var(--portal-text)] font-medium italic">
                         &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
                       </p>
                     </div>
@@ -5403,7 +5658,11 @@ export default function LeadDetailPage({
                 return (
                   <>
                     {/* Confirmed booking state / tour scheduling action */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <MagicCard
+                      className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                      gradientColor="rgba(202, 162, 76, 0.08)"
+                    >
+                      <BorderBeam size={75} duration={12} colorFrom="#caa24c" colorTo="#f1d27a" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -5436,7 +5695,7 @@ export default function LeadDetailPage({
                           )}
                         </div>
                       </div>
-                    </section>
+                    </MagicCard>
 
                     {/* Row 1: Tour Details & Tour Attendance */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -5444,16 +5703,16 @@ export default function LeadDetailPage({
                       <section id="lead-tour-details" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
                         <div>
                           <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Tour Details</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Tour Details</p>
                           </div>
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Tour Date</span>
-                              <span className="font-bold text-white">{lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'Not scheduled'}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Tour Date</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'Not scheduled'}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Tour Time</span>
-                              <span className="font-bold text-white">{lead.preferred_tour_time || '3:00 PM'}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Tour Time</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{lead.preferred_tour_time || '3:00 PM'}</span>
                             </div>
                             {emailResendCandidate ? (
                               <div className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-3">
@@ -5485,22 +5744,22 @@ export default function LeadDetailPage({
                               </div>
                             ) : null}
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Assigned To</span>
-                              <span className="font-bold text-white">{Array.isArray(lead.metadata?.tour_assignees) && lead.metadata.tour_assignees.length ? lead.metadata.tour_assignees.join(', ') : String(lead.metadata?.tour_coordinator || 'Not assigned')}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Assigned To</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{Array.isArray(lead.metadata?.tour_assignees) && lead.metadata.tour_assignees.length ? lead.metadata.tour_assignees.join(', ') : String(lead.metadata?.tour_coordinator || 'Not assigned')}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Location</span>
-                              <span className="font-bold text-white">Luxor at Las Palmas Events</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Location</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">Luxor at Las Palmas Events</span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Status</span>
                               <span className="rounded bg-[#caa24c]/10 text-[#a8792f] border border-[#caa24c]/20 px-2 py-0.5 text-[9px] font-bold uppercase">{tourDisplayStatus(lead)}</span>
                             </div>
                           </div>
                         </div>
                         <div className="mt-6 border-t border-[color:var(--portal-border)] pt-4">
                           {tourDisplayStatus(lead) === 'Confirmed' ? (
-                            <span className="mb-3 block rounded-lg border border-emerald-500/20 bg-emerald-500/10 py-1.5 text-center text-[9px] font-black uppercase text-emerald-400">Tour Confirmed</span>
+                            <span className="mb-3 block rounded-lg border border-emerald-500/20 bg-emerald-500/10 py-1.5 text-center text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400">Tour Confirmed</span>
                           ) : null}
                           {!['Completed', 'Cancelled'].includes(tourDisplayStatus(lead)) ? (
                             <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">{lead.tour_attendance_status === 'no_show' ? 'Correct Outcome to Completed' : 'Mark Complete'}</button>
@@ -5523,12 +5782,12 @@ export default function LeadDetailPage({
                               
                               <div className="space-y-3.5">
                                 <div>
-                                  <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Tour Team</label>
+                                  <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Tour Team</label>
                                   <div className="flex flex-wrap gap-2">
                                     {['Arianna', 'Carlos', 'Alex'].map((name) => {
                                       const selected = tourAssignees.includes(name)
                                       return (
-                                        <button key={name} type="button" onClick={() => setTourAssignees((current) => selected ? current.filter((item) => item !== name) : [...current, name])} className={`rounded border px-2.5 py-1.5 text-[9px] font-black uppercase ${selected ? 'border-[#caa24c]/50 bg-[#caa24c]/15 text-[#a8792f]' : 'border-[color:var(--portal-border)] text-zinc-500'}`}>
+                                        <button key={name} type="button" onClick={() => setTourAssignees((current) => selected ? current.filter((item) => item !== name) : [...current, name])} className={`rounded border px-2.5 py-1.5 text-[9px] font-black uppercase ${selected ? 'border-[#caa24c]/50 bg-[#caa24c]/15 text-[#a8792f]' : 'border-[color:var(--portal-border)] text-[color:var(--portal-muted)]'}`}>
                                           {name}
                                         </button>
                                       )
@@ -5538,16 +5797,16 @@ export default function LeadDetailPage({
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
-                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Primary Attendee</label>
+                                    <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Primary Attendee</label>
                                     <input
                                       type="text"
                                       disabled
                                       value={lead.full_name}
-                                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-zinc-500 cursor-not-allowed outline-none"
+                                      className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-muted)] cursor-not-allowed outline-none"
                                     />
                                   </div>
                                   <div>
-                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Guests / Additional Attendees</label>
+                                    <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Guests / Additional Attendees</label>
                                     <input
                                       type="text"
                                       value={tourGuests}
@@ -5559,7 +5818,7 @@ export default function LeadDetailPage({
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
-                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Target Budget</label>
+                                    <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Target Budget</label>
                                     <input
                                       type="text"
                                       value={tourBudget}
@@ -5569,7 +5828,7 @@ export default function LeadDetailPage({
                                     />
                                   </div>
                                   <div>
-                                    <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Catering & Bar Preferences</label>
+                                    <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Catering & Bar Preferences</label>
                                     <input
                                       type="text"
                                       value={cateringPreferences}
@@ -5580,7 +5839,7 @@ export default function LeadDetailPage({
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Tour Notes / Feedback</label>
+                                  <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Tour Notes / Feedback</label>
                                   <textarea
                                     value={tourNotes}
                                     onChange={(e) => setTourNotes(e.target.value)}
@@ -5602,7 +5861,7 @@ export default function LeadDetailPage({
                                   setTourBudget(String(lead.metadata?.estimatedBudget || ''))
                                   setCateringPreferences(String(lead.metadata?.cateringPreferences || ''))
                                 }}
-                                className="px-3 py-1.5 rounded border border-zinc-800 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                                className="px-3 py-1.5 rounded border border-[color:var(--portal-border)] text-[10px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                               >
                                 Cancel
                               </button>
@@ -5621,34 +5880,34 @@ export default function LeadDetailPage({
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <div className="space-y-3">
                                 <div>
-                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Tour Attendance</p>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)] mb-2">Tour Attendance</p>
                                   <div className="space-y-1.5 text-xs">
                                     <div className="flex items-center gap-2">
                                       <span className="h-1.5 w-1.5 rounded-full bg-[#caa24c]" />
-                                      <span className="font-bold text-white">{lead.full_name} <span className="text-zinc-500 font-medium">(Primary)</span></span>
+                                      <span className="font-bold text-[color:var(--portal-text)]">{lead.full_name} <span className="text-[color:var(--portal-muted)] font-medium">(Primary)</span></span>
                                     </div>
                                     {tourGuests ? (
                                       <div className="flex items-center gap-2">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-                                        <span className="font-bold text-zinc-300">{tourGuests} <span className="text-zinc-500 font-medium">(Guest)</span></span>
+                                        <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--portal-border)]" />
+                                        <span className="font-bold text-[color:var(--portal-text)]">{tourGuests} <span className="text-[color:var(--portal-muted)] font-medium">(Guest)</span></span>
                                       </div>
                                     ) : null}
                                   </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                   <div>
-                                    <p className="text-[9px] uppercase font-bold text-zinc-500">Target Budget</p>
-                                    <p className="text-xs font-semibold text-white mt-0.5">{tourBudget || 'Not captured'}</p>
+                                    <p className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Target Budget</p>
+                                    <p className="text-xs font-semibold text-[color:var(--portal-text)] mt-0.5">{tourBudget || 'Not captured'}</p>
                                   </div>
                                   <div>
-                                    <p className="text-[9px] uppercase font-bold text-zinc-500">Catering / Bar</p>
-                                    <p className="text-xs font-semibold text-zinc-300 mt-0.5 truncate">{cateringPreferences || 'Not captured'}</p>
+                                    <p className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Catering / Bar</p>
+                                    <p className="text-xs font-semibold text-[color:var(--portal-text)] mt-0.5 truncate">{cateringPreferences || 'Not captured'}</p>
                                   </div>
                                 </div>
                               </div>
                               <div className="border-t sm:border-t-0 sm:border-l border-[color:var(--portal-border)] pt-3 sm:pt-0 sm:pl-4">
-                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Tour Notes & Prep</p>
-                                <p className="text-xs text-zinc-400 italic leading-relaxed">
+                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)] mb-2">Tour Notes & Prep</p>
+                                <p className="text-xs text-[color:var(--portal-muted)] italic leading-relaxed">
                                   &ldquo;{tourNotes || 'No tour notes captured yet.'}&rdquo;
                                 </p>
                                 <button
@@ -5787,7 +6046,14 @@ export default function LeadDetailPage({
                 return (
                   <>
                     {/* Next Move */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <MagicCard
+                      className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                      gradientColor="rgba(202, 162, 76, 0.14)"
+                      gradientFrom="#caa24c"
+                      gradientTo="#8c6529"
+                      gradientOpacity={0.22}
+                    >
+                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -5807,7 +6073,7 @@ export default function LeadDetailPage({
                           Planning Checklist
                         </button>
                       </div>
-                    </section>
+                    </MagicCard>
 
                     {/* Sub-tabs for Planning */}
                     <div className="flex gap-4 border-b border-[color:var(--portal-border)] text-xs overflow-x-auto pb-1 portal-scrollbar">
@@ -5883,37 +6149,37 @@ export default function LeadDetailPage({
                           {/* Event Information */}
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Information</p>
-                              <button type="button" onClick={() => beginPlanningEdit('event')} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit</button>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Event Information</p>
+                              <button type="button" onClick={() => beginPlanningEdit('event')} className="text-[10px] font-bold uppercase text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68]">Edit</button>
                             </div>
                             <div className="space-y-2 text-xs">
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Event Date</span>
-                              <span className="font-bold text-white">{latestBooking?.event_date ? formatDisplayDate(latestBooking.event_date) : activeEventForDisplay?.target_date ? formatDisplayDate(activeEventForDisplay.target_date) : 'Date not set'}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Event Date</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{latestBooking?.event_date ? formatDisplayDate(latestBooking.event_date) : activeEventForDisplay?.target_date ? formatDisplayDate(activeEventForDisplay.target_date) : 'Date not set'}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Event Time</span>
-                                <span className="font-bold text-white">{summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'Time not set'}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Event Time</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'Time not set'}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Duration</span>
-                                <span className="font-bold text-white">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Duration</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Event Type</span>
-                                <span className="font-bold text-white">{activeEventForDisplay?.event_type || lead.event_type || 'Event type not captured'}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Event Type</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{activeEventForDisplay?.event_type || lead.event_type || 'Event type not captured'}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Location</span>
-                                <span className="font-bold text-white">Luxor at Las Palmas Events</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Location</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">Luxor at Las Palmas Events</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Guest Count</span>
-                                <span className="font-bold text-white">{(activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} Expected Guests` : 'Guest count not captured'}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Guest Count</span>
+                                <span className="font-bold tabular-nums text-[color:var(--portal-text)]">{(activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} Expected Guests` : 'Guest count not captured'}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Theme / Style</span>
-                                <span className="font-bold text-white">{String(activeEventMetadata.event_style || 'Not captured')}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Theme / Style</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.event_style || 'Not captured')}</span>
                               </div>
                             </div>
                           </section>
@@ -5921,12 +6187,12 @@ export default function LeadDetailPage({
                           {/* Client Preferences */}
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Client Preferences</p>
-                              <button type="button" onClick={() => beginPlanningEdit('preferences')} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit</button>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Client Preferences</p>
+                              <button type="button" onClick={() => beginPlanningEdit('preferences')} className="text-[10px] font-bold uppercase text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68]">Edit</button>
                             </div>
                             <div className="space-y-3 text-xs">
                               <div className="flex items-center justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Color Palette</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Color Palette</span>
                                 <div className="flex gap-1.5">
                                   {(Array.isArray(activeEventMetadata.color_palette) && activeEventMetadata.color_palette.length > 0 ? activeEventMetadata.color_palette.map(String) : PLANNING_COLOR_OPTIONS[0].colors).map((color) => (
                                     <span key={color} title={color} className="h-4.5 w-4.5 rounded-full border border-black/10" style={{ backgroundColor: color }} />
@@ -5934,16 +6200,16 @@ export default function LeadDetailPage({
                                 </div>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Music Style</span>
-                                <span className="font-bold text-white">{String(activeEventMetadata.music_style || 'Not captured')}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Music Style</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.music_style || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Lighting</span>
-                                <span className="font-bold text-white">{String(activeEventMetadata.lighting_preference || 'Not captured')}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Lighting</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.lighting_preference || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Special Requests</span>
-                                <span className="font-bold text-white">{String(activeEventMetadata.special_requests || activeEventForDisplay?.notes || lead.message || 'None captured')}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Special Requests</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.special_requests || activeEventForDisplay?.notes || lead.message || 'None captured')}</span>
                               </div>
                             </div>
                           </section>
@@ -5953,32 +6219,32 @@ export default function LeadDetailPage({
                           {/* Space & Layout */}
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Space & Layout</p>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Space & Layout</p>
                               <div className="flex items-center gap-3">
                                 <button type="button" onClick={() => beginPlanningEdit('layout')} className="text-[10px] font-bold uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Edit details</button>
                                 <button type="button" onClick={() => setLayoutDesignerOpen(true)} className="rounded-lg bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider !text-white hover:bg-[#dfbd68]">Open layout builder</button>
                               </div>
                             </div>
                             <div className="grid grid-cols-5 gap-4">
-                              <div className="col-span-2 border border-zinc-850 rounded bg-black/45 p-2 flex items-center justify-center flex-col text-zinc-600">
+                              <div className="col-span-2 border border-[color:var(--portal-border)] rounded-xl bg-[color:var(--portal-soft)] p-2 flex items-center justify-center flex-col text-[color:var(--portal-muted)]">
                                 <span className="text-[8px] font-bold uppercase text-center">{PLANNING_LAYOUT_OPTIONS.find((option) => option.id === activeEventMetadata.floor_plan_layout)?.label || 'Layout not selected'}</span>
                               </div>
                               <div className="col-span-3 space-y-2 text-xs">
                                 <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Head Table</span>
-                                  <span className="font-bold text-white">{String(activeEventMetadata.head_table || 'Not captured')}</span>
+                                  <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Head Table</span>
+                                  <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.head_table || 'Not captured')}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Dance Floor</span>
-                                  <span className="font-bold text-white">{String(activeEventMetadata.dance_floor || 'Not captured')}</span>
+                                  <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Dance Floor</span>
+                                  <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.dance_floor || 'Not captured')}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Stage</span>
-                                  <span className="font-bold text-white">{String(activeEventMetadata.stage_needed || 'Not captured')}</span>
+                                  <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Stage</span>
+                                  <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.stage_needed || 'Not captured')}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-zinc-500">Other Areas</span>
-                                  <span className="font-bold text-white">{String(activeEventMetadata.other_areas || 'Not captured')}</span>
+                                  <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Other Areas</span>
+                                  <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.other_areas || 'Not captured')}</span>
                                 </div>
                               </div>
                             </div>
@@ -5987,29 +6253,29 @@ export default function LeadDetailPage({
                           {/* Decor Overview */}
                           <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
                             <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Decor Overview</p>
-                              <button type="button" onClick={() => beginPlanningEdit('decor')} className="text-[10px] font-bold uppercase text-[#caa24c] hover:text-[#f1d27a]">Edit</button>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Decor Overview</p>
+                              <button type="button" onClick={() => beginPlanningEdit('decor')} className="text-[10px] font-bold uppercase text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68]">Edit</button>
                             </div>
                             <div className="space-y-2 text-xs">
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Selected Package</span>
-                                <span className="font-bold text-white">{activeEventForDisplay?.package_interest || latestBooking?.package_name || lead.package_interest || 'Not selected'}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Selected Package</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{activeEventForDisplay?.package_interest || latestBooking?.package_name || lead.package_interest || 'Not selected'}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Décor Style</span>
-                                <span className="font-bold text-white">{String(activeEventMetadata.decor_style || 'Not captured')}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Décor Style</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.decor_style || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Centerpieces</span>
-                                <span className="font-bold text-white">{String(activeEventMetadata.centerpieces || 'Not captured')}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Centerpieces</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.centerpieces || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500">Linens</span>
-                                <span className="font-bold text-white">{String(activeEventMetadata.linens || 'Not captured')}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Linens</span>
+                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.linens || 'Not captured')}</span>
                               </div>
                               <div className="flex justify-between items-start">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500 mt-0.5">Additional Notes</span>
-                                <span className="font-bold text-white text-right max-w-[60%]">{tourNotes || 'No planning notes captured yet.'}</span>
+                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] mt-0.5">Additional Notes</span>
+                                <span className="font-bold text-[color:var(--portal-text)] text-right max-w-[60%]">{tourNotes || 'No planning notes captured yet.'}</span>
                               </div>
                             </div>
                           </section>
@@ -6026,7 +6292,22 @@ export default function LeadDetailPage({
 
                         {/* Planning Checklist Summary */}
                         <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
-                          <p className="mb-4 text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Planning Checklist Progress</p>
+                          <div className="mb-4 flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Planning Checklist Progress</p>
+                              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">1 of 5 core planning categories confirmed</p>
+                            </div>
+                            <AnimatedCircularProgressBar
+                              value={20}
+                              max={100}
+                              min={0}
+                              size={52}
+                              strokeWidth={5}
+                              gaugePrimaryColor="#caa24c"
+                              gaugeSecondaryColor="rgba(202, 162, 76, 0.14)"
+                              className="shrink-0"
+                            />
+                          </div>
                           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                             {[
                               { label: 'Event Details', val: 'Completed', color: 'text-emerald-700 dark:text-emerald-400' },
@@ -6037,7 +6318,7 @@ export default function LeadDetailPage({
                             ].map((item, idx) => (
                               <div key={idx} className="space-y-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-center">
                                 <p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{item.label}</p>
-                                <p className={`text-xs font-black uppercase ${item.color}`}>{item.val}</p>
+                                <p className={`text-xs font-black uppercase tabular-nums ${item.color}`}>{item.val}</p>
                               </div>
                             ))}
                           </div>
@@ -6069,7 +6350,7 @@ export default function LeadDetailPage({
                               setActiveLeadTab('tasks')
                             }
                           }}
-                          className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] hover:bg-[#caa24c]/15"
+                          className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/15"
                         >
                           {planningSubTab === 'fb' || planningSubTab === 'decor' ? 'Create planning task' : 'Open workspace'}
                         </button>
@@ -6083,7 +6364,14 @@ export default function LeadDetailPage({
                 return (
                   <>
                     {/* Next Move */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <MagicCard
+                      className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                      gradientColor="rgba(202, 162, 76, 0.14)"
+                      gradientFrom="#caa24c"
+                      gradientTo="#8c6529"
+                      gradientOpacity={0.22}
+                    >
+                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs"><Send size={18} /></span>
@@ -6134,7 +6422,7 @@ export default function LeadDetailPage({
                         </div>
                       </div>
                       {agreementBooking ? <div className="mt-4 grid gap-3 border-t border-[color:var(--portal-border)] pt-4 md:grid-cols-2"><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Suggested payment method</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'card')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { method: value as 'card' | 'zelle' | 'cash' | 'check' })} options={[{ value: 'card', label: 'Card via Stripe' }, { value: 'zelle', label: 'Zelle' }, { value: 'cash', label: 'Cash' }, { value: 'check', label: 'Check' }]} className="w-full" /><p className="mt-1.5 text-[10px] leading-4 text-[color:var(--portal-muted)]">The client starts with this after signing and can change it.</p></div><div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Suggested payment amount</p><PortalSelect value={String((agreementBooking.metadata?.client_payment_preference as { amount?: string } | undefined)?.amount || 'deposit')} onChange={(value) => void saveBookingPaymentPreference(agreementBooking, { amount: value as 'deposit' | 'full' })} options={[{ value: 'deposit', label: 'Reservation deposit to hold date' }, { value: 'full', label: 'Full event balance' }]} className="w-full" /><p className="mt-1.5 text-[10px] leading-4 text-[color:var(--portal-muted)]">Use this to guide the handoff, not to mark payment received.</p></div></div> : null}
-                    </section>
+                    </MagicCard>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                       {/* Card 1: Sent & Delivery */}
@@ -6172,22 +6460,34 @@ export default function LeadDetailPage({
                       </div>
 
                       {/* Card 3: Financial Summary / Total & Balance */}
-                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Final Event Price</span>
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                            proposalBalance <= 0 && proposalAmount > 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : proposalPaidTotal > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/20'
-                          }`}>
-                            <DollarSign size={10} />
-                            {proposalBalance <= 0 && proposalAmount > 0 ? 'Paid' : proposalPaidTotal > 0 ? 'Partial' : 'Unpaid'}
-                          </span>
+                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 shadow-sm flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Final Event Price</span>
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                              proposalBalance <= 0 && proposalAmount > 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : proposalPaidTotal > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a] border border-[#caa24c]/20'
+                            }`}>
+                              <DollarSign size={10} />
+                              {proposalBalance <= 0 && proposalAmount > 0 ? 'Paid' : proposalPaidTotal > 0 ? 'Partial' : 'Unpaid'}
+                            </span>
+                          </div>
+                          <div className="mt-2.5">
+                            <p className="text-lg font-serif font-bold tabular-nums text-[color:var(--portal-text)]">{proposalAmount > 0 ? formatMoney(proposalAmount) : '$0.00'}</p>
+                            <p className="mt-0.5 text-[10px] tabular-nums text-[color:var(--portal-muted)]">
+                              {proposalInvoice ? (proposalPaidTotal > 0 ? `${formatMoney(proposalPaidTotal)} paid · ${formatMoney(proposalBalance)} left` : `${formatMoney(proposalBalance)} balance remaining`) : 'No saved proposal'}
+                            </p>
+                          </div>
                         </div>
-                        <div className="mt-3">
-                          <p className="text-sm font-mono font-bold text-[color:var(--portal-text)]">{proposalAmount > 0 ? formatMoney(proposalAmount) : '$0.00'}</p>
-                          <p className="mt-0.5 text-[10px] font-mono text-[color:var(--portal-muted)]">
-                            {proposalInvoice ? (proposalPaidTotal > 0 ? `${formatMoney(proposalPaidTotal)} paid · ${formatMoney(proposalBalance)} left` : `${formatMoney(proposalBalance)} balance remaining`) : 'No saved proposal'}
-                          </p>
-                        </div>
+                        <AnimatedCircularProgressBar
+                          value={proposalAmount > 0 ? Math.min(100, Math.round((proposalPaidTotal / proposalAmount) * 100)) : 0}
+                          max={100}
+                          min={0}
+                          size={48}
+                          strokeWidth={4.5}
+                          gaugePrimaryColor={proposalBalance <= 0 && proposalAmount > 0 ? '#10b981' : '#caa24c'}
+                          gaugeSecondaryColor="rgba(202, 162, 76, 0.14)"
+                          className="shrink-0"
+                        />
                       </div>
 
                       {/* Card 4: Automations / Reminders */}
@@ -6229,18 +6529,18 @@ export default function LeadDetailPage({
                             {proposalInvoice.line_items.map((item, index) => (
                               <div key={`${item.description}-${index}`} className="grid gap-2 px-5 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_70px_110px_110px] sm:items-center">
                                 <div className="min-w-0"><p className="font-bold text-[color:var(--portal-text)]">{item.description}</p><p className="mt-1 text-[9px] uppercase tracking-wider text-[color:var(--portal-muted)]">{item.category || 'Custom service'}</p></div>
-                                <div><span className="text-[9px] uppercase text-[color:var(--portal-muted)] sm:hidden">Qty </span><span className="font-mono text-[color:var(--portal-muted)]">{item.quantity}</span></div>
-                                <div className="font-mono text-[color:var(--portal-muted)] sm:text-right">{item.included ? <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Included</span> : formatMoney(item.unitPrice)}</div>
-                                <div className="font-mono font-bold text-[color:var(--portal-text)] sm:text-right">{item.included ? '—' : formatMoney(item.total)}</div>
+                                <div><span className="text-[9px] uppercase text-[color:var(--portal-muted)] sm:hidden">Qty </span><span className="tabular-nums font-semibold text-[color:var(--portal-muted)]">{item.quantity}</span></div>
+                                <div className="tabular-nums font-medium text-[color:var(--portal-muted)] sm:text-right">{item.included ? <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Included</span> : formatMoney(item.unitPrice)}</div>
+                                <div className="tabular-nums font-bold text-[color:var(--portal-text)] sm:text-right">{item.included ? '—' : formatMoney(item.total)}</div>
                               </div>
                             ))}
                           </div>
                           <div className="grid gap-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 text-xs sm:ml-auto sm:w-80">
-                            <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Subtotal</span><span className="font-mono text-[color:var(--portal-text)]">{formatMoney(proposalInvoice.subtotal)}</span></div>
-                            <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Tax ({(Number(proposalInvoice.tax_rate) * 100).toFixed(2)}%)</span><span className="font-mono text-[color:var(--portal-text)]">{formatMoney(Number(proposalInvoice.total) - Number(proposalInvoice.subtotal))}</span></div>
-                            <div className="flex justify-between border-t border-[color:var(--portal-border)] pt-2 text-sm font-black text-[color:var(--portal-text)]"><span>Total</span><span className="font-mono text-[#a8792f] dark:text-[#f1d27a]">{formatMoney(proposalInvoice.total)}</span></div>
-                            <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Paid</span><span className="font-mono">{formatMoney(proposalPaidTotal)}</span></div>
-                            <div className="flex justify-between font-bold text-[color:var(--portal-text)]"><span>Balance</span><span className="font-mono">{formatMoney(proposalBalance)}</span></div>
+                            <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Subtotal</span><span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{formatMoney(proposalInvoice.subtotal)}</span></div>
+                            <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Tax ({(Number(proposalInvoice.tax_rate) * 100).toFixed(2)}%)</span><span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{formatMoney(Number(proposalInvoice.total) - Number(proposalInvoice.subtotal))}</span></div>
+                            <div className="flex justify-between border-t border-[color:var(--portal-border)] pt-2 text-sm font-black text-[color:var(--portal-text)]"><span>Total</span><span className="font-serif tabular-nums text-base text-[#a8792f] dark:text-[#f1d27a]">{formatMoney(proposalInvoice.total)}</span></div>
+                            <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Paid</span><span className="tabular-nums">{formatMoney(proposalPaidTotal)}</span></div>
+                            <div className="flex justify-between font-bold text-[color:var(--portal-text)]"><span>Balance</span><span className="tabular-nums">{formatMoney(proposalBalance)}</span></div>
                           </div>
                         </>
                       ) : (
@@ -6629,10 +6929,20 @@ export default function LeadDetailPage({
               }
 
               if (currentStage === 'deposit') {
+                const depositPctPaid = initialPaymentInvoiceTotal > 0
+                  ? Math.min(100, Math.round(((initialPaymentInvoiceTotal - depositBalance) / initialPaymentInvoiceTotal) * 100))
+                  : 0
                 return (
                   <>
                     {/* Next Move */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <MagicCard
+                      className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                      gradientColor="rgba(202, 162, 76, 0.14)"
+                      gradientFrom="#caa24c"
+                      gradientTo="#8c6529"
+                      gradientOpacity={0.22}
+                    >
+                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -6657,42 +6967,55 @@ export default function LeadDetailPage({
                           ) : null}
                         </div>
                       </div>
-                    </section>
+                    </MagicCard>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Deposit Summary */}
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
                         <div>
-                          <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Deposit Invoice</p>
+                          <div className="mb-4 flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Deposit Invoice</p>
+                              <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{depositBalance <= 0 && initialPaymentInvoiceTotal > 0 ? 'Initial booking payment settled' : 'Due with agreement signature'}</p>
+                            </div>
+                            <AnimatedCircularProgressBar
+                              value={depositPctPaid}
+                              max={100}
+                              min={0}
+                              size={48}
+                              strokeWidth={4.5}
+                              gaugePrimaryColor={depositBalance <= 0 && initialPaymentInvoiceTotal > 0 ? '#10b981' : '#caa24c'}
+                              gaugeSecondaryColor="rgba(202, 162, 76, 0.14)"
+                              className="shrink-0"
+                            />
                           </div>
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Number</span>
-                              <span className="font-bold text-white">{depositInvoice ? depositInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Invoice Number</span>
+                              <span className="font-bold tabular-nums text-[color:var(--portal-text)]">{depositInvoice ? depositInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Deposit Due Date</span>
-                              <span className="font-bold text-white">Due with agreement signature</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Deposit Due Date</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">Due with agreement signature</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Initial Payment + Security</span>
-                              <span className="font-bold text-[#caa24c] font-mono">{formatMoney(initialPaymentInvoiceTotal)}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Initial Payment + Security</span>
+                              <span className="font-serif font-bold tabular-nums text-sm text-[#a8792f] dark:text-[#caa24c]">{formatMoney(initialPaymentInvoiceTotal)}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Paid Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{depositBalance <= 0 && initialPaymentInvoiceTotal > 0 ? 'paid / held' : 'pending'}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Paid Status</span>
+                              <span className="rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{depositBalance <= 0 && initialPaymentInvoiceTotal > 0 ? 'paid / held' : 'pending'}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Remaining Balance</span>
-                              <span className="font-bold text-white font-mono">{formatMoney(depositBalance)}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Remaining Balance</span>
+                              <span className="font-bold tabular-nums text-[color:var(--portal-text)]">{formatMoney(depositBalance)}</span>
                             </div>
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
                           {depositInvoice && depositBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(depositInvoice)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Resend Payment Link</button> : null}
                           {latestBooking ? (
-                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Initial Payment Paid</button>
+                            <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/25 bg-[#caa24c]/10 text-[9px] font-black uppercase text-[#a8792f] dark:text-[#caa24c] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Mark Initial Payment Paid</button>
                           ) : null}
                         </div>
                       </section>
@@ -6700,21 +7023,21 @@ export default function LeadDetailPage({
                       {/* Payment Schedule */}
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Payment Schedule</p>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)] mb-3">Payment Schedule</p>
                           <div className="space-y-3 text-xs">
-                            <div className="flex justify-between py-1 border-b border-zinc-850">
+                            <div className="flex justify-between py-2 border-b border-[color:var(--portal-border)]">
                               <div>
-                                <p className="font-bold text-white">1. Initial Booking Payment + Security Deposit</p>
-                                <p className="text-[9px] text-zinc-500">Due with agreement signature</p>
+                                <p className="font-bold text-[color:var(--portal-text)]">1. Initial Booking Payment + Security Deposit</p>
+                                <p className="text-[9px] text-[color:var(--portal-muted)]">Due with agreement signature</p>
                               </div>
-                              <span className="font-mono font-bold text-[#caa24c]">{formatMoney(initialPaymentInvoiceTotal)}</span>
+                              <span className="font-serif font-bold tabular-nums text-sm text-[#a8792f] dark:text-[#caa24c]">{formatMoney(initialPaymentInvoiceTotal)}</span>
                             </div>
-                            <div className="flex justify-between py-1">
+                            <div className="flex justify-between py-2">
                               <div>
-                                <p className="font-bold text-zinc-400">2. Remaining Final Event Price Balance</p>
-                                <p className="text-[9px] text-zinc-500">{latestBooking?.final_payment_due_date ? `Due ${formatDisplayDate(latestBooking.final_payment_due_date)}` : 'Due date not set'}</p>
+                                <p className="font-bold text-[color:var(--portal-text)]">2. Remaining Final Event Price Balance</p>
+                                <p className="text-[9px] text-[color:var(--portal-muted)]">{latestBooking?.final_payment_due_date ? `Due ${formatDisplayDate(latestBooking.final_payment_due_date)}` : 'Due date not set'}</p>
                               </div>
-                              <span className="font-mono font-bold text-zinc-400">{formatMoney(finalPaymentTotal)}</span>
+                              <span className="font-bold tabular-nums text-[color:var(--portal-muted)]">{formatMoney(finalPaymentTotal)}</span>
                             </div>
                           </div>
                         </div>
@@ -6733,7 +7056,14 @@ export default function LeadDetailPage({
                 const paymentCount = paymentPlan && typeof paymentPlan === 'object' && Number.isInteger(Number(paymentPlan.payment_count)) ? Number(paymentPlan.payment_count) : 4
                 return (
                   <>
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <MagicCard
+                      className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                      gradientColor="rgba(202, 162, 76, 0.14)"
+                      gradientFrom="#caa24c"
+                      gradientTo="#8c6529"
+                      gradientOpacity={0.22}
+                    >
+                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
                           <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Final payment</p>
@@ -6745,7 +7075,7 @@ export default function LeadDetailPage({
                           {agreementBooking && finalPaymentBalance > 0 ? <button type="button" onClick={() => handleRecordManualPayment(agreementBooking, 'final')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[color:var(--portal-soft)] px-5 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/60 transition-all">Record manual payment</button> : null}
                         </div>
                       </div>
-                    </section>
+                    </MagicCard>
                     <ProposalPaymentSchedule
                       finalEventPrice={Number(proposalInvoice?.total || agreementBooking?.contract_total || 0)}
                       venueServicesTotal={venueServices}
@@ -6760,114 +7090,33 @@ export default function LeadDetailPage({
                     />
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Payment history</p><span className="text-[10px] font-bold text-[color:var(--portal-muted)]">Event payments only</span></div>
-                      <div className="space-y-3">{sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).length ? sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).map((payment) => <div key={payment.id} className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3 text-xs"><div><p className="font-bold text-[color:var(--portal-text)]">{String(payment.metadata?.payment_kind || 'Event payment').replaceAll('_', ' ')}</p><p className="text-[10px] text-[color:var(--portal-muted)]">{payment.paid_at ? `Paid ${formatDisplayDate(payment.paid_at)}` : formatTimelineDate(payment.created_at)}</p></div><span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">{formatMoney(payment.amount)}</span></div>) : <p className="text-xs text-[color:var(--portal-muted)]">No event payments have been recorded yet.</p>}</div>
+                      <div className="space-y-3">{sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).length ? sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).map((payment) => <div key={payment.id} className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3 text-xs"><div><p className="font-bold text-[color:var(--portal-text)]">{String(payment.metadata?.payment_kind || 'Event payment').replaceAll('_', ' ')}</p><p className="text-[10px] text-[color:var(--portal-muted)]">{payment.paid_at ? `Paid ${formatDisplayDate(payment.paid_at)}` : formatTimelineDate(payment.created_at)}</p></div><span className="tabular-nums font-bold text-emerald-700 dark:text-emerald-300">{formatMoney(payment.amount)}</span></div>) : <p className="text-xs text-[color:var(--portal-muted)]">No event payments have been recorded yet.</p>}</div>
                     </section>
-                  </>
-                )
-                return (
-                  <>
-                    {/* Next Move */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
-                            <CreditCard size={18} />
-                          </span>
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
-                            <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {finalPaymentBalance <= 0 ? 'Luxor services settled' : luxorOnlyCollection ? 'Collect remaining Luxor services' : 'Collect final event payment balance'}
-                            </h4>
-                            <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {finalPaymentBalance <= 0 ? 'Luxor-controlled services are settled. The separate $750 refundable security deposit remains held until post-event inspection.' : `${formatMoney(finalPaymentBalance)} ${luxorOnlyCollection ? 'Luxor services' : 'final event'} balance remaining. Planner-managed services remain outside Luxor Stripe collection.`}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {finalBalanceInvoice && finalPaymentBalance > 0 ? (
-                            <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice!)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
-                              Send Secure Payment Link
-                            </button>
-                          ) : null}
-                          {agreementBooking ? (
-                            <button type="button" onClick={() => handleRecordManualPayment(agreementBooking!, 'final')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
-                              Mark Paid Manually
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </section>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Final Payment Status */}
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
-                        <div>
-                          <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Payment Summary</p>
-                          </div>
-                          <div className="space-y-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Remaining Balance</span>
-                              <span className="font-bold text-[#caa24c] font-mono">{formatMoney(finalPaymentBalance)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Due Date</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{finalPaymentDueDate ? formatDisplayDate(finalPaymentDueDate) : 'No due date set'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Late Status</span>
-                              <span className="font-bold text-emerald-400">On Time</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Invoice Ref</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{finalBalanceInvoiceId?.slice(0, 8).toUpperCase() || 'No invoice'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Payment Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{finalPaymentBalance <= 0 && finalPaymentTotal > 0 ? 'paid' : 'pending'}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          {finalBalanceInvoice && finalPaymentBalance > 0 ? (
-                            <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice!)} className="flex-1 min-w-[110px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Send Secure Payment Link</button>
-                          ) : null}
-                          {agreementBooking ? (
-                            <button type="button" onClick={() => handleRecordManualPayment(agreementBooking!, 'final')} className="flex-1 min-w-[100px] py-1.5 rounded border border-[#caa24c]/20 bg-[#caa24c]/5 text-[9px] font-black uppercase text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer">Mark Paid Manually</button>
-                          ) : null}
-                          <button type="button" onClick={() => setActiveLeadTab('tasks')} className="flex-1 min-w-[80px] py-1.5 rounded border border-zinc-850 text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">Create Reminder Task</button>
-                        </div>
-                      </section>
-
-                      {/* Payment History */}
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-3">Transaction History</p>
-                          <div className="space-y-3 text-xs">
-                            {sortedPayments.length ? sortedPayments.map((payment) => (
-                              <div key={payment.id} className="flex justify-between items-center py-1.5 border-b border-zinc-850 last:border-0">
-                                <div>
-                                  <p className="font-bold text-white">{String(payment.metadata?.payment_kind || 'Payment').replaceAll('_', ' ')}</p>
-                                  <p className="text-[9px] text-zinc-500">{payment.paid_at ? `Paid ${formatDisplayDate(payment.paid_at)}` : formatTimelineDate(payment.created_at)}</p>
-                                </div>
-                                <span className="font-mono font-bold text-emerald-400">+{formatMoney(payment.amount)} {payment.status}</span>
-                              </div>
-                            )) : (
-                              <p className="text-xs text-zinc-500">No payments have been recorded yet.</p>
-                            )}
-                          </div>
-                        </div>
-                      </section>
-                    </div>
                   </>
                 )
               }
 
               if (currentStage === 'event') {
+                const eventMilestones = [
+                  { label: 'Coordinator assigned', done: Boolean(activeEventMetadata.event_coordinator) },
+                  { label: 'Access details captured', done: Boolean(activeEventMetadata.gate_access_code || activeEventMetadata.backdoor_code) },
+                  { label: 'Run of show confirmed', done: Boolean(activeEventMetadata.run_of_show_confirmed_at) },
+                  { label: 'Vendor arrival windows confirmed', done: Boolean(activeEventMetadata.vendor_windows_confirmed_at) },
+                  { label: 'Final walkthrough complete', done: Boolean(activeEventMetadata.final_walkthrough_completed_at) },
+                ]
+                const eventMilestonesDone = eventMilestones.filter((item) => item.done).length
+                const eventMilestonesPct = Math.round((eventMilestonesDone / eventMilestones.length) * 100)
                 return (
                   <>
                     {/* Next Move */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <MagicCard
+                      className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                      gradientColor="rgba(202, 162, 76, 0.14)"
+                      gradientFrom="#caa24c"
+                      gradientTo="#8c6529"
+                      gradientOpacity={0.22}
+                    >
+                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -6887,35 +7136,35 @@ export default function LeadDetailPage({
                           Run of Show
                         </button>
                       </div>
-                    </section>
+                    </MagicCard>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Coordinator & Contacts */}
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
                         <div>
                           <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">On-Site operations</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">On-Site operations</p>
                           </div>
                           <div className="space-y-2 text-xs">
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Head Contact</span>
-                              <span className="font-bold text-white">{lead.full_name}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Head Contact</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{lead.full_name}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Assigned Coordinator</span>
-                              <span className="font-bold text-white">{String(activeEventMetadata.event_coordinator || 'Not assigned')}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Assigned Coordinator</span>
+                              <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.event_coordinator || 'Not assigned')}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Gate Access Code</span>
-                              <span className="font-mono font-bold text-[#caa24c]">{String(activeEventMetadata.gate_access_code || 'Not set')}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Gate Access Code</span>
+                              <span className="tabular-nums font-bold text-[#a8792f] dark:text-[#caa24c]">{String(activeEventMetadata.gate_access_code || 'Not set')}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Backdoor Code</span>
-                              <span className="font-mono font-bold text-white">{String(activeEventMetadata.backdoor_code || 'Not set')}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Backdoor Code</span>
+                              <span className="tabular-nums font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.backdoor_code || 'Not set')}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Emergency Line</span>
-                              <span className="font-bold text-white">{String(activeEventMetadata.emergency_contact || 'Not set')}</span>
+                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Emergency Line</span>
+                              <span className="tabular-nums font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.emergency_contact || 'Not set')}</span>
                             </div>
                           </div>
                         </div>
@@ -6923,22 +7172,31 @@ export default function LeadDetailPage({
 
                       {/* Event Day Checklist */}
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-3 luxor-soft-enter">
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Operation Milestones</p>
+                        <div className="mb-3 flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Operation Milestones</p>
+                            <p className="mt-1 text-[10px] tabular-nums text-[color:var(--portal-muted)]">{eventMilestonesDone} of {eventMilestones.length} milestones complete</p>
+                          </div>
+                          <AnimatedCircularProgressBar
+                            value={eventMilestonesPct}
+                            max={100}
+                            min={0}
+                            size={48}
+                            strokeWidth={4.5}
+                            gaugePrimaryColor={eventMilestonesPct >= 100 ? '#10b981' : '#caa24c'}
+                            gaugeSecondaryColor="rgba(202, 162, 76, 0.14)"
+                            className="shrink-0"
+                          />
+                        </div>
                         <div className="space-y-2 text-xs">
-                          {[
-                            { label: 'Coordinator assigned', done: Boolean(activeEventMetadata.event_coordinator) },
-                            { label: 'Access details captured', done: Boolean(activeEventMetadata.gate_access_code || activeEventMetadata.backdoor_code) },
-                            { label: 'Run of show confirmed', done: Boolean(activeEventMetadata.run_of_show_confirmed_at) },
-                            { label: 'Vendor arrival windows confirmed', done: Boolean(activeEventMetadata.vendor_windows_confirmed_at) },
-                            { label: 'Final walkthrough complete', done: Boolean(activeEventMetadata.final_walkthrough_completed_at) },
-                          ].map((item, idx) => (
+                          {eventMilestones.map((item, idx) => (
                             <div key={idx} className="flex items-center gap-3 py-0.5">
                               <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                                item.done ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-zinc-850 text-zinc-700'
+                                item.done ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-[color:var(--portal-border)] text-[color:var(--portal-muted)]'
                               }`}>
                                 {item.done && <Check size={8} className="stroke-[3]" />}
                               </span>
-                              <span className={item.done ? 'text-zinc-500 line-through' : 'text-white'}>{item.label}</span>
+                              <span className={item.done ? 'text-[color:var(--portal-muted)] line-through' : 'font-medium text-[color:var(--portal-text)]'}>{item.label}</span>
                             </div>
                           ))}
                         </div>
@@ -6967,10 +7225,27 @@ export default function LeadDetailPage({
               }
 
               if (currentStage === 'closing') {
+                const closingChecklist = [
+                  { label: 'Thank-you follow-up logged', done: Boolean(activeEventMetadata.thank_you_follow_up_logged_at) },
+                  { label: 'Review request ready', done: Boolean(activeEventMetadata.review_request_ready_at) },
+                  { label: 'Photo/video assets requested', done: Boolean(activeEventMetadata.assets_requested_at) },
+                  { label: 'Security deposit return authorized', done: Boolean(activeEventMetadata.deposit_return_authorized_at) },
+                  { label: 'Damage report & final inspection cleared', done: Boolean(activeEventMetadata.final_inspection_cleared_at) },
+                  { label: 'Anniversary reminder noted', done: Boolean(activeEventMetadata.anniversary_reminder_date) },
+                ]
+                const closingDoneCount = closingChecklist.filter((item) => item.done).length
+                const closingDonePct = Math.round((closingDoneCount / closingChecklist.length) * 100)
                 return (
                   <>
                     {/* Next Move */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
+                    <MagicCard
+                      className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
+                      gradientColor="rgba(202, 162, 76, 0.14)"
+                      gradientFrom="#caa24c"
+                      gradientTo="#8c6529"
+                      gradientOpacity={0.22}
+                    >
+                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -7005,28 +7280,36 @@ export default function LeadDetailPage({
                           </button>
                         </div>
                       </div>
-                    </section>
+                    </MagicCard>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Post-Event Checklist */}
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-3 luxor-soft-enter">
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Wrap-Up Checklist</p>
+                        <div className="mb-3 flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Wrap-Up Checklist</p>
+                            <p className="mt-1 text-[10px] tabular-nums text-[color:var(--portal-muted)]">{closingDoneCount} of {closingChecklist.length} items completed</p>
+                          </div>
+                          <AnimatedCircularProgressBar
+                            value={closingDonePct}
+                            max={100}
+                            min={0}
+                            size={48}
+                            strokeWidth={4.5}
+                            gaugePrimaryColor={closingDonePct >= 100 ? '#10b981' : '#caa24c'}
+                            gaugeSecondaryColor="rgba(202, 162, 76, 0.14)"
+                            className="shrink-0"
+                          />
+                        </div>
                         <div className="space-y-2 text-xs">
-                          {[
-                            { label: 'Thank-you follow-up logged', done: Boolean(activeEventMetadata.thank_you_follow_up_logged_at) },
-                            { label: 'Review request ready', done: Boolean(activeEventMetadata.review_request_ready_at) },
-                            { label: 'Photo/video assets requested', done: Boolean(activeEventMetadata.assets_requested_at) },
-                            { label: 'Security deposit return authorized', done: Boolean(activeEventMetadata.deposit_return_authorized_at) },
-                            { label: 'Damage report & final inspection cleared', done: Boolean(activeEventMetadata.final_inspection_cleared_at) },
-                            { label: 'Anniversary reminder noted', done: Boolean(activeEventMetadata.anniversary_reminder_date) },
-                          ].map((item, idx) => (
+                          {closingChecklist.map((item, idx) => (
                             <div key={idx} className="flex items-center gap-3 py-0.5">
                               <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                                item.done ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-zinc-850 text-zinc-700'
+                                item.done ? 'border-[#caa24c] bg-[#caa24c] text-white' : 'border-[color:var(--portal-border)] text-[color:var(--portal-muted)]'
                               }`}>
                                 {item.done && <Check size={8} className="stroke-[3]" />}
                               </span>
-                              <span className={item.done ? 'text-zinc-500 line-through' : 'text-white'}>{item.label}</span>
+                              <span className={item.done ? 'text-[color:var(--portal-muted)] line-through' : 'font-medium text-[color:var(--portal-text)]'}>{item.label}</span>
                             </div>
                           ))}
                         </div>
@@ -7035,10 +7318,10 @@ export default function LeadDetailPage({
                       {/* Feedback & Referrals */}
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2">Anniversary Reminder</p>
-                          <p className="text-xs text-zinc-400 leading-relaxed">
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)] mb-2">Anniversary Reminder</p>
+                          <p className="text-xs text-[color:var(--portal-muted)] leading-relaxed">
                             {activeEventMetadata.anniversary_reminder_date
-                              ? <>Anniversary reminder noted for <strong>{formatDisplayDate(String(activeEventMetadata.anniversary_reminder_date))}</strong>. No post-event email automation is created from this page.</>
+                              ? <>Anniversary reminder noted for <strong className="text-[color:var(--portal-text)]">{formatDisplayDate(String(activeEventMetadata.anniversary_reminder_date))}</strong>. No post-event email automation is created from this page.</>
                               : 'No anniversary reminder date has been captured yet.'}
                           </p>
                         </div>
@@ -7050,14 +7333,14 @@ export default function LeadDetailPage({
 
               // Default cards for other stages
               return (
-                <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-zinc-500 space-y-3 luxor-soft-enter">
-                  <Sparkles size={24} className="mx-auto text-zinc-800" />
+                <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-[color:var(--portal-muted)] space-y-3 luxor-soft-enter">
+                  <Sparkles size={24} className="mx-auto text-[#caa24c]" />
                   <p className="text-xs uppercase font-black tracking-widest text-[#caa24c] capitalize">{currentStage} Stage Dashboard</p>
                   <p className="text-xs leading-relaxed max-w-md mx-auto">
                     Welcome to the <strong>{currentStage.toUpperCase()}</strong> stage. This dossier dashboard automatically adapts to show details, invoices, and documents matching this phase.
                   </p>
                   <div className="pt-4 flex justify-center gap-3">
-                    <button type="button" onClick={() => setSelectedStageOverride(null)} className="px-4 py-2 rounded-lg border border-zinc-800 text-[10px] font-black uppercase text-zinc-400 hover:text-white transition-colors cursor-pointer">
+                    <button type="button" onClick={() => setSelectedStageOverride(null)} className="px-4 py-2 rounded-lg border border-[color:var(--portal-border)] text-[10px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer">
                       Reset Preview to Active Stage
                     </button>
                   </div>
@@ -7066,8 +7349,18 @@ export default function LeadDetailPage({
             })()}
           </div>
 
-          {/* Right Column: Sticky actions & summary */}
-          <div className="space-y-6 px-2.5 pt-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-3 lg:pt-2 lg:pb-8 lg:[scrollbar-gutter:stable] portal-scrollbar">
+          {/* Right Column: Sticky actions & summary — animates push in from right to left */}
+          <AnimatePresence initial={false}>
+            {showClientSidebar ? (
+              <motion.div
+                key="dossier-client-sidebar"
+                initial={{ width: 0, opacity: 0, x: 56 }}
+                animate={{ width: 'auto', opacity: 1, x: 0 }}
+                exit={{ width: 0, opacity: 0, x: 56 }}
+                transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                className="w-full shrink-0 overflow-hidden xl:sticky xl:top-6 xl:self-start xl:w-auto"
+              >
+                <div className="min-w-0 space-y-6 py-0.5 pr-0.5 xl:w-[370px] 2xl:w-[420px] xl:pl-6">
             {(() => {
               const currentStage = selectedStageOverride || activeStage
               
@@ -7132,7 +7425,7 @@ export default function LeadDetailPage({
                         <button
                           type="button"
                           onClick={() => setActiveLeadTab('tasks')}
-                          className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                          className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68] transition-colors cursor-pointer"
                         >
                           View all tasks &rarr;
                         </button>
@@ -7145,12 +7438,12 @@ export default function LeadDetailPage({
                     {!isNewsletter && currentStage !== 'newsletter' && (
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Summary</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Event Summary</p>
                         {!isEditingSummary ? (
                           <button 
                             type="button"
                             onClick={() => setIsEditingSummary(true)}
-                            className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer animate-[luxor-soft-enter_0.2s_ease-out]"
+                            className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68] transition-colors cursor-pointer animate-[luxor-soft-enter_0.2s_ease-out]"
                           >
                             <Pencil size={11} /> Edit
                           </button>
@@ -7160,7 +7453,7 @@ export default function LeadDetailPage({
                       {isEditingSummary ? (
                         <div className="space-y-4">
                           <div>
-                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Venue</label>
+                            <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Venue</label>
                             <PortalSelect
                               value={summaryVenue}
                               onChange={setSummaryVenue}
@@ -7175,7 +7468,7 @@ export default function LeadDetailPage({
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Start Time</label>
+                              <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Start Time</label>
                               <PortalSelect
                                 value={summaryStartTime}
                                 onChange={setSummaryStartTime}
@@ -7185,7 +7478,7 @@ export default function LeadDetailPage({
                               />
                             </div>
                             <div>
-                              <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">End Time</label>
+                              <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">End Time</label>
                               <PortalSelect
                                 value={summaryEndTime}
                                 onChange={setSummaryEndTime}
@@ -7196,7 +7489,7 @@ export default function LeadDetailPage({
                             </div>
                           </div>
                           <div>
-                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Setup Time</label>
+                            <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Setup Time</label>
                             <input
                               type="text"
                               value={summarySetupTime}
@@ -7206,7 +7499,7 @@ export default function LeadDetailPage({
                             />
                           </div>
                           <div>
-                            <label className="block text-[9px] uppercase font-bold text-zinc-500 mb-1">Breakdown Time</label>
+                            <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Breakdown Time</label>
                             <input
                               type="text"
                               value={summaryBreakdownTime}
@@ -7219,7 +7512,7 @@ export default function LeadDetailPage({
                             <button
                               type="button"
                               onClick={() => setIsEditingSummary(false)}
-                              className="px-3 py-1.5 rounded border border-zinc-850 text-[10px] font-black uppercase text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                              className="px-3 py-1.5 rounded border border-[color:var(--portal-border)] text-[10px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -7235,27 +7528,27 @@ export default function LeadDetailPage({
                         </div>
                       ) : (
                         <div className="space-y-3.5">
-                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
-                            <span className="text-[10px] uppercase font-bold text-zinc-500">Venue</span>
-                            <span className="text-xs font-bold text-white">{summaryVenue || 'Not captured'}</span>
+                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
+                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Venue</span>
+                            <span className="text-xs font-bold text-[color:var(--portal-text)]">{summaryVenue || 'Not captured'}</span>
                           </div>
-                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
-                            <span className="text-[10px] uppercase font-bold text-zinc-500">Time</span>
-                            <span className="text-xs font-bold text-white">
+                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
+                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Time</span>
+                            <span className="text-xs font-bold text-[color:var(--portal-text)]">
                               {summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'N/A'}
                             </span>
                           </div>
-                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
-                            <span className="text-[10px] uppercase font-bold text-zinc-500">Duration</span>
-                            <span className="text-xs font-bold text-white">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
+                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
+                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Duration</span>
+                            <span className="text-xs font-bold text-[color:var(--portal-text)]">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
                           </div>
-                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
-                            <span className="text-[10px] uppercase font-bold text-zinc-500">Setup Time</span>
-                            <span className="text-xs font-bold text-white">{summarySetupTime || 'Not set'}</span>
+                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
+                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Setup Time</span>
+                            <span className="text-xs font-bold text-[color:var(--portal-text)]">{summarySetupTime || 'Not set'}</span>
                           </div>
-                          <div className="flex justify-between items-center py-1 border-b border-zinc-100/5 dark:border-zinc-850/30">
-                            <span className="text-[10px] uppercase font-bold text-zinc-500">Breakdown Time</span>
-                            <span className="text-xs font-bold text-white">{summaryBreakdownTime || 'Not set'}</span>
+                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
+                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Breakdown Time</span>
+                            <span className="text-xs font-bold text-[color:var(--portal-text)]">{summaryBreakdownTime || 'Not set'}</span>
                           </div>
                         </div>
                       )}
@@ -7329,15 +7622,15 @@ export default function LeadDetailPage({
                   {/* NEXT STEP */}
                   <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                     <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Next Step</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Next Step</p>
                     </div>
                     <div className="flex items-start gap-4 text-left">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#a8792f] border border-[#caa24c]/20">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] border border-[#caa24c]/20">
                         <Calendar size={18} />
                       </span>
                       <div>
-                        <h4 className="text-xs font-bold text-white leading-tight">{nextStepTitle}</h4>
-                        <p className="mt-1 text-[10px] text-zinc-500 leading-relaxed">{nextStepDetail}</p>
+                        <h4 className="text-xs font-bold text-[color:var(--portal-text)] leading-tight">{nextStepTitle}</h4>
+                        <p className="mt-1 text-[10px] text-[color:var(--portal-muted)] leading-relaxed">{nextStepDetail}</p>
                       </div>
                     </div>
                     <div className="mt-5">
@@ -7356,7 +7649,7 @@ export default function LeadDetailPage({
                   {/* RECENT ACTIVITY */}
                   <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                     <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Recent Activity</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Recent Activity</p>
                     </div>
                     <div className="space-y-4 text-left">
                       {allActivityEntries.length ? allActivityEntries.slice(0, 3).map((entry) => {
@@ -7372,14 +7665,14 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                       }) : (
-                        <p className="text-xs text-zinc-500">No recent activity logged yet.</p>
+                        <p className="text-xs text-[color:var(--portal-muted)]">No recent activity logged yet.</p>
                       )}
                     </div>
-                    <div className="mt-4 pt-3 border-t border-zinc-100/5 dark:border-zinc-850/30 text-center">
+                    <div className="mt-4 pt-3 border-t border-[color:var(--portal-border)] text-center">
                       <button
                         type="button"
                         onClick={() => setActiveLeadTab('activity')}
-                        className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
+                        className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68] transition-colors cursor-pointer"
                       >
                         View All Activity &rarr;
                       </button>
@@ -7388,7 +7681,10 @@ export default function LeadDetailPage({
                 </>
               )
             })()}
-          </div>
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
       ) : (
         <div className={`mt-3 grid gap-6 pb-12 sm:pb-16 ${
@@ -8456,17 +8752,31 @@ export default function LeadDetailPage({
       </div>
       )}
 
-      {activeLeadTab !== 'proposals' ? <div className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 grid grid-cols-3 gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
-        <button type="button" onClick={() => lead.phone && startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40">
-          <Phone size={14} /> Call
-        </button>
-        <button type="button" onClick={() => setTextPopupOpen(true)} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-transparent text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-40 cursor-pointer">
-          <MessageSquare size={14} /> Text
-        </button>
-        <button type="button" onClick={recommendedActions[0]?.onClick} disabled={!recommendedActions[0] || recommendedActions[0].disabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-45">
-          <ChevronRight size={14} /> Next
-        </button>
-      </div> : null}
+      {activeLeadTab !== 'proposals' && typeof document !== 'undefined' ? createPortal(
+        <div className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 grid grid-cols-3 gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
+          <button type="button" onClick={() => lead.phone && startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 disabled:pointer-events-none disabled:opacity-40">
+            <Phone size={14} className="text-[#caa24c]" /> Call
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent('luxor-open-text', {
+                  detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.full_name },
+                })
+              )
+            }}
+            disabled={!lead.phone}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 disabled:pointer-events-none disabled:opacity-40 cursor-pointer"
+          >
+            <MessageSquare size={14} className="text-[#caa24c]" /> Text
+          </button>
+          <button type="button" onClick={recommendedActions[0]?.onClick} disabled={!recommendedActions[0] || recommendedActions[0].disabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-2 text-[10px] font-black uppercase tracking-wider text-white shadow-md shadow-[#caa24c]/20 transition-colors hover:bg-[#dfbd68] disabled:opacity-45">
+            <ChevronRight size={14} /> Next
+          </button>
+        </div>,
+        document.body
+      ) : null}
 
       <AnimatePresence>
         {textPopupOpen && lead.phone ? <LuxorThreadPopup inquiryId={lead.id} phone={lead.phone} contactName={lead.full_name} onClose={() => setTextPopupOpen(false)} /> : null}
@@ -9324,7 +9634,7 @@ function ClientDossierLoading() {
       </section>
 
       {/* 3. Sticky Tab Bar */}
-      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/50 backdrop-blur-xl px-4 py-3 sm:-top-6 lg:-top-10">
+      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/50 backdrop-blur-xl px-4 py-3 sm:-top-6 lg:-top-8">
         <div className="flex min-w-max gap-5">
           {Array.from({ length: 8 }).map((_, index) => (
             <div key={index} className="h-6 w-16 luxor-skeleton rounded-full" />
@@ -9462,8 +9772,8 @@ function ClientSummaryCard({
     onCompose?: () => void
     onCall?: () => void
   }> = [
-    { label: 'Email', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: true, onCompose: lead.email ? () => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } })) : undefined },
-    { label: 'Phone', icon: <Phone size={14} />, value: lead.phone ? formatPhoneDisplay(lead.phone) : 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: true, onCall: lead.phone ? () => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id }) : undefined },
+    { label: 'Email', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: false, onCompose: lead.email ? () => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } })) : undefined },
+    { label: 'Phone', icon: <Phone size={14} />, value: lead.phone ? formatPhoneDisplay(lead.phone) : 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: false, onCall: lead.phone ? () => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id }) : undefined },
     ...(isNewsletter ? [] : [
       { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address' as EditableLeadField, placeholder: 'San Antonio, TX' },
       { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Expected Guests` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count' as EditableLeadField, inputType: 'select' as LeadDetailInputType, options: guestCountOptions },
@@ -9725,6 +10035,8 @@ function LeadLifecycleRail({
     return icons[stageId as keyof typeof icons] || Circle
   }
 
+  const [mobileRailExpanded, setMobileRailExpanded] = useState(false)
+
   const activeIndex = steps.findIndex(s => s.isActive)
   let finalSteps = steps.map((step, idx) => {
     let active = step.isActive
@@ -9753,60 +10065,171 @@ function LeadLifecycleRail({
     return step
   })
 
+  const currentStepIdx = Math.max(
+    0,
+    finalSteps.findIndex((step) => {
+      const stepStageId = getStageIdFromStepId(step.id)
+      return activeStageId ? stepStageId === activeStageId : step.isActive
+    }),
+  )
+  const currentStep = finalSteps[currentStepIdx] || finalSteps[0]
+  const progressPercent = finalSteps.length > 1
+    ? Math.min(100, Math.max(0, Math.round((currentStepIdx / (finalSteps.length - 1)) * 100)))
+    : 100
+
   return (
-    <div className="portal-scrollbar overflow-x-auto pb-2">
-      <div className="relative flex min-w-[760px] items-center justify-between px-4 py-4 sm:min-w-[960px] sm:px-6">
-        {/* Track Line */}
-        <div className="absolute left-[5%] right-[5%] top-[34px] h-[2px] bg-zinc-200 dark:bg-zinc-800" />
-        
-        {finalSteps.map((step, index) => {
-          const isDone = step.isCompleted
-          const stepStageId = getStageIdFromStepId(step.id)
-          const isCurrent = activeStageId ? stepStageId === activeStageId : step.isActive
-          const StageIcon = getStageIcon(step.id)
+    <div>
+      {/* Mobile Compact Lifecycle Pill + Expandable Stage Grid */}
+      <div className="md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileRailExpanded((current) => !current)}
+          aria-expanded={mobileRailExpanded}
+          className="flex w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 px-3.5 py-2.5 text-left transition-colors hover:border-[#caa24c]/40"
+        >
+          <span className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm shadow-[#caa24c]/25">
+              {React.createElement(getStageIcon(currentStep?.id || 'inquiry'), { size: 14, strokeWidth: 2.5 })}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#f1d27a]">
+                Stage {currentStepIdx + 1} of {finalSteps.length}
+              </span>
+              <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs font-bold text-[color:var(--portal-text)]">
+                <span>{currentStep?.label}</span>
+                {currentStep?.subtext ? (
+                  <span className="text-[10px] font-medium text-[color:var(--portal-muted)]">· {currentStep.subtext}</span>
+                ) : null}
+              </span>
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="h-1.5 w-14 overflow-hidden rounded-full bg-[color:var(--portal-border)]">
+              <motion.span
+                className="block h-full rounded-full bg-gradient-to-r from-[#a8792f] to-[#caa24c]"
+                initial={{ width: '0%' }}
+                whileInView={{ width: `${Math.max(12, progressPercent)}%` }}
+                viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+              />
+            </span>
+            <ChevronDown size={14} className={`text-[color:var(--portal-muted)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${mobileRailExpanded ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
 
-          return (
-            <button
-              key={index}
-              type="button"
-              onClick={() => onStepClick?.(stepStageId)}
-              className="relative flex flex-col items-center flex-1 cursor-pointer focus:outline-none group/step"
+        <AnimatePresence initial={false}>
+          {mobileRailExpanded ? (
+            <motion.div
+              key="mobile-lifecycle-stage-grid"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="overflow-hidden"
             >
-              <div className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300 ${
-                isCurrent
-                  ? 'border-2 border-[#caa24c] bg-[#caa24c] text-white ring-4 ring-[#caa24c]/25 shadow-lg shadow-[#caa24c]/20 font-bold'
-                  : isDone
-                  ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/20 font-bold'
-                  : 'border-zinc-200 dark:border-zinc-850 bg-white dark:bg-[#080706] text-zinc-400 dark:text-zinc-650 hover:border-[#caa24c]/40'
-              }`}>
-                {isDone || isCurrent ? (
-                  <StageIcon
-                    size={15}
-                    color="#ffffff"
-                    style={{ stroke: '#ffffff', color: '#ffffff' }}
-                    strokeWidth={2.5}
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <span className="h-2 w-2 rounded-full bg-zinc-300 dark:bg-zinc-700 transition-colors group-hover/step:bg-[#caa24c]" />
-                )}
+              <div className="mt-2 grid grid-cols-2 gap-1.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 shadow-lg">
+                {finalSteps.map((step, index) => {
+                  const isDone = step.isCompleted
+                  const stepStageId = getStageIdFromStepId(step.id)
+                  const isCurrent = activeStageId ? stepStageId === activeStageId : step.isActive
+                  const StageIcon = getStageIcon(step.id)
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => {
+                        onStepClick?.(stepStageId)
+                        setMobileRailExpanded(false)
+                      }}
+                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                        isCurrent
+                          ? 'border-[#caa24c]/55 bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]'
+                          : isDone
+                          ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-text)]'
+                          : 'border-transparent bg-[color:var(--portal-soft)]/30 text-[color:var(--portal-muted)]'
+                      }`}
+                    >
+                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                        isCurrent || isDone ? 'bg-[#caa24c] text-white' : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
+                      }`}>
+                        {isCurrent || isDone ? <StageIcon size={11} strokeWidth={2.5} /> : <span className="text-[9px] font-bold tabular-nums">{index + 1}</span>}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[10px] font-black uppercase tracking-[0.1em]">{step.label}</span>
+                        {step.subtext ? <span className="block truncate text-[9px] text-[color:var(--portal-muted)]">{step.subtext}</span> : null}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
 
-              <span className={`mt-3 text-[9px] font-black uppercase tracking-[0.15em] ${
-                isCurrent
-                  ? 'text-[#a8792f] dark:text-[#caa24c]'
-                  : isDone
-                  ? 'text-[color:var(--portal-text)]'
-                  : 'text-zinc-550 dark:text-zinc-500 group-hover/step:text-zinc-400'
-              }`}>
-                {step.label}
-              </span>
-              <span className="mt-1 h-3 text-[9px] font-medium text-[color:var(--portal-muted)]">
-                {step.subtext}
-              </span>
-            </button>
-          )
-        })}
+      {/* Tablet (iPad) & Desktop Horizontal Stepper with Gold Progress Fill */}
+      <div className="hidden md:block portal-scrollbar overflow-x-auto pb-1">
+        <div className="relative flex min-w-[760px] items-center justify-between px-4 py-2.5 sm:min-w-[920px] sm:px-6">
+          {/* Base Track Line */}
+          <div className="absolute left-[5%] right-[5%] top-[26px] h-[2px] rounded-full bg-[color:var(--portal-border)]" />
+          {/* Active Gold Fill Line */}
+          <motion.div
+            className="absolute left-[5%] top-[26px] h-[2px] rounded-full bg-gradient-to-r from-[#a8792f] via-[#caa24c] to-[#f1d27a]"
+            initial={{ width: '0%' }}
+            whileInView={{ width: `${(progressPercent * 0.9).toFixed(1)}%` }}
+            viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+            transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+          />
+          
+          {finalSteps.map((step, index) => {
+            const isDone = step.isCompleted
+            const stepStageId = getStageIdFromStepId(step.id)
+            const isCurrent = activeStageId ? stepStageId === activeStageId : step.isActive
+            const StageIcon = getStageIcon(step.id)
+
+            return (
+              <button
+                key={index}
+                type="button"
+                onClick={() => onStepClick?.(stepStageId)}
+                className="relative flex flex-col items-center flex-1 cursor-pointer focus:outline-none group/step"
+              >
+                <div className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ${
+                  isCurrent
+                    ? 'border-2 border-[#caa24c] bg-[#caa24c] text-white ring-4 ring-[#caa24c]/25 shadow-lg shadow-[#caa24c]/25 font-bold scale-105'
+                    : isDone
+                    ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-md shadow-[#caa24c]/20 font-bold'
+                    : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/45'
+                }`}>
+                  {isDone || isCurrent ? (
+                    <StageIcon
+                      size={14}
+                      color="#ffffff"
+                      style={{ stroke: '#ffffff', color: '#ffffff' }}
+                      strokeWidth={2.5}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <span className="h-2 w-2 rounded-full bg-[color:var(--portal-border)] transition-colors group-hover/step:bg-[#caa24c]" />
+                  )}
+                </div>
+
+                <span className={`mt-2.5 text-[9px] font-black uppercase tracking-[0.14em] ${
+                  isCurrent
+                    ? 'text-[#a8792f] dark:text-[#f1d27a]'
+                    : isDone
+                    ? 'text-[color:var(--portal-text)]'
+                    : 'text-[color:var(--portal-muted)] group-hover/step:text-[color:var(--portal-text)]'
+                }`}>
+                  {step.label}
+                </span>
+                <span className="mt-0.5 h-3 text-[9px] font-medium text-[color:var(--portal-muted)]">
+                  {step.subtext}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -10024,7 +10447,7 @@ function DetailItem({
                 void commitValue(value)
               }}
               labelClassName="mb-1.5 text-[9px] font-black tracking-[0.16em]"
-              inputClassName={`${compact ? 'py-1.5' : 'py-2'} rounded-lg px-3 text-sm font-bold ${isMono ? 'font-mono' : ''}`}
+              inputClassName={`${compact ? 'py-1.5' : 'py-2'} rounded-lg px-3 text-sm font-bold ${isMono ? 'tabular-nums' : ''}`}
             />
           </div>
         ) : inputType === 'select' ? (
@@ -10069,7 +10492,7 @@ function DetailItem({
               }
             }}
             className={`${compact ? 'py-1.5' : 'mt-2 py-2'} w-full rounded-lg border border-[#caa24c]/25 bg-[color:var(--portal-card)] px-3 text-sm font-bold text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 ${
-              isMono ? 'font-mono' : ''
+              isMono ? 'tabular-nums' : ''
             }`}
           />
         )
@@ -10078,7 +10501,7 @@ function DetailItem({
           {compact ? <span className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{label}</span> : null}
           <p
             className={`min-w-0 w-full flex-1 break-words ${compact ? 'text-xs font-medium [overflow-wrap:anywhere]' : 'text-sm font-bold'} leading-normal text-[color:var(--portal-text)] transition-all duration-150 ${compact ? '' : 'sm:truncate sm:group-hover/value:pr-[5.5rem]'} ${
-              isMono ? 'font-mono text-xs' : ''
+              isMono ? 'tabular-nums text-xs' : ''
             }`}
           >
             {isSaving ? 'Saving...' : value}
@@ -10173,7 +10596,7 @@ function LeadStatCard({
         <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${toneClasses[tone]}`}>Live</span>
       </div>
       <div className="mt-2 flex items-end justify-between gap-3">
-        <p className="max-w-[70%] font-mono text-lg font-bold leading-tight text-[color:var(--portal-text)]">{value}</p>
+        <p className="max-w-[70%] font-serif tabular-nums text-lg font-bold leading-tight text-[color:var(--portal-text)]">{value}</p>
         <p className="pb-1 text-right text-[11px] font-medium leading-4 text-[color:var(--portal-muted)]">{detail}</p>
       </div>
     </div>
@@ -10234,9 +10657,9 @@ function SignalMetric({
 }) {
   return (
     <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3">
-      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">{label}</p>
-      <p className="mt-2 text-lg font-bold text-white">{value}</p>
-      <p className="mt-1 text-[10px] leading-4 text-zinc-500">{detail}</p>
+      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{label}</p>
+      <p className="mt-2 font-serif text-lg font-bold tabular-nums text-[color:var(--portal-text)]">{value}</p>
+      <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">{detail}</p>
     </div>
   )
 }

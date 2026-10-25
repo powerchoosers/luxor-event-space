@@ -2,7 +2,8 @@
 
 import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
 import React from 'react'
-import { PortalModal } from './PortalUI'
+import { PortalModal, PortalStaggerGroup, PortalStaggerCard } from './PortalUI'
+import { AnimatePresence, motion } from 'framer-motion'
 
 export type PortalCalendarView = 'month' | 'week' | 'day' | 'schedule'
 
@@ -146,37 +147,54 @@ export function PortalCalendar({
               <button type="button" aria-label="Calendar options" aria-haspopup="menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
                 <MoreHorizontal size={18} />
               </button>
-              {mobileMenuOpen ? (
-                <div role="menu" aria-label="Calendar view options" className="absolute right-0 top-11 z-30 w-52 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl">
-                  <p className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-faint)]">Calendar view</p>
-                  {(['month', 'week', 'day', 'schedule'] as const).map((option) => (
-                    <button key={option} type="button" role="menuitemradio" aria-checked={view === option} onClick={() => { onViewChange(option); setMobileMenuOpen(false) }} className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-bold capitalize text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">
-                      {option}
-                      {view === option ? <Check size={15} className="text-[#a8792f]" /> : null}
+              <AnimatePresence>
+                {mobileMenuOpen && (
+                  <motion.div
+                    role="menu"
+                    aria-label="Calendar view options"
+                    initial={{ opacity: 0, scale: 0.95, y: -6, filter: 'blur(6px)' }}
+                    animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, scale: 0.95, y: -6, filter: 'blur(6px)' }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute right-0 top-11 z-30 w-52 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-md"
+                  >
+                    <p className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-faint)]">Calendar view</p>
+                    {(['month', 'week', 'day', 'schedule'] as const).map((option) => (
+                      <button key={option} type="button" role="menuitemradio" aria-checked={view === option} onClick={() => { onViewChange(option); setMobileMenuOpen(false) }} className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-bold capitalize text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">
+                        {option}
+                        {view === option ? <Check size={15} className="text-[#a8792f]" /> : null}
+                      </button>
+                    ))}
+                    <div className="my-1 border-t border-[color:var(--portal-border)]" />
+                    <button type="button" role="menuitem" onClick={() => { setAnchor(new Date()); setMobileMenuOpen(false) }} className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">
+                      <CalendarDays size={15} className="text-[#a8792f]" /> Today
                     </button>
-                  ))}
-                  <div className="my-1 border-t border-[color:var(--portal-border)]" />
-                  <button type="button" role="menuitem" onClick={() => { setAnchor(new Date()); setMobileMenuOpen(false) }} className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">
-                    <CalendarDays size={15} className="text-[#a8792f]" /> Today
-                  </button>
-                </div>
-              ) : null}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
-          {dayStatuses ? <p className="mt-2 max-w-xl text-[10px] leading-4 text-[color:var(--portal-muted)]">“No tour times” means no public tour slot is currently available that day; it does not mean the venue is closed.</p> : null}
+          {dayStatuses ? <p className="mt-2 hidden max-w-xl sm:block text-[10px] leading-4 text-[color:var(--portal-muted)]">“No tour times” means no public tour slot is currently available that day; it does not mean the venue is closed.</p> : null}
         </div>
         <div className="hidden w-full min-w-0 items-center gap-2 overflow-x-auto pb-1 sm:flex lg:w-auto lg:overflow-visible lg:pb-0">
-          <div className="flex shrink-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
+          <div className="relative flex shrink-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
             {(['month', 'week', 'day', 'schedule'] as const).map((option) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => onViewChange(option)}
-                className={`shrink-0 rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${
-                  view === option ? 'bg-[#caa24c]/15 text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                className={`relative shrink-0 rounded-lg px-3.5 py-2 text-[10px] font-black uppercase tracking-widest transition-colors duration-150 ${
+                  view === option ? 'text-[#8c6529] dark:text-[#f1d27a] font-bold' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                 }`}
               >
-                {option}
+                {view === option && (
+                  <motion.span
+                    layoutId="calendarViewTabPill"
+                    className="absolute inset-0 rounded-lg bg-[#caa24c]/20 border border-[#caa24c]/30 shadow-sm"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span className="relative z-10">{option}</span>
               </button>
             ))}
           </div>
@@ -192,7 +210,7 @@ export function PortalCalendar({
         </div>
       </div>
 
-      <div className="portal-scrollbar min-h-[36rem] flex-1 overflow-auto p-1 sm:p-4">
+      <div className="portal-scrollbar min-h-[26rem] flex-1 overflow-auto p-1 sm:min-h-[36rem] sm:p-4">
         {view === 'schedule' ? (
           <ScheduleView items={items} onSelectItem={setSelectedItem} />
         ) : (
@@ -208,7 +226,7 @@ export function PortalCalendar({
             return (
               <div
                 key={iso}
-                className={`relative flex min-w-0 flex-col p-2 transition-colors duration-150 sm:p-3 ${view === 'month' ? 'h-28 min-h-28 sm:h-40 sm:min-h-40' : 'h-64 min-h-64'} ${isToday ? 'bg-[#caa24c]/[0.09] shadow-[inset_0_0_0_1px_rgba(202,162,76,0.7)]' : 'bg-[color:var(--portal-card)] hover:bg-[color:var(--portal-soft)]'} ${outsideMonth ? 'opacity-40' : ''}`}
+                className={`relative flex min-w-0 flex-col p-2 transition-colors duration-150 sm:p-3 ${view === 'day' ? 'min-h-[28rem] flex-1' : view === 'month' ? 'h-20 min-h-20 sm:h-32 sm:min-h-32 lg:h-40 lg:min-h-40' : 'h-64 min-h-64'} ${isToday ? 'bg-[#caa24c]/[0.09] shadow-[inset_0_0_0_1px_rgba(202,162,76,0.7)]' : 'bg-[color:var(--portal-card)] hover:bg-[color:var(--portal-soft)]'} ${outsideMonth ? 'opacity-40' : ''}`}
               >
                 <button type="button" aria-label={`View schedule for ${formatDayHeading(iso)}${isToday ? ', today' : ''}${isCoarsePointer && dayItems.length ? `, ${dayItems.length} scheduled items: ${dayItems.map((item) => `${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}${item.title}`).join(', ')}` : ''}`} onClick={() => setSelectedDay(iso)} className="portal-calendar-day-hit absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]" />
                 <div className="pointer-events-none relative z-10 flex items-center justify-between gap-2">
@@ -271,9 +289,42 @@ export function PortalCalendar({
         isOpen={Boolean(selectedDay)}
         onClose={() => setSelectedDay(null)}
         title={selectedDay ? formatDayHeading(selectedDay) : 'Day details'}
+        footer={
+          selectedDay ? (
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAnchor(new Date(`${selectedDay}T12:00:00`))
+                  onViewChange('day')
+                  setSelectedDay(null)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f]"
+              >
+                <CalendarDays size={14} className="text-[#caa24c]" />
+                View full day in calendar
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDay(null)}
+                className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]"
+              >
+                Close
+              </button>
+            </div>
+          ) : null
+        }
       >
         {selectedDay ? (
-          <div className="space-y-4 max-h-[70vh] overflow-auto pr-1 portal-scrollbar">
+          <div className="space-y-3">
+            {dayStatuses?.[selectedDay] ? (
+              <div className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs">
+                <span className={`h-2 w-2 rounded-full ${dayStatuses[selectedDay] === 'open' ? 'bg-emerald-500' : 'bg-[color:var(--portal-faint)]'}`} />
+                <span className="font-semibold text-[color:var(--portal-text)]">
+                  {dayStatuses[selectedDay] === 'open' ? 'Public tour times available' : 'No public tour times scheduled'}
+                </span>
+              </div>
+            ) : null}
             {renderDayDetails(itemsByDate[selectedDay] || [], setSelectedItem)}
           </div>
         ) : null}
@@ -285,7 +336,7 @@ export function PortalCalendar({
         title={selectedItem ? selectedItem.title : 'Event details'}
       >
         {selectedItem ? (
-          <div className="space-y-3 max-h-[70vh] overflow-auto pr-1 portal-scrollbar">
+          <div className="space-y-3">
             <div className={`rounded-xl border p-4 ${toneClass(selectedItem.tone)}`}>
               <p className="text-lg font-bold text-[color:var(--portal-text)]">{selectedItem.title}</p>
               {selectedItem.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{selectedItem.warningLabel}</span> : null}
@@ -326,28 +377,32 @@ function ScheduleView({
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 py-2">
-      {dates.map((date) => (
-        <section key={date} className="grid gap-3 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-6">
-          <div className="border-b border-[color:var(--portal-border)] pb-2 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-6">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#a8792f]">{new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(new Date(`${date}T12:00:00`))}</p>
-            <p className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`))}</p>
-          </div>
-          <div className="space-y-2">
-            {itemsByDate[date].map((item) => (
-              <button key={item.id} type="button" aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`} onClick={() => onSelectItem(item)} className={`flex min-h-11 w-full items-center gap-3 rounded-xl border p-3 text-left transition-transform hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ${toneClass(item.tone)}`}>
-                <span className="h-9 w-1 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true" />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
-                  {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
-                  {item.subtitle ? <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
-                </span>
-                <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{item.openLabel || 'Open'}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-4 sm:px-6 sm:py-6">
+      <PortalStaggerGroup staggerDelay={0.05} className="space-y-6">
+        {dates.map((date) => (
+          <PortalStaggerCard key={date} className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4 sm:p-5 shadow-sm">
+            <div className="grid gap-3 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:gap-6">
+              <div className="border-b border-[color:var(--portal-border)] pb-2.5 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-6">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#a8792f]">{new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(new Date(`${date}T12:00:00`))}</p>
+                <p className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`))}</p>
+              </div>
+              <div className="space-y-2.5">
+                {itemsByDate[date].map((item) => (
+                  <button key={item.id} type="button" aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`} onClick={() => onSelectItem(item)} className={`flex min-h-11 w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ${toneClass(item.tone)}`}>
+                    <span className="h-9 w-1 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
+                      {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
+                      {item.subtitle ? <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{item.openLabel || 'Open'}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </PortalStaggerCard>
+        ))}
+      </PortalStaggerGroup>
     </div>
   )
 }

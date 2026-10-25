@@ -120,6 +120,11 @@ const EmailComposeDrawer = dynamic(
   { ssr: false }
 )
 
+const LuxorDraggableTextModal = dynamic(
+  () => import('@/components/portal/LuxorDraggableTextModal').then((mod) => mod.LuxorDraggableTextModal),
+  { ssr: false }
+)
+
 const PortalNotificationModal = dynamic(
   () => import('@/components/portal/PortalNotificationModal').then((mod) => mod.PortalNotificationModal),
   { ssr: false }
@@ -505,6 +510,13 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [registerToastCallback, notify, router])
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
 
+  // Global SMS / Text Modal State & Event Listener
+  const [activeTextMessage, setActiveTextMessage] = useState<{
+    inquiryId?: string
+    phone: string
+    contactName?: string
+  } | null>(null)
+
   // Global Email Compose State & Event Listener
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [composeLead, setComposeLead] = useState<LuxorInquiry | null>(null)
@@ -540,9 +552,22 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       setIsComposeOpen(true)
     }
 
+    const handleTextEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ inquiryId?: string; phone?: string; contactName?: string }>
+      if (customEvent.detail?.phone) {
+        setActiveTextMessage({
+          inquiryId: customEvent.detail.inquiryId,
+          phone: customEvent.detail.phone,
+          contactName: customEvent.detail.contactName || 'Client',
+        })
+      }
+    }
+
     window.addEventListener('luxor-compose-email', handleComposeEvent)
+    window.addEventListener('luxor-open-text', handleTextEvent)
     return () => {
       window.removeEventListener('luxor-compose-email', handleComposeEvent)
+      window.removeEventListener('luxor-open-text', handleTextEvent)
     }
   }, [])
   
@@ -1074,7 +1099,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         </header>
 
         {/* The shell reserves the bottom bar; detail pages also reserve their action row. */}
-        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-24 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 sm:p-6 lg:p-8'} ${
+        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-44 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 sm:p-6 lg:p-8'} ${
           portalTheme === 'light'
             ? 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
             : 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
@@ -1212,6 +1237,16 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             initialDraft={composeDraft?.contextKey === composeContextKey ? composeDraft : null}
             onDraftChange={persistComposeDraft}
             onSuccess={() => setComposeDraft(null)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {activeTextMessage && (
+          <LuxorDraggableTextModal
+            inquiryId={activeTextMessage.inquiryId}
+            phone={activeTextMessage.phone}
+            contactName={activeTextMessage.contactName}
+            onClose={() => setActiveTextMessage(null)}
           />
         )}
       </AnimatePresence>

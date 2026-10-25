@@ -15,8 +15,6 @@ import {
   UserPlus,
   Activity,
   Eye,
-  Radio,
-  ShieldCheck
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -26,7 +24,7 @@ import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { listAllTasks } from "@/lib/luxorTasksServer";
 import { listAllBills } from "@/lib/luxorInvoicesServer";
 import { isLuxorNonRevenueTestInquiry, LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, LuxorBill } from "@/lib/luxorInquiryTypes";
-import { PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from "@/components/portal/PortalUI";
+import { PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard, PortalProgressBar } from "@/components/portal/PortalUI";
 import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
 import { BillsDueCard } from "@/components/portal/BillsDueCard";
@@ -496,27 +494,18 @@ export default async function PortalOverview() {
         icon={<Activity size={18} />}
         title="Luxor Operations Hub"
         description="Your daily view of bookings, revenue, and venue operations."
+        actions={
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 md:pt-1">
+            <div className="flex items-center gap-2 text-[color:var(--portal-text)]">
+              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" aria-hidden="true" />
+              <span className="text-[10px] uppercase font-bold tracking-wider">Communications operational</span>
+            </div>
+            <span className="hidden text-[10px] font-semibold tracking-wider text-[color:var(--portal-faint)] sm:block">
+              LUXOR AT LAS PALMAS • HQ
+            </span>
+          </div>
+        }
       />
-
-      {/* Quiet communications status; failures are surfaced below as an exception banner. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 px-1 text-xs" aria-label="Communications status">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <div className="flex items-center gap-2 font-bold text-[color:var(--portal-text)]">
-            <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" aria-hidden="true" />
-            <span className="text-[10px] uppercase font-bold tracking-wider">Communications operational</span>
-          </div>
-          <div className="hidden h-4 w-px bg-[color:var(--portal-border)] sm:block" />
-          <div className="hidden items-center gap-1.5 text-[color:var(--portal-muted)] sm:flex">
-            <Radio size={13} className="text-[#caa24c]" />
-            <span className="text-[10px] font-medium">Twilio SIP online</span>
-          </div>
-          <div className="hidden items-center gap-1.5 text-[color:var(--portal-muted)] sm:flex">
-            <ShieldCheck size={13} className="text-emerald-400" />
-            <span className="text-[10px] font-medium">Mailbox connected</span>
-          </div>
-        </div>
-        <span className="hidden text-[10px] font-semibold tracking-wider text-[color:var(--portal-faint)] sm:block">LUXOR AT LAS PALMAS • HQ</span>
-      </div>
 
       {loadError && (
         <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-medium text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300">
@@ -575,9 +564,11 @@ export default async function PortalOverview() {
               </div>
             </div>
             <div className="mt-4 w-full">
-              <div className="h-2 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b] transition-all duration-700" style={{ width: `${bookingsPercentage}%` }} />
-              </div>
+              <PortalProgressBar
+                value={bookingsPercentage}
+                className="h-2 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden"
+                barClassName="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]"
+              />
               <p className="text-[10px] font-bold text-[color:var(--portal-muted)] mt-2 tabular-nums">{bookingsPercentage}% to monthly goal</p>
             </div>
           </MagicCard>
@@ -812,9 +803,11 @@ export default async function PortalOverview() {
                   </div>
                   <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">$48,500</span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]" style={{ width: "84%" }} />
-                </div>
+                <PortalProgressBar
+                  value={84}
+                  className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden"
+                  barClassName="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]"
+                />
               </div>
 
               <div className="space-y-1.5 border-b border-[color:var(--portal-border)]/30 pb-2.5 border-dashed">
@@ -825,9 +818,12 @@ export default async function PortalOverview() {
                   </div>
                   <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">8</span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400" style={{ width: "80%" }} />
-                </div>
+                <PortalProgressBar
+                  value={80}
+                  delay={0.1}
+                  className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden"
+                  barClassName="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
+                />
               </div>
 
               <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">

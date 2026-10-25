@@ -22,35 +22,57 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
       return
     }
     let isMounted = true
-    fetch(`/api/twilio/consent?phone=${encodeURIComponent(phone)}`, { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!isMounted) return
-        if (data?.status === 'opted_out') {
-          setIsOptedOut(true)
+    const checkConsent = () => {
+      fetch(`/api/twilio/consent?phone=${encodeURIComponent(phone)}`, { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!isMounted) return
+          if (data?.status === 'opted_out') {
+            setIsOptedOut(true)
+          } else {
+            setIsOptedOut(false)
+          }
+        })
+        .catch(() => {
+          if (isMounted) setIsOptedOut(false)
+        })
+    }
+    checkConsent()
+
+    const handleConsentUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ phone?: string; state?: { status?: string } }>
+      const updatedPhone = customEvent.detail?.phone
+      if (!updatedPhone || updatedPhone === phone || updatedPhone.replace(/\D/g, '') === phone.replace(/\D/g, '')) {
+        if (customEvent.detail?.state?.status) {
+          setIsOptedOut(customEvent.detail.state.status === 'opted_out')
         } else {
-          setIsOptedOut(false)
+          checkConsent()
         }
-      })
-      .catch(() => {
-        if (isMounted) setIsOptedOut(false)
-      })
+      }
+    }
+    window.addEventListener('luxor-sms-consent-updated', handleConsentUpdated)
+
     return () => {
       isMounted = false
+      window.removeEventListener('luxor-sms-consent-updated', handleConsentUpdated)
     }
   }, [phone])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params = inquiryId ? `?inquiryId=${encodeURIComponent(inquiryId)}&limit=300` : '?limit=300'
+      const queryParts: string[] = []
+      if (phone) queryParts.push(`phone=${encodeURIComponent(phone)}`)
+      else if (inquiryId) queryParts.push(`inquiryId=${encodeURIComponent(inquiryId)}`)
+      queryParts.push('limit=300')
+      const params = `?${queryParts.join('&')}`
       const response = await fetch(`/api/twilio/messages${params}`, { cache: 'no-store' })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to load messages.')
       setMessages(data)
       for (const message of data as LuxorMessage[]) if (message.direction === 'inbound' && !message.is_read) void fetch('/api/twilio/messages', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: message.id }) })
     } catch (error) { notify({ title: 'Texts unavailable', description: error instanceof Error ? error.message : 'Unable to load messages.', variant: 'error' }) } finally { setLoading(false) }
-  }, [inquiryId, notify])
+  }, [inquiryId, phone, notify])
   useEffect(() => { void load(); const timer = window.setInterval(() => void load(), 30_000); return () => window.clearInterval(timer) }, [load])
   async function send() {
     if (!phone || !body.trim() || isOptedOut) return
@@ -147,25 +169,6 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
             {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
         </div>
-        {body.trim() && !isOptedOut ? (
-          <motion.p
-            initial={{ opacity: 0, y: 3 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-2 flex items-center gap-1 text-[9px] text-[#caa24c]"
-          >
-            Typing{' '}
-            <span className="flex gap-0.5">
-              {[0, 1, 2].map((dot) => (
-                <motion.span
-                  key={dot}
-                  className="h-1 w-1 rounded-full bg-[#caa24c]"
-                  animate={{ y: [0, -3, 0] }}
-                  transition={{ duration: 0.75, repeat: Infinity, delay: dot * 0.12 }}
-                />
-              ))}
-            </span>
-          </motion.p>
-        ) : null}
       </div>
     </section>
   )

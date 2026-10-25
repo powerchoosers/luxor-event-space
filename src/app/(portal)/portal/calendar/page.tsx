@@ -2,11 +2,12 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Calendar as CalendarIcon, Check, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
+import { Calendar as CalendarIcon, Check, Settings2, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
 import { LuxorAvailabilityCalendar } from '@/components/portal/LuxorAvailabilityCalendar'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
-import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
+import { PortalButton, PortalModal, PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard, type PortalStatusTone } from '@/components/portal/PortalUI'
+import { motion } from 'framer-motion'
 import type { LuxorBooking, LuxorInquiry, LuxorTask, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
@@ -81,6 +82,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
   const { notify } = useToast()
 
   const loadData = useCallback(async (): Promise<boolean> => {
@@ -291,6 +293,14 @@ export default function CalendarPage() {
       } satisfies PortalCalendarItem))
   }, [busyId, data.bookings])
 
+  const todayStats = useMemo(() => {
+    const todayKey = luxorTodayKey()
+    const tours = data.tours.filter((tour) => tour.preferred_tour_date === todayKey && tour.tour_attendance_status !== 'cancelled').length
+    const tasks = data.tasks.filter((task) => task.status === 'pending' && task.due_date === todayKey).length
+    const openTimes = data.slots.filter((slot) => slot.status === 'available' && slot.booked_count < slot.capacity && slot.slot_date >= todayKey).length
+    return { tours, tasks, openTimes }
+  }, [data.slots, data.tasks, data.tours])
+
   const selectedDateBookings = useMemo(() => data.bookings.filter((booking) => booking.event_date && luxorDateKey(booking.event_date) === selectedEventDate), [data.bookings, selectedEventDate])
   const confirmedDateBookings = selectedDateBookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed')
   const holdDateBookings = selectedDateBookings.filter((booking) => booking.status === 'tentative')
@@ -303,20 +313,43 @@ export default function CalendarPage() {
         title="Tours & Booked Events"
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1 text-[10px] font-black uppercase tracking-widest">
+            {activeCalendar === 'tours' ? (
+              <PortalButton type="button" variant="secondary" size="sm" onClick={() => setScheduleOpen(true)} aria-haspopup="dialog" className="min-h-10">
+                <Settings2 size={14} aria-hidden="true" /> <span>Tour schedule</span>
+              </PortalButton>
+            ) : null}
+            <div className="relative inline-flex items-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1 text-[10px] font-black uppercase tracking-widest">
               <button
                 type="button"
                 onClick={() => setActiveCalendar('tours')}
-                className={`rounded-lg px-3 py-2 ${activeCalendar === 'tours' ? 'bg-[#caa24c]/15 text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}
+                className={`relative z-10 rounded-lg px-3.5 py-2 transition-colors duration-200 ${
+                  activeCalendar === 'tours' ? 'text-[#8c6529] dark:text-[#f1d27a] font-bold' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                }`}
               >
-                Tours + Tasks
+                {activeCalendar === 'tours' && (
+                  <motion.span
+                    layoutId="activeCalendarTabPill"
+                    className="absolute inset-0 rounded-lg bg-[#caa24c]/20 border border-[#caa24c]/30 shadow-sm"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span className="relative z-10">Tours + Tasks</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveCalendar('events')}
-                className={`rounded-lg px-3 py-2 ${activeCalendar === 'events' ? 'bg-[#caa24c]/15 text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}
+                className={`relative z-10 rounded-lg px-3.5 py-2 transition-colors duration-200 ${
+                  activeCalendar === 'events' ? 'text-[#8c6529] dark:text-[#f1d27a] font-bold' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                }`}
               >
-                Booked Events
+                {activeCalendar === 'events' && (
+                  <motion.span
+                    layoutId="activeCalendarTabPill"
+                    className="absolute inset-0 rounded-lg bg-[#caa24c]/20 border border-[#caa24c]/30 shadow-sm"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span className="relative z-10">Booked Events</span>
               </button>
             </div>
           </div>
@@ -327,38 +360,45 @@ export default function CalendarPage() {
         <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300">{error}</div>
       ) : null}
 
-      {activeCalendar === 'tours' ? (
-        <TourAvailabilityManager
-          title="Publish tour availability"
-          description="Set the weekly days and hours first, then choose the specific future dates you want to publish. Visitors will see only the times that are open and still available."
-          publishLabel="Open selected dates"
-          defaultExpanded={false}
-          onUpdated={async () => { await loadData() }}
-        />
-      ) : null}
-
-      {loading ? (
-        <div className="portal-card-surface space-y-6 p-8">
-          <div className="flex items-center justify-between">
-            <div className="h-6 w-48 rounded luxor-skeleton" />
-            <div className="h-8 w-32 rounded-lg luxor-skeleton" />
-          </div>
-          <div className="grid grid-cols-7 gap-3 pt-4">
-            {Array.from({ length: 28 }).map((_, i) => (
-              <div key={i} className="h-20 rounded-xl luxor-skeleton" />
-            ))}
-          </div>
-        </div>
-      ) : activeCalendar === 'tours' ? (
-        <PortalCalendar
-          title="Tours & tasks"
-          items={[...tourItems, ...taskItems]}
-          view={view}
-          onViewChange={setView}
-          dayStatuses={tourDayStatuses}
-        />
-      ) : view === 'month' ? (
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-6">
+      <PortalTabTransition activeKey={activeCalendar} className="flex-1 min-h-0 flex flex-col space-y-4">
+        {activeCalendar === 'tours' ? (
+          <PortalStaggerGroup staggerDelay={0.06} className="flex-1 min-h-0 flex flex-col space-y-4">
+            <PortalStaggerCard>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Today at a glance">
+                <GlanceStat label="Tours today" value={todayStats.tours} />
+                <GlanceStat label="Tasks due today" value={todayStats.tasks} />
+                <GlanceStat label="Open tour times" value={todayStats.openTimes} />
+              </div>
+            </PortalStaggerCard>
+            <PortalStaggerCard className="flex-1 min-h-0 flex flex-col">
+              {loading ? (
+                <div className="portal-card-surface space-y-6 p-8">
+                  <div className="flex items-center justify-between">
+                    <div className="h-6 w-48 rounded luxor-skeleton" />
+                    <div className="h-8 w-32 rounded-lg luxor-skeleton" />
+                  </div>
+                  <div className="grid grid-cols-7 gap-3 pt-4">
+                    {Array.from({ length: 28 }).map((_, i) => (
+                      <div key={i} className="h-20 rounded-xl luxor-skeleton" />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <PortalCalendar
+                  title="Tours & tasks"
+                  items={[...tourItems, ...taskItems]}
+                  view={view}
+                  onViewChange={setView}
+                  dayStatuses={tourDayStatuses}
+                />
+              )}
+            </PortalStaggerCard>
+          </PortalStaggerGroup>
+        ) : (
+          <PortalStaggerGroup staggerDelay={0.06} className="flex-1 min-h-0 flex flex-col space-y-4">
+            <PortalStaggerCard className="flex-1 min-h-0 flex flex-col">
+              {view === 'month' ? (
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-[color:var(--portal-muted)]">Availability shows confirmed event and hold conflicts. Sent proposals remain separate.</p>
             <div role="group" aria-label="Booked events calendar view" className="flex flex-wrap gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
@@ -424,8 +464,31 @@ export default function CalendarPage() {
         </div>
       ) : (
         <PortalCalendar title="Booked events" items={eventItems} view={view} onViewChange={setView} />
-      )}
+              )}
+            </PortalStaggerCard>
+          </PortalStaggerGroup>
+        )}
+      </PortalTabTransition>
+      <PortalModal
+        isOpen={scheduleOpen}
+        onClose={() => setScheduleOpen(false)}
+        title="Tour schedule"
+        description="Set the days and times guests can book. Saving updates the public booking form."
+        maxWidth="max-w-4xl"
+        className="h-[88vh] sm:h-[85vh]"
+      >
+        <TourAvailabilityManager hideHeader onUpdated={async () => { await loadData() }} />
+      </PortalModal>
     </PortalPageFrame>
+  )
+}
+
+function GlanceStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 sm:px-4 sm:py-3">
+      <p className="truncate text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)] sm:text-[10px]">{label}</p>
+      <p className="mt-0.5 font-serif text-2xl font-semibold tabular-nums leading-none text-[color:var(--portal-text)] sm:text-3xl">{value}</p>
+    </div>
   )
 }
 

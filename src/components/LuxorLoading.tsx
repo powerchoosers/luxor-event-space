@@ -33,7 +33,33 @@ export function SiteLoading() {
   )
 }
 
-export function PortalLoading() {
+export function PortalLoadingCard({ className = '' }: { className?: string }) {
+  return (
+    <div
+      data-luxor-loading="true"
+      className={`w-full max-w-md rounded-3xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center shadow-2xl shadow-black/20 backdrop-blur-2xl transition-all duration-300 ${className}`}
+    >
+      <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c]">
+        <span className="absolute inset-0 rounded-2xl bg-[#caa24c]/20 animate-ping opacity-30" />
+        <span className="h-4 w-4 rounded-full bg-[#caa24c] shadow-[0_0_12px_rgba(202,162,76,0.8)]" />
+      </div>
+      <h2 className="mt-6 text-xl font-extrabold tracking-tight text-[color:var(--portal-text)]">
+        Syncing Workspace
+      </h2>
+      <p className="mt-2 text-xs font-medium leading-relaxed text-[color:var(--portal-muted)]">
+        Connecting client dossiers, venue telemetry, and operational schedules...
+      </p>
+      <div className="mt-7 space-y-3">
+        <div className="luxor-skeleton h-3.5 w-full rounded-md" />
+        <div className="luxor-skeleton h-3.5 w-4/5 mx-auto rounded-md" />
+        <div className="luxor-skeleton h-3.5 w-3/5 mx-auto rounded-md" />
+      </div>
+    </div>
+  )
+}
+;(PortalLoadingCard as unknown as { isLuxorLoading?: boolean }).isLuxorLoading = true
+
+export function PortalLoading({ className = '' }: { className?: string }) {
   const reduceMotion = useReducedMotion()
 
   return (
@@ -41,27 +67,12 @@ export function PortalLoading() {
       data-luxor-loading="true"
       initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, scale: 0.99, filter: 'blur(10px)' }}
       animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, filter: 'blur(0px)' }}
-      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.982, filter: 'blur(14px)' }}
-      transition={{ duration: 0.24, ease: LUXOR_EASE }}
-      className="flex flex-1 flex-col items-center justify-center my-auto min-h-[calc(100vh-10rem)] w-full py-10 px-4 transform-gpu"
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.982, filter: 'blur(16px)' }}
+      transition={{ duration: 0.28, ease: LUXOR_EASE }}
+      className={`flex flex-1 flex-col items-center justify-center my-auto min-h-[calc(100vh-10rem)] w-full py-10 px-4 transform-gpu ${className}`}
     >
-      <div className="w-full max-w-md rounded-3xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center shadow-2xl shadow-black/20 backdrop-blur-2xl transition-all duration-300">
-        <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c]">
-          <span className="absolute inset-0 rounded-2xl bg-[#caa24c]/20 animate-ping opacity-30" />
-          <span className="h-4 w-4 rounded-full bg-[#caa24c] shadow-[0_0_12px_rgba(202,162,76,0.8)]" />
-        </div>
-        <h2 className="mt-6 text-xl font-extrabold tracking-tight text-[color:var(--portal-text)]">
-          Syncing Workspace
-        </h2>
-        <p className="mt-2 text-xs font-medium leading-relaxed text-[color:var(--portal-muted)]">
-          Connecting client dossiers, venue telemetry, and operational schedules...
-        </p>
-        <div className="mt-7 space-y-3">
-          <div className="luxor-skeleton h-3.5 w-full rounded-md" />
-          <div className="luxor-skeleton h-3.5 w-4/5 mx-auto rounded-md" />
-          <div className="luxor-skeleton h-3.5 w-3/5 mx-auto rounded-md" />
-        </div>
-      </div>
+      <PortalLoadingCard />
     </motion.div>
   )
 }
+;(PortalLoading as unknown as { isLuxorLoading?: boolean }).isLuxorLoading = true
