@@ -112,14 +112,14 @@ body {
 }
 
 @media (max-width: 1023px) and (display-mode: standalone) {
-  /* iOS Home Screen apps can report dvh shortened by the top safe area. */
+  /* Keep the standalone shell inside the visible viewport on fresh iOS installs. */
   body.portal-shell {
     position: relative;
     inset: auto;
-    height: 100lvh;
+    height: 100dvh;
   }
 
-  /* Anchor the app navigation to the expanded standalone shell as well. */
+  /* Anchor navigation to the same visible viewport as the standalone shell. */
   .portal-mobile-nav {
     position: absolute;
     padding-bottom: max(0.375rem, env(safe-area-inset-bottom, 0px));
