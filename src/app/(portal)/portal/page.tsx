@@ -500,19 +500,19 @@ export default async function PortalOverview() {
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <div className="flex items-center gap-2 font-bold text-[color:var(--portal-text)]">
             <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" aria-hidden="true" />
-            <span className="font-mono text-[10px] uppercase tracking-wider">Communications operational</span>
+            <span className="text-[10px] uppercase font-bold tracking-wider">Communications operational</span>
           </div>
           <div className="hidden h-4 w-px bg-[color:var(--portal-border)] sm:block" />
           <div className="hidden items-center gap-1.5 text-[color:var(--portal-muted)] sm:flex">
             <Radio size={13} className="text-[#caa24c]" />
-            <span className="font-mono text-[10px]">Twilio SIP online</span>
+            <span className="text-[10px] font-medium">Twilio SIP online</span>
           </div>
           <div className="hidden items-center gap-1.5 text-[color:var(--portal-muted)] sm:flex">
             <ShieldCheck size={13} className="text-emerald-400" />
-            <span className="font-mono text-[10px]">Mailbox connected</span>
+            <span className="text-[10px] font-medium">Mailbox connected</span>
           </div>
         </div>
-        <span className="hidden font-mono text-[10px] text-[color:var(--portal-faint)] sm:block">LUXOR AT LAS PALMAS • HQ</span>
+        <span className="hidden text-[10px] font-semibold tracking-wider text-[color:var(--portal-faint)] sm:block">LUXOR AT LAS PALMAS • HQ</span>
       </div>
 
       {loadError && (
@@ -535,7 +535,7 @@ export default async function PortalOverview() {
       <div className="pt-6 border-t border-[color:var(--portal-border)]">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg sm:text-xl font-serif font-bold text-[color:var(--portal-text)] tracking-tight">
+            <h2 className="text-lg sm:text-xl font-bold text-[color:var(--portal-text)] tracking-tight">
               Venue Operations & Cash Flow
             </h2>
             <p className="text-xs text-[color:var(--portal-muted)]">
@@ -613,7 +613,7 @@ export default async function PortalOverview() {
                 </p>
                 <p className="text-xs font-bold text-[#caa24c] mt-1">{nextBookingRelativeStr}</p>
               </div>
-              <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] font-mono">
+              <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">
                 {nextBookingDateFormatted}
               </div>
             </>
@@ -628,7 +628,7 @@ export default async function PortalOverview() {
                 <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug">No Upcoming Events</p>
                 <p className="text-xs text-[color:var(--portal-muted)] mt-1">None scheduled</p>
               </div>
-              <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] font-mono">
+              <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">
                 --
               </div>
             </>
@@ -675,7 +675,7 @@ export default async function PortalOverview() {
                       />
                       <span className="text-xs font-medium text-[color:var(--portal-text)]">{item.title}</span>
                     </div>
-                    <span className={`text-[10px] font-bold ${item.isOverdue ? 'text-[#b93c3c] bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded' : 'text-[color:var(--portal-muted)]'} font-mono shrink-0`}>
+                    <span className={`text-[10px] font-bold ${item.isOverdue ? 'text-[#b93c3c] bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded' : 'text-[color:var(--portal-muted)]'} tabular-nums shrink-0`}>
                       {item.meta}
                     </span>
                   </div>
@@ -743,7 +743,7 @@ export default async function PortalOverview() {
                           )}
                         </div>
                       </div>
-                      <span className="text-[10px] font-medium text-[color:var(--portal-muted)] font-mono shrink-0 ml-2 group-hover/item:text-[color:var(--portal-text)] transition-colors">
+                      <span className="text-[10px] font-medium text-[color:var(--portal-muted)] tabular-nums shrink-0 ml-2 group-hover/item:text-[color:var(--portal-text)] transition-colors">
                         {act.formattedTime}
                       </span>
                     </Link>
@@ -777,7 +777,7 @@ export default async function PortalOverview() {
                   <FileText size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Booked Revenue</span>
                 </div>
-                <span className="text-sm font-bold text-[color:var(--portal-text)] font-mono">$48,500</span>
+                <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">$48,500</span>
               </div>
 
               <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
@@ -785,7 +785,7 @@ export default async function PortalOverview() {
                   <Calendar size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Events</span>
                 </div>
-                <span className="text-sm font-bold text-[color:var(--portal-text)] font-mono">8</span>
+                <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">8</span>
               </div>
 
               <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
@@ -793,7 +793,7 @@ export default async function PortalOverview() {
                   <Users size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Occupancy</span>
                 </div>
-                <span className="text-sm font-bold text-[color:var(--portal-text)] font-mono">82%</span>
+                <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">82%</span>
               </div>
 
               <div className="flex items-center justify-between text-xs border-b border-[color:var(--portal-border)]/30 pb-2 border-dashed">
@@ -801,7 +801,7 @@ export default async function PortalOverview() {
                   <DollarSign size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Average Booking Value</span>
                 </div>
-                <span className="text-sm font-bold text-[color:var(--portal-text)] font-mono">$6,062</span>
+                <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">$6,062</span>
               </div>
 
               <div className="flex items-center justify-between text-xs pb-0.5">
@@ -809,7 +809,7 @@ export default async function PortalOverview() {
                   <Clock size={16} strokeWidth={1.5} className="text-[#caa24c]" />
                   <span className="text-[color:var(--portal-muted)] font-medium">Average Days to Book</span>
                 </div>
-                <span className="text-sm font-bold text-[color:var(--portal-text)] font-mono">11</span>
+                <span className="text-sm font-bold text-[color:var(--portal-text)] tabular-nums">11</span>
               </div>
             </div>
           </div>
