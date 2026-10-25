@@ -29,7 +29,6 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: 'Luxor Portal',
-    statusBarStyle: 'black-translucent',
   },
   icons: {
     apple: [{ url: '/apple-icon.png', sizes: '1024x1024', type: 'image/png' }],
