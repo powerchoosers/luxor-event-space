@@ -22,9 +22,9 @@ export function PortalSmsConsentBadge({
   initialConsent,
   compact = false,
 }: PortalSmsConsentBadgeProps) {
-  const [fetchedConsent, setFetchedConsent] = useState<SmsConsentState | null>(null)
-  const consent = initialConsent || fetchedConsent
-  const [loading, setLoading] = useState(!initialConsent && Boolean(phone))
+  const [fetchedConsent, setFetchedConsent] = useState<{ phone: string; state: SmsConsentState } | null>(null)
+  const consent = initialConsent || (fetchedConsent && fetchedConsent.phone === phone ? fetchedConsent.state : null)
+  const loading = Boolean(phone) && !consent
 
   useEffect(() => {
     if (!phone) return
@@ -40,20 +40,20 @@ export function PortalSmsConsentBadge({
           if (!isMounted) return
           if (data && typeof data.status === 'string') {
             setFetchedConsent({
-              status: data.status,
-              updated_at: data.updated_at ?? null,
-              consent_scopes: Array.isArray(data.consent_scopes) ? data.consent_scopes : [],
-              consent_request_status: data.consent_request_status ?? null,
+              phone,
+              state: {
+                status: data.status,
+                updated_at: data.updated_at ?? null,
+                consent_scopes: Array.isArray(data.consent_scopes) ? data.consent_scopes : [],
+                consent_request_status: data.consent_request_status ?? null,
+              },
             })
           } else {
-            setFetchedConsent({ status: 'unknown', consent_request_status: null })
+            setFetchedConsent({ phone, state: { status: 'unknown', consent_request_status: null } })
           }
         })
         .catch(() => {
-          if (isMounted) setFetchedConsent({ status: 'unknown', consent_request_status: null })
-        })
-        .finally(() => {
-          if (isMounted) setLoading(false)
+          if (isMounted) setFetchedConsent({ phone, state: { status: 'unknown', consent_request_status: null } })
         })
     }
 
@@ -66,7 +66,7 @@ export function PortalSmsConsentBadge({
       const updatedPhone = customEvent.detail?.phone
       if (!updatedPhone || updatedPhone === phone || updatedPhone.replace(/\D/g, '') === phone.replace(/\D/g, '')) {
         if (customEvent.detail?.state) {
-          setFetchedConsent(customEvent.detail.state)
+          setFetchedConsent({ phone, state: customEvent.detail.state })
         } else {
           fetchConsent()
         }
@@ -85,9 +85,9 @@ export function PortalSmsConsentBadge({
 
   if (loading) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-[color:var(--portal-soft)] px-2 py-0.5 text-[9px] font-medium text-[color:var(--portal-faint)]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--portal-faint)] animate-pulse" />
-        Checking SMS Consent...
+      <span role="status" className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-[color:var(--portal-soft)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--portal-muted)]">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--portal-muted)] motion-safe:animate-pulse" />
+        {compact ? 'Checking consent…' : 'Checking SMS consent…'}
       </span>
     )
   }
@@ -98,12 +98,12 @@ export function PortalSmsConsentBadge({
     return (
       <span
         title="Client sent STOP or opted out of SMS. Manual and automated texts are blocked."
-        className={`inline-flex items-center gap-1 rounded-md border border-red-500/20 bg-red-500/10 ${
-          compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]'
-        } font-black uppercase tracking-wider text-red-500 dark:text-red-400`}
+        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-500/20 bg-red-500/10 ${
+          compact ? 'px-1.5 py-0.5 text-[10px] font-semibold' : 'px-2 py-0.5 text-[10px] font-black uppercase tracking-wider'
+        } text-red-600 dark:text-red-400`}
       >
         <ShieldAlert size={compact ? 10 : 12} className="shrink-0 text-red-500" />
-        <span>SMS Opted Out (STOP Keyword)</span>
+        <span>{compact ? 'SMS opted out' : 'SMS Opted Out (STOP Keyword)'}</span>
       </span>
     )
   }
@@ -112,12 +112,12 @@ export function PortalSmsConsentBadge({
     return (
       <span
         title="Client opted in to Luxor SMS updates."
-        className={`inline-flex items-center gap-1 rounded-md border border-emerald-500/20 bg-emerald-500/10 ${
-          compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]'
-        } font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400`}
+        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-emerald-500/20 bg-emerald-500/10 ${
+          compact ? 'px-1.5 py-0.5 text-[10px] font-semibold' : 'px-2 py-0.5 text-[10px] font-black uppercase tracking-wider'
+        } text-emerald-700 dark:text-emerald-400`}
       >
-        <ShieldCheck size={compact ? 10 : 12} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-        <span>SMS Opted In</span>
+        <ShieldCheck size={compact ? 10 : 12} className="shrink-0 text-emerald-700 dark:text-emerald-400" />
+        <span>{compact ? 'SMS opted in' : 'SMS Opted In'}</span>
       </span>
     )
   }
@@ -126,12 +126,12 @@ export function PortalSmsConsentBadge({
     return (
       <span
         title="A one-time SMS consent request was sent. Waiting for the client to reply YES."
-        className={`inline-flex items-center gap-1 rounded-md border border-[#caa24c]/25 bg-[#caa24c]/10 ${
-          compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]'
-        } font-black uppercase tracking-wider text-[#8c6529] dark:text-[#f1d27a]`}
+        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-[#caa24c]/25 bg-[#caa24c]/10 ${
+          compact ? 'px-1.5 py-0.5 text-[10px] font-semibold' : 'px-2 py-0.5 text-[10px] font-black uppercase tracking-wider'
+        } text-[#8c6529] dark:text-[#f1d27a]`}
       >
         <HelpCircle size={compact ? 10 : 12} className="shrink-0" />
-        <span>Consent Requested</span>
+        <span>{compact ? 'Consent requested' : 'Consent Requested'}</span>
       </span>
     )
   }
@@ -139,12 +139,12 @@ export function PortalSmsConsentBadge({
   return (
     <span
       title="No explicit opt-in or opt-out recorded yet."
-      className={`inline-flex items-center gap-1 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] ${
-        compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[10px]'
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] ${
+        compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[10px]'
       } font-medium text-[color:var(--portal-muted)]`}
     >
       <HelpCircle size={compact ? 10 : 12} className="shrink-0 opacity-60" />
-      <span>No SMS Consent</span>
+      <span>{compact ? 'No SMS consent' : 'No SMS Consent'}</span>
     </span>
   )
 }

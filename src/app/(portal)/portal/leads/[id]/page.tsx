@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
@@ -115,6 +115,7 @@ import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'
 import { ProposalDeliveryPreview } from '@/components/portal/ProposalDeliveryPreview'
 import { ProposalPaymentSchedule } from '@/components/portal/ProposalPaymentSchedule'
 import { SameDayReceiptDialog, type SameDayReceiptEvidence } from '@/components/portal/SameDayReceiptDialog'
+import { LeadMobileActionBar } from '@/components/portal/LeadMobileActionBar'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext, isPreferredVendorEstimateLine } from '@/lib/luxorProposalDuplicateContext'
 import { findProposalLeadEvent, getLeadClientProposals, getProposalCardState, getProposalWorkflowDisplayState, getSavedProposalPricingSummary } from '@/lib/luxorProposalCard'
@@ -902,7 +903,47 @@ export default function LeadDetailPage({
   const [summaryBreakdownTime, setSummaryBreakdownTime] = useState('')
   const [savingSummary, setSavingSummary] = useState(false)
   const [mobileSectionDrawerOpen, setMobileSectionDrawerOpen] = useState(false)
+  const sectionMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const sectionMenuPanelRef = useRef<HTMLDivElement>(null)
+  const sectionMenuId = React.useId()
   const [showClientSidebar, setShowClientSidebar] = useState(true)
+
+  useEffect(() => {
+    if (!mobileSectionDrawerOpen) return
+    const panel = sectionMenuPanelRef.current
+    const buttons = () => Array.from(panel?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') || [])
+    const frame = window.requestAnimationFrame(() => {
+      (panel?.querySelector<HTMLButtonElement>('[aria-pressed="true"]') || buttons()[0])?.focus()
+    })
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        setMobileSectionDrawerOpen(false)
+      } else if (event.key === 'Tab') {
+        const controls = buttons()
+        const first = controls[0]
+        const last = controls[controls.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last?.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first?.focus()
+        }
+      }
+    }
+    const desktop = window.matchMedia('(min-width: 1280px)')
+    const closeOnDesktop = () => { if (desktop.matches) setMobileSectionDrawerOpen(false) }
+    document.addEventListener('keydown', handleKeyDown, true)
+    desktop.addEventListener('change', closeOnDesktop)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      document.removeEventListener('keydown', handleKeyDown, true)
+      desktop.removeEventListener('change', closeOnDesktop)
+      sectionMenuTriggerRef.current?.focus()
+    }
+  }, [mobileSectionDrawerOpen])
 
   // Tour Attendance states
   const [isEditingTourAttendance, setIsEditingTourAttendance] = useState(false)
@@ -4635,16 +4676,16 @@ export default function LeadDetailPage({
         ) : <PortalStatusBadge status={proposalWorkflowDisplay.status} />}
       </div>
 
-      <section className="overflow-visible rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/10">
-        <div className="grid gap-4 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
-          <div className="flex min-w-0 gap-3 sm:gap-4">
-            <div className="relative h-20 w-20 shrink-0 self-start">
+      <section className="overflow-visible rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] sm:shadow-2xl sm:shadow-black/10">
+        <div aria-label="Contact summary" className="grid gap-3 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
+          <div className="grid min-w-0 grid-cols-[3rem_minmax(0,1fr)_2.75rem] items-start gap-x-3 gap-y-2 sm:flex sm:gap-4">
+            <div className="relative col-start-1 row-start-1 h-12 w-12 shrink-0 self-start sm:h-20 sm:w-20">
               <PortalContactAvatar
                 name={lead.full_name}
                 avatarUrl={lead.metadata?.avatar_url as string | null}
                 inquiryId={lead.id}
                 size="2xl"
-                className="shadow-xl shadow-black/10"
+                className="h-12 w-12 text-lg sm:h-20 sm:w-20 sm:text-2xl sm:shadow-xl sm:shadow-black/10"
                 onAvatarUpdate={(newUrl) => {
                   setLead((current) => current ? {
                     ...current,
@@ -4656,33 +4697,33 @@ export default function LeadDetailPage({
                 }}
               />
               <div
-                className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--portal-card)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md"
+                className="absolute bottom-0 right-0 hidden h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--portal-card)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md sm:flex"
                 title={isNewsletter ? 'Newsletter subscriber' : `${displayEventType} event`}
                 aria-label={isNewsletter ? 'Newsletter subscriber' : `${displayEventType} event`}
               >
                 {isNewsletter ? <Mail size={13} /> : <EventTypeIcon eventType={displayEventType} />}
               </div>
             </div>
-            <div className="min-w-0 pt-1">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <h1 className="break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
+            <div className="contents sm:block sm:min-w-0 sm:pt-1">
+              <div className="contents sm:flex sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
+                <h1 className={`col-start-2 row-start-1 min-w-0 self-center break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl ${lead.email ? '' : 'col-span-2'}`}>{lead.full_name}</h1>
                 {lead.phone ? (
-                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)]">
-                    <Phone size={11} className="text-[#caa24c]" /> {formatPhoneDisplay(lead.phone)}
+                  <span className="col-span-3 inline-flex min-w-0 max-w-full items-center gap-2 text-sm leading-5 tabular-nums text-[color:var(--portal-text)] sm:gap-1.5 sm:rounded-full sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-2.5 sm:py-1 sm:text-[10px] sm:font-semibold">
+                    <Phone size={14} className="shrink-0 text-[color:var(--portal-muted)] sm:h-[11px] sm:w-[11px] sm:text-[#caa24c]" /> {formatPhoneDisplay(lead.phone)}
                   </span>
                 ) : null}
                 {lead.email ? (
-                  <span className="inline-flex min-w-0 max-w-full items-start gap-1.5 break-all rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[10px] font-semibold text-[color:var(--portal-text)]">
-                    <Mail size={11} className="text-[#caa24c]" /> {lead.email}
+                  <span className="col-span-3 inline-flex min-w-0 max-w-full items-start gap-2 text-sm leading-5 text-[color:var(--portal-text)] sm:gap-1.5 sm:rounded-full sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-2.5 sm:py-1 sm:text-[10px] sm:font-semibold">
+                    <Mail size={14} className="mt-0.5 shrink-0 text-[color:var(--portal-muted)] sm:mt-0 sm:h-[11px] sm:w-[11px] sm:text-[#caa24c]" /><span className="min-w-0 [overflow-wrap:anywhere]">{lead.email}</span>
                   </span>
                 ) : null}
                 {emailNoticeResolution?.kind === 'warning' && !loadingEmailMessages ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/8 px-2.5 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">
+                  <span className="col-span-3 inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/8 px-2.5 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">
                     {bouncedAddressMatchesCurrentEmail(lead) ? 'Email bounced · check address' : 'Earlier email address bounced'}
                   </span>
                 ) : null}
                 {showResolvedEmailNotice && emailNoticeResolution?.kind === 'resolved' ? (
-                  <div role="status" aria-live="polite" className="flex min-w-0 basis-full items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2.5 text-emerald-800 dark:text-emerald-200 sm:px-3.5">
+                  <div role="status" aria-live="polite" className="col-span-3 flex min-w-0 basis-full items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2.5 text-emerald-800 dark:text-emerald-200 sm:px-3.5">
                     <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
                     <p className="min-w-0 flex-1 break-words text-xs font-semibold leading-5">
                       {emailNoticeResolution.delivery === 'delivered' ? 'Delivered' : 'Successfully sent'} to {emailNoticeResolution.recipient}.
@@ -4705,22 +4746,18 @@ export default function LeadDetailPage({
                     </button>
                   </div>
                 ) : null}
-                {requestedTourLanguage ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
-                    <Languages size={12} /> {requestedTourLanguage}-speaking
-                  </span>
-                ) : null}
                 {lead.email && (
-                  <div className="flex items-center gap-3">
+                  <div className="contents sm:flex sm:items-center sm:gap-3">
                     <button
                       onClick={handleToggleMarketing}
                       disabled={togglingMarketing}
-                      className="group relative flex h-[18px] w-[18px] shrink-0 select-none items-center justify-center focus:outline-none disabled:opacity-50 cursor-pointer"
+                      className="group relative col-start-3 row-start-1 flex h-11 w-11 shrink-0 cursor-pointer select-none items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50 sm:h-[18px] sm:w-[18px]"
+                      aria-label={isSubscribed ? 'Remove from marketing list' : 'Add to marketing list'}
                       title={isSubscribed ? "Remove from marketing list" : "Add to marketing list"}
                     >
                       <div className="relative h-[18px] w-[18px] shrink-0">
                         {/* Background outline star */}
-                        <Star size={18} className="absolute inset-0 text-zinc-650 transition-colors group-hover:text-zinc-400" />
+                        <Star size={18} className="absolute inset-0 text-[color:var(--portal-muted)] transition-colors group-hover:text-[color:var(--portal-text)]" />
                         
                         {/* Animated liquid fill mask star */}
                         <div 
@@ -4736,7 +4773,7 @@ export default function LeadDetailPage({
                       </div>
                     </button>
                     {isGrandOpeningLead ? (
-                      <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-[0.16em] text-[#caa24c]">
+                      <span className="col-span-3 whitespace-nowrap text-[9px] font-black uppercase tracking-[0.16em] text-[#caa24c]">
                         Grand Opening
                       </span>
                     ) : null}
@@ -4747,7 +4784,7 @@ export default function LeadDetailPage({
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 4 }}
                           transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                          className={`text-[9px] font-black uppercase tracking-[0.18em] ${
+                          className={`col-span-3 text-[9px] font-black uppercase tracking-[0.18em] ${
                             marketingMessage === 'added' ? 'text-emerald-450' : 'text-zinc-550'
                           }`}
                         >
@@ -4758,20 +4795,20 @@ export default function LeadDetailPage({
                   </div>
                 )}
               </div>
-              <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs text-[color:var(--portal-muted)]">
+              <div className="col-span-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-[color:var(--portal-muted)] sm:mt-1.5 sm:gap-x-2.5">
                 {isNewsletter ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                     Newsletter
                   </span>
                 ) : leadEvents.length > 0 ? (
-                  <div className="relative">
+                  <div className="relative min-w-0 max-w-full">
                     <button
                       ref={eventPickerTriggerRef}
                       type="button"
                       onClick={() => setShowEventPicker((current) => !current)}
                       aria-expanded={showEventPicker}
                       aria-haspopup="listbox"
-                      className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-left text-[10px] font-black uppercase tracking-[0.08em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                      className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-left text-[13px] font-semibold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] sm:min-h-0 sm:max-w-[260px] sm:rounded-md sm:px-2 sm:text-[10px] sm:font-black sm:uppercase sm:tracking-[0.08em]"
                     >
                       <EventTypeIcon eventType={displayEventType} />
                       <span className="truncate">{displayEventType}{leadEvents.length > 1 ? ` · ${leadEvents.length} events` : ''}</span>
@@ -4814,15 +4851,20 @@ export default function LeadDetailPage({
                     </AnimatePresence>
                   </div>
                 ) : null}
-                <p className="text-xs leading-5 text-[color:var(--portal-muted)]">
-                  Captured via <span className="capitalize font-medium text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</span> on {new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
+                {requestedTourLanguage ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--portal-muted)] sm:rounded-full sm:border sm:border-[#caa24c]/35 sm:bg-[#caa24c]/10 sm:px-2.5 sm:py-1 sm:text-[9px] sm:font-black sm:uppercase sm:tracking-[0.14em] sm:text-[#a8792f] dark:sm:text-[#f1d27a]">
+                    <Languages size={13} className="shrink-0" /><span className="capitalize">{requestedTourLanguage}<span className="hidden sm:inline">-speaking</span></span>
+                  </span>
+                ) : null}
+                <p className="basis-full text-xs leading-5 text-[color:var(--portal-muted)] sm:basis-auto">
+                  <span className="hidden sm:inline">Captured via </span><span className="capitalize font-medium sm:text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</span><span className="sm:hidden"> · </span><span className="hidden sm:inline"> on </span><time dateTime={lead.created_at}><span className="sm:hidden">{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span><span className="hidden sm:inline">{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</span></time>
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-            <PortalSmsConsentBadge phone={lead.phone} initialConsent={smsConsent} />
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-0.5 border-t border-[color:var(--portal-border)] pt-2 sm:justify-start sm:gap-3 sm:border-0 sm:pt-0 lg:justify-end">
+            {lead.phone ? <span className="basis-full pb-1 min-[380px]:basis-auto min-[380px]:pb-0"><PortalSmsConsentBadge phone={lead.phone} initialConsent={smsConsent} compact /></span> : null}
             {lead.email && (
               <button 
                 type="button"
@@ -4831,7 +4873,7 @@ export default function LeadDetailPage({
                 aria-label="Email client"
                 title="Email client"
               >
-                <Mail size={15} />
+                <Mail size={18} className="sm:h-[15px] sm:w-[15px]" />
               </button>
             )}
             {lead.phone && (
@@ -4842,7 +4884,7 @@ export default function LeadDetailPage({
                 aria-label="Call client"
                 title="Call client"
               >
-                <Phone size={15} />
+                <Phone size={18} className="sm:h-[15px] sm:w-[15px]" />
               </button>
             )}
             {lead.phone && (
@@ -4859,7 +4901,7 @@ export default function LeadDetailPage({
                 aria-label="Text client"
                 title="Text client"
               >
-                <MessageSquare size={15} />
+                <MessageSquare size={18} className="sm:h-[15px] sm:w-[15px]" />
               </button>
             )}
             {lead.is_test ? <LuxorTestLeadPanel leadId={lead.id} /> : null}
@@ -5039,30 +5081,32 @@ export default function LeadDetailPage({
           WebkitBackdropFilter: 'blur(50px)',
         }}
       >
-        {/* Mobile Condensed Section Selector */}
-        <div className="md:hidden px-3 py-2.5">
+        {/* Compact section navigation for phones and tablets. */}
+        <div className="flex items-stretch gap-3 px-3 py-2.5 md:px-4 md:py-3 xl:hidden">
           {(() => {
             const activeItem = tabItems.find((item) => item.id === activeLeadTab) || tabItems[0]
             return (
               <button
+                ref={sectionMenuTriggerRef}
                 type="button"
                 onClick={() => setMobileSectionDrawerOpen(true)}
                 aria-haspopup="dialog"
                 aria-expanded={mobileSectionDrawerOpen}
-                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-2 text-left shadow-sm transition-colors hover:border-[#caa24c]/45"
+                aria-controls={sectionMenuId}
+                className="flex min-h-11 min-w-0 w-full flex-1 items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-2 text-left shadow-sm transition-colors hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:min-h-16 md:px-4"
               >
                 <span className="min-w-0">
-                  <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Dossier section</span>
-                  <span className="mt-0.5 flex items-center gap-2 truncate text-xs font-bold text-[color:var(--portal-text)]">
+                  <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)] md:text-[10px]">Dossier section</span>
+                  <span className="mt-0.5 flex items-center gap-2 truncate text-xs font-bold text-[color:var(--portal-text)] md:text-sm">
                     <span>{activeItem.label}</span>
                     {typeof activeItem.count === 'number' ? (
-                      <span className="rounded-full bg-[#caa24c]/15 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-[#a8792f] dark:text-[#f1d27a]">
+                      <span className="rounded-full bg-[#caa24c]/15 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-[#a8792f] dark:text-[#f1d27a] md:text-[11px] md:text-[#8c6529] dark:md:text-[#f1d27a]">
                         {activeItem.count}
                       </span>
                     ) : null}
                   </span>
                 </span>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] dark:text-[#f1d27a]">
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] dark:text-[#f1d27a] md:px-3 md:py-2 md:text-[13px] md:font-semibold md:normal-case md:tracking-normal md:text-[#8c6529] dark:md:text-[#f1d27a]">
                   <Menu size={13} />
                   Browse sections
                   <ChevronDown size={13} />
@@ -5070,10 +5114,22 @@ export default function LeadDetailPage({
               </button>
             )
           })()}
+          {(activeLeadTab === 'overview' || activeLeadTab === 'planning') ? (
+            <button
+              type="button"
+              onClick={() => setShowClientSidebar((current) => !current)}
+              aria-pressed={!showClientSidebar}
+              title={showClientSidebar ? 'Hide Client Summary' : 'Show Client Summary'}
+              className={`hidden shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:inline-flex ${!showClientSidebar ? 'border-[#caa24c]/45 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]'}`}
+            >
+              {showClientSidebar ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+              {showClientSidebar ? 'Focus view' : 'Show summary'}
+            </button>
+          ) : null}
         </div>
 
-        {/* Tablet (iPad) & Desktop Tab Bar */}
-        <div className="hidden md:block bg-transparent px-4">
+        {/* Full tab bar for wide desktop layouts. */}
+        <div className="hidden bg-transparent px-4 xl:block">
           <div className="flex items-center justify-between gap-3">
             <div role="tablist" aria-label="Client sections" className="relative flex min-w-0 flex-1 gap-5 overflow-x-auto portal-scrollbar">
               <span
@@ -5134,53 +5190,56 @@ export default function LeadDetailPage({
         </div>
       </div>
 
-      {/* Mobile Dossier Section Bottom-Sheet Modal */}
+      {/* Bottom sheet on phones; centered section chooser on tablets. */}
       {mobileSectionDrawerOpen && typeof document !== 'undefined' ? createPortal(
         <div
-          className="fixed inset-0 z-[70] flex items-end bg-black/60 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-xs md:hidden"
+          id={sectionMenuId}
+          className="fixed inset-0 z-[70] flex items-end bg-black/60 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-xs md:items-center md:justify-center md:bg-black/45! md:p-6 md:backdrop-blur-none xl:hidden"
           role="dialog"
           aria-modal="true"
           aria-label="Browse dossier sections"
           onClick={() => setMobileSectionDrawerOpen(false)}
         >
           <div
-            className="max-h-[75dvh] w-full overflow-y-auto rounded-t-2xl border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 pb-6 shadow-2xl"
+            ref={sectionMenuPanelRef}
+            className="max-h-[75dvh] w-full overflow-y-auto rounded-t-2xl border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 pb-6 shadow-2xl md:max-h-[80dvh] md:max-w-2xl md:overscroll-contain md:rounded-2xl md:border md:bg-[color:var(--portal-frame)] md:p-6"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#f1d27a]">Client Dossier</p>
-                <h2 className="mt-0.5 text-sm font-bold text-[color:var(--portal-text)]">Choose a section</h2>
+                <h2 className="mt-0.5 text-sm font-bold text-[color:var(--portal-text)] md:text-lg">Choose a section</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileSectionDrawerOpen(false)}
                 aria-label="Close sections menu"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:h-11 md:w-11"
               >
                 <X size={15} />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
               {tabItems.map((item) => {
                 const isActive = activeLeadTab === item.id
                 return (
                   <button
                     key={item.id}
                     type="button"
+                    aria-pressed={isActive}
                     onClick={() => {
                       selectLeadTab(item)
                       setMobileSectionDrawerOpen(false)
                     }}
-                    className={`flex min-h-12 items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                    className={`flex min-h-12 items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:min-h-14 md:px-4 ${
                       isActive
-                        ? 'border-[#caa24c]/50 bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]'
+                        ? 'border-[#caa24c]/50 bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a] md:text-[#8c6529] dark:md:text-[#f1d27a]'
                         : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
                     }`}
                   >
-                    <span className="truncate text-[11px] font-black uppercase tracking-[0.08em]">{item.label}</span>
+                    <span className="truncate text-[11px] font-black uppercase tracking-[0.08em] md:text-sm md:font-semibold md:normal-case md:tracking-normal">{item.label}</span>
                     {typeof item.count === 'number' ? (
-                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums ${
+                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums md:text-[11px] ${
                         isActive ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
                       }`}>
                         {item.count}
@@ -8753,28 +8812,20 @@ export default function LeadDetailPage({
       )}
 
       {activeLeadTab !== 'proposals' && typeof document !== 'undefined' ? createPortal(
-        <div className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 grid grid-cols-3 gap-2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
-          <button type="button" onClick={() => lead.phone && startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })} disabled={!lead.phone} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 disabled:pointer-events-none disabled:opacity-40">
-            <Phone size={14} className="text-[#caa24c]" /> Call
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent('luxor-open-text', {
-                  detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.full_name },
-                })
-              )
-            }}
-            disabled={!lead.phone}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 disabled:pointer-events-none disabled:opacity-40 cursor-pointer"
-          >
-            <MessageSquare size={14} className="text-[#caa24c]" /> Text
-          </button>
-          <button type="button" onClick={recommendedActions[0]?.onClick} disabled={!recommendedActions[0] || recommendedActions[0].disabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-2 text-[10px] font-black uppercase tracking-wider text-white shadow-md shadow-[#caa24c]/20 transition-colors hover:bg-[#dfbd68] disabled:opacity-45">
-            <ChevronRight size={14} /> Next
-          </button>
-        </div>,
+        <LeadMobileActionBar
+          phoneAvailable={Boolean(lead.phone)}
+          onCall={() => lead.phone && startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })}
+          onText={() => {
+            window.dispatchEvent(
+              new CustomEvent('luxor-open-text', {
+                detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.full_name },
+              })
+            )
+          }}
+          onNext={recommendedActions[0]?.onClick}
+          nextDisabled={!recommendedActions[0] || Boolean(recommendedActions[0].disabled)}
+          nextLabel={recommendedActions[0]?.label}
+        />,
         document.body
       ) : null}
 
@@ -10036,6 +10087,9 @@ function LeadLifecycleRail({
   }
 
   const [mobileRailExpanded, setMobileRailExpanded] = useState(false)
+  const stageTriggerRef = useRef<HTMLButtonElement>(null)
+  const stageGridId = React.useId()
+  const reduceMotion = useReducedMotion()
 
   const activeIndex = steps.findIndex(s => s.isActive)
   let finalSteps = steps.map((step, idx) => {
@@ -10079,41 +10133,49 @@ function LeadLifecycleRail({
 
   return (
     <div>
-      {/* Mobile Compact Lifecycle Pill + Expandable Stage Grid */}
-      <div className="md:hidden">
+      {/* Compact stage summary for phones and tablets. */}
+      <div className="xl:hidden" onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !mobileRailExpanded) return
+        event.preventDefault()
+        setMobileRailExpanded(false)
+        stageTriggerRef.current?.focus()
+      }}>
         <button
+          ref={stageTriggerRef}
           type="button"
           onClick={() => setMobileRailExpanded((current) => !current)}
           aria-expanded={mobileRailExpanded}
-          className="flex w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 px-3.5 py-2.5 text-left transition-colors hover:border-[#caa24c]/40"
+          aria-controls={stageGridId}
+          className="flex w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 px-3.5 py-2.5 text-left transition-colors hover:border-[#caa24c]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:min-h-[72px] md:px-4 md:py-3"
         >
           <span className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm shadow-[#caa24c]/25">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm shadow-[#caa24c]/25 md:h-10 md:w-10">
               {React.createElement(getStageIcon(currentStep?.id || 'inquiry'), { size: 14, strokeWidth: 2.5 })}
             </span>
             <span className="min-w-0">
-              <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#f1d27a]">
+              <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#f1d27a] md:text-[11px] md:text-[#8c6529] dark:md:text-[#f1d27a]">
                 Stage {currentStepIdx + 1} of {finalSteps.length}
               </span>
-              <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs font-bold text-[color:var(--portal-text)]">
+              <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs font-bold text-[color:var(--portal-text)] md:text-sm">
                 <span>{currentStep?.label}</span>
                 {currentStep?.subtext ? (
-                  <span className="text-[10px] font-medium text-[color:var(--portal-muted)]">· {currentStep.subtext}</span>
+                  <span className="text-[10px] font-medium text-[color:var(--portal-muted)] md:text-xs">· {currentStep.subtext}</span>
                 ) : null}
               </span>
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-2">
-            <span className="h-1.5 w-14 overflow-hidden rounded-full bg-[color:var(--portal-border)]">
+            <span className="h-1.5 w-14 overflow-hidden rounded-full bg-[color:var(--portal-border)] md:w-24">
               <motion.span
                 className="block h-full rounded-full bg-gradient-to-r from-[#a8792f] to-[#caa24c]"
                 initial={{ width: '0%' }}
                 whileInView={{ width: `${Math.max(12, progressPercent)}%` }}
                 viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-                transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: reduceMotion ? 0 : 0.85, ease: [0.22, 1, 0.36, 1] }}
               />
             </span>
-            <ChevronDown size={14} className={`text-[color:var(--portal-muted)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${mobileRailExpanded ? 'rotate-180' : ''}`} />
+            <span className="hidden text-[13px] font-semibold text-[color:var(--portal-muted)] md:inline">{mobileRailExpanded ? 'Hide stages' : 'View stages'}</span>
+            <ChevronDown size={14} className={`text-[color:var(--portal-muted)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${mobileRailExpanded ? 'rotate-180' : ''}`} />
           </span>
         </button>
 
@@ -10121,13 +10183,16 @@ function LeadLifecycleRail({
           {mobileRailExpanded ? (
             <motion.div
               key="mobile-lifecycle-stage-grid"
+              id={stageGridId}
+              role="group"
+              aria-label="Lead stages"
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: reduceMotion ? 0 : 0.3, ease: [0.22, 1, 0.36, 1] }}
               className="overflow-hidden"
             >
-              <div className="mt-2 grid grid-cols-2 gap-1.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 shadow-lg">
+              <div className="mt-2 grid grid-cols-2 gap-1.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 shadow-lg md:grid-cols-4 md:gap-2 md:p-3">
                 {finalSteps.map((step, index) => {
                   const isDone = step.isCompleted
                   const stepStageId = getStageIdFromStepId(step.id)
@@ -10140,23 +10205,25 @@ function LeadLifecycleRail({
                       onClick={() => {
                         onStepClick?.(stepStageId)
                         setMobileRailExpanded(false)
+                        stageTriggerRef.current?.focus()
                       }}
-                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                      aria-pressed={isCurrent}
+                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:min-h-16 md:gap-3 md:px-3 md:py-2.5 ${
                         isCurrent
-                          ? 'border-[#caa24c]/55 bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]'
+                          ? 'border-[#caa24c]/55 bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a] md:text-[#8c6529] dark:md:text-[#f1d27a]'
                           : isDone
                           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-text)]'
                           : 'border-transparent bg-[color:var(--portal-soft)]/30 text-[color:var(--portal-muted)]'
                       }`}
                     >
-                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full md:h-8 md:w-8 ${
                         isCurrent || isDone ? 'bg-[#caa24c] text-white' : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
                       }`}>
-                        {isCurrent || isDone ? <StageIcon size={11} strokeWidth={2.5} /> : <span className="text-[9px] font-bold tabular-nums">{index + 1}</span>}
+                        {isCurrent || isDone ? <StageIcon size={11} strokeWidth={2.5} className="md:h-3.5 md:w-3.5" /> : <span className="text-[9px] font-bold tabular-nums md:text-[11px]">{index + 1}</span>}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[10px] font-black uppercase tracking-[0.1em]">{step.label}</span>
-                        {step.subtext ? <span className="block truncate text-[9px] text-[color:var(--portal-muted)]">{step.subtext}</span> : null}
+                        <span className="block truncate text-[10px] font-black uppercase tracking-[0.1em] md:overflow-visible md:whitespace-normal md:text-[13px] md:font-semibold md:normal-case md:tracking-normal">{step.label}</span>
+                        {step.subtext ? <span className="block truncate text-[9px] text-[color:var(--portal-muted)] md:overflow-visible md:whitespace-normal md:text-[11px]">{step.subtext}</span> : null}
                       </span>
                     </button>
                   )
@@ -10167,8 +10234,8 @@ function LeadLifecycleRail({
         </AnimatePresence>
       </div>
 
-      {/* Tablet (iPad) & Desktop Horizontal Stepper with Gold Progress Fill */}
-      <div className="hidden md:block portal-scrollbar overflow-x-auto pb-1">
+      {/* Horizontal stage rail for wide desktop layouts. */}
+      <div className="portal-scrollbar hidden overflow-x-auto pb-1 xl:block">
         <div className="relative flex min-w-[760px] items-center justify-between px-4 py-2.5 sm:min-w-[920px] sm:px-6">
           {/* Base Track Line */}
           <div className="absolute left-[5%] right-[5%] top-[26px] h-[2px] rounded-full bg-[color:var(--portal-border)]" />
