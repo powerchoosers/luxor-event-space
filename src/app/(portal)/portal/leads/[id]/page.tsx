@@ -469,6 +469,7 @@ export default function LeadDetailPage({
   const { notify } = useToast()
 
   const [lead, setLead] = useState<LuxorInquiry | null>(null)
+  const [expandedOriginalInquiryId, setExpandedOriginalInquiryId] = useState<string | null>(null)
   const [activeTestRunId, setActiveTestRunId] = useState<string | null>(null)
   const [testProposalReadOnly, setTestProposalReadOnly] = useState(false)
   const [loadingTestRun, setLoadingTestRun] = useState(false)
@@ -4014,6 +4015,9 @@ export default function LeadDetailPage({
     sortedInvoices,
     sortedPayments,
   } = leadDerivedData
+  const originalInquiryText = lead.message?.trim() || (isNewsletterLead(lead) ? 'No event or tour request was included with this signup.' : 'No written request was included with this inquiry.')
+  const isLongOriginalInquiry = originalInquiryText.length > 320
+  const isOriginalInquiryExpanded = expandedOriginalInquiryId === lead.id
   const activeEventMetadata = activeEventForDisplay?.metadata || lead.metadata || {}
   const agreementBooking = proposalInvoice ? proposalBooking : latestBooking
   const bookingContractAmount = Number(agreementBooking?.contract_total || 0)
@@ -5256,23 +5260,34 @@ export default function LeadDetailPage({
         document.body
       ) : null}
 
+      <section id="lead-messages" aria-labelledby="original-inquiry-heading" className="mt-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h2 id="original-inquiry-heading" className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">
+            {isGrandOpeningLead ? 'Original RSVP note' : 'Original inquiry'}
+          </h2>
+          <p className="text-[10px] text-[color:var(--portal-muted)]">{formatSourceLabel(lead)} · {formatDisplayDate(lead.created_at)}</p>
+        </div>
+        <p className={`mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)] ${isLongOriginalInquiry && !isOriginalInquiryExpanded ? 'line-clamp-4' : ''}`}>
+          {originalInquiryText}
+        </p>
+        {isLongOriginalInquiry ? (
+          <button
+            type="button"
+            aria-expanded={isOriginalInquiryExpanded}
+            onClick={() => setExpandedOriginalInquiryId(isOriginalInquiryExpanded ? null : lead.id)}
+            className="mt-2 min-h-10 text-xs font-semibold text-[#8c6529] underline decoration-[#caa24c]/50 underline-offset-4 hover:text-[#a8792f] dark:text-[#f1d27a] dark:hover:text-[#ffe6a0]"
+          >
+            {isOriginalInquiryExpanded ? 'Show less' : 'Read full request'}
+          </button>
+        ) : null}
+      </section>
+
       {activeLeadTab === 'overview' || activeLeadTab === 'planning' ? (
         <div className="mt-4 flex flex-col gap-6 pb-12 sm:pb-16 xl:flex-row xl:items-start xl:gap-0">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
           <div className="min-w-0 flex-1 space-y-6">
             {activeLeadTab === 'planning' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="planning" onOpenProposal={() => openProposalBuilder()} /> : null}
 
-            <section id="lead-messages" aria-labelledby="original-inquiry-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm sm:p-5">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <h2 id="original-inquiry-heading" className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">
-                  {isGrandOpeningLead ? 'Original RSVP note' : 'Original inquiry'}
-                </h2>
-                <p className="text-[10px] text-[color:var(--portal-muted)]">{formatSourceLabel(lead)} · {formatDisplayDate(lead.created_at)}</p>
-              </div>
-              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">
-                {lead.message?.trim() || (isNewsletterLead(lead) ? 'No event or tour request was included with this signup.' : 'No written request was included with this inquiry.')}
-              </p>
-            </section>
             
             {/* Stage-specific Content Router */}
             {(() => {
