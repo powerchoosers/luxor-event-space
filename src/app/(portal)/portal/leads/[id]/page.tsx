@@ -5261,6 +5261,18 @@ export default function LeadDetailPage({
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
           <div className="min-w-0 flex-1 space-y-6">
             {activeLeadTab === 'planning' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="planning" onOpenProposal={() => openProposalBuilder()} /> : null}
+
+            <section id="lead-messages" aria-labelledby="original-inquiry-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm sm:p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <h2 id="original-inquiry-heading" className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">
+                  {isGrandOpeningLead ? 'Original RSVP note' : 'Original inquiry'}
+                </h2>
+                <p className="text-[10px] text-[color:var(--portal-muted)]">{formatSourceLabel(lead)} · {formatDisplayDate(lead.created_at)}</p>
+              </div>
+              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">
+                {lead.message?.trim() || (isNewsletterLead(lead) ? 'No event or tour request was included with this signup.' : 'No written request was included with this inquiry.')}
+              </p>
+            </section>
             
             {/* Stage-specific Content Router */}
             {(() => {
@@ -5670,16 +5682,6 @@ export default function LeadDetailPage({
                         )}
                       </div>
                     </section>
-
-                    {/* RSVP / Inquiry Message */}
-                    <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl luxor-soft-enter" id="lead-messages">
-                      <h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">
-                        {isGrandOpeningLead ? 'RSVP Notes Payload' : 'Inquiry Message Payload'}
-                      </h4>
-                      <p className="text-xs leading-relaxed text-[color:var(--portal-text)] font-medium italic">
-                        &ldquo;{lead.message || 'No additional message was submitted.'}&rdquo;
-                      </p>
-                    </div>
 
                     {/* Concierge AI session replay */}
                     {chatMessages.length > 0 && (
