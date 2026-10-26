@@ -14,6 +14,7 @@ import {
   LUXOR_MAX_GUESTS,
   LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE,
   LUXOR_LEGACY_VISIT_EMAIL_DISCLOSURE_ES,
+  LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS,
   normalizeLuxorEventType,
   type LuxorInquiryInput,
 } from '@/lib/luxorInquiryTypes'
@@ -26,14 +27,6 @@ type Locale = 'en' | 'es'
 
 const publicDatePickerClass =
   'w-full [&>button]:min-h-12 [&>button]:rounded-xl [&>button]:border-[#d8c4a4] [&>button]:bg-[#fffdfa] [&>button]:px-3.5 [&>button]:text-sm [&>button]:normal-case [&>button]:tracking-normal hover:[&>button]:border-[#caa24c]'
-
-const budgetOptions = [
-  { value: 'Under $5,000', labelEn: 'Under $5,000', labelEs: 'Menos de $5,000' },
-  { value: '$5,000–$10,000', labelEn: '$5,000–$10,000', labelEs: '$5,000–$10,000' },
-  { value: '$10,000–$20,000', labelEn: '$10,000–$20,000', labelEs: '$10,000–$20,000' },
-  { value: '$20,000+', labelEn: '$20,000+', labelEs: '$20,000+' },
-  { value: 'Not sure yet', labelEn: 'Not sure yet', labelEs: 'Aún no lo sé' },
-]
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -136,7 +129,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   const [eventType, setEventType] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [guestCount, setGuestCount] = useState('')
-  const [budget, setBudget] = useState('')
+  const [packageInterest, setPackageInterest] = useState('')
   const [message, setMessage] = useState('')
   const [marketingOptIn, setMarketingOptIn] = useState(false)
 
@@ -289,7 +282,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       eventType: cleanEventType,
       targetDate: eventDate,
       guestCount,
-      budget,
+      packageInterest,
       preferredTourDate,
       preferredTourTime,
       message: message.trim(),
@@ -868,16 +861,13 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
               />
             </Field>
 
-            <Field label={spanish ? 'Presupuesto estimado (opcional)' : 'Planning Budget (optional)'}>
+            <Field label={spanish ? 'Paquete de interés (opcional)' : 'Package Interest (optional)'}>
               <PortalSelect
                 theme="light"
-                value={budget}
-                onChange={setBudget}
-                options={budgetOptions.map((opt) => ({
-                  value: opt.value,
-                  label: spanish ? opt.labelEs : opt.labelEn,
-                }))}
-                placeholder={spanish ? 'Selecciona un rango' : 'Select a budget range'}
+                value={packageInterest}
+                onChange={setPackageInterest}
+                options={LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS.map((option) => ({ ...option }))}
+                placeholder={spanish ? 'Selecciona un paquete' : 'Select a package'}
                 className="w-full"
                 buttonClassName="min-h-12 sm:!min-h-12 rounded-xl bg-[#fffdfa] border-[#d8c4a4] px-3.5 text-sm normal-case tracking-normal hover:border-[#caa24c]"
               />

@@ -65,6 +65,14 @@ export const LUXOR_MAX_GUESTS = 180
 export const LUXOR_GUEST_CAPACITY_MESSAGE = 'Luxor accommodates up to 180 people. Please enter 180 or fewer, and add any layout needs in the notes.'
 export const LUXOR_GUEST_CAPACITY_MESSAGE_ES = 'Luxor admite hasta 180 personas. Ingresa 180 o menos y cuéntanos cualquier necesidad especial en las notas.'
 
+// These are inquiry-interest labels only. They do not carry package pricing or
+// select a proposal price tier.
+export const LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS = [
+  { value: 'Essentials', label: 'Essentials' },
+  { value: 'Signature', label: 'Signature' },
+  { value: 'Luxor', label: 'Luxor' },
+] as const
+
 export type LuxorEventType = (typeof LUXOR_EVENT_TYPES)[number]
 
 export type LuxorPipelineStage =

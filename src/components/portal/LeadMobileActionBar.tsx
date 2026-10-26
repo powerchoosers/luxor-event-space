@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, useReducedMotion, useSpring, useTransform } from 'framer-motion'
-import { ChevronDown, ChevronRight, MessageSquare, Phone } from 'lucide-react'
+import { ChevronDown, Mail, MessageSquare, Phone } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 
 const VISIBILITY_KEY = 'luxor-lead-actions-visibility'
@@ -10,17 +10,15 @@ const ACTION_BAR_SPRING = { stiffness: 460, damping: 43, mass: 1 }
 export function LeadMobileActionBar({
   onCall,
   onText,
-  onNext,
+  onEmail,
   phoneAvailable,
-  nextDisabled,
-  nextLabel,
+  emailAvailable,
 }: {
   onCall: () => void
   onText: () => void
-  onNext?: () => void
+  onEmail: () => void
   phoneAvailable: boolean
-  nextDisabled: boolean
-  nextLabel?: string
+  emailAvailable: boolean
 }) {
   const panelId = useId()
   const toggleRef = useRef<HTMLButtonElement>(null)
@@ -112,8 +110,8 @@ export function LeadMobileActionBar({
           <button type="button" onClick={onText} disabled={!phoneAvailable} className={secondaryButton}>
             <span className={secondarySurface}><MessageSquare size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Text</span>
           </button>
-          <button type="button" onClick={onNext} disabled={nextDisabled} title={nextLabel} aria-label={nextLabel ? `Next: ${nextLabel}` : 'Next action'} className="group inline-flex h-11 min-w-0 items-center justify-center rounded-lg text-sm font-semibold text-[#18130d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60 disabled:pointer-events-none disabled:opacity-40">
-            <span className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-[#caa24c] px-2 transition-colors group-hover:bg-[#dfbd68] group-active:bg-[#b8913c]">Next <ChevronRight size={16} className="shrink-0" /></span>
+          <button type="button" onClick={onEmail} disabled={!emailAvailable} className={secondaryButton}>
+            <span className={secondarySurface}><Mail size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Email</span>
           </button>
         </div>
       </motion.div>

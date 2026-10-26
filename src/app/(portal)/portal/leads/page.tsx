@@ -2676,6 +2676,8 @@ function LeadsProposalsTab({
                 badges={[{ label: 'Sent', tone: luxorCrmStatusTone('sent') }]}
                 subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
                 contact={lead.email || 'No email registered'}
+                onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
+                interactionLabel={`Open lead record for ${lead.full_name}`}
                 actions={
                   <>
                     <Link href={'/portal/leads/' + lead.id + '?stage=proposal'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><FileCheck size={14} /> Review Proposal</Link>
@@ -2687,7 +2689,6 @@ function LeadsProposalsTab({
                   <span className="text-[color:var(--portal-muted)]">Intake source</span>
                   <span className="font-semibold text-[color:var(--portal-text)]">{isGrandOpeningRsvp(lead) ? 'RSVP' : lead.source.replaceAll('_', ' ')}</span>
                 </div>
-                <Link href={'/portal/leads/' + lead.id} className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]"><Eye size={14} /> View lead record</Link>
               </LuxorCrmRecordCard>
             ))}
           </div>

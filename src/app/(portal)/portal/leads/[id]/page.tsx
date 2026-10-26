@@ -57,7 +57,7 @@ import {
   PanelRightOpen,
   X,
 } from 'lucide-react'
-import { isLuxorTestInquiry, LUXOR_MAX_GUESTS, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
+import { isLuxorTestInquiry, LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS, LUXOR_MAX_GUESTS, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
@@ -401,15 +401,6 @@ type EditableLeadField =
 
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select' | 'event-type'
 type LeadDetailTab = 'overview' | 'activity' | 'proposals' | 'contract' | 'payments' | 'planning' | 'messages' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'notes'
-
-const LEAD_BUDGET_OPTIONS = [
-  { value: 'Under $5,000', label: 'Under $5,000' },
-  { value: '$5,000–$10,000', label: '$5,000–$10,000' },
-  { value: '$10,000–$15,000', label: '$10,000–$15,000' },
-  { value: '$15,000–$20,000', label: '$15,000–$20,000' },
-  { value: '$20,000+', label: '$20,000+' },
-  { value: 'Not sure yet', label: 'Not sure yet' },
-]
 
 const ACTIVITY_BATCH_SIZE = 18
 const EVENT_TIME_OPTIONS = LUXOR_TIME_DROPDOWN_OPTIONS
@@ -963,6 +954,10 @@ export default function LeadDetailPage({
     () => leadEvents.find((event) => event.id === activeEventId) || leadEvents.find((event) => event.is_primary) || leadEvents[0] || null,
     [activeEventId, leadEvents],
   )
+  const currentEventType = selectedLeadEvent ? selectedLeadEvent.event_type : lead?.event_type ?? null
+  const currentEventDate = selectedLeadEvent ? selectedLeadEvent.target_date : lead?.target_date ?? null
+  const currentEventGuestCount = selectedLeadEvent ? selectedLeadEvent.guest_count : lead?.guest_count ?? null
+  const currentEventPackageInterest = selectedLeadEvent ? selectedLeadEvent.package_interest : lead?.package_interest ?? null
   const isolatedTestLead = isLuxorTestInquiry(lead)
   const eventBookings = useMemo(
     () => isolatedTestLead ? [] : selectedLeadEvent ? bookings.filter((booking) => booking.lead_event_id === selectedLeadEvent.id) : bookings,
@@ -2672,7 +2667,7 @@ export default function LeadDetailPage({
       setInvoiceTaxRate(String(Number(invoice.tax_rate || 0) * 100))
       setLegacyProposalDiscount(!savedPromotionId && discountValue > 0 ? { type: discountType, value: discountValue } : null)
     } else {
-      setInvoiceDesc(defaultProposalTitle(lead?.full_name, activeEventForDisplay?.event_type || lead?.event_type || 'Event'))
+      setInvoiceDesc(defaultProposalTitle(lead?.full_name, currentEventType || 'Event'))
       setInvoiceDueDate('')
       setInvoiceOfferExpiryTime(DEFAULT_OFFER_EXPIRY_TIME)
       setInvoiceDiscountType('percent')
@@ -2897,7 +2892,7 @@ export default function LeadDetailPage({
     const contextSelection = asProposalRecord(context.pricing_selection)
     const calculationSelection = asProposalRecord(calculationContext.pricing_selection)
     const packageId = engineProposalPackageId(selectedProposalPackageId || context.package_id || calculationContext.package_id)
-    const eventDate = String(context.event_date || calculationContext.event_date || activeEventForDisplay?.target_date || lead?.target_date || '')
+    const eventDate = String(context.event_date || calculationContext.event_date || currentEventDate || '')
     const guestCount = asProposalNumber(context.expected_guest_count, calculationContext.expected_guest_count, proposalGuestCount)
     const rentalPeriod = context.rental_period || calculationContext.rental_period || 'evening'
     const addOns = proposalServiceIds(contextSelection).length
@@ -2945,7 +2940,7 @@ export default function LeadDetailPage({
       ...(packageTierId ? { packageTierId, package_tier_id: packageTierId } : {}),
       eventDate,
       guestCount,
-      eventType: context.event_type || activeEventForDisplay?.event_type || lead?.event_type || null,
+      eventType: context.event_type || currentEventType || null,
       rentalPeriod,
       rentalStartTime: String(context.rental_start_time || context.start_time || context.guest_arrival_time || context.guestArrivalTime || calculationContext.rental_start_time || calculationContext.start_time || ''),
       rentalEndTime: String(context.rental_end_time || context.end_time || context.event_end_time || context.eventEndTime || calculationContext.rental_end_time || calculationContext.end_time || ''),
@@ -3075,8 +3070,8 @@ export default function LeadDetailPage({
               : { creation_request_id: invoiceCreationRequest.current ||= crypto.randomUUID() }),
           ...(createRevision && editingInvoice ? { supersedes_invoice_id: editingInvoice.id } : {}),
           client_name: lead.full_name,
-          event_type: proposalContext?.event_type || activeEventForDisplay?.event_type || lead.event_type || 'Event Booking',
-          description: invoiceDesc || (editingInvoice ? editingInvoice.description || null : defaultProposalTitle(lead.full_name, activeEventForDisplay?.event_type || lead.event_type || 'Event')),
+          event_type: proposalContext?.event_type || currentEventType || 'Event Booking',
+          description: invoiceDesc || (editingInvoice ? editingInvoice.description || null : defaultProposalTitle(lead.full_name, currentEventType || 'Event')),
           line_items: invoiceItems,
           tax_rate: taxRate,
           due_date: invoiceDueDate || null,
@@ -4156,22 +4151,34 @@ export default function LeadDetailPage({
     placeholder?: string
     isMono?: boolean
     options?: { value: string; label: string }[]
+    readOnly?: boolean
   }> = [
     {
       label: 'Event Type',
-      value: activeEventForDisplay?.event_type || lead.event_type || (isNewsletter ? '' : 'Not specified'),
-      editValue: activeEventForDisplay?.event_type || lead.event_type || '',
-      copyValue: activeEventForDisplay?.event_type || lead.event_type || '',
+      value: currentEventType || (isNewsletter ? '' : 'Not specified'),
+      editValue: currentEventType || '',
+      copyValue: currentEventType || '',
       field: 'event_type',
       icon: <Sparkles size={14} />,
       inputType: 'event-type',
       placeholder: 'Search or enter an event type...',
     },
     {
+      label: 'Package Interest',
+      value: currentEventPackageInterest || 'Not selected',
+      editValue: currentEventPackageInterest || '',
+      copyValue: currentEventPackageInterest || '',
+      field: 'package_interest',
+      icon: <Briefcase size={14} />,
+      inputType: 'select',
+      placeholder: 'Select a package of interest',
+      options: [...LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS],
+    },
+    {
       label: 'Guest Count',
-      value: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} guests` : (isNewsletter ? '' : 'Unspecified'),
-      editValue: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? String(activeEventForDisplay?.guest_count ?? lead.guest_count) : '',
-      copyValue: (activeEventForDisplay?.guest_count ?? lead.guest_count) ? String(activeEventForDisplay?.guest_count ?? lead.guest_count) : '',
+      value: currentEventGuestCount ? `${currentEventGuestCount} guests` : (isNewsletter ? '' : 'Unspecified'),
+      editValue: currentEventGuestCount ? String(currentEventGuestCount) : '',
+      copyValue: currentEventGuestCount ? String(currentEventGuestCount) : '',
       field: 'guest_count',
       icon: <Users size={14} />,
       inputType: 'number',
@@ -4179,41 +4186,32 @@ export default function LeadDetailPage({
     },
     {
       label: 'Target Date',
-      value: (activeEventForDisplay?.target_date || lead.target_date) ? formatDisplayDate(activeEventForDisplay?.target_date || lead.target_date || '') : (isNewsletter ? '' : 'TBD'),
-      editValue: activeEventForDisplay?.target_date || lead.target_date || '',
-      copyValue: activeEventForDisplay?.target_date || lead.target_date || '',
+      value: currentEventDate ? formatDisplayDate(currentEventDate) : (isNewsletter ? '' : 'TBD'),
+      editValue: currentEventDate || '',
+      copyValue: currentEventDate || '',
       field: 'target_date',
       icon: <Calendar size={14} />,
       inputType: 'date',
     },
     {
-      label: 'Package Interest',
-      value: activeEventForDisplay?.package_interest || lead.package_interest || 'Not selected',
-      editValue: activeEventForDisplay?.package_interest || lead.package_interest || '',
-      copyValue: activeEventForDisplay?.package_interest || lead.package_interest || '',
-      field: 'package_interest',
-      icon: <Briefcase size={14} />,
-      inputType: 'select',
-      placeholder: 'Package or room interest',
-      options: LUXOR_PACKAGE_INTEREST_OPTIONS,
-    },
-    {
-      label: 'Preferred Tour Date',
+      label: 'Tour Date',
       value: lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'No tour scheduled',
       editValue: lead.preferred_tour_date || '',
       copyValue: lead.preferred_tour_date || '',
       field: 'preferred_tour_date',
       icon: <Calendar size={14} />,
       inputType: 'date',
+      readOnly: true,
     },
     {
-      label: 'Preferred Tour Time',
+      label: 'Tour Time',
       value: lead.preferred_tour_time || 'N/A',
       editValue: normalizeTimeInputValue(lead.preferred_tour_time),
       copyValue: lead.preferred_tour_time || '',
       field: 'preferred_tour_time',
       icon: <Clock size={14} />,
       inputType: 'time',
+      readOnly: true,
     },
   ]
   const beginEventDetailsEdit = () => {
@@ -4675,9 +4673,12 @@ export default function LeadDetailPage({
     </section>
   )
 
-  const displayEventType = activeEventForDisplay?.event_type || lead.event_type || 'Event'
-  const displayEventDate = activeEventForDisplay?.target_date || lead.target_date
-  const displayGuestCount = activeEventForDisplay?.guest_count ?? lead.guest_count
+  const displayEventType = currentEventType || 'Event'
+  const displayEventDate = currentEventDate
+  const displayGuestCount = currentEventGuestCount
+  const clientSummaryLead = activeEventForDisplay
+    ? { ...lead, event_type: activeEventForDisplay.event_type }
+    : lead
   const requestedTourLanguage = getRequestedTourLanguage(lead)
 
   return (
@@ -4700,7 +4701,7 @@ export default function LeadDetailPage({
       </div>
 
       <section className="overflow-visible rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] sm:shadow-2xl sm:shadow-black/10">
-        <div aria-label="Contact summary" className="grid gap-3 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
+        <div aria-label="Contact summary" className="relative grid gap-3 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
           <div className="grid min-w-0 grid-cols-[3rem_minmax(0,1fr)_2.75rem] items-start gap-x-3 gap-y-2 sm:flex sm:gap-4">
             <div className="relative col-start-1 row-start-1 h-12 w-12 shrink-0 self-start sm:h-20 sm:w-20">
               <PortalContactAvatar
@@ -4729,11 +4730,32 @@ export default function LeadDetailPage({
             </div>
             <div className="contents sm:block sm:min-w-0 sm:pt-1">
               <div className="contents sm:flex sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
-                <h1 className={`col-start-2 row-start-1 min-w-0 self-center break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl ${lead.email ? '' : 'col-span-2'}`}>{lead.full_name}</h1>
+                <div className="col-span-2 col-start-2 row-start-1 flex min-w-0 items-center gap-2 pr-12 sm:pr-0">
+                  <h1 className="min-w-0 break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
+                  {lead.email ? (
+                    <button
+                      onClick={handleToggleMarketing}
+                      disabled={togglingMarketing}
+                      className="group relative inline-flex h-9 w-9 shrink-0 cursor-pointer select-none items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50 sm:h-[18px] sm:w-[18px]"
+                      aria-label={isSubscribed ? 'Remove from marketing list' : 'Add to marketing list'}
+                      title={isSubscribed ? 'Remove from marketing list' : 'Add to marketing list'}
+                    >
+                      <div className="relative h-[18px] w-[18px] shrink-0">
+                        <Star size={18} className="absolute inset-0 text-[color:var(--portal-muted)] transition-colors group-hover:text-[color:var(--portal-text)]" />
+                        <div className="absolute bottom-0 left-0 right-0 overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ height: isSubscribed ? '18px' : '0px' }}>
+                          <Star size={18} className="absolute bottom-0 left-0 fill-[#caa24c] text-[#caa24c]" style={{ width: '18px', height: '18px' }} />
+                        </div>
+                      </div>
+                    </button>
+                  ) : null}
+                </div>
                 {lead.phone ? (
-                  <span className="col-span-3 inline-flex min-w-0 max-w-full items-center gap-2 text-sm leading-5 tabular-nums text-[color:var(--portal-text)] sm:gap-1.5 sm:rounded-full sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-2.5 sm:py-1 sm:text-[10px] sm:font-semibold">
-                    <Phone size={14} className="shrink-0 text-[color:var(--portal-muted)] sm:h-[11px] sm:w-[11px] sm:text-[#caa24c]" /> {formatPhoneDisplay(lead.phone)}
-                  </span>
+                  <div className="col-span-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:contents">
+                    <span className="inline-flex min-w-0 max-w-full items-center gap-2 text-sm leading-5 tabular-nums text-[color:var(--portal-text)] sm:col-span-3 sm:gap-1.5 sm:rounded-full sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-2.5 sm:py-1 sm:text-[10px] sm:font-semibold">
+                      <Phone size={14} className="shrink-0 text-[color:var(--portal-muted)] sm:h-[11px] sm:w-[11px] sm:text-[#caa24c]" /> {formatPhoneDisplay(lead.phone)}
+                    </span>
+                    <span className="sm:hidden"><PortalSmsConsentBadge phone={lead.phone} initialConsent={smsConsent} compact /></span>
+                  </div>
                 ) : null}
                 {lead.email ? (
                   <span className="col-span-3 inline-flex min-w-0 max-w-full items-start gap-2 text-sm leading-5 text-[color:var(--portal-text)] sm:gap-1.5 sm:rounded-full sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-2.5 sm:py-1 sm:text-[10px] sm:font-semibold">
@@ -4771,30 +4793,6 @@ export default function LeadDetailPage({
                 ) : null}
                 {lead.email && (
                   <div className="contents sm:flex sm:items-center sm:gap-3">
-                    <button
-                      onClick={handleToggleMarketing}
-                      disabled={togglingMarketing}
-                      className="group relative col-start-3 row-start-1 flex h-11 w-11 shrink-0 cursor-pointer select-none items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50 sm:h-[18px] sm:w-[18px]"
-                      aria-label={isSubscribed ? 'Remove from marketing list' : 'Add to marketing list'}
-                      title={isSubscribed ? "Remove from marketing list" : "Add to marketing list"}
-                    >
-                      <div className="relative h-[18px] w-[18px] shrink-0">
-                        {/* Background outline star */}
-                        <Star size={18} className="absolute inset-0 text-[color:var(--portal-muted)] transition-colors group-hover:text-[color:var(--portal-text)]" />
-                        
-                        {/* Animated liquid fill mask star */}
-                        <div 
-                          className="absolute bottom-0 left-0 right-0 overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]" 
-                          style={{ height: isSubscribed ? '18px' : '0px' }}
-                        >
-                          <Star 
-                            size={18} 
-                            className="absolute bottom-0 left-0 text-[#caa24c] fill-[#caa24c]" 
-                            style={{ width: '18px', height: '18px' }} 
-                          />
-                        </div>
-                      </div>
-                    </button>
                     {isGrandOpeningLead ? (
                       <span className="col-span-3 whitespace-nowrap text-[9px] font-black uppercase tracking-[0.16em] text-[#caa24c]">
                         Grand Opening
@@ -4886,13 +4884,13 @@ export default function LeadDetailPage({
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-0.5 border-t border-[color:var(--portal-border)] pt-2 sm:justify-start sm:gap-3 sm:border-0 sm:pt-0 lg:justify-end">
-            {lead.phone ? <span className="basis-full pb-1 min-[380px]:basis-auto min-[380px]:pb-0"><PortalSmsConsentBadge phone={lead.phone} initialConsent={smsConsent} compact /></span> : null}
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-0.5 border-t-0 pt-0 sm:justify-start sm:gap-3 sm:border-0 sm:pt-0 lg:justify-end">
+            {lead.phone ? <span className="hidden sm:inline-flex sm:basis-auto"><PortalSmsConsentBadge phone={lead.phone} initialConsent={smsConsent} compact /></span> : null}
             {lead.email && (
               <button 
                 type="button"
                 onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
+                className="hidden h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:inline-flex sm:h-9 sm:w-9"
                 aria-label="Email client"
                 title="Email client"
               >
@@ -4903,7 +4901,7 @@ export default function LeadDetailPage({
               <button
                 type="button"
                 onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
+                className="hidden h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:inline-flex sm:h-9 sm:w-9"
                 aria-label="Call client"
                 title="Call client"
               >
@@ -4920,7 +4918,7 @@ export default function LeadDetailPage({
                     })
                   )
                 }}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
+                className="hidden h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:inline-flex sm:h-9 sm:w-9"
                 aria-label="Text client"
                 title="Text client"
               >
@@ -4928,7 +4926,7 @@ export default function LeadDetailPage({
               </button>
             )}
             {lead.is_test ? <LuxorTestLeadPanel leadId={lead.id} /> : null}
-            <div className="relative">
+            <div className="absolute right-3 top-3 z-10 sm:relative sm:right-auto sm:top-auto sm:z-auto">
               <button
                 ref={actionsMenuTriggerRef}
                 type="button"
@@ -5284,7 +5282,7 @@ export default function LeadDetailPage({
           <h2 id="original-inquiry-heading" className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">
             {isGrandOpeningLead ? 'Original RSVP note' : 'Original inquiry'}
           </h2>
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          <div className="flex w-full min-w-0 flex-col items-stretch gap-x-3 gap-y-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
             <p className="text-[10px] text-[color:var(--portal-muted)]">{formatSourceLabel(lead)} · {formatDisplayDate(lead.created_at)}</p>
             {lead.email ? (
               <button
@@ -5294,7 +5292,7 @@ export default function LeadDetailPage({
                   purpose: 'inquiry-response',
                   initialSubject: `Your ${lead.event_type?.trim() || 'event'} inquiry at Luxor`,
                 } }))}
-                className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 text-[11px] font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 text-[11px] font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:w-auto"
               >
                 <Mail size={14} aria-hidden="true" /> Respond to inquiry
               </button>
@@ -5500,7 +5498,7 @@ export default function LeadDetailPage({
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                      <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
                         <div className="space-y-1">
                           {eventDetails.slice(0, 3).map((item) => (
                             <DetailItem
@@ -7498,7 +7496,7 @@ export default function LeadDetailPage({
                 return (
                   <>
                     <ClientSummaryCard
-                      lead={lead}
+                      lead={clientSummaryLead}
                       isSaving={Boolean(savingLeadField)}
                       onUpdate={handleLeadFieldUpdate}
                       onViewDetails={() => scrollToSection('lead-messages')}
@@ -7734,7 +7732,7 @@ export default function LeadDetailPage({
               return (
                 <>
                   <ClientSummaryCard
-                    lead={lead}
+                    lead={clientSummaryLead}
                     isSaving={Boolean(savingLeadField)}
                     onUpdate={handleLeadFieldUpdate}
                     onViewDetails={() => scrollToSection('lead-messages')}
@@ -8893,9 +8891,12 @@ export default function LeadDetailPage({
               })
             )
           }}
-          onNext={recommendedActions[0]?.onClick}
-          nextDisabled={!recommendedActions[0] || Boolean(recommendedActions[0].disabled)}
-          nextLabel={recommendedActions[0]?.label}
+          emailAvailable={Boolean(lead.email)}
+          onEmail={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: {
+            lead,
+            purpose: 'inquiry-response',
+            initialSubject: `Your ${lead.event_type?.trim() || 'event'} inquiry at Luxor`,
+          } }))}
         />,
         document.body
       ) : null}
@@ -9876,12 +9877,6 @@ function ClientSummaryCard({
   const [sectionEditing, setSectionEditing] = useState(false)
   const [sectionDraft, setSectionDraft] = useState<Partial<Record<EditableLeadField, string>>>({})
   const isNewsletter = isNewsletterLead(lead)
-  const currentGuestCount = lead.guest_count ? String(lead.guest_count) : ''
-  const guestCountOptions = Array.from(new Set([
-    ...(currentGuestCount ? [currentGuestCount] : []),
-    ...Array.from({ length: 7 }, (_, index) => String((index + 1) * 25)),
-    String(LUXOR_MAX_GUESTS),
-  ])).map((value) => ({ value, label: `${value} guests` }))
   const summaryRows: Array<{
     label: string
     value: string
@@ -9895,15 +9890,13 @@ function ClientSummaryCard({
     isMono?: boolean
     onCompose?: () => void
     onCall?: () => void
+    readOnly?: boolean
   }> = [
-    { label: 'Email', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: false, onCompose: lead.email ? () => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } })) : undefined },
-    { label: 'Phone', icon: <Phone size={14} />, value: lead.phone ? formatPhoneDisplay(lead.phone) : 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: false, onCall: lead.phone ? () => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id }) : undefined },
-    ...(isNewsletter ? [] : [
-      { label: 'Address', icon: <MapPin size={14} />, value: lead.metadata?.address ? String(lead.metadata.address) : 'Address not captured', editValue: lead.metadata?.address ? String(lead.metadata.address) : '', copyValue: lead.metadata?.address ? String(lead.metadata.address) : '', field: 'address' as EditableLeadField, placeholder: 'San Antonio, TX' },
-      { label: 'Guest Count', icon: <Users size={14} />, value: lead.guest_count ? `${lead.guest_count} Expected Guests` : 'Guest count not captured', editValue: currentGuestCount, copyValue: currentGuestCount, field: 'guest_count' as EditableLeadField, inputType: 'select' as LeadDetailInputType, options: guestCountOptions },
-      { label: 'Planning Budget', icon: <DollarSign size={14} />, value: lead.budget || 'Budget not provided', editValue: lead.budget || '', copyValue: lead.budget || '', field: 'budget' as EditableLeadField, inputType: 'select' as LeadDetailInputType, options: LEAD_BUDGET_OPTIONS },
-      { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type' as EditableLeadField, inputType: 'event-type' as LeadDetailInputType, placeholder: 'Search or enter an event type...' },
-    ]),
+    { label: 'Phone Number', icon: <Phone size={14} />, value: lead.phone ? formatPhoneDisplay(lead.phone) : 'No phone captured', editValue: lead.phone || '', copyValue: lead.phone || '', field: 'phone', inputType: 'tel', placeholder: 'Phone number', isMono: false, onCall: lead.phone ? () => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id }) : undefined },
+    { label: 'Email Address', icon: <Mail size={14} />, value: lead.email || 'No email captured', editValue: lead.email || '', copyValue: lead.email || '', field: 'email', inputType: 'email', placeholder: 'client@email.com', isMono: false, onCompose: lead.email ? () => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } })) : undefined },
+    { label: 'Event Type', icon: <Star size={14} />, value: lead.event_type || 'Event type not captured', editValue: lead.event_type || '', copyValue: lead.event_type || '', field: 'event_type', inputType: 'event-type', placeholder: 'Search or enter an event type...' },
+    { label: 'Tour Date', icon: <Calendar size={14} />, value: lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'No tour scheduled', editValue: lead.preferred_tour_date || '', copyValue: lead.preferred_tour_date || '', field: 'preferred_tour_date', inputType: 'date', readOnly: true },
+    { label: 'Tour Time', icon: <Clock size={14} />, value: lead.preferred_tour_time || 'N/A', editValue: normalizeTimeInputValue(lead.preferred_tour_time), copyValue: lead.preferred_tour_time || '', field: 'preferred_tour_time', inputType: 'time', readOnly: true },
   ]
 
   const beginSummaryEdit = () => {
@@ -9916,7 +9909,7 @@ function ClientSummaryCard({
   const saveSummary = async () => {
     const updates: Array<[EditableLeadField, string]> = [
       ['full_name', sectionDraft.full_name ?? lead.full_name],
-      ...summaryRows.map((row): [EditableLeadField, string] => [row.field, sectionDraft[row.field] ?? row.editValue]),
+      ...summaryRows.filter((row) => !row.readOnly).map((row): [EditableLeadField, string] => [row.field, sectionDraft[row.field] ?? row.editValue]),
     ]
     for (const [field, value] of updates) {
       const currentValue = field === 'full_name' ? lead.full_name : summaryRows.find((row) => row.field === field)?.editValue ?? ''
@@ -9973,8 +9966,8 @@ function ClientSummaryCard({
             {...row}
             copyValue={undefined}
             isSaving={isSaving}
-            onCommit={sectionEditing ? (value) => onUpdate(row.field, value) : undefined}
-            sectionEditing={sectionEditing}
+            onCommit={sectionEditing && !row.readOnly ? (value) => onUpdate(row.field, value) : undefined}
+            sectionEditing={sectionEditing && !row.readOnly}
             sectionDraftValue={sectionDraft[row.field] ?? row.editValue}
             onSectionDraftChange={(value) => setSectionDraft((current) => ({ ...current, [row.field]: value }))}
           />

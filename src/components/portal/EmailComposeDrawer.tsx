@@ -91,6 +91,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
   const drawerRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: number; x: number; y: number; left: number; top: number } | null>(null)
+  const closeAfterFocusExitRef = useRef(false)
 
   const fit = useCallback((x: number, y: number) => {
     if (typeof window === 'undefined') return { x, y }
@@ -143,7 +144,15 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
     if (isOpen) setIsClosing(false)
   }, [isOpen])
 
-  const requestClose = () => setIsClosing(true)
+  const requestClose = () => {
+    if (isClosing) return
+    if (isFocusMode && purpose === 'inquiry-response') {
+      closeAfterFocusExitRef.current = true
+      setIsFocusMode(false)
+      return
+    }
+    setIsClosing(true)
+  }
 
   // Preview Scaling & Zoom States & Ref
   const [zoomMode, setZoomMode] = useState<'fit' | 'custom'>('fit')
@@ -176,6 +185,11 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   const handleFocusModeExit = () => {
     if (isFocusMode && isOpen) return
     setIsFocusModePresent(false)
+    if (closeAfterFocusExitRef.current) {
+      closeAfterFocusExitRef.current = false
+      setIsClosing(true)
+      return
+    }
     if (isOpen) bodyReviewRef.current?.focus({ preventScroll: true })
   }
 

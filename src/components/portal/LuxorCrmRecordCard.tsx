@@ -64,7 +64,7 @@ export function LuxorCrmRecordCard({
   />
   return (
     <article
-      className={`portal-card-surface relative rounded-xl border p-4 shadow-sm transition-colors ${onOpen ? 'cursor-pointer hover:border-[#caa24c]/60' : ''} ${selected ? 'border-[#caa24c]/60 bg-[#caa24c]/[0.04]' : ''} ${className}`}
+      className={`portal-card-surface relative rounded-xl border p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-150 ${onOpen ? 'cursor-pointer hover:-translate-y-0.5 hover:border-[#caa24c]/80 hover:shadow-md active:translate-y-0' : ''} ${selected ? 'border-[#caa24c]/60 bg-[#caa24c]/[0.04]' : ''} ${className}`}
       onClick={(event) => {
         const target = event.target as HTMLElement
         if (target.closest('a,button,input,select,textarea,[role="menuitem"]')) return
