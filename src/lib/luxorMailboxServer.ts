@@ -88,6 +88,7 @@ export async function findVisibleLuxorMailboxItem(id: string, email?: string) {
     select: 'id,message', id: `eq.${match[1]}`, created_at: `lte.${new Date().toISOString()}`,
     or: '(source.eq.contact_page,flow.eq.contact_form)',
     message: 'not.is.null', is_test: 'not.is.true',
+    and: '(or(metadata->>is_test_record.is.null,metadata->>is_test_record.eq.false))',
   })
   if (email) params.set('email', `eq.${email.trim().toLowerCase()}`)
   const rows = await supabaseRest<Array<{ id: string; message: string | null }>>(`luxor_inquiries?${params}&limit=1`)
