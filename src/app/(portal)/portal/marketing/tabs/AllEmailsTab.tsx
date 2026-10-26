@@ -960,7 +960,24 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         else next.delete(id)
         return next
       })
-      await loadEmails(true)
+      const savedStarred = result.isStarred === true
+      const starCountDelta = Number(savedStarred) - Number(wasStarred)
+      if (activeFolder === 'starred' && !savedStarred) {
+        const nextMessages = messagesRef.current.filter((message) => message.id !== id)
+        messagesRef.current = nextMessages
+        setMessages(nextMessages)
+      }
+      setPageResult((current) => current ? {
+        ...current,
+        stats: {
+          ...current.stats,
+          starredCount: Math.max(0, current.stats.starredCount + starCountDelta),
+        },
+        folderCounts: activeFolder === 'starred' && !savedStarred
+          ? { ...current.folderCounts, starred: Math.max(0, (current.folderCounts.starred ?? current.total) - 1) }
+          : current.folderCounts,
+        ...(activeFolder === 'starred' && !savedStarred ? { total: Math.max(0, current.total - 1) } : {}),
+      } : current)
     } catch (error) {
       setStarredIds((current) => {
         const next = new Set(current)

@@ -132,11 +132,23 @@ export function usePortalNotifications() {
   const notifiedToastIdsRef = useRef<Set<string> | null>(null)
   const previousEmailItemsRef = useRef<PortalNotificationItem[]>([])
   const fetchInFlightRef = useRef(false)
+  const pendingRefreshRef = useRef<{ silent: boolean; refreshEmails: boolean; scopes: Set<string> | null } | null>(null)
+  const notificationSourceDataRef = useRef<Record<string, unknown>>({})
   // Callback fired for each new item (used by PortalShell to fire toasts)
   const onNewItemRef = useRef<((item: NotificationToastPayload) => void) | null>(null)
 
-  const fetchNotifications = useCallback(async (silent = false, refreshEmails = false) => {
-    if (fetchInFlightRef.current) return
+  const fetchNotifications = useCallback(async (silent = false, refreshEmails = false, scopes?: string[]) => {
+    if (fetchInFlightRef.current) {
+      const pending = pendingRefreshRef.current
+      pendingRefreshRef.current = {
+        silent: pending ? pending.silent && silent : silent,
+        refreshEmails: Boolean(pending?.refreshEmails || refreshEmails),
+        scopes: !pending || pending.scopes === null || scopes === undefined
+          ? null
+          : new Set([...pending.scopes, ...scopes]),
+      }
+      return
+    }
     fetchInFlightRef.current = true
     try {
       if (!silent) setLoading(true)
@@ -144,22 +156,37 @@ export function usePortalNotifications() {
 
       const shouldFetchEmails = !silent || refreshEmails
 
-      const [inquiriesRes, emailsRes, messagesRes, callsRes, invoicesRes, expensesRes, bookingsRes, paymentsRes, signaturesRes, marketingEventsRes, layoutReviewsRes, calendarResponsesRes] = await Promise.allSettled([
-        fetch('/api/inquiries', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        shouldFetchEmails
-          ? fetch('/api/email/events?limit=25', { headers: { Accept: 'application/json' }, cache: 'no-store' })
-          : Promise.resolve(null),
-        fetch('/api/twilio/messages?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/twilio/calls?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/invoices', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/expenses', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/bookings', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/payments', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/signatures?limit=100', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/marketing/events?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/portal/layout-reviews/notifications?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-        fetch('/api/portal/calendar-responses/notifications?limit=50', { headers: { Accept: 'application/json' }, cache: 'no-store' }),
-      ])
+      const summaryParams = new URLSearchParams()
+      if (shouldFetchEmails) summaryParams.set('emails', '1')
+      if (scopes) summaryParams.set('scopes', [...new Set(scopes)].join(','))
+      const summaryQuery = summaryParams.size ? `?${summaryParams.toString()}` : ''
+      const summaryResponse = await fetch(`/api/portal/notifications/summary${summaryQuery}`, {
+        headers: { Accept: 'application/json' }, cache: 'no-store',
+      })
+      if (!summaryResponse.ok) throw new Error('Unable to sync portal notifications.')
+      const summary = await summaryResponse.json() as { sources?: Record<string, { ok: boolean; data: unknown }> }
+      const sourceResponse = (name: string) => {
+        const source = summary.sources?.[name]
+        if (source?.ok && source.data !== null && source.data !== undefined) notificationSourceDataRef.current[name] = source.data
+        const data = notificationSourceDataRef.current[name]
+        return { status: 'fulfilled' as const, value: new Response(JSON.stringify(data), { status: data === undefined ? 500 : 200 }) }
+      }
+      const inquiriesRes = sourceResponse('inquiries')
+      const cachedInquiries = notificationSourceDataRef.current.inquiries
+      if (inquiriesRes.value.ok && Array.isArray(cachedInquiries)) {
+        window.dispatchEvent(new CustomEvent('luxor:portal-inquiries-refreshed', { detail: cachedInquiries }))
+      }
+      const emailsRes = shouldFetchEmails ? sourceResponse('emails') : { status: 'fulfilled' as const, value: null }
+      const messagesRes = sourceResponse('messages')
+      const callsRes = sourceResponse('calls')
+      const invoicesRes = sourceResponse('invoices')
+      const expensesRes = sourceResponse('expenses')
+      const bookingsRes = sourceResponse('bookings')
+      const paymentsRes = sourceResponse('payments')
+      const signaturesRes = sourceResponse('signatures')
+      const marketingEventsRes = sourceResponse('marketingEvents')
+      const layoutReviewsRes = sourceResponse('layoutReviews')
+      const calendarResponsesRes = sourceResponse('calendarResponses')
 
   const aggregated: PortalNotificationItem[] = []
   const bounceNotificationIds = new Set<string>()
@@ -739,6 +766,10 @@ export function usePortalNotifications() {
     } finally {
       setLoading(false)
       fetchInFlightRef.current = false
+      const pending = pendingRefreshRef.current
+      pendingRefreshRef.current = null
+      if (pending) void fetchNotifications(pending.silent, pending.refreshEmails,
+        pending.scopes === null ? undefined : [...pending.scopes])
     }
   }, [])
 
@@ -762,22 +793,22 @@ export function usePortalNotifications() {
         channel = supabase
           .channel(data.realtimeChannel)
           .on('broadcast', { event: 'email-arrived' }, () => {
-            void fetchNotifications(true, true)
+            void fetchNotifications(true, true, ['emails'])
           })
           .on('broadcast', { event: 'email-status' }, () => {
-            void fetchNotifications(true, true)
+            void fetchNotifications(true, true, ['emails'])
           })
           .on('broadcast', { event: 'lead-email-bounced' }, () => {
-            void fetchNotifications(true)
+            void fetchNotifications(true, false, ['inquiries'])
           })
           .on('broadcast', { event: 'contract-status' }, () => {
-            void fetchNotifications(true)
+            void fetchNotifications(true, false, ['signatures'])
           })
           .on('broadcast', { event: 'booking-confirmed' }, () => {
-            void fetchNotifications(true)
+            void fetchNotifications(true, false, ['inquiries', 'bookings'])
           })
           .on('broadcast', { event: 'layout-review-feedback' }, () => {
-            void fetchNotifications(true)
+            void fetchNotifications(true, false, ['layoutReviews'])
           })
           .subscribe()
       })
@@ -786,6 +817,18 @@ export function usePortalNotifications() {
     return () => {
       active = false
       if (channel) void supabase.removeChannel(channel)
+    }
+  }, [fetchNotifications])
+
+  useEffect(() => {
+    const refreshInquiryNotifications = () => {
+      void fetchNotifications(true, false, ['inquiries', 'bookings', 'payments', 'marketingEvents', 'calendarResponses'])
+    }
+    window.addEventListener('luxor:inquiries-updated', refreshInquiryNotifications)
+    window.addEventListener('focus', refreshInquiryNotifications)
+    return () => {
+      window.removeEventListener('luxor:inquiries-updated', refreshInquiryNotifications)
+      window.removeEventListener('focus', refreshInquiryNotifications)
     }
   }, [fetchNotifications])
 
@@ -821,42 +864,42 @@ export function usePortalNotifications() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_inquiries' },
         () => {
-          fetchNotifications(true)
+          void fetchNotifications(true, false, ['inquiries', 'bookings', 'payments', 'marketingEvents', 'calendarResponses'])
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_bookings' },
         () => {
-          fetchNotifications(true)
+          void fetchNotifications(true, false, ['bookings', 'payments'])
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_messages' },
         () => {
-          fetchNotifications(true)
+          void fetchNotifications(true, false, ['messages'])
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_calls' },
         () => {
-          fetchNotifications(true)
+          void fetchNotifications(true, false, ['calls'])
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_invoices' },
         () => {
-          fetchNotifications(true)
+          void fetchNotifications(true, false, ['invoices', 'payments', 'signatures'])
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_payments' },
         () => {
-          fetchNotifications(true)
+          void fetchNotifications(true, false, ['payments', 'invoices'])
         }
       )
           .subscribe((status) => {

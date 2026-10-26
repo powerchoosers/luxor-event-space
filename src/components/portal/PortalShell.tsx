@@ -57,9 +57,6 @@ type PortalUserProfile = {
 }
 
 type PortalTheme = 'light' | 'dark'
-function isTransientFetchError(error: unknown) {
-  return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message)
-}
 type NextBestActionKind = 'reply' | 'tour' | 'proposal' | 'followup' | 'review'
 type NextBestActionMode = 'compose' | 'open'
 
@@ -640,36 +637,16 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     router.push(nextBestAction.href)
   }, [nextBestAction, router])
 
-  // Load inquiries for header search bar
+  // Reuse the protected notification summary's live inquiry snapshot instead
+  // of polling the full inquiry API separately from the dashboard.
   useEffect(() => {
-    let active = true
-    const loadInquiries = async () => {
-      try {
-        const res = await fetch('/api/inquiries', { headers: { Accept: 'application/json' }, cache: 'no-store' })
-        if (res.ok && active) {
-          const data = await res.json()
-          setInquiries(data)
-        }
-      } catch (err) {
-        if (!isTransientFetchError(err)) console.error('Failed to load inquiries for search:', err)
-      }
+    const handleInquiriesRefreshed = (event: Event) => {
+      const data = (event as CustomEvent<LuxorInquiry[]>).detail
+      if (Array.isArray(data)) setInquiries(data)
     }
-    void loadInquiries()
-    const refreshTimer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void loadInquiries()
-    }, 60_000)
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') void loadInquiries()
-    }
-    window.addEventListener('focus', refreshWhenVisible)
-    document.addEventListener('visibilitychange', refreshWhenVisible)
-    window.addEventListener('luxor:inquiries-updated', loadInquiries)
+    window.addEventListener('luxor:portal-inquiries-refreshed', handleInquiriesRefreshed)
     return () => {
-      active = false
-      window.clearInterval(refreshTimer)
-      window.removeEventListener('focus', refreshWhenVisible)
-      document.removeEventListener('visibilitychange', refreshWhenVisible)
-      window.removeEventListener('luxor:inquiries-updated', loadInquiries)
+      window.removeEventListener('luxor:portal-inquiries-refreshed', handleInquiriesRefreshed)
     }
   }, [])
 
