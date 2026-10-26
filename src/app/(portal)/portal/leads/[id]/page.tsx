@@ -4220,6 +4220,7 @@ export default function LeadDetailPage({
   }
   const saveEventDetails = async () => {
     for (const item of eventDetails) {
+      if (item.readOnly) continue
       const nextValue = eventDetailsDraft[item.field] ?? item.editValue
       if (normalizeComparableValue(nextValue) === normalizeComparableValue(item.editValue)) continue
       if (!await handleLeadFieldUpdate(item.field, nextValue)) return
@@ -5512,8 +5513,8 @@ export default function LeadDetailPage({
                               placeholder={item.placeholder}
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
-                              onCommit={eventDetailsEditing ? (value) => handleLeadFieldUpdate(item.field, value) : undefined}
-                              sectionEditing={eventDetailsEditing}
+                              onCommit={eventDetailsEditing && !item.readOnly ? (value) => handleLeadFieldUpdate(item.field, value) : undefined}
+                              sectionEditing={eventDetailsEditing && !item.readOnly}
                               sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
                               onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
                               options={item.options}
@@ -5533,8 +5534,8 @@ export default function LeadDetailPage({
                               placeholder={item.placeholder}
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
-                              onCommit={eventDetailsEditing ? (value) => handleLeadFieldUpdate(item.field, value) : undefined}
-                              sectionEditing={eventDetailsEditing}
+                              onCommit={eventDetailsEditing && !item.readOnly ? (value) => handleLeadFieldUpdate(item.field, value) : undefined}
+                              sectionEditing={eventDetailsEditing && !item.readOnly}
                               sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
                               onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
                               options={item.options}
