@@ -5268,6 +5268,7 @@ export default function LeadDetailPage({
           <p className="text-[10px] text-[color:var(--portal-muted)]">{formatSourceLabel(lead)} · {formatDisplayDate(lead.created_at)}</p>
         </div>
         <div
+          key={activeLeadTab}
           className={`mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)] ${isLongOriginalInquiry && !isOriginalInquiryExpanded ? 'line-clamp-4' : ''}`}
           style={{ color: 'var(--portal-text)', opacity: 1, visibility: 'visible' }}
         >
