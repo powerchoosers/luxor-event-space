@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
         if (!simulation) return NextResponse.json({ error: 'The associated inquiry is not the permanent test lead.' }, { status: 409 })
         return NextResponse.json({ success: true, simulated: true, recipient: LUXOR_TEST_IDENTIFICATION_EMAIL, providerStatus: 'not_attempted', deliveryStatus: 'unknown', simulation })
       }
+      return NextResponse.json({ error: 'The permanent test lead could not be verified.' }, { status: 409 })
     }
     if (typeof inquiryId === 'string' && inquiryId) {
       const inquiry = await getLuxorInquiry(inquiryId)
