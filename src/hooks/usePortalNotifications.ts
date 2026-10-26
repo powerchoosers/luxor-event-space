@@ -143,9 +143,9 @@ export function usePortalNotifications() {
       pendingRefreshRef.current = {
         silent: pending ? pending.silent && silent : silent,
         refreshEmails: Boolean(pending?.refreshEmails || refreshEmails),
-        scopes: !pending || pending.scopes === null || scopes === undefined
+        scopes: pending?.scopes === null || scopes === undefined || scopes.length === 0
           ? null
-          : new Set([...pending.scopes, ...scopes]),
+          : new Set([...(pending?.scopes ?? []), ...scopes]),
       }
       return
     }
