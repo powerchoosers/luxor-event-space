@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
-import { findVisibleLuxorMailMessage, setLuxorMailMessageStar } from '@/lib/luxorMailboxServer'
+import { findVisibleLuxorMailboxItem, setLuxorMailboxItemStar } from '@/lib/luxorMailboxServer'
 import { findLuxorSharedMailboxByAddress } from '@/lib/luxorSharedMailboxes'
 
 export const runtime = 'nodejs'
@@ -18,8 +18,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const { id } = await params
-  if (!/^mail-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-    return NextResponse.json({ error: 'Only saved mailbox messages can be starred.' }, { status: 400, headers })
+  if (!/^(mail-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|form_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(id)) {
+    return NextResponse.json({ error: 'Only saved mailbox items can be starred.' }, { status: 400, headers })
   }
 
   const rawBody = await request.text()
@@ -42,9 +42,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   try {
-    const visible = await findVisibleLuxorMailMessage(id, mailboxEmail || undefined)
+    const visible = await findVisibleLuxorMailboxItem(id, mailboxEmail || undefined)
     if (!visible) return NextResponse.json({ error: 'Mailbox message not found.' }, { status: 404, headers })
-    const result = await setLuxorMailMessageStar(session.email, id, body.starred)
+    const result = await setLuxorMailboxItemStar(session.email, id, body.starred)
     return NextResponse.json(result, { headers })
   } catch {
     return NextResponse.json({ error: 'The message star could not be saved. Please retry.' }, { status: 503, headers })

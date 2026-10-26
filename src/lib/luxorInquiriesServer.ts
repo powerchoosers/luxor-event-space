@@ -3,6 +3,7 @@ import 'server-only'
 import { compactText, getLuxorConsentFormProfile, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
+import { findRecentLuxorInquiryMatch } from './luxorInquiryDuplicateMatch'
 import { compareLuxorScheduledTours, getLuxorInquiryPageRequest, loadLuxorPages } from './luxorTourMetrics'
 import { recordLuxorWebsiteSmsConsent } from './luxorTextAutomationsServer'
 import {
@@ -151,11 +152,12 @@ export async function findRecentDuplicateLuxorInquiry(input: LuxorInquiryInput, 
     phone ? `phone.eq.${encodeURIComponent(phone)}` : '',
   ].filter(Boolean)
 
-  const [existing] = await supabaseRest<LuxorInquiry[]>(
-    `luxor_inquiries?select=*&created_at=gte.${encodeURIComponent(since)}&or=(${filters.join(',')})&order=created_at.desc&limit=1`,
+  const existing = await supabaseRest<LuxorInquiry[]>(
+    `luxor_inquiries?select=*&created_at=gte.${encodeURIComponent(since)}&or=(${filters.join(',')})&order=created_at.desc&limit=100`,
   )
-
-  return existing ?? null
+  // Keep existing deduplication for other forms, while avoiding cross-flow
+  // collisions when a brochure or booking is followed by a contact message.
+  return findRecentLuxorInquiryMatch(input, existing)
 }
 
 function normalizeRsvpStatus(value: unknown) {

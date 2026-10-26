@@ -81,6 +81,7 @@ export interface EmailMessageItem {
   folderName?: string
   folderPath?: string
   category?: string
+  inquiryId?: string
   isStarred?: boolean
   isRead?: boolean
   deliveryStatus?: string
@@ -122,7 +123,25 @@ function detailCacheKey(messageId: string, folderId?: string) {
 }
 
 function supportsDurableStar(messageId: string) {
-  return /^mail-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId)
+  return /^(mail-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|form_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(messageId)
+}
+
+const PORTAL_READ_NOTIFICATION_KEY = 'luxor_read_notification_ids_v1'
+
+function getReadNotificationIds() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(PORTAL_READ_NOTIFICATION_KEY) || '[]')
+    return new Set<string>(Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : [])
+  } catch {
+    return new Set<string>()
+  }
+}
+
+function saveReadNotificationId(id: string, isRead: boolean) {
+  const ids = getReadNotificationIds()
+  if (isRead) ids.add(id)
+  else ids.delete(id)
+  try { window.localStorage.setItem(PORTAL_READ_NOTIFICATION_KEY, JSON.stringify([...ids])) } catch { /* Keep the reader usable when storage is unavailable. */ }
 }
 
 function mailboxParts(value: string) {
@@ -396,6 +415,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [savingStarIds, setSavingStarIds] = useState<Set<string>>(() => new Set())
   const [starErrors, setStarErrors] = useState<Record<string, string>>({})
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    setReadIds(getReadNotificationIds())
+  }, [])
 
   useEffect(() => {
     onReaderOpenChange(Boolean(initialMessageId || compactReaderOpen))
@@ -705,6 +728,22 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     setSavingReadId(id)
     setReadStateError(null)
     try {
+      if (id.startsWith('form_')) {
+        saveReadNotificationId(id, isRead)
+        setReadIds((current) => {
+          const next = new Set(current)
+          if (isRead) next.add(id)
+          else next.delete(id)
+          return next
+        })
+        setMessages((current) => {
+          const next = current.map((message) => message.id === id ? { ...message, isRead } : message)
+          messagesRef.current = next
+          return next
+        })
+        setMessageDetail((current) => current?.id === id ? { ...current, isRead } : current)
+        return
+      }
       const response = await fetch(`/api/email/messages/${encodeURIComponent(id)}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isRead }),
       })
@@ -748,7 +787,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             setReadRequestedId(detail.id)
             setSelectedMessageKey(messageKey(detail))
           }
-          if (!selectedId.startsWith('mail-')) setReadIds((prev) => new Set(prev).add(selectedId))
+          if (selectedId.startsWith('form_') && readRequestedId === selectedId) {
+            saveReadNotificationId(selectedId, true)
+            setReadIds((prev) => new Set(prev).add(selectedId))
+            setMessageDetail((current) => current?.id === selectedId ? { ...current, isRead: true } : current)
+          }
           // Only an explicit open/deep link marks archived mail read. Selecting
           // the first list item while the mobile reader is hidden must not.
           if (readRequestedId === selectedId && selectedId.startsWith('mail-') && detail.direction === 'incoming') {
@@ -999,11 +1042,22 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
   // Matched inquiry for currently selected email
   const currentInquiry = useMemo(() => {
+    if (messageDetail?.inquiryId) {
+      const inquiry = inquiries.find((entry) => entry.id === messageDetail.inquiryId)
+      if (inquiry) return inquiry
+    }
     if (thread?.inquiry) return thread.inquiry
     if (!messageDetail) return null
     const targetEmail = firstMailboxEmail(messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to)
     return inquiryByEmail.get(targetEmail) || null
-  }, [messageDetail, inquiryByEmail, thread?.inquiry])
+  }, [messageDetail, inquiries, inquiryByEmail, thread?.inquiry])
+
+  const respondToInquiry = () => {
+    if (!currentInquiry?.email) return
+    window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: {
+      lead: currentInquiry, purpose: 'inquiry-response', initialSubject: 'Re: Website inquiry',
+    } }))
+  }
 
   const stats = pageResult?.stats || { total: 0, inboxCount: 0, sentCount: 0, campaignCount: 0, starredCount: 0 }
   const additionalFolders = useMemo(() => luxorMailAdditionalFolders(folderCatalog, []).map(folder => ({
@@ -1537,6 +1591,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                         <time className="shrink-0 whitespace-nowrap text-sm tabular-nums leading-5 text-[color:var(--portal-muted)] lg:text-xs">{formatEmailDate(msg.receivedAt)}</time>
                       </span>
                       <span className={`mt-0.5 block truncate text-[18px] leading-6 lg:text-sm ${isSelected ? 'font-semibold text-[color:var(--portal-text)]' : 'font-medium text-[color:var(--portal-text)]'}`}>{subject}</span>
+                      {msg.category === 'Website Inquiry' ? <span className="mt-1 inline-flex rounded-md border border-[#caa24c]/35 px-1.5 py-0.5 text-[9px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">Website Inquiry</span> : null}
                       <span className="mt-0.5 block truncate text-base leading-5 text-[color:var(--portal-muted)] lg:text-xs">{decodeHtmlEntities(msg.summary) || 'No preview available.'}</span>
                       {msg.direction === 'outgoing' && msg.deliveryStatus ? <span className="mt-1 inline-flex text-[10px] text-[color:var(--portal-muted)]">{luxorMailDeliveryLabel(msg.deliveryStatus)}</span> : null}
                     </span>
@@ -1647,7 +1702,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                           <div className="border-b border-[color:var(--portal-border)] px-2.5 pb-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">
                             Message actions
                           </div>
-                          {messageDetail.id.startsWith('mail-') && messageDetail.direction === 'incoming' && (
+                          {(messageDetail.id.startsWith('mail-') || messageDetail.id.startsWith('form_')) && messageDetail.direction === 'incoming' && (
                             <button type="button" role="menuitem" disabled={savingReadId === messageDetail.id}
                               onClick={() => {
                                 setReadRequestedId(null)
@@ -1812,6 +1867,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             <div className="shrink-0 space-y-1 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 pb-2 pt-2 sm:px-6 sm:pb-3 sm:pt-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
+                  {messageDetail.category === 'Website Inquiry' ? <span className="inline-flex rounded-md border border-[#caa24c]/35 px-1.5 py-0.5 text-[9px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">Website Inquiry</span> : null}
                   {messageDetail.direction === 'outgoing' && messageDetail.deliveryStatus ? (
                     <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">{luxorMailDeliveryLabel(messageDetail.deliveryStatus)}</p>
                   ) : null}
@@ -1852,6 +1908,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1.5">
+                  {messageDetail.category === 'Website Inquiry' && currentInquiry?.email ? <button type="button" onClick={respondToInquiry} className="min-h-10 rounded-lg bg-[#caa24c] px-3 text-xs font-semibold text-white hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">Respond to inquiry</button> : null}
                   <div className="max-w-32 text-right text-[10px] leading-4 text-[color:var(--portal-muted)] sm:max-w-none sm:text-[11px]">
                     <p>{formatEmailDateDetailed(messageDetail.receivedAt)}</p>
                   </div>
@@ -1924,7 +1981,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               </div>
             </div>
 
-            {messageDetail.direction !== 'campaign' && (isMobileReader || !replyOpen) ? <div
+            {messageDetail.category !== 'Website Inquiry' && messageDetail.direction !== 'campaign' && (isMobileReader || !replyOpen) ? <div
               className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 sm:px-6"
             >
               {isMobileReader ? (
@@ -2008,7 +2065,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       </div>
     </div>
   </div>
-    {isMobileReader && compactReaderOpen && mobileReplyAnchor && messageDetail && messageDetail.direction !== 'campaign' && mobileReplyBounds && typeof document !== 'undefined' ? createPortal(
+    {isMobileReader && compactReaderOpen && mobileReplyAnchor && messageDetail && messageDetail.category !== 'Website Inquiry' && messageDetail.direction !== 'campaign' && mobileReplyBounds && typeof document !== 'undefined' ? createPortal(
       <>
       {replyModalPresent && <div aria-hidden="true" className="fixed inset-0 z-[120]" />}
       <motion.div

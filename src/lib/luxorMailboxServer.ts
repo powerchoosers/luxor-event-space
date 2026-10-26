@@ -46,10 +46,10 @@ export async function listLuxorMailMessageStars(portalEmail: string) {
 
   const starredIds: string[] = []
   for (let offset = 0; offset < MAX_PORTAL_MAIL_STARS; offset += 500) {
-    const rows = await supabaseRest<Array<{ mail_message_id: string }>>(
-      `luxor_mail_message_stars?select=mail_message_id&portal_email=eq.${encodeURIComponent(email)}&order=created_at.desc,mail_message_id.asc&limit=500&offset=${offset}`,
+    const rows = await supabaseRest<Array<{ item_id: string }>>(
+      `luxor_mailbox_item_stars?select=item_id&portal_email=eq.${encodeURIComponent(email)}&order=created_at.desc,item_id.asc&limit=500&offset=${offset}`,
     )
-    starredIds.push(...rows.map((row) => `mail-${row.mail_message_id}`))
+    starredIds.push(...rows.map((row) => row.item_id))
     if (rows.length < 500) return starredIds
   }
 
@@ -80,6 +80,20 @@ export async function findVisibleLuxorMailMessage(id: string, email?: string) {
   return rows[0] || null
 }
 
+export async function findVisibleLuxorMailboxItem(id: string, email?: string) {
+  if (id.startsWith('mail-')) return findVisibleLuxorMailMessage(id, email)
+  const match = id.match(/^form_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
+  if (!match) return null
+  const params = new URLSearchParams({
+    select: 'id,message', id: `eq.${match[1]}`, created_at: `lte.${new Date().toISOString()}`,
+    or: '(source.eq.contact_page,flow.eq.contact_form)',
+    message: 'not.is.null', is_test: 'not.is.true',
+  })
+  if (email) params.set('email', `eq.${email.trim().toLowerCase()}`)
+  const rows = await supabaseRest<Array<{ id: string; message: string | null }>>(`luxor_inquiries?${params}&limit=1`)
+  return rows.find((row) => Boolean(row.message?.trim())) || null
+}
+
 /** Persist a star under the verified portal email. */
 export async function setLuxorMailMessageStar(portalEmail: string, id: string, starred: boolean) {
   const email = portalEmail.trim().toLowerCase()
@@ -100,6 +114,24 @@ export async function setLuxorMailMessageStar(portalEmail: string, id: string, s
   }
 
   return { id: `mail-${messageId}`, isStarred: starred }
+}
+
+export async function setLuxorMailboxItemStar(portalEmail: string, id: string, starred: boolean) {
+  const email = portalEmail.trim().toLowerCase()
+  if (!email || email.length > 254 || !/^(mail-[0-9a-f-]{36}|form_[0-9a-f-]{36})$/i.test(id)) {
+    throw new Error('A valid portal email and mailbox item are required to save stars.')
+  }
+  if (starred) {
+    await supabaseRest('luxor_mailbox_item_stars?on_conflict=portal_email,item_id', {
+      method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' },
+      body: JSON.stringify({ portal_email: email, item_id: id }),
+    })
+  } else {
+    await supabaseRest(`luxor_mailbox_item_stars?portal_email=eq.${encodeURIComponent(email)}&item_id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+  }
+  return { id, isStarred: starred }
 }
 
 /** Resolve existing portal links without requiring Zoho after a verified import. */

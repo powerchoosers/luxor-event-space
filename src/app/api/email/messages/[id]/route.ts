@@ -5,6 +5,7 @@ import { getArchivedLuxorEmail } from '@/lib/luxorEmailArchiveServer'
 import { getMarketingCampaignDetail } from '@/lib/luxorMarketingServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { setLuxorMailboxRead } from '@/lib/luxorMailboxServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getLuxorPortalSession()
@@ -50,6 +51,21 @@ export async function GET(
     const { id } = await params
     if (!id) {
       return NextResponse.json({ error: 'Message ID is required.' }, { status: 400 })
+    }
+
+    const inquiryMatch = id.match(/^form_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
+    if (inquiryMatch) {
+      const inquiry = await getLuxorInquiry(inquiryMatch[1])
+      if (!inquiry || (inquiry.source !== 'contact_page' && inquiry.flow !== 'contact_form')
+        || !inquiry.message?.trim() || inquiry.is_test === true || inquiry.metadata?.is_test_record === true) {
+        return NextResponse.json({ error: 'Website inquiry not found.' }, { status: 404 })
+      }
+      return NextResponse.json({
+        id, subject: 'Website Inquiry', from: `${inquiry.full_name}${inquiry.email ? ` <${inquiry.email}>` : ''}`,
+        to: 'Luxor Event Space', receivedAt: inquiry.created_at, summary: inquiry.message.trim().replace(/\s+/g, ' ').slice(0, 280),
+        content: inquiry.message, hasAttachment: false, direction: 'incoming', folder: 'inbox', folderName: 'Inbox',
+        category: 'Website Inquiry', inquiryId: inquiry.id, isRead: false,
+      }, { headers: { 'Cache-Control': 'private, no-store' } })
     }
 
     // Check if it's a marketing campaign message ID

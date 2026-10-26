@@ -263,7 +263,11 @@ export function usePortalNotifications() {
             const isRead = currentReadIds.has(`form_${inqId}`) || (inq.status !== 'new' && inq.status !== 'tour_requested')
 
             let title = `New Inquiry: ${fullName}`
-            if (source.toLowerCase().includes('rsvp') || eventType.toLowerCase().includes('rsvp')) {
+            const isContactMessage = (inq.source === 'contact_page' || inq.flow === 'contact_form')
+              && typeof inq.message === 'string' && Boolean(inq.message.trim()) && inq.is_test !== true
+            if (isContactMessage) {
+              title = `New contact message: ${fullName}`
+            } else if (source.toLowerCase().includes('rsvp') || eventType.toLowerCase().includes('rsvp')) {
               title = `New RSVP: ${fullName}`
             } else if (inq.status === 'tour_confirmed') {
               title = `Tour Confirmed: ${fullName}`
@@ -277,7 +281,7 @@ export function usePortalNotifications() {
               id: `form_${inqId}`,
               type: 'form',
               title,
-              subtitle: `${eventType} ${guestCount ? `(${guestCount} guests)` : ''}`,
+              subtitle: isContactMessage ? String(inq.message).trim().replace(/\s+/g, ' ').slice(0, 180) : `${eventType} ${guestCount ? `(${guestCount} guests)` : ''}`,
               timestamp: createdAt,
               isRead,
               targetUrl: leadUrl(inqId),
