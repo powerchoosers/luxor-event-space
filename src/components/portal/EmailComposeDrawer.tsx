@@ -1324,7 +1324,11 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
           />
         </div>
         {purpose === 'inquiry-response' ? (
-          <footer className="flex min-h-14 shrink-0 items-center border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4">
+          <footer className="flex min-h-14 shrink-0 flex-col items-start justify-center gap-1 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-2">
+            {errorMsg ? <p role="alert" aria-live="assertive" className="w-full text-xs leading-4 text-rose-600 dark:text-rose-300">{errorMsg}</p>
+              : simulationMsg ? <p role="status" aria-live="polite" className="w-full text-xs leading-4 text-amber-700 dark:text-amber-300">{simulationMsg}</p>
+                : successMsg ? <p role="status" aria-live="polite" className="w-full text-xs leading-4 text-emerald-700 dark:text-emerald-300">{successMsg}</p>
+                  : null}
             <button
               type="button"
               onClick={() => {

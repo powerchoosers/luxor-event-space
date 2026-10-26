@@ -28,9 +28,13 @@ export async function POST(request: NextRequest) {
       ? requestedIdempotencyKey
       : `manual/${crypto.randomUUID()}`
     const normalizedRecipient = typeof to === 'string' ? to.trim().toLowerCase() : ''
-    const testLeadId = typeof inquiryId === 'string' && inquiryId
-      ? inquiryId
-      : normalizedRecipient === LUXOR_TEST_IDENTIFICATION_EMAIL ? LUXOR_PERMANENT_TEST_LEAD_ID : ''
+    // Only the permanent test lead is routed to the simulation. A normal
+    // inquiryId is context for recipient verification, not a test-lead flag.
+    const testLeadId = inquiryId === LUXOR_PERMANENT_TEST_LEAD_ID
+      ? LUXOR_PERMANENT_TEST_LEAD_ID
+      : !inquiryId && normalizedRecipient === LUXOR_TEST_IDENTIFICATION_EMAIL
+        ? LUXOR_PERMANENT_TEST_LEAD_ID
+        : ''
     if (testLeadId) {
       const inquiry = await getLuxorInquiry(testLeadId)
       if (inquiry?.is_test === true) {
@@ -38,12 +42,11 @@ export async function POST(request: NextRequest) {
         if (!simulation) return NextResponse.json({ error: 'The associated inquiry is not the permanent test lead.' }, { status: 409 })
         return NextResponse.json({ success: true, simulated: true, recipient: LUXOR_TEST_IDENTIFICATION_EMAIL, providerStatus: 'not_attempted', deliveryStatus: 'unknown', simulation })
       }
-      if (typeof inquiryId === 'string' && inquiryId) return NextResponse.json({ error: 'The selected lead could not be verified as the permanent test lead.' }, { status: 409 })
     }
     if (typeof inquiryId === 'string' && inquiryId) {
       const inquiry = await getLuxorInquiry(inquiryId)
       const verifiedLeadEmail = normalizeEmailAddress(inquiry?.email)
-      if (!inquiry || !verifiedLeadEmail || verifiedLeadEmail !== normalizedRecipient) {
+      if (!inquiry || inquiry.is_test === true || !verifiedLeadEmail || verifiedLeadEmail !== normalizedRecipient) {
         return NextResponse.json({ error: 'The recipient must match the selected inquiry’s verified email address.' }, { status: 409 })
       }
     }
