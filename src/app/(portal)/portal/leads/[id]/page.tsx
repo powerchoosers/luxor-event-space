@@ -387,6 +387,7 @@ function EventTypeIcon({ eventType }: { eventType: string | null }) {
 }
 
 type EditableLeadField =
+  | 'full_name'
   | 'event_type'
   | 'guest_count'
   | 'budget'
@@ -657,6 +658,8 @@ export default function LeadDetailPage({
   const [newEventNotes, setNewEventNotes] = useState('')
   const [submittingEvent, setSubmittingEvent] = useState(false)
   const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
+  const [eventDetailsEditing, setEventDetailsEditing] = useState(false)
+  const [eventDetailsDraft, setEventDetailsDraft] = useState<Partial<Record<EditableLeadField, string>>>({})
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
 
@@ -2262,7 +2265,7 @@ export default function LeadDetailPage({
         ? normalizeLuxorEventType(nextValue)
         : normalizeLeadFieldValue(field, nextValue)
     } catch (eventTypeError) {
-      notify({ title: 'Event type not saved', description: eventTypeError instanceof Error ? eventTypeError.message : 'Please shorten the event type.', variant: 'error' })
+      notify({ title: field === 'full_name' ? 'Client name not saved' : 'Event type not saved', description: eventTypeError instanceof Error ? eventTypeError.message : 'Please check the value and try again.', variant: 'error' })
       return false
     }
     if (field === 'event_type' && !normalizedValue) {
@@ -4213,6 +4216,22 @@ export default function LeadDetailPage({
       inputType: 'time',
     },
   ]
+  const beginEventDetailsEdit = () => {
+    setEventDetailsDraft(Object.fromEntries(eventDetails.map((item) => [item.field, item.editValue])))
+    setEventDetailsEditing(true)
+  }
+  const saveEventDetails = async () => {
+    for (const item of eventDetails) {
+      const nextValue = eventDetailsDraft[item.field] ?? item.editValue
+      if (normalizeComparableValue(nextValue) === normalizeComparableValue(item.editValue)) continue
+      if (!await handleLeadFieldUpdate(item.field, nextValue)) return
+    }
+    setEventDetailsEditing(false)
+  }
+  const cancelEventDetailsEdit = () => {
+    setEventDetailsDraft({})
+    setEventDetailsEditing(false)
+  }
   const clientDetails: Array<{
     label: string
     value: string
@@ -5261,11 +5280,26 @@ export default function LeadDetailPage({
       ) : null}
 
       <section id="lead-messages" aria-labelledby="original-inquiry-heading" className="mt-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <h2 id="original-inquiry-heading" className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">
             {isGrandOpeningLead ? 'Original RSVP note' : 'Original inquiry'}
           </h2>
-          <p className="text-[10px] text-[color:var(--portal-muted)]">{formatSourceLabel(lead)} · {formatDisplayDate(lead.created_at)}</p>
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
+            <p className="text-[10px] text-[color:var(--portal-muted)]">{formatSourceLabel(lead)} · {formatDisplayDate(lead.created_at)}</p>
+            {lead.email ? (
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: {
+                  lead,
+                  purpose: 'inquiry-response',
+                  initialSubject: `Your ${lead.event_type?.trim() || 'event'} inquiry at Luxor`,
+                } }))}
+                className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 text-[11px] font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              >
+                <Mail size={14} aria-hidden="true" /> Respond to inquiry
+              </button>
+            ) : null}
+          </div>
         </div>
         <div
           key={activeLeadTab}
@@ -5454,6 +5488,16 @@ export default function LeadDetailPage({
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {eventDetailsEditing ? (
+                            <>
+                              <button type="button" onClick={cancelEventDetailsEdit} disabled={Boolean(savingLeadField)} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">Cancel</button>
+                              <button type="button" onClick={() => void saveEventDetails()} disabled={Boolean(savingLeadField)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c] px-3 text-xs font-semibold text-white hover:bg-[#b98a3d] disabled:opacity-50"><Check size={13} /> Save</button>
+                            </>
+                          ) : (
+                            <button type="button" onClick={beginEventDetailsEdit} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"><Pencil size={13} /> Edit</button>
+                          )}
+                        </div>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-x-6 gap-y-1">
@@ -5465,12 +5509,15 @@ export default function LeadDetailPage({
                               label={item.label}
                               value={item.value}
                               editValue={item.editValue}
-                              copyValue={item.copyValue}
+                              copyValue={undefined}
                               inputType={item.inputType}
                               placeholder={item.placeholder}
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
-                              onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                              onCommit={eventDetailsEditing ? (value) => handleLeadFieldUpdate(item.field, value) : undefined}
+                              sectionEditing={eventDetailsEditing}
+                              sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
+                              onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
                               options={item.options}
                             />
                           ))}
@@ -5483,12 +5530,15 @@ export default function LeadDetailPage({
                               label={item.label}
                               value={item.value}
                               editValue={item.editValue}
-                              copyValue={item.copyValue}
+                              copyValue={undefined}
                               inputType={item.inputType}
                               placeholder={item.placeholder}
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
-                              onCommit={(value) => handleLeadFieldUpdate(item.field, value)}
+                              onCommit={eventDetailsEditing ? (value) => handleLeadFieldUpdate(item.field, value) : undefined}
+                              sectionEditing={eventDetailsEditing}
+                              sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
+                              onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
                               options={item.options}
                             />
                           ))}
@@ -9823,6 +9873,8 @@ function ClientSummaryCard({
   onViewDetails: () => void
   onAvatarUpdate?: (newUrl: string) => void
 }) {
+  const [sectionEditing, setSectionEditing] = useState(false)
+  const [sectionDraft, setSectionDraft] = useState<Partial<Record<EditableLeadField, string>>>({})
   const isNewsletter = isNewsletterLead(lead)
   const currentGuestCount = lead.guest_count ? String(lead.guest_count) : ''
   const guestCountOptions = Array.from(new Set([
@@ -9854,6 +9906,30 @@ function ClientSummaryCard({
     ]),
   ]
 
+  const beginSummaryEdit = () => {
+    setSectionDraft(Object.fromEntries([
+      ...summaryRows.map((row) => [row.field, row.editValue] as const),
+      ['full_name', lead.full_name] as const,
+    ]))
+    setSectionEditing(true)
+  }
+  const saveSummary = async () => {
+    const updates: Array<[EditableLeadField, string]> = [
+      ['full_name', sectionDraft.full_name ?? lead.full_name],
+      ...summaryRows.map((row): [EditableLeadField, string] => [row.field, sectionDraft[row.field] ?? row.editValue]),
+    ]
+    for (const [field, value] of updates) {
+      const currentValue = field === 'full_name' ? lead.full_name : summaryRows.find((row) => row.field === field)?.editValue ?? ''
+      if (normalizeComparableValue(currentValue) === normalizeComparableValue(value)) continue
+      if (!await onUpdate(field, value)) return
+    }
+    setSectionEditing(false)
+  }
+  const cancelSummaryEdit = () => {
+    setSectionDraft({})
+    setSectionEditing(false)
+  }
+
   return (
     <section className="flex min-h-[260px] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
@@ -9867,10 +9943,27 @@ function ClientSummaryCard({
           />
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Client Summary</p>
-            <p className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{lead.full_name}</p>
+            {sectionEditing ? (
+              <input
+                aria-label="Client name"
+                value={sectionDraft.full_name ?? lead.full_name}
+                maxLength={120}
+                onChange={(event) => setSectionDraft((current) => ({ ...current, full_name: event.target.value }))}
+                className="mt-1 min-h-9 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-2 text-sm font-semibold text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/45"
+              />
+            ) : <p className="mt-1 truncate text-sm font-bold text-[color:var(--portal-text)]">{lead.full_name}</p>}
           </div>
         </div>
-        <span className="text-[9px] font-black uppercase tracking-[0.14em] text-zinc-600">Hover to edit</span>
+        <div className="flex shrink-0 items-center gap-1">
+          {sectionEditing ? (
+            <>
+              <button type="button" onClick={cancelSummaryEdit} disabled={isSaving} className="min-h-9 rounded-lg px-2.5 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">Cancel</button>
+              <button type="button" onClick={() => void saveSummary()} disabled={isSaving} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c] px-2.5 text-xs font-semibold text-white hover:bg-[#b98a3d] disabled:opacity-50"><Check size={13} /> Save</button>
+            </>
+          ) : (
+            <button type="button" onClick={beginSummaryEdit} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] px-2.5 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"><Pencil size={13} /> Edit</button>
+          )}
+        </div>
       </div>
       <div className="min-w-0 space-y-1">
         {summaryRows.map((row) => (
@@ -9878,8 +9971,12 @@ function ClientSummaryCard({
             key={row.label}
             compact
             {...row}
+            copyValue={undefined}
             isSaving={isSaving}
-            onCommit={(value) => onUpdate(row.field, value)}
+            onCommit={sectionEditing ? (value) => onUpdate(row.field, value) : undefined}
+            sectionEditing={sectionEditing}
+            sectionDraftValue={sectionDraft[row.field] ?? row.editValue}
+            onSectionDraftChange={(value) => setSectionDraft((current) => ({ ...current, [row.field]: value }))}
           />
         ))}
       </div>
@@ -10383,6 +10480,9 @@ function DetailItem({
   compact = false,
   onCompose,
   onCall,
+  sectionEditing = false,
+  sectionDraftValue,
+  onSectionDraftChange,
 }: {
   icon?: React.ReactNode
   label: string
@@ -10399,6 +10499,9 @@ function DetailItem({
   compact?: boolean
   onCompose?: () => void
   onCall?: () => void
+  sectionEditing?: boolean
+  sectionDraftValue?: string
+  onSectionDraftChange?: (value: string) => void
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(editValue ?? value)
@@ -10406,6 +10509,8 @@ function DetailItem({
   const commitInFlightRef = useRef(false)
   const canEdit = Boolean(onCommit)
   const canCopy = Boolean(copyValue?.trim())
+  const currentDraft = sectionEditing ? (sectionDraftValue ?? draft) : draft
+  const changeDraft = (value: string) => sectionEditing ? onSectionDraftChange?.(value) : setDraft(value)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -10426,12 +10531,13 @@ function DetailItem({
   }, [isEditing, inputType])
 
   const startEditing = () => {
-    if (!canEdit || isSaving || commitInFlightRef.current) return
+    if (!canEdit || sectionEditing || isSaving || commitInFlightRef.current) return
     setDraft(editValue ?? value)
     setIsEditing(true)
   }
 
   const activateRow = () => {
+    if (sectionEditing) return
     if (onCompose) {
       onCompose()
       return
@@ -10444,6 +10550,10 @@ function DetailItem({
   }
 
   const commitValue = async (value: string) => {
+    if (sectionEditing) {
+      onSectionDraftChange?.(value)
+      return
+    }
     if (!onCommit || isSaving || commitInFlightRef.current) return
 
     commitInFlightRef.current = true
@@ -10480,7 +10590,7 @@ function DetailItem({
       aria-label={canEdit ? onCompose ? 'Compose email' : onCall ? 'Call client' : `Edit ${label}` : undefined}
       onClick={activateRow}
       onKeyDown={(event) => {
-        if (event.target !== event.currentTarget || !canEdit || isEditing) return
+        if (event.target !== event.currentTarget || !canEdit || isEditing || sectionEditing) return
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
           activateRow()
@@ -10498,13 +10608,14 @@ function DetailItem({
       <div className="min-w-0 flex-1">
       {!compact ? <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</div> : null}
 
-      {isEditing ? (
+      {sectionEditing || isEditing ? (
         inputType === 'date' ? (
           <div className={`${compact ? '' : 'mt-2'} w-full`} onClick={(event) => event.stopPropagation()}>
             <PortalDatePicker
-              value={draft}
+              value={currentDraft}
               onChange={async (val) => {
-                setDraft(val)
+                changeDraft(val)
+                if (sectionEditing) return
                 if (onCommit) {
                   const saved = await onCommit(val)
                   if (saved) {
@@ -10520,19 +10631,19 @@ function DetailItem({
               label={label}
               hideLabel={!compact}
               required
-              value={draft}
+              value={currentDraft}
               disabled={isSaving}
               variant="portal"
               placeholder="Search or enter an event type..."
-              onChange={setDraft}
-              onBlur={() => { void commitDraft() }}
+              onChange={changeDraft}
+              onBlur={() => { if (!sectionEditing) void commitDraft() }}
               onEnterCustom={(value) => {
-                setDraft(value)
-                void commitValue(value)
+                changeDraft(value)
+                if (!sectionEditing) void commitValue(value)
               }}
               onSelectSuggestion={(value) => {
-                setDraft(value)
-                void commitValue(value)
+                changeDraft(value)
+                if (!sectionEditing) void commitValue(value)
               }}
               labelClassName="mb-1.5 text-[9px] font-black tracking-[0.16em]"
               inputClassName={`${compact ? 'py-1.5' : 'py-2'} rounded-lg px-3 text-sm font-bold ${isMono ? 'tabular-nums' : ''}`}
@@ -10541,11 +10652,12 @@ function DetailItem({
         ) : inputType === 'select' ? (
           <div className={`${compact ? '' : 'mt-2'} w-full`} onClick={(event) => event.stopPropagation()}>
             <PortalSelect
-              value={draft}
+              value={currentDraft}
               disabled={isSaving}
               options={options}
               onChange={async (val) => {
-                setDraft(val)
+                changeDraft(val)
+                if (sectionEditing) return
                 if (onCommit) {
                   const saved = await onCommit(val)
                   if (saved) {
@@ -10560,15 +10672,19 @@ function DetailItem({
             autoFocus
             type={inputType}
             min={inputType === 'number' ? 0 : undefined}
-            value={draft}
+            value={currentDraft}
             disabled={isSaving}
             placeholder={placeholder}
             onClick={(event) => event.stopPropagation()}
-            onChange={(event) => setDraft(inputType === 'tel' || label === 'Phone' ? formatUsDialInput(event.target.value) : event.target.value)}
+            onChange={(event) => changeDraft(inputType === 'tel' || label === 'Phone' ? formatUsDialInput(event.target.value) : event.target.value)}
             onBlur={() => {
-              void commitDraft()
+              if (!sectionEditing) void commitDraft()
             }}
             onKeyDown={(event) => {
+              if (sectionEditing && (event.key === 'Enter' || event.key === 'Escape')) {
+                event.preventDefault()
+                return
+              }
               if (event.key === 'Enter') {
                 event.preventDefault()
                 void commitDraft()
@@ -10636,7 +10752,7 @@ function DetailItem({
                   <Phone size={13} />
                 </button>
               ) : null}
-              {canEdit ? (
+              {canEdit && !sectionEditing ? (
                 <button
                   type="button"
                   aria-label={`Edit ${label}`}
@@ -10703,6 +10819,11 @@ function getInitials(name: string) {
 
 function normalizeLeadFieldValue(field: EditableLeadField, value: string): string | number | null {
   const trimmed = value.trim()
+  if (field === 'full_name') {
+    if (!trimmed) throw new Error('Enter a client name before saving.')
+    if (Array.from(trimmed).length > 120) throw new Error('Keep the client name to 120 characters or fewer.')
+    return trimmed
+  }
   if (!trimmed) return null
 
   if (field === 'guest_count') {

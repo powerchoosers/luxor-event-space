@@ -56,6 +56,8 @@ interface EmailComposeDrawerProps {
   lead: LuxorInquiry | null
   onSuccess?: () => void
   initialTemplateId?: string | null
+  purpose?: 'regular' | 'inquiry-response'
+  initialSubject?: string
   composeContextKey: string
   initialDraft: EmailComposeDraft | null
   onDraftChange: (draft: EmailComposeDraft) => void
@@ -72,7 +74,7 @@ export interface EmailComposeDraft {
   templateBlocks: EmailBlock[]
 }
 
-export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTemplateId, composeContextKey, initialDraft, onDraftChange }: EmailComposeDrawerProps) {
+export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTemplateId, purpose = 'regular', initialSubject = '', composeContextKey, initialDraft, onDraftChange }: EmailComposeDrawerProps) {
   const reduceMotion = useReducedMotion()
   const [isMinimized, setIsMinimized] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -206,7 +208,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   const [senderAvatarUrl, setSenderAvatarUrl] = useState<string | null>(null)
   const [senderPhone, setSenderPhone] = useState<string | null>(null)
   const [toAddress, setToAddress] = useState(initialDraft?.toAddress || lead?.email || '')
-  const [subject, setSubject] = useState(initialDraft?.subject || '')
+  const [subject, setSubject] = useState(initialDraft?.subject || initialSubject)
   // Direct CRM messages should feel like a note from a person, not a campaign.
   // Tracking remains available when intentionally needed, but is off by default.
   const [track, setTrack] = useState(initialDraft?.track ?? false)
@@ -219,6 +221,13 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   // Composed Body
   const [bodyText, setBodyText] = useState(initialDraft?.bodyText || '')
   const [templateBlocks, setTemplateBlocks] = useState<EmailBlock[]>(initialDraft?.templateBlocks || [])
+
+  useEffect(() => {
+    if (!isOpen || purpose !== 'inquiry-response' || !window.matchMedia('(max-width: 639px)').matches) return
+    setActiveTab('edit')
+    setIsFocusModePresent(true)
+    setIsFocusMode(true)
+  }, [isOpen, purpose])
 
   // Delivery states
   const [isSending, setIsSending] = useState(false)
@@ -301,7 +310,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
     } else {
       setToAddress('')
     }
-    setSubject('')
+    setSubject(purpose === 'inquiry-response' ? initialSubject : '')
     setBodyText('')
     setSelectedTemplateId('regular')
     setTemplateBlocks([])
@@ -310,7 +319,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
     setSimulationMsg(null)
     setShowDirectory(false)
     setDirectorySearch('')
-  }, [composeContextKey, lead])
+  }, [composeContextKey, lead, purpose, initialSubject])
 
   useEffect(() => {
     if (!isOpen) return
@@ -475,6 +484,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         content: isConversational ? bodyText : compiledHtml,
         format: isConversational ? 'conversational' : 'html',
         contentMode: isConversational ? 'rich' : undefined,
+        inquiryId: purpose === 'inquiry-response' ? lead?.id : undefined,
         track,
         campaignName: selectedTemplateId !== 'regular' ? `Direct Campaign: ${subject.trim()}` : undefined
       }
@@ -1286,16 +1296,18 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
           height: visualViewportMetrics ? `${visualViewportMetrics.height}px` : '100dvh',
         }}
       >
-        <header className="flex min-h-14 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-4">
-          <PortalCloseButton onClick={returnFromFocusMode} aria-label="Close writing mode and keep draft" />
+        <header className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4">
+          <PortalCloseButton onClick={purpose === 'inquiry-response' ? requestClose : returnFromFocusMode} aria-label={purpose === 'inquiry-response' ? 'Close email and keep draft' : 'Close writing mode and keep draft'} />
+          {purpose === 'inquiry-response' ? <div className="min-w-0 flex-1 text-center" aria-label={`To ${toAddress || 'recipient not set'}, subject ${subject || 'subject not set'}`}><p className="truncate text-[10px] leading-4 text-[color:var(--portal-muted)]">To: {toAddress || 'Add recipient'}</p><p className="truncate text-[11px] font-semibold leading-4 text-[color:var(--portal-text)]">{subject || 'Add subject'}</p></div> : null}
           <button
             type="button"
-            onClick={returnFromFocusMode}
-            aria-label="Done editing message"
-            title="Done editing"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)]"
+            onClick={purpose === 'inquiry-response' ? () => void handleSend() : returnFromFocusMode}
+            disabled={purpose === 'inquiry-response' && isSending}
+            aria-label={purpose === 'inquiry-response' ? (isSending ? 'Sending email' : 'Send email') : 'Done editing message'}
+            title={purpose === 'inquiry-response' ? 'Send email' : 'Done editing'}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)] disabled:cursor-wait disabled:opacity-60"
           >
-            <Check size={19} strokeWidth={2.5} />
+            {purpose === 'inquiry-response' ? <Send size={18} strokeWidth={2.5} /> : <Check size={19} strokeWidth={2.5} />}
           </button>
         </header>
         <div className="flex min-h-0 flex-1 px-2">
@@ -1311,6 +1323,20 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
             onInitialCommandApplied={handleFocusCommandApplied}
           />
         </div>
+        {purpose === 'inquiry-response' ? (
+          <footer className="flex min-h-14 shrink-0 items-center border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4">
+            <button
+              type="button"
+              onClick={() => {
+                requestClose()
+                window.dispatchEvent(new Event('luxor-open-elena'))
+              }}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+            >
+              <Sparkles size={15} aria-hidden="true" /> Write with Elena
+            </button>
+          </footer>
+        ) : null}
       </motion.section>}
       </AnimatePresence>,
       document.body,

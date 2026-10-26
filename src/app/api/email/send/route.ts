@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isLuxorZohoAuthorizationError, sendLuxorZohoEmail } from '@/lib/zohoMailServer'
+import { isLuxorZohoAuthorizationError, normalizeEmailAddress, sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { instrumentMarketingHtml } from '@/lib/luxorMarketingServer'
@@ -39,6 +39,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, simulated: true, recipient: LUXOR_TEST_IDENTIFICATION_EMAIL, providerStatus: 'not_attempted', deliveryStatus: 'unknown', simulation })
       }
       if (typeof inquiryId === 'string' && inquiryId) return NextResponse.json({ error: 'The selected lead could not be verified as the permanent test lead.' }, { status: 409 })
+    }
+    if (typeof inquiryId === 'string' && inquiryId) {
+      const inquiry = await getLuxorInquiry(inquiryId)
+      const verifiedLeadEmail = normalizeEmailAddress(inquiry?.email)
+      if (!inquiry || !verifiedLeadEmail || verifiedLeadEmail !== normalizedRecipient) {
+        return NextResponse.json({ error: 'The recipient must match the selected inquiry’s verified email address.' }, { status: 409 })
+      }
     }
     const [senderProfile, senderPhone] = await Promise.all([
       getLuxorUserProfile(session.email),

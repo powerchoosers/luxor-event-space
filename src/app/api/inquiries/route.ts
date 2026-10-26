@@ -392,6 +392,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Inquiry not found.' }, { status: 404 })
     }
     if (existing.is_test) return NextResponse.json({ error: 'The permanent test lead can only be changed through its run lifecycle controls.' }, { status: 409 })
+    if (updates.full_name !== undefined) {
+      const fullName = typeof updates.full_name === 'string' ? updates.full_name.trim() : ''
+      if (!fullName || Array.from(fullName).length > 120) {
+        return NextResponse.json({ error: 'Enter a client name of 120 characters or fewer.' }, { status: 400 })
+      }
+      updates.full_name = fullName
+    }
     if (updates.guest_count !== undefined) {
       const nextGuestCount = updates.guest_count === null || updates.guest_count === '' ? null : Number(updates.guest_count)
       if (nextGuestCount !== null && (!Number.isInteger(nextGuestCount) || nextGuestCount < 1)) {

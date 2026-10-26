@@ -518,36 +518,45 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [composeLead, setComposeLead] = useState<LuxorInquiry | null>(null)
   const [composeTemplateId, setComposeTemplateId] = useState<string | null>(null)
+  const [composePurpose, setComposePurpose] = useState<'regular' | 'inquiry-response'>('regular')
+  const [composeInitialSubject, setComposeInitialSubject] = useState('')
   const [composeDraft, setComposeDraft] = useState<EmailComposeDraft | null>(null)
   const composeContextKeyRef = useRef('global')
-  const composeContextKey = composeLead?.id
+  const composeContextKeyBase = composeLead?.id
     ? `lead:${composeLead.id}`
     : composeLead?.email
       ? `email:${composeLead.email.trim().toLowerCase()}`
       : 'global'
+  const composeContextKey = composePurpose === 'inquiry-response' ? `${composeContextKeyBase}:inquiry-response` : composeContextKeyBase
   const persistComposeDraft = useCallback((draft: EmailComposeDraft) => setComposeDraft(draft), [setComposeDraft])
 
   useEffect(() => {
     const handleComposeEvent = (e: Event) => {
-      const customEvent = e as CustomEvent<{ lead?: LuxorInquiry; email?: string; templateId?: string }>
+      const customEvent = e as CustomEvent<{ lead?: LuxorInquiry; email?: string; templateId?: string; purpose?: 'regular' | 'inquiry-response'; initialSubject?: string }>
       const nextLead = customEvent.detail?.lead
         ? customEvent.detail.lead
         : customEvent.detail?.email
           ? { email: customEvent.detail.email, full_name: customEvent.detail.email } as LuxorInquiry
           : null
-      const nextContextKey = nextLead?.id
+      const nextPurpose = customEvent.detail?.purpose === 'inquiry-response' ? 'inquiry-response' : 'regular'
+      const nextContextKeyBase = nextLead?.id
         ? `lead:${nextLead.id}`
         : nextLead?.email
           ? `email:${nextLead.email.trim().toLowerCase()}`
           : 'global'
+      const nextContextKey = nextPurpose === 'inquiry-response' ? `${nextContextKeyBase}:inquiry-response` : nextContextKeyBase
       if (composeContextKeyRef.current !== nextContextKey) {
         composeContextKeyRef.current = nextContextKey
         setComposeDraft(null)
       }
       setComposeTemplateId(typeof customEvent.detail?.templateId === 'string' ? customEvent.detail.templateId : null)
+      setComposePurpose(nextPurpose)
+      setComposeInitialSubject(nextPurpose === 'inquiry-response' && typeof customEvent.detail?.initialSubject === 'string' ? customEvent.detail.initialSubject : '')
       setComposeLead(nextLead)
       setIsComposeOpen(true)
     }
+
+    const handleOpenElena = () => setElenaOpen(true)
 
     const handleTextEvent = (e: Event) => {
       const customEvent = e as CustomEvent<{ inquiryId?: string; phone?: string; contactName?: string }>
@@ -561,9 +570,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     }
 
     window.addEventListener('luxor-compose-email', handleComposeEvent)
+    window.addEventListener('luxor-open-elena', handleOpenElena)
     window.addEventListener('luxor-open-text', handleTextEvent)
     return () => {
       window.removeEventListener('luxor-compose-email', handleComposeEvent)
+      window.removeEventListener('luxor-open-elena', handleOpenElena)
       window.removeEventListener('luxor-open-text', handleTextEvent)
     }
   }, [])
@@ -1210,6 +1221,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             onClose={() => { setIsComposeOpen(false); setComposeTemplateId(null) }}
             lead={composeLead}
             initialTemplateId={composeTemplateId}
+            purpose={composePurpose}
+            initialSubject={composeInitialSubject}
             composeContextKey={composeContextKey}
             initialDraft={composeDraft?.contextKey === composeContextKey ? composeDraft : null}
             onDraftChange={persistComposeDraft}
