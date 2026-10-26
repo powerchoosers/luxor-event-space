@@ -966,6 +966,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         const nextMessages = messagesRef.current.filter((message) => message.id !== id)
         messagesRef.current = nextMessages
         setMessages(nextMessages)
+        // Starred pages use offsets over a live, mutable set of star IDs.
+        // Removing one row shifts every later offset, so reload the already
+        // visible page depth with a fresh snapshot before allowing pagination.
+        void loadEmails(true)
       }
       setPageResult((current) => current ? {
         ...current,
