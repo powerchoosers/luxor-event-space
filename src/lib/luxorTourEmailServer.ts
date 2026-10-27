@@ -20,6 +20,7 @@ export type TourEmailContext = {
   tourTimeLabel: string
   durationMinutes: number
   responseUrl?: string | null
+  cancelUrl?: string | null
   contactPhone?: string | null
 }
 
@@ -189,6 +190,7 @@ function fallbackCopy(context: TourEmailContext): TourCopy {
 function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
   const baseUrl = publicBaseUrl()
   const phoneDisplay = formatPhoneDisplay(context.contactPhone)
+  const cancellationUrl = context.cancelUrl ?? cancelResponseUrl(context.responseUrl)
   const phoneNote = phoneDisplay
     ? `Luxor may call you from <a href="tel:${escapeHtml(context.contactPhone || '')}" style="color:#c79b43;font-weight:700">${escapeHtml(phoneDisplay)}</a> before your tour. Please save this number so you recognize our call. `
     : ''
@@ -208,7 +210,7 @@ function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
     ],
     actions: context.responseUrl ? [
       { label: 'Reschedule tour', url: context.responseUrl },
-      ...(cancelResponseUrl(context.responseUrl) ? [{ label: 'Cancel tour', url: cancelResponseUrl(context.responseUrl)! }] : []),
+      ...(cancellationUrl ? [{ label: 'Cancel tour', url: cancellationUrl }] : []),
     ] : undefined,
     note: `${phoneNote}Reply to this email if your timing changes and the Luxor team will help.`,
     theme: 'brand',
@@ -217,6 +219,7 @@ function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
 
 function renderTourEmailText(context: TourEmailContext, copy: TourCopy) {
   const phoneDisplay = formatPhoneDisplay(context.contactPhone)
+  const cancellationUrl = context.cancelUrl ?? cancelResponseUrl(context.responseUrl)
   return [
     copy.greeting,
     copy.introduction,
@@ -227,7 +230,7 @@ function renderTourEmailText(context: TourEmailContext, copy: TourCopy) {
     `Meeting: ${context.meetingType}`,
     `Location: ${FALLBACK_LOCATION}`,
     context.responseUrl ? `Reschedule: ${context.responseUrl}` : '',
-    cancelResponseUrl(context.responseUrl) ? `Cancel tour: ${cancelResponseUrl(context.responseUrl)}` : '',
+    cancellationUrl ? `Cancel tour: ${cancellationUrl}` : '',
     phoneDisplay ? `Luxor may call you from ${phoneDisplay} before your tour. Please save this number so you recognize our call.` : '',
     'Questions? Reply to booking@luxoratlaspalmas.com.',
   ].filter(Boolean).join('\n\n')

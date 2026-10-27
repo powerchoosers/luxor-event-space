@@ -182,6 +182,7 @@ export async function buildLuxorTestEmailTemplate(category: LuxorTestEmailCatego
     tourTimeLabel: '11:00 AM',
     durationMinutes: 30,
     responseUrl: portalUrl,
+    cancelUrl: portalUrl,
     contactPhone: null,
   }
 
@@ -326,7 +327,7 @@ export async function buildLuxorTestTourPlan(
   inquiry.preferred_tour_date = date
   inquiry.preferred_tour_time = time
   const plan = await buildLuxorTourPlan({
-    inquiry, date, time, responseToken: `test-${safeRunId(runId)}`, responseUrl: safePortalUrl(runId),
+    inquiry, date, time, responseToken: `test-${safeRunId(runId)}`, responseUrl: safePortalUrl(runId), cancelUrl: safePortalUrl(runId),
     attendeeEmails: ['luxoratlaspalmas@gmail.com'], meetingType: options.meetingType || 'Private Venue Tour',
     clientFacingNotes: options.clientFacingNotes || 'Synthetic test walkthrough; no venue calendar or inventory is reserved.',
     durationMinutes: Math.min(Math.max(Number(options.durationMinutes) || 30, 30), 180),

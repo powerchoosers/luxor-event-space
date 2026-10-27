@@ -56,6 +56,7 @@ export async function buildLuxorTourPlan(input: {
   time: string
   responseToken: string
   responseUrl: string
+  cancelUrl?: string
   attendeeEmails?: string[]
   location?: string
   meetingType?: string
@@ -79,7 +80,7 @@ export async function buildLuxorTourPlan(input: {
   }).format(startUtc)
   const emailContext: TourEmailContext = {
     inquiry: input.inquiry, meetingType, clientFacingNotes, tourDateLabel, tourTimeLabel, durationMinutes,
-    responseUrl: input.responseUrl, contactPhone: input.contactPhone,
+    responseUrl: input.responseUrl, cancelUrl: input.cancelUrl, contactPhone: input.contactPhone,
   }
   const templates = {
     confirmation: await buildAiTourConfirmationEmail(emailContext),
