@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { getBrochureClickSummary } from './luxorBrochureClicksServer'
 import { supabaseRest } from './supabaseRestServer'
 import { listAllLuxorInquiries } from './luxorInquiriesServer'
 import { listLuxorBookingsWithPayments } from './luxorBookingsServer'
@@ -41,6 +42,7 @@ export type MarketingSalesMetrics = {
   // Brochure Lead Generation Tracking
   brochureFormViews: number | null
   brochureSubmissions: number
+  brochureClickedLeads: number | null
   brochureConversionRate: number | null
   brochureSubmissionsDeltaPercent: number | null
 
@@ -264,7 +266,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
 
   // 1. Fetch First-Party Web Events
   let tourAnalyticsAvailable = true
-  const [currentEvents, prevEvents, inquiries, bookingsWithPayments] = await Promise.all([
+  const [currentEvents, prevEvents, inquiries, bookingsWithPayments, brochureClicks] = await Promise.all([
     supabaseRest<PublicEventRow[]>(
       `luxor_public_events?select=id,event_name,session_id,page_path,source,created_at,metadata,inquiry_id&created_at=gte.${encodeURIComponent(startIso)}&created_at=lte.${encodeURIComponent(endIso)}&limit=10000`,
     ).catch(() => []),
@@ -273,6 +275,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     ).catch(() => []),
     listAllLuxorInquiries().catch(() => { tourAnalyticsAvailable = false; return [] }),
     listLuxorBookingsWithPayments(2000).catch(() => []),
+    getBrochureClickSummary(range.tourDateRange.startDate, range.tourDateRange.endDate).catch(() => null),
   ])
 
   const testInquiryIds = new Set(inquiries.filter(isLuxorNonRevenueTestInquiry).map((inq) => inq.id))
@@ -703,6 +706,7 @@ export async function fetchMarketingAndSalesMetrics(range: DateRange): Promise<M
     // Brochure Lead Generation Tracking
     brochureFormViews,
     brochureSubmissions,
+    brochureClickedLeads: brochureClicks?.lead_count ?? null,
     brochureConversionRate,
     brochureSubmissionsDeltaPercent,
 

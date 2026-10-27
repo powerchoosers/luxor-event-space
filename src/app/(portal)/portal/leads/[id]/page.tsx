@@ -894,6 +894,7 @@ export default function LeadDetailPage({
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [togglingMarketing, setTogglingMarketing] = useState(false)
   const [marketingMessage, setMarketingMessage] = useState<'added' | 'removed' | null>(null)
+  const [brochureClick, setBrochureClick] = useState<{ click_count: number; latest_clicked_at: string | null } | 'unavailable' | null>(null)
   const [marketingEngagement, setMarketingEngagement] = useState<LeadMarketingEngagement | null>(null)
   const [loadingMarketingEngagement, setLoadingMarketingEngagement] = useState(false)
   const [marketingEngagementError, setMarketingEngagementError] = useState<string | null>(null)
@@ -1764,6 +1765,9 @@ export default function LeadDetailPage({
       if (!leadRes.ok) throw new Error('Failed to fetch lead details.')
       const leadData = await leadRes.json()
       setLead(leadData)
+      void fetch(`/api/portal/leads/${encodeURIComponent(id)}/brochure-clicks`, { cache: 'no-store' })
+        .then(async (response) => setBrochureClick(response.ok ? await response.json() : 'unavailable'))
+        .catch(() => setBrochureClick('unavailable'))
       if (!proposalEditorOpenRef.current) {
         const savedProposalItems = leadData.metadata?.proposalLineItems
         if (Array.isArray(savedProposalItems) && savedProposalItems.length) {
@@ -4692,6 +4696,16 @@ export default function LeadDetailPage({
           <RefreshCw size={11} className={loadingMarketingEngagement ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
+
+      {brochureClick === 'unavailable' ? (
+        <p className="mb-3 text-xs text-[color:var(--portal-muted)]">Brochure click data unavailable.</p>
+      ) : brochureClick && brochureClick.click_count > 0 ? (
+        <p className="mb-3 text-xs text-[color:var(--portal-muted)]">
+          <span className="font-semibold text-[color:var(--portal-text)]">Brochure link clicked</span> · {brochureClick.click_count} {brochureClick.click_count === 1 ? 'click' : 'clicks'}{brochureClick.latest_clicked_at ? ` · Last ${formatRelativeTime(brochureClick.latest_clicked_at)}` : ''}
+        </p>
+      ) : brochureClick ? (
+        <p className="mb-3 text-xs text-[color:var(--portal-muted)]">No recorded brochure link clicks.</p>
+      ) : null}
 
       {!lead.email ? (
         <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-4 text-xs leading-5 text-[color:var(--portal-muted)]">

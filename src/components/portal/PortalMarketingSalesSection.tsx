@@ -295,6 +295,7 @@ export function PortalMarketingSalesSection({
                   <p className="mt-1.5 text-2xl font-extrabold text-[color:var(--portal-text)] tabular-nums">
                     {formatStaticValue(metrics.brochureSubmissions ?? 0)}
                   </p>
+                  <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">{metrics.brochureClickedLeads ?? "—"} unique leads with recorded brochure clicks</p>
                   <MetricSparkBar percent={metrics.brochureConversionRate ?? 25} color="gold" delay={0.1} />
                 </div>
                 <div className="mt-2.5 pt-2 border-t border-[color:var(--portal-border)]/50 flex items-center justify-between text-[11px] text-[color:var(--portal-muted)]">
