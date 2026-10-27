@@ -3,7 +3,7 @@ import 'server-only'
 import { LuxorEmailJob, LuxorInquiry } from './luxorInquiryTypes'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { sendLuxorResendEmail } from './luxorResendMailServer'
-import { luxorMailProvider } from './luxorMailConfig'
+import { luxorMailAddress, luxorMailProvider } from './luxorMailConfig'
 import { supabaseRest } from './supabaseRestServer'
 
 type InquirySnapshot = Pick<LuxorInquiry, 'id' | 'full_name' | 'email' | 'phone' | 'event_type' | 'guest_count' | 'budget'
@@ -241,8 +241,38 @@ function buildBrandedNotificationHtml(inquiry: InquirySnapshot, aiSummary: strin
 }
 
 /** Build once before delivery so a retry uses the exact same provider payload. */
-export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promise<{ status: 'sent' }> {
+export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promise<{ status: 'sent' | 'skipped' }> {
   if (job.job_type !== 'inquiry_notification' || job.status !== 'sending') throw new Error('Internal alert must be claimed before delivery.')
+  const cancellationKind = job.metadata.notificationKind
+  if (cancellationKind === 'tour_cancellation' || cancellationKind === 'tour_cancellation_client') {
+    const inquiryId = job.metadata.tourInquiryId
+    const eventId = job.metadata.calendarEventId
+    const sequence = job.metadata.calendarSequence
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (job.inquiry_id !== null || typeof inquiryId !== 'string' || !uuid.test(inquiryId)
+      || typeof eventId !== 'string' || !uuid.test(eventId) || typeof sequence !== 'string' || !/^\d+$/.test(sequence)
+      || job.metadata.notificationRendered !== true || job.metadata.notificationProvider !== 'resend') {
+      throw new Error('Tour cancellation alert is missing its saved identity.')
+    }
+    const [inquiries, events] = await Promise.all([
+      supabaseRest<Array<{ is_test: boolean; tour_attendance_status: string | null; email: string | null }>>(`luxor_inquiries?select=is_test,tour_attendance_status,email&id=eq.${encodeURIComponent(inquiryId)}&limit=1`),
+      supabaseRest<Array<{ id: string; sequence: number; status: string; state: { attendeeEmails?: unknown } | null }>>(`luxor_calendar_events?select=id,sequence,status,state&inquiry_id=eq.${encodeURIComponent(inquiryId)}&limit=1`),
+    ])
+    const event = events[0]
+    const inquiry = inquiries[0]
+    if (!inquiry || inquiry.is_test || inquiry.tour_attendance_status !== 'cancelled' || !event || event.id !== eventId
+      || event.status !== 'cancelled' || String(event.sequence) !== sequence
+      || !Array.isArray(event.state?.attendeeEmails)) return { status: 'skipped' }
+    const recipient = luxorMailAddress(job.recipient_email)
+    const client = luxorMailAddress(inquiry.email || '')
+    const attendees = event.state.attendeeEmails.map((value: unknown) => typeof value === 'string' ? luxorMailAddress(value) : '')
+    // Client notices target only the current inquiry email. An admin alert
+    // must never reach the client or someone already receiving calendar mail.
+    if (!recipient || attendees.includes(recipient)
+      || (cancellationKind === 'tour_cancellation_client' ? !client || recipient !== client : recipient === client)) {
+      return { status: 'skipped' }
+    }
+  }
   let frozen = job
   if (job.metadata.notificationRendered !== true) {
     const snapshot = job.metadata.inquirySnapshot as InquirySnapshot | undefined
@@ -269,7 +299,7 @@ export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promi
   const send = provider === 'resend' ? sendLuxorResendEmail : sendLuxorZohoEmail
   await send({
     to: frozen.recipient_email, subject: frozen.subject, content: frozen.body,
-    from: 'booking@luxoratlaspalmas.com', fromName: 'Luxor Lead Alerts',
+    from: 'booking@luxoratlaspalmas.com', fromName: cancellationKind === 'tour_cancellation_client' ? 'Luxor Event Space' : 'Luxor Lead Alerts',
     idempotencyKey: `email-job/${frozen.id}`,
   })
   return { status: 'sent' }

@@ -203,13 +203,17 @@ async function invoicePaymentStates(invoices: LuxorInvoice[]) {
 function closeoutNote(input: {
   reason: string | null
   outcome: LuxorDealLostOutcome
+  inquiry: LuxorInquiry
 }) {
   const reasonLine = input.reason ? ` Reason: ${input.reason}.` : ''
   const preserved = input.outcome.paidRecordsPreserved
   const preservedLine = preserved.paymentCount || preserved.signedContractIds.length
     ? ` ${preserved.paymentCount} paid payment record(s) and ${preserved.signedContractIds.length} signed agreement(s) were preserved; no refund or legal cancellation was created automatically.`
     : ''
-  return `Deal marked lost.${reasonLine} Withdrawn ${input.outcome.invoicesCancelled} open proposal/payment record(s), voided ${input.outcome.contractsVoided} open agreement(s), and stopped ${input.outcome.queuedEmailJobsCancelled} queued email(s) plus ${input.outcome.queuedTextJobsCancelled} queued text(s).${preservedLine}`
+  const tourTime = [input.inquiry.preferred_tour_date, input.inquiry.preferred_tour_time].filter(Boolean).join(' at ')
+  const tourSequence = input.outcome.tourCancellation?.metadataPatch.calendarSequence
+  const tourLine = input.outcome.tourCancellation ? ` Tour cancelled${tourTime ? ` for ${tourTime}` : ''}${tourSequence != null ? `; calendar sequence ${String(tourSequence)}` : ''}.` : ''
+  return `Deal marked lost.${reasonLine}${tourLine} Withdrawn ${input.outcome.invoicesCancelled} open proposal/payment record(s), voided ${input.outcome.contractsVoided} open agreement(s), and stopped ${input.outcome.queuedEmailJobsCancelled} queued email(s) plus ${input.outcome.queuedTextJobsCancelled} queued text(s).${preservedLine}`
 }
 
 /**
@@ -377,7 +381,7 @@ export async function closeLuxorDealAsLost(input: {
   const priorDealLost = dealLostMetadata(inquiry)
   const shouldCreateAuditNote = !priorDealLost.auditNoteCreatedAt
   if (shouldCreateAuditNote) {
-    await createNote(inquiry.id, closeoutNote({ reason, outcome }), 'status_change', requestedBy)
+    await createNote(inquiry.id, closeoutNote({ reason, outcome, inquiry }), 'status_change', requestedBy)
   }
 
   const updated = await updateLuxorInquiry(inquiry.id, {

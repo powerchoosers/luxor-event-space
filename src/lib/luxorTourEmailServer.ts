@@ -23,6 +23,16 @@ export type TourEmailContext = {
   contactPhone?: string | null
 }
 
+function cancelResponseUrl(responseUrl?: string | null) {
+  if (!responseUrl) return null
+  try {
+    const url = new URL(responseUrl)
+    if (!/^\/tour-response\/[A-Za-z0-9_-]+$/.test(url.pathname)) return null
+    url.searchParams.set('action', 'cancel')
+    return url.toString()
+  } catch { return null }
+}
+
 const FALLBACK_LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
 
 export async function buildAiTourConfirmationEmail(context: TourEmailContext, options: { skipAi?: boolean } = {}) {
@@ -196,7 +206,10 @@ function renderTourEmailHtml(context: TourEmailContext, copy: TourCopy) {
       { label: 'Meeting', value: escapeHtml(context.meetingType) },
       { label: 'Location', value: escapeHtml(FALLBACK_LOCATION) },
     ],
-    actions: context.responseUrl ? [{ label: 'Reschedule tour', url: context.responseUrl }] : undefined,
+    actions: context.responseUrl ? [
+      { label: 'Reschedule tour', url: context.responseUrl },
+      ...(cancelResponseUrl(context.responseUrl) ? [{ label: 'Cancel tour', url: cancelResponseUrl(context.responseUrl)! }] : []),
+    ] : undefined,
     note: `${phoneNote}Reply to this email if your timing changes and the Luxor team will help.`,
     theme: 'brand',
   })
@@ -214,6 +227,7 @@ function renderTourEmailText(context: TourEmailContext, copy: TourCopy) {
     `Meeting: ${context.meetingType}`,
     `Location: ${FALLBACK_LOCATION}`,
     context.responseUrl ? `Reschedule: ${context.responseUrl}` : '',
+    cancelResponseUrl(context.responseUrl) ? `Cancel tour: ${cancelResponseUrl(context.responseUrl)}` : '',
     phoneDisplay ? `Luxor may call you from ${phoneDisplay} before your tour. Please save this number so you recognize our call.` : '',
     'Questions? Reply to booking@luxoratlaspalmas.com.',
   ].filter(Boolean).join('\n\n')

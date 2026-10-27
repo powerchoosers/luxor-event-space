@@ -68,6 +68,7 @@ export function getTourResponseLinks(token: string) {
   return {
     confirmUrl: absoluteUrl(`/tour-response/${token}?action=confirm`),
     rescheduleUrl: absoluteUrl(`/tour-response/${token}?action=reschedule`),
+    cancelUrl: absoluteUrl(`/tour-response/${token}?action=cancel`),
   }
 }
 
@@ -100,6 +101,7 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
         inquiry.message ? `Details you shared: ${inquiry.message}` : '',
         `Confirm your tour: ${links.confirmUrl}`,
         `Need a new time? Reschedule here: ${links.rescheduleUrl}`,
+        `Cancel tour: ${links.cancelUrl}`,
         ...plainTextEmailFooter(),
       ].filter(Boolean).join('\n\n'),
     }
@@ -114,6 +116,7 @@ export function buildTourEmail(kind: LuxorEmailJobKind, inquiry: LuxorInquiry, t
       inquiry.message ? `Details you shared: ${inquiry.message}` : '',
       `Confirm your tour: ${links.confirmUrl}`,
       `Need to reschedule? ${links.rescheduleUrl}`,
+      `Cancel tour: ${links.cancelUrl}`,
       ...plainTextEmailFooter(),
     ].filter(Boolean).join('\n\n'),
   }
