@@ -899,13 +899,8 @@ export default function LeadDetailPage({
   const [marketingEngagementError, setMarketingEngagementError] = useState<string | null>(null)
 
   // Event Summary states
-  const [isEditingSummary, setIsEditingSummary] = useState(false)
-  const [summaryVenue, setSummaryVenue] = useState('')
   const [summaryStartTime, setSummaryStartTime] = useState('')
   const [summaryEndTime, setSummaryEndTime] = useState('')
-  const [summarySetupTime, setSummarySetupTime] = useState('')
-  const [summaryBreakdownTime, setSummaryBreakdownTime] = useState('')
-  const [savingSummary, setSavingSummary] = useState(false)
   const [mobileSectionDrawerOpen, setMobileSectionDrawerOpen] = useState(false)
   const sectionMenuTriggerRef = useRef<HTMLButtonElement>(null)
   const sectionMenuPanelRef = useRef<HTMLDivElement>(null)
@@ -1259,86 +1254,11 @@ export default function LeadDetailPage({
   useEffect(() => {
     if (lead) {
       const metadata = activeEventForDisplay?.metadata || lead.metadata || {}
-      setSummaryVenue(String(latestBooking?.metadata?.venue || metadata.venue || ''))
       const grandOpeningLead = isGrandOpeningRsvp(lead)
       setSummaryStartTime(String(latestBooking?.start_time || metadata.start_time || (grandOpeningLead ? LUXOR_GRAND_OPENING.startTime : '')))
       setSummaryEndTime(String(latestBooking?.end_time || metadata.end_time || (grandOpeningLead ? LUXOR_GRAND_OPENING.endTime : '')))
-      setSummarySetupTime(String(latestBooking?.metadata?.setup_time || metadata.setup_time || ''))
-      setSummaryBreakdownTime(String(latestBooking?.metadata?.breakdown_time || metadata.breakdown_time || ''))
     }
   }, [activeEventForDisplay, lead, latestBooking])
-
-  const handleSaveSummary = async () => {
-    if (!lead) return
-    try {
-      setSavingSummary(true)
-      const durationMinutes = calculateEventDurationMinutes(summaryStartTime, summaryEndTime)
-      if (latestBooking) {
-        const res = await fetch('/api/bookings', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: latestBooking.id,
-            start_time: summaryStartTime,
-            end_time: summaryEndTime,
-            metadata: {
-              ...latestBooking.metadata,
-              venue: summaryVenue,
-              setup_time: summarySetupTime,
-              breakdown_time: summaryBreakdownTime,
-              duration_minutes: durationMinutes,
-            }
-          })
-        })
-        if (!res.ok) throw new Error('Failed to save event summary details.')
-      } else if (selectedLeadEvent) {
-        const res = await fetch('/api/lead-events', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: selectedLeadEvent.id,
-            inquiry_id: lead.id,
-            metadata: {
-              ...selectedLeadEvent.metadata,
-              venue: summaryVenue,
-              start_time: summaryStartTime,
-              end_time: summaryEndTime,
-              setup_time: summarySetupTime,
-              breakdown_time: summaryBreakdownTime,
-              duration_minutes: durationMinutes,
-            },
-          }),
-        })
-        if (!res.ok) throw new Error('Failed to save event summary details.')
-      } else {
-        const res = await fetch('/api/inquiries', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: lead.id,
-            metadata: {
-              ...lead.metadata,
-              venue: summaryVenue,
-              start_time: summaryStartTime,
-              end_time: summaryEndTime,
-              setup_time: summarySetupTime,
-              breakdown_time: summaryBreakdownTime,
-              duration_minutes: durationMinutes,
-            }
-          })
-        })
-        if (!res.ok) throw new Error('Failed to save lead event summary.')
-      }
-
-      await fetchAllData(false)
-      setIsEditingSummary(false)
-    } catch (err) {
-      console.error(err)
-      notify({ title: 'Event summary not saved', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
-    } finally {
-      setSavingSummary(false)
-    }
-  }
 
   const handleSaveTourAttendance = async () => {
     if (!lead) return
@@ -4419,6 +4339,41 @@ export default function LeadDetailPage({
     setEventDetailsDraftEventId(null)
     setEventDetailsEditing(false)
   }
+  const openEventDetailsEditor = () => {
+    if (!selectedLeadEvent?.id) return
+    if ((selectedStageOverride || activeStage) !== 'inquiry' || activeLeadTab !== 'overview') {
+      setSelectedStageOverride('inquiry')
+      setActiveLeadTab('overview')
+    }
+    beginEventDetailsEdit()
+    window.setTimeout(() => {
+      document.getElementById('event-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
+  }
+  const renderEventSummaryCard = () => (
+    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Event Summary</p>
+        <button
+          type="button"
+          onClick={openEventDetailsEditor}
+          disabled={!selectedLeadEvent?.id}
+          title={selectedLeadEvent?.id ? 'Edit event details' : 'Select an event to edit its details'}
+          className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          <Pencil size={13} /> Edit
+        </button>
+      </div>
+      <div className="space-y-1">
+        {eventDetails.map((item) => (
+          <div key={item.field} className="flex min-w-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] py-2 last:border-b-0">
+            <span className="shrink-0 text-[10px] font-bold uppercase text-[color:var(--portal-muted)]">{item.label}</span>
+            <span className="min-w-0 text-right text-xs font-bold text-[color:var(--portal-text)]">{item.value || 'Not captured'}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
   const clientDetails: Array<{
     label: string
     value: string
@@ -5672,7 +5627,7 @@ export default function LeadDetailPage({
                     </MagicCard>
 
                     {/* Event Details */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                    <section id="event-details" className="scroll-mt-24 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
                         <div className="flex shrink-0 items-center gap-2">
@@ -7699,6 +7654,7 @@ export default function LeadDetailPage({
                         } : null)
                       }}
                     />
+                    {!isNewsletter ? renderEventSummaryCard() : null}
 
                     {/* Recommended Actions */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
@@ -7751,126 +7707,6 @@ export default function LeadDetailPage({
 
                     {renderMarketingEngagementCard()}
 
-                    {/* Event Summary */}
-                    {!isNewsletter && currentStage !== 'newsletter' && (
-                      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Event Summary</p>
-                        {!isEditingSummary ? (
-                          <button 
-                            type="button"
-                            onClick={() => setIsEditingSummary(true)}
-                            className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68] transition-colors cursor-pointer animate-[luxor-soft-enter_0.2s_ease-out]"
-                          >
-                            <Pencil size={11} /> Edit
-                          </button>
-                        ) : null}
-                      </div>
-
-                      {isEditingSummary ? (
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Venue</label>
-                            <PortalSelect
-                              value={summaryVenue}
-                              onChange={setSummaryVenue}
-                              options={[
-                                { value: 'Luxor Main Hall', label: 'Luxor Main Hall' },
-                                { value: 'Luxor Grand Pavilion', label: 'Luxor Grand Pavilion' },
-                                { value: 'Elena Garden Plaza', label: 'Elena Garden Pavilion' },
-                                { value: 'Palmas Terrace Suite', label: 'Palmas Terrace Suite' },
-                              ]}
-                              className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Start Time</label>
-                              <PortalSelect
-                                value={summaryStartTime}
-                                onChange={setSummaryStartTime}
-                                options={EVENT_TIME_OPTIONS}
-                                placeholder="Select start time"
-                                className="w-full"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">End Time</label>
-                              <PortalSelect
-                                value={summaryEndTime}
-                                onChange={setSummaryEndTime}
-                                options={EVENT_TIME_OPTIONS}
-                                placeholder="Select end time"
-                                className="w-full"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Setup Time</label>
-                            <input
-                              type="text"
-                              value={summarySetupTime}
-                              onChange={(e) => setSummarySetupTime(e.target.value)}
-                              placeholder="e.g. 3:00 PM"
-                              className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] uppercase font-bold text-[color:var(--portal-muted)] mb-1">Breakdown Time</label>
-                            <input
-                              type="text"
-                              value={summaryBreakdownTime}
-                              onChange={(e) => setSummaryBreakdownTime(e.target.value)}
-                              placeholder="e.g. 11:00 PM – 12:30 AM"
-                              className="w-full rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 text-xs text-[color:var(--portal-text)] focus:border-[#caa24c]/40 outline-none"
-                            />
-                          </div>
-                          <div className="flex gap-2 justify-end pt-2">
-                            <button
-                              type="button"
-                              onClick={() => setIsEditingSummary(false)}
-                              className="px-3 py-1.5 rounded border border-[color:var(--portal-border)] text-[10px] font-black uppercase text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleSaveSummary}
-                              disabled={savingSummary}
-                              className="px-4 py-1.5 rounded bg-[#caa24c] text-[10px] font-black uppercase text-white hover:bg-[#dfbd68] transition-all cursor-pointer"
-                            >
-                              {savingSummary ? 'Saving...' : 'Save'}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-3.5">
-                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
-                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Venue</span>
-                            <span className="text-xs font-bold text-[color:var(--portal-text)]">{summaryVenue || 'Not captured'}</span>
-                          </div>
-                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
-                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Time</span>
-                            <span className="text-xs font-bold text-[color:var(--portal-text)]">
-                              {summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'N/A'}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
-                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Duration</span>
-                            <span className="text-xs font-bold text-[color:var(--portal-text)]">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
-                          </div>
-                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
-                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Setup Time</span>
-                            <span className="text-xs font-bold text-[color:var(--portal-text)]">{summarySetupTime || 'Not set'}</span>
-                          </div>
-                          <div className="flex justify-between items-center py-1 border-b border-[color:var(--portal-border)]">
-                            <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Breakdown Time</span>
-                            <span className="text-xs font-bold text-[color:var(--portal-text)]">{summaryBreakdownTime || 'Not set'}</span>
-                          </div>
-                        </div>
-                      )}
-                      </section>
-                    )}
                   </>
                 )
               }
@@ -7935,6 +7771,7 @@ export default function LeadDetailPage({
                       } : null)
                     }}
                   />
+                  {!isNewsletter ? renderEventSummaryCard() : null}
 
                   {/* NEXT STEP */}
                   <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
