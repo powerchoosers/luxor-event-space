@@ -37,7 +37,7 @@ export function EmailQueueHealthWidget() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const lifecycleRef = useRef<AbortController | null>(null)
-  const requestRef = useRef<{ signal?: AbortSignal } | null>(null)
+  const requestRef = useRef<{ signal?: AbortSignal; needsCatchUp: boolean } | null>(null)
   const pendingRefreshRef = useRef<boolean | null>(null)
 
   const fetchStatus = useCallback(async (isManual = false, signal = lifecycleRef.current?.signal, queueIfBusy = false) => {
@@ -45,11 +45,12 @@ export function EmailQueueHealthWidget() {
     if (requestRef.current && !requestRef.current.signal?.aborted) {
       if (isManual || queueIfBusy) {
         pendingRefreshRef.current = Boolean(pendingRefreshRef.current || isManual)
+        requestRef.current.needsCatchUp = false
         if (isManual) setRefreshing(true)
       }
       return
     }
-    const request = { signal }
+    const request = { signal, needsCatchUp: document.visibilityState !== 'visible' }
     requestRef.current = request
     if (isManual) setRefreshing(true)
     try {
@@ -84,7 +85,11 @@ export function EmailQueueHealthWidget() {
     lifecycleRef.current = controller
     void fetchStatus(false, controller.signal)
     const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') void fetchStatus(false, controller.signal, true)
+      if (document.visibilityState === 'visible') {
+        void fetchStatus(false, controller.signal, Boolean(requestRef.current?.needsCatchUp))
+      } else if (requestRef.current) {
+        requestRef.current.needsCatchUp = true
+      }
     }
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void fetchStatus(false, controller.signal)

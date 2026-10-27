@@ -146,9 +146,31 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
   }, [dialNumber])
 
   useEffect(() => {
+    let active = true
+    let catchingUp = false
     void loadUnreadCount()
-    const intervalId = window.setInterval(() => void loadUnreadCount(true), 30_000)
-    return () => window.clearInterval(intervalId)
+    const refreshWhenVisible = async () => {
+      if (document.visibilityState !== 'visible' || catchingUp) return
+      catchingUp = true
+      try {
+        // A request started before returning may contain an older count.
+        if (unreadCountRequestRef.current) await unreadCountRequestRef.current
+        if (active && document.visibilityState === 'visible') await loadUnreadCount(true)
+      } finally {
+        catchingUp = false
+      }
+    }
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadUnreadCount(true)
+    }, 30_000)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    window.addEventListener('focus', refreshWhenVisible)
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      window.removeEventListener('focus', refreshWhenVisible)
+    }
   }, [loadUnreadCount])
 
   const refreshToken = useCallback(async () => {
