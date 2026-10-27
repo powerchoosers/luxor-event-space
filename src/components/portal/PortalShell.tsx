@@ -914,7 +914,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       </aside>
 
       <main onWheelCapture={handOffWheelToPage} style={{ backgroundColor: 'var(--portal-frame)' }} className={`portal-main flex h-[100dvh] min-w-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] transition-[margin-left] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'lg:ml-16' : 'lg:ml-60'}`}>
-        <header className={`z-50 grid h-14 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 border-b px-4 backdrop-blur-md sm:h-16 sm:gap-x-4 sm:px-6 lg:px-8 ${
+        <header className={`z-50 grid h-14 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 border-b px-4 sm:h-16 sm:gap-x-4 sm:px-6 lg:px-8 ${
           portalTheme === 'light'
             ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95'
             : 'border-b-0 bg-[#050505]'

@@ -134,7 +134,9 @@ body {
     padding-bottom: var(--portal-mobile-nav-bottom-clearance);
   }
 
-  /* Keep the unread badge crisp over the standalone app's translucent header. */
+  /* Keep the unread badge crisp in the installed iOS app. The header itself has
+     no backdrop filter: it is opaque and nothing scrolls beneath it, and WebKit
+     standalone blurred composited children (this badge) through that layer. */
   .portal-notification-number {
     animation: none;
     box-shadow: none;
