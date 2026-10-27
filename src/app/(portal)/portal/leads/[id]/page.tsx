@@ -121,7 +121,7 @@ import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext, isP
 import { findProposalLeadEvent, getLeadClientProposals, getProposalCardState, getProposalWorkflowDisplayState, getSavedProposalPricingSummary } from '@/lib/luxorProposalCard'
 import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
-import { buildLuxorEventPlanningTimePatch, hasLuxorEventPlanningTimeConflict, resolveLuxorEventPlanningTimes } from '@/lib/luxorEventPlanningTimes'
+import { buildLuxorEventPlanningTimePatch, createLuxorEventPlanningTimeBaseline, hasActiveLuxorEventBooking, hasLuxorEventPlanningTimeConflict, persistLuxorEventDetailsDraft, resolveLuxorEventPlanningTimes } from '@/lib/luxorEventPlanningTimes'
 import { DEFAULT_NEW_PROPOSAL_PAYMENT_PLAN } from '@/lib/luxorPaymentSchedule'
 import {
   hasCancellableTour,
@@ -476,10 +476,13 @@ export default function LeadDetailPage({
   const [proposalHistory, setProposalHistory] = useState<Record<string, ProposalHistoryPayload>>({})
   const [proposalHistoryLoadingId, setProposalHistoryLoadingId] = useState<string | null>(null)
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
+  const bookingsRef = useRef(bookings)
+  bookingsRef.current = bookings
   const [documents, setDocuments] = useState<LuxorDocument[]>([])
   const [signatureRequests, setSignatureRequests] = useState<Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null }>>([])
   const [leadEvents, setLeadEvents] = useState<LuxorLeadEvent[]>([])
   const [activeEventId, setActiveEventId] = useState<string | null>(null)
+  const selectedLeadEventIdRef = useRef<string | null>(null)
   const initializedEventPreferenceRef = useRef(false)
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [paymentInstallments, setPaymentInstallments] = useState<LuxorPaymentInstallment[]>([])
@@ -654,6 +657,8 @@ export default function LeadDetailPage({
   const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
   const [eventDetailsEditing, setEventDetailsEditing] = useState(false)
   const [eventDetailsDraft, setEventDetailsDraft] = useState<Partial<Record<EventDetailsField, string>>>({})
+  const [eventDetailsDraftEventId, setEventDetailsDraftEventId] = useState<string | null>(null)
+  const eventDetailsEditSessionRef = useRef(0)
   const proposalTimingBaselineRef = useRef<{ eventId: string; venueAccessTime: string; eventTime: string } | null>(null)
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
@@ -958,6 +963,15 @@ export default function LeadDetailPage({
     () => leadEvents.find((event) => event.id === activeEventId) || leadEvents.find((event) => event.is_primary) || leadEvents[0] || null,
     [activeEventId, leadEvents],
   )
+  selectedLeadEventIdRef.current = selectedLeadEvent?.id || null
+  useEffect(() => {
+    if (eventDetailsEditing && eventDetailsDraftEventId && eventDetailsDraftEventId !== selectedLeadEvent?.id) {
+      eventDetailsEditSessionRef.current += 1
+      setEventDetailsDraft({})
+      setEventDetailsDraftEventId(null)
+      setEventDetailsEditing(false)
+    }
+  }, [eventDetailsDraftEventId, eventDetailsEditing, selectedLeadEvent?.id])
   const currentEventType = selectedLeadEvent ? selectedLeadEvent.event_type : lead?.event_type ?? null
   const currentEventDate = selectedLeadEvent ? selectedLeadEvent.target_date : lead?.target_date ?? null
   const currentEventGuestCount = selectedLeadEvent ? selectedLeadEvent.guest_count : lead?.guest_count ?? null
@@ -1391,6 +1405,14 @@ export default function LeadDetailPage({
     }
   }
 
+  const handleEventPlanningTimeUpdate = async (updatedMetadata: Record<string, unknown>, targetEventId: string) => {
+    if (hasActiveLuxorEventBooking(targetEventId, bookingsRef.current)) {
+      notify({ title: 'Event time not saved', description: 'This event has a booking. Update its timing through the booking workflow.', variant: 'error' })
+      return false
+    }
+    return handleEventMetadataUpdate(updatedMetadata, targetEventId)
+  }
+
   const openTourDetailsEditor = () => {
     if (!lead) return
     const metadata = lead.metadata || {}
@@ -1582,6 +1604,13 @@ export default function LeadDetailPage({
   }
 
   const selectLeadEvent = (eventId: string) => {
+    if (eventId !== selectedLeadEventIdRef.current) {
+      eventDetailsEditSessionRef.current += 1
+      setEventDetailsDraft({})
+      setEventDetailsDraftEventId(null)
+      setEventDetailsEditing(false)
+    }
+    selectedLeadEventIdRef.current = eventId
     setActiveEventId(eventId)
     setShowEventPicker(false)
     setShowActionsMenu(false)
@@ -2626,7 +2655,6 @@ export default function LeadDetailPage({
     const savedPromotionId = String(savedSelection.promotionId || savedSelection.promotion_id || savedContext?.promotionId || savedContext?.promotion_id || '').trim() || null
     const sourceMetadata = sourceEvent?.metadata || {}
     const eventPlanningTimes = resolveLuxorEventPlanningTimes(sourceMetadata, savedContext)
-    const eventPlanningMetadataTimes = resolveLuxorEventPlanningTimes(sourceMetadata)
     const hasMetadataRentalStartTime = Object.prototype.hasOwnProperty.call(sourceMetadata, 'venue_access_time')
     const hasMetadataGuestArrivalTime = Object.prototype.hasOwnProperty.call(sourceMetadata, 'event_time')
     const sourceEventHasBooking = Boolean(sourceEvent && bookings.some(
@@ -2638,10 +2666,7 @@ export default function LeadDetailPage({
       && !invoice.proposal_accepted_at
       && invoice.status === 'draft',
     ))
-    proposalTimingBaselineRef.current = sourceEvent ? {
-      eventId: sourceEvent.id,
-      ...eventPlanningMetadataTimes,
-    } : null
+    proposalTimingBaselineRef.current = createLuxorEventPlanningTimeBaseline(sourceEvent?.id, sourceMetadata)
     const nextContext: ProposalBuilderContext = {
       version: asProposalNumber(savedContext?.version, 1) || 1,
       event_type: String(savedContext?.event_type || invoice?.event_type || sourceEvent?.event_type || (invoice ? 'Event' : lead?.event_type) || 'Event Booking'),
@@ -2768,7 +2793,15 @@ export default function LeadDetailPage({
   const duplicateProposalDraft = (invoice: LuxorInvoice) => {
     openProposalBuilder()
     const sourceEvent = findProposalLeadEvent(invoice, leadEvents, bookings)
+    const duplicateEventId = invoice.lead_event_id || sourceEvent?.id || null
+    const duplicateTargetEvent = duplicateEventId ? leadEvents.find((event) => event.id === duplicateEventId) || sourceEvent : sourceEvent
     const savedContext = asProposalRecord(invoice.proposal_context) || {}
+    const duplicatePlanningTimes = resolveLuxorEventPlanningTimes(duplicateTargetEvent?.metadata, savedContext)
+    const duplicateCanSyncPlanningTimes = Boolean(
+      duplicateTargetEvent
+      && !hasActiveLuxorEventBooking(duplicateTargetEvent.id, bookings),
+    )
+    proposalTimingBaselineRef.current = createLuxorEventPlanningTimeBaseline(duplicateEventId, duplicateTargetEvent?.metadata)
     const savedSelection = asProposalRecord(savedContext.pricing_selection) || {}
     const promotionSnapshot = asProposalRecord(invoice.promotion_snapshot) || {}
     const savedPromotionId = String(savedSelection.promotionId || savedSelection.promotion_id || savedContext.promotionId || savedContext.promotion_id || invoice.promotion_id || promotionSnapshot.id || '').trim() || null
@@ -2790,6 +2823,12 @@ export default function LeadDetailPage({
       rental_period: rentalPeriod === 'morning' || rentalPeriod === 'full_day' || rentalPeriod === 'custom' || rentalPeriod === 'evening' ? rentalPeriod : sourceRentalPeriodFallback,
       ...(savedContext.event_access ? { event_access: String(savedContext.event_access) } : {}),
       ...getDuplicatedProposalTimingContext(savedContext),
+      ...(duplicateCanSyncPlanningTimes && Object.prototype.hasOwnProperty.call(duplicateTargetEvent?.metadata || {}, 'venue_access_time')
+        ? { rental_start_time: duplicatePlanningTimes.venueAccessTime, start_time: duplicatePlanningTimes.venueAccessTime }
+        : {}),
+      ...(duplicateCanSyncPlanningTimes && Object.prototype.hasOwnProperty.call(duplicateTargetEvent?.metadata || {}, 'event_time')
+        ? { guest_arrival_time: duplicatePlanningTimes.eventTime, guestArrivalTime: duplicatePlanningTimes.eventTime }
+        : {}),
       package_id: packageId,
       package_name: String(savedContext.package_name || packageId.replace('_', ' ')),
       pricing_selection: duplicateSelection,
@@ -2803,7 +2842,7 @@ export default function LeadDetailPage({
       : [{ description: '', quantity: 1, unitPrice: 0, total: 0 }]
 
     setProposalContext(nextContext)
-    setProposalLeadEventId(invoice.lead_event_id || sourceEvent?.id || null)
+    setProposalLeadEventId(duplicateEventId)
     setSelectedProposalPackageId(packageId)
     setSelectedProposalPromotionId(savedPromotionId)
     setProposalGuestCount(asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count) ? String(asProposalNumber(savedContext.expected_guest_count, sourceEvent?.guest_count)) : '')
@@ -3110,7 +3149,7 @@ export default function LeadDetailPage({
         action === 'save'
         && proposalLeadEventId
         && !createRevision
-        && !bookings.some((booking) => booking.lead_event_id === proposalLeadEventId && booking.status !== 'cancelled')
+        && !hasActiveLuxorEventBooking(proposalLeadEventId, bookingsRef.current)
         && (!editingInvoice || (
           editingInvoice.status === 'draft'
           && !editingInvoice.price_locked_at
@@ -3143,7 +3182,7 @@ export default function LeadDetailPage({
       )
 
       if (syncEventPlanningTimes && proposalLeadEventId) {
-        const savedTimes = await handleEventMetadataUpdate(buildLuxorEventPlanningTimePatch({
+        const savedTimes = await handleEventPlanningTimeUpdate(buildLuxorEventPlanningTimePatch({
           venueAccessTime: String(proposalSelection.rentalStartTime || ''),
           eventTime: String(proposalSelection.guestArrivalTime || ''),
         }), proposalLeadEventId)
@@ -4245,15 +4284,13 @@ export default function LeadDetailPage({
   const selectedEventBooking = [...eventBookings]
     .filter((booking) => booking.status !== 'cancelled')
     .sort((left, right) => new Date(right.updated_at || right.created_at).getTime() - new Date(left.updated_at || left.created_at).getTime())[0]
-  const resolvedPlanningTimes = resolveLuxorEventPlanningTimes(selectedLeadEvent?.metadata, selectedEventProposalContext)
-  const venueAccessTime = String(selectedEventBooking?.start_time || resolvedPlanningTimes.venueAccessTime)
-  const eventTime = String(
-    selectedEventProposalContext?.guest_arrival_time
-    || selectedEventProposalContext?.guestArrivalTime
-    || selectedEventBooking?.metadata?.guest_arrival_time
-    || selectedEventBooking?.metadata?.guestArrivalTime
-    || resolvedPlanningTimes.eventTime,
+  const resolvedPlanningTimes = resolveLuxorEventPlanningTimes(
+    selectedLeadEvent?.metadata,
+    selectedEventProposalContext,
+    selectedEventBooking ? { ...selectedEventBooking.metadata, start_time: selectedEventBooking.start_time } : null,
   )
+  const venueAccessTime = String(resolvedPlanningTimes.venueAccessTime)
+  const eventTime = String(resolvedPlanningTimes.eventTime)
   const eventDetails: Array<{
     label: string
     value: string
@@ -4328,28 +4365,58 @@ export default function LeadDetailPage({
       readOnly: Boolean(selectedEventBooking),
     },
   ]
+  const isEventDetailsEditing = eventDetailsEditing && eventDetailsDraftEventId === selectedLeadEvent?.id
   const beginEventDetailsEdit = () => {
+    if (!selectedLeadEvent?.id) return
+    eventDetailsEditSessionRef.current += 1
+    setEventDetailsDraftEventId(selectedLeadEvent.id)
     setEventDetailsDraft(Object.fromEntries(eventDetails.map((item) => [item.field, item.editValue])))
     setEventDetailsEditing(true)
   }
   const saveEventDetails = async () => {
-    for (const item of eventDetails) {
-      if (item.readOnly) continue
-      if (item.field === 'venue_access_time' || item.field === 'event_time') continue
-      const nextValue = eventDetailsDraft[item.field] ?? item.editValue
-      if (normalizeComparableValue(nextValue) === normalizeComparableValue(item.editValue)) continue
-      if (!await handleLeadFieldUpdate(item.field, nextValue)) return
+    const draftEventId = eventDetailsDraftEventId
+    const editSessionId = eventDetailsEditSessionRef.current
+    if (!draftEventId || draftEventId !== selectedLeadEvent?.id) {
+      cancelEventDetailsEdit()
+      notify({ title: 'Event details not saved', description: 'The selected event changed. Reopen Edit and review the current event before saving.', variant: 'error' })
+      return
     }
-    const nextVenueAccessTime = eventDetailsDraft.venue_access_time ?? venueAccessTime
-    const nextEventTime = eventDetailsDraft.event_time ?? eventTime
-    const timingUpdates: Record<string, unknown> = {}
-    if (nextVenueAccessTime.trim() !== venueAccessTime.trim()) timingUpdates.venue_access_time = nextVenueAccessTime.trim() || null
-    if (nextEventTime.trim() !== eventTime.trim()) timingUpdates.event_time = nextEventTime.trim() || null
-    if (Object.keys(timingUpdates).length && !await handleEventMetadataUpdate(timingUpdates)) return
+    const fieldUpdates = eventDetails.flatMap((item) => {
+      if (item.readOnly || item.field === 'venue_access_time' || item.field === 'event_time') return []
+      const nextValue = eventDetailsDraft[item.field] ?? item.editValue
+      return normalizeComparableValue(nextValue) === normalizeComparableValue(item.editValue)
+        ? []
+        : [{ field: item.field, value: nextValue }]
+    })
+    const timingUpdates: { venueAccessTime?: string; eventTime?: string } = {}
+    if (!eventDetails.find((item) => item.field === 'venue_access_time')?.readOnly) {
+      const nextVenueAccessTime = eventDetailsDraft.venue_access_time ?? venueAccessTime
+      if (nextVenueAccessTime.trim() !== venueAccessTime.trim()) timingUpdates.venueAccessTime = nextVenueAccessTime.trim()
+    }
+    if (!eventDetails.find((item) => item.field === 'event_time')?.readOnly) {
+      const nextEventTime = eventDetailsDraft.event_time ?? eventTime
+      if (nextEventTime.trim() !== eventTime.trim()) timingUpdates.eventTime = nextEventTime.trim()
+    }
+    const result = await persistLuxorEventDetailsDraft({
+      draftEventId,
+      selectedEventId: selectedLeadEvent?.id || null,
+      editSessionId,
+      getSelectedEventId: () => selectedLeadEventIdRef.current,
+      getEditSessionId: () => eventDetailsEditSessionRef.current,
+      fieldUpdates,
+      timingUpdates,
+      persistField: (field, value) => handleLeadFieldUpdate(field as EditableLeadField, value),
+      persistTimes: async (updates, eventId) => handleEventPlanningTimeUpdate(buildLuxorEventPlanningTimePatch(updates), eventId),
+    })
+    if (result !== 'saved') return
+    setEventDetailsDraft({})
+    setEventDetailsDraftEventId(null)
     setEventDetailsEditing(false)
   }
   const cancelEventDetailsEdit = () => {
+    eventDetailsEditSessionRef.current += 1
     setEventDetailsDraft({})
+    setEventDetailsDraftEventId(null)
     setEventDetailsEditing(false)
   }
   const clientDetails: Array<{
@@ -5609,7 +5676,7 @@ export default function LeadDetailPage({
                       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
                         <div className="flex shrink-0 items-center gap-2">
-                          {eventDetailsEditing ? (
+                          {isEventDetailsEditing ? (
                             <>
                               <button type="button" onClick={cancelEventDetailsEdit} disabled={Boolean(savingLeadField)} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">Cancel</button>
                               <button type="button" onClick={() => void saveEventDetails()} disabled={Boolean(savingLeadField)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c] px-3 text-xs font-semibold text-white hover:bg-[#b98a3d] disabled:opacity-50"><Check size={13} /> Save</button>
@@ -5634,8 +5701,8 @@ export default function LeadDetailPage({
                               placeholder={item.placeholder}
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
-                              onCommit={eventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
-                              sectionEditing={eventDetailsEditing && !item.readOnly}
+                              onCommit={isEventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
+                              sectionEditing={isEventDetailsEditing && !item.readOnly}
                               sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
                               onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
                               options={item.options}
@@ -5655,8 +5722,8 @@ export default function LeadDetailPage({
                               placeholder={item.placeholder}
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
-                              onCommit={eventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
-                              sectionEditing={eventDetailsEditing && !item.readOnly}
+                              onCommit={isEventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
+                              sectionEditing={isEventDetailsEditing && !item.readOnly}
                               sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
                               onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
                               options={item.options}
