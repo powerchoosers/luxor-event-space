@@ -8,6 +8,7 @@ import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Link from 'next/link'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { LUXOR_INQUIRY_SMS_DISCLOSURE, LUXOR_MARKETING_EMAIL_DISCLOSURE, LUXOR_MARKETING_SMS_DISCLOSURE } from '@/lib/luxorInquiryTypes'
+import { focusPublicConfirmation } from '@/lib/focusPublicConfirmation'
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -165,7 +166,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
               Brochure Request Received
             </p>
 
-            <h3 className="mt-2 font-serif text-3xl text-[#241d17] sm:text-4xl">
+            <h3 ref={focusPublicConfirmation} tabIndex={-1} className="mt-2 font-serif text-3xl text-[#241d17] sm:text-4xl">
               Thank You for Your Interest in Luxor Events!
             </h3>
 

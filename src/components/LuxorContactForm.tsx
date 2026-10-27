@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react'
 import { Check, Loader2, Send } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
+import { focusPublicConfirmation } from '@/lib/focusPublicConfirmation'
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -112,7 +113,7 @@ export function LuxorContactForm({
               <Check className="h-7 w-7 stroke-[2.5]" />
             </div>
 
-            <h3 className="mt-4 font-serif text-3xl font-semibold text-[#241d17]">
+            <h3 ref={focusPublicConfirmation} tabIndex={-1} className="mt-4 font-serif text-3xl font-semibold text-[#241d17]">
               {spanish ? '¡Gracias por contactarnos!' : 'Thank You for Reaching Out!'}
             </h3>
 
