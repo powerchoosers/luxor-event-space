@@ -158,10 +158,15 @@ export async function PATCH(request: NextRequest) {
         ['2027-01-09', 'saturday'],
         ['2027-01-10', 'sunday'],
       ].flatMap(([eventDate]) => ['morning', 'evening', 'full_day'].map((rentalPeriod) => ({
-        packageId: 'rental_only', eventDate, guestCount: 50, rentalPeriod, addOns: [], taxRate: 0, paymentPlan,
+        packageId: 'rental_only', eventDate, guestCount: 50, rentalPeriod,
+        guestArrivalTime: rentalPeriod === 'evening' ? '18:00' : '10:00',
+        eventEndTime: rentalPeriod === 'morning' ? '14:00' : '22:00',
+        addOns: [], taxRate: 0, paymentPlan,
       })),
       ...[50, 100, 175].map((guestCount) => ({
-        packageId: 'rental_only', eventDate: '2027-01-08', guestCount, rentalPeriod: 'full_day', addOns: ['essential_decor', 'buffet_catering', 'dj', 'photo_booth_signature', 'bartender_service'], taxRate: 0, paymentPlan,
+        packageId: 'rental_only', eventDate: '2027-01-08', guestCount, rentalPeriod: 'full_day',
+        guestArrivalTime: '10:00', eventEndTime: '22:00',
+        addOns: ['essential_decor', 'buffet_catering', 'dj', 'photo_booth_signature', 'bartender_service'], taxRate: 0, paymentPlan,
       }))),
     ]
     const luxorCosts = object(config.luxor_costs) || config

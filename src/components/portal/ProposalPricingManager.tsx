@@ -193,7 +193,10 @@ export function ProposalPricingManager() {
         body: JSON.stringify({ id: record.id, version: record.version, config: draft }),
       })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error || 'Could not save pricing changes.')
+      if (!response.ok) {
+        const details = Array.isArray(payload.details) ? payload.details.filter((detail: unknown): detail is string => typeof detail === 'string') : []
+        throw new Error([payload.error || 'Could not save pricing changes.', ...details].join(' '))
+      }
       setRecord(payload)
       setDraft(structuredClone(payload.config))
       notify({ title: 'Pricing updated across Luxor.', variant: 'success' })

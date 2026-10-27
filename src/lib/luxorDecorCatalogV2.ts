@@ -86,7 +86,9 @@ export function validateLuxorDecorCatalog(value: unknown): string[] {
   const packages = new Set<string>(LUXOR_PROPOSAL_PACKAGE_IDS)
   root.items.forEach((rawItem, index) => {
     const item = asRecord(rawItem)
-    const label = 'Add-on ' + (index + 1)
+    const label = item && typeof item.name === 'string' && item.name.trim()
+      ? 'Add-on "' + item.name.trim() + '"'
+      : 'Add-on ' + (index + 1)
     if (!item) {
       errors.push(label + ' must be a record.')
       return
