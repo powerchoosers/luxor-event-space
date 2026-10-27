@@ -8906,7 +8906,7 @@ export default function LeadDetailPage({
       </div>
       )}
 
-      {activeLeadTab !== 'proposals' && typeof document !== 'undefined' ? createPortal(
+      {typeof document !== 'undefined' ? createPortal(
         <LeadMobileActionBar
           phoneAvailable={Boolean(lead.phone)}
           onCall={() => lead.phone && startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })}
