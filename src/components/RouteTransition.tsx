@@ -192,40 +192,27 @@ export function RouteTransition({
         ease: LUXOR_EASE,
       },
     },
-    exit: {
-      opacity: 0,
-      y: -8,
-      scale: 0.985,
-      filter: 'blur(14px)',
-      transition: {
-        duration: 0.22,
-        ease: LUXOR_EASE,
-      },
-    },
   }
 
   const transitionKey = `${pathname}-${isLoading ? 'loading' : 'content'}`
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        ref={ref}
-        key={transitionKey}
-        id={`route-transition-${transitionKey.replace(/[^a-zA-Z0-9-]/g, '_')}`}
-        className="luxor-route-stage surface-site min-h-screen transform-gpu"
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        variants={siteVariants}
-        onAnimationComplete={(definition) => {
-          if (definition === 'animate' && ref.current) {
-            ref.current.style.filter = 'none'
-            ref.current.style.transform = 'none'
-          }
-        }}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      ref={ref}
+      key={transitionKey}
+      id={`route-transition-${transitionKey.replace(/[^a-zA-Z0-9-]/g, '_')}`}
+      className="luxor-route-stage surface-site min-h-screen transform-gpu"
+      initial="initial"
+      animate="animate"
+      variants={siteVariants}
+      onAnimationComplete={(definition) => {
+        if (definition === 'animate' && ref.current) {
+          ref.current.style.filter = 'none'
+          ref.current.style.transform = 'none'
+        }
+      }}
+    >
+      {children}
+    </motion.div>
   )
 }
