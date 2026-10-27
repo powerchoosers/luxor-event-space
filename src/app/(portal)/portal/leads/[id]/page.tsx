@@ -121,6 +121,7 @@ import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext, isP
 import { findProposalLeadEvent, getLeadClientProposals, getProposalCardState, getProposalWorkflowDisplayState, getSavedProposalPricingSummary } from '@/lib/luxorProposalCard'
 import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
+import { buildLuxorEventPlanningTimePatch, hasLuxorEventPlanningTimeConflict, resolveLuxorEventPlanningTimes } from '@/lib/luxorEventPlanningTimes'
 import { DEFAULT_NEW_PROPOSAL_PAYMENT_PLAN } from '@/lib/luxorPaymentSchedule'
 import {
   hasCancellableTour,
@@ -399,6 +400,8 @@ type EditableLeadField =
   | 'phone'
   | 'address'
 
+type EventDetailsField = EditableLeadField | 'venue_access_time' | 'event_time'
+
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select' | 'event-type'
 type LeadDetailTab = 'overview' | 'activity' | 'proposals' | 'contract' | 'payments' | 'planning' | 'messages' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'notes'
 
@@ -650,7 +653,8 @@ export default function LeadDetailPage({
   const [submittingEvent, setSubmittingEvent] = useState(false)
   const [savingLeadField, setSavingLeadField] = useState<EditableLeadField | null>(null)
   const [eventDetailsEditing, setEventDetailsEditing] = useState(false)
-  const [eventDetailsDraft, setEventDetailsDraft] = useState<Partial<Record<EditableLeadField, string>>>({})
+  const [eventDetailsDraft, setEventDetailsDraft] = useState<Partial<Record<EventDetailsField, string>>>({})
+  const proposalTimingBaselineRef = useRef<{ eventId: string; venueAccessTime: string; eventTime: string } | null>(null)
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
 
@@ -1360,18 +1364,19 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleEventMetadataUpdate = async (updatedMetadata: Record<string, unknown>) => {
-    if (!lead || !selectedLeadEvent) return false
-    const previousEvent = selectedLeadEvent
-    const mergedMetadata = { ...selectedLeadEvent.metadata, ...updatedMetadata }
-    setLeadEvents((current) => current.map((event) => event.id === selectedLeadEvent.id
+  const handleEventMetadataUpdate = async (updatedMetadata: Record<string, unknown>, targetEventId = selectedLeadEvent?.id) => {
+    if (!lead || !targetEventId) return false
+    const previousEvent = leadEvents.find((event) => event.id === targetEventId)
+    if (!previousEvent) return false
+    const mergedMetadata = { ...previousEvent.metadata, ...updatedMetadata }
+    setLeadEvents((current) => current.map((event) => event.id === targetEventId
       ? { ...event, metadata: mergedMetadata, updated_at: new Date().toISOString() }
       : event))
     try {
       const res = await fetch('/api/lead-events', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: selectedLeadEvent.id, inquiry_id: lead.id, metadata: mergedMetadata }),
+        body: JSON.stringify({ id: targetEventId, inquiry_id: lead.id, metadata: mergedMetadata }),
       })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(payload.error || 'Failed to update event details.')
@@ -2619,6 +2624,24 @@ export default function LeadDetailPage({
     ) || 'rent_only'
     const savedSelection = asProposalRecord(savedContext?.pricing_selection) || {}
     const savedPromotionId = String(savedSelection.promotionId || savedSelection.promotion_id || savedContext?.promotionId || savedContext?.promotion_id || '').trim() || null
+    const sourceMetadata = sourceEvent?.metadata || {}
+    const eventPlanningTimes = resolveLuxorEventPlanningTimes(sourceMetadata, savedContext)
+    const eventPlanningMetadataTimes = resolveLuxorEventPlanningTimes(sourceMetadata)
+    const hasMetadataRentalStartTime = Object.prototype.hasOwnProperty.call(sourceMetadata, 'venue_access_time')
+    const hasMetadataGuestArrivalTime = Object.prototype.hasOwnProperty.call(sourceMetadata, 'event_time')
+    const sourceEventHasBooking = Boolean(sourceEvent && bookings.some(
+      (booking) => booking.lead_event_id === sourceEvent.id && booking.status !== 'cancelled',
+    ))
+    const canSyncPlanningTimes = !sourceEventHasBooking && (!invoice || Boolean(
+      !invoice.price_locked_at
+      && !invoice.proposal_sent_at
+      && !invoice.proposal_accepted_at
+      && invoice.status === 'draft',
+    ))
+    proposalTimingBaselineRef.current = sourceEvent ? {
+      eventId: sourceEvent.id,
+      ...eventPlanningMetadataTimes,
+    } : null
     const nextContext: ProposalBuilderContext = {
       version: asProposalNumber(savedContext?.version, 1) || 1,
       event_type: String(savedContext?.event_type || invoice?.event_type || sourceEvent?.event_type || (invoice ? 'Event' : lead?.event_type) || 'Event Booking'),
@@ -2628,6 +2651,12 @@ export default function LeadDetailPage({
       package_id: packageId,
       package_name: String(savedContext?.package_name || packageId.replace('_', ' ')),
       ...savedContext,
+      ...(canSyncPlanningTimes && (hasMetadataRentalStartTime || eventPlanningTimes.venueAccessTime)
+        ? { rental_start_time: eventPlanningTimes.venueAccessTime, start_time: eventPlanningTimes.venueAccessTime }
+        : {}),
+      ...(canSyncPlanningTimes && (hasMetadataGuestArrivalTime || eventPlanningTimes.eventTime)
+        ? { guest_arrival_time: eventPlanningTimes.eventTime, guestArrivalTime: eventPlanningTimes.eventTime }
+        : {}),
       pricing_selection: { ...savedSelection },
       ...(!invoice && !savedContext?.payment_plan ? { payment_plan: { ...DEFAULT_NEW_PROPOSAL_PAYMENT_PLAN } } : {}),
     }
@@ -2870,6 +2899,18 @@ export default function LeadDetailPage({
       return {
         ...current,
         ...calculationContext,
+        ...(current && (Object.prototype.hasOwnProperty.call(current, 'rental_start_time') || Object.prototype.hasOwnProperty.call(current, 'start_time'))
+          ? {
+              rental_start_time: Object.prototype.hasOwnProperty.call(current, 'rental_start_time') ? current.rental_start_time : current.start_time,
+              start_time: Object.prototype.hasOwnProperty.call(current, 'start_time') ? current.start_time : current.rental_start_time,
+            }
+          : {}),
+        ...(current && (Object.prototype.hasOwnProperty.call(current, 'guest_arrival_time') || Object.prototype.hasOwnProperty.call(current, 'guestArrivalTime'))
+          ? {
+              guest_arrival_time: Object.prototype.hasOwnProperty.call(current, 'guest_arrival_time') ? current.guest_arrival_time : current.guestArrivalTime,
+              guestArrivalTime: Object.prototype.hasOwnProperty.call(current, 'guestArrivalTime') ? current.guestArrivalTime : current.guest_arrival_time,
+            }
+          : {}),
         ...(currentPaymentPlan && !calculatedPaymentPlan ? { payment_plan: currentPaymentPlan } : {}),
         package_id: activePackageId || normalizeProposalPackageId(calculationContext.package_id) || current?.package_id,
         pricing_selection: {
@@ -2934,6 +2975,20 @@ export default function LeadDetailPage({
     }
     const promotionId = selectedProposalPromotionId
       || String(contextSelection?.promotionId || contextSelection?.promotion_id || calculationSelection?.promotionId || calculationSelection?.promotion_id || '').trim()
+    const hasRentalStartTime = Object.prototype.hasOwnProperty.call(context, 'rental_start_time')
+    const hasStartTime = Object.prototype.hasOwnProperty.call(context, 'start_time')
+    const hasGuestArrivalTime = Object.prototype.hasOwnProperty.call(context, 'guest_arrival_time')
+    const hasGuestArrivalTimeAlias = Object.prototype.hasOwnProperty.call(context, 'guestArrivalTime')
+    const resolvedRentalStartTime = hasRentalStartTime
+      ? context.rental_start_time
+      : hasStartTime
+        ? context.start_time
+        : context.guest_arrival_time || context.guestArrivalTime || calculationContext.rental_start_time || calculationContext.start_time || ''
+    const resolvedGuestArrivalTime = hasGuestArrivalTime
+      ? context.guest_arrival_time
+      : hasGuestArrivalTimeAlias
+        ? context.guestArrivalTime
+        : ''
 
     return {
       packageId,
@@ -2942,9 +2997,9 @@ export default function LeadDetailPage({
       guestCount,
       eventType: context.event_type || currentEventType || null,
       rentalPeriod,
-      rentalStartTime: String(context.rental_start_time || context.start_time || context.guest_arrival_time || context.guestArrivalTime || calculationContext.rental_start_time || calculationContext.start_time || ''),
+      rentalStartTime: String(resolvedRentalStartTime || ''),
       rentalEndTime: String(context.rental_end_time || context.end_time || context.event_end_time || context.eventEndTime || calculationContext.rental_end_time || calculationContext.end_time || ''),
-      guestArrivalTime: String(context.guest_arrival_time || context.guestArrivalTime || ''),
+      guestArrivalTime: String(resolvedGuestArrivalTime || ''),
       eventEndTime: String(context.event_end_time || context.eventEndTime || ''),
       addOns,
       ...proposalDecorSelection(calculationSelection),
@@ -2988,6 +3043,7 @@ export default function LeadDetailPage({
     setSubmittingInvoice(true)
     setInvoiceSubmissionError(null)
     let handoffWindow: Window | null = null
+    let planningTimesSavedBeforeProposal = false
     try {
       if (isLuxorTestInquiry(lead)) {
         if (action === 'breakdown') throw new Error('Proposal Breakdown email delivery is disabled for isolated Test Leads. Use the preview only.')
@@ -3050,6 +3106,33 @@ export default function LeadDetailPage({
       }
       const updateExistingDraft = Boolean(editingInvoice && !createRevision)
       const proposalSelection = buildProposalSelection()
+      const syncEventPlanningTimes = Boolean(
+        action === 'save'
+        && proposalLeadEventId
+        && !createRevision
+        && !bookings.some((booking) => booking.lead_event_id === proposalLeadEventId && booking.status !== 'cancelled')
+        && (!editingInvoice || (
+          editingInvoice.status === 'draft'
+          && !editingInvoice.price_locked_at
+          && !editingInvoice.proposal_sent_at
+          && !editingInvoice.proposal_accepted_at
+        )),
+      )
+      if (syncEventPlanningTimes && proposalLeadEventId) {
+        const baseline = proposalTimingBaselineRef.current
+        const targetEvent = leadEvents.find((event) => event.id === proposalLeadEventId)
+        if (!baseline || baseline.eventId !== proposalLeadEventId || !targetEvent) {
+          throw new Error('The selected event changed while this proposal was open. Close and reopen the proposal before saving its times.')
+        }
+        const currentTimes = resolveLuxorEventPlanningTimes(targetEvent.metadata)
+        const proposedTimes = {
+          venueAccessTime: String(proposalSelection.rentalStartTime || '').trim(),
+          eventTime: String(proposalSelection.guestArrivalTime || '').trim(),
+        }
+        if (hasLuxorEventPlanningTimeConflict({ current: currentTimes, baseline, proposed: proposedTimes })) {
+          throw new Error('Event Details changed while this proposal was open. Close and reopen the proposal to review the latest saved times before saving.')
+        }
+      }
       const selectedPackage = proposalCalculation?.packages?.find((candidate) => (
         normalizeProposalPackageId(candidate.id) === normalizeProposalPackageId(selectedProposalPackageId || proposalContext?.package_id)
       ))
@@ -3058,6 +3141,15 @@ export default function LeadDetailPage({
         proposalCalculation?.context?.final_event_price,
         proposalContext?.final_event_price,
       )
+
+      if (syncEventPlanningTimes && proposalLeadEventId) {
+        const savedTimes = await handleEventMetadataUpdate(buildLuxorEventPlanningTimePatch({
+          venueAccessTime: String(proposalSelection.rentalStartTime || ''),
+          eventTime: String(proposalSelection.guestArrivalTime || ''),
+        }), proposalLeadEventId)
+        if (!savedTimes) throw new Error('The proposal times could not be linked to Event Details, so the proposal was not saved. Please retry after checking the selected event.')
+        planningTimesSavedBeforeProposal = true
+      }
 
       const res = await fetch('/api/invoices', {
         method: updateExistingDraft ? 'PATCH' : 'POST',
@@ -3108,7 +3200,11 @@ export default function LeadDetailPage({
       if (action === 'email') await handleSendFinalProposal(invoice, true)
       if (action === 'in_person') await prepareClientProposalHandoff(invoice, handoffWindow)
       if (action === 'save') {
-        notify({ title: 'Final proposal saved', description: `${displayedFinalPrice === undefined ? 'The final price' : formatMoney(displayedFinalPrice)} is ready to review or publish.`, variant: 'success' })
+        notify({
+          title: 'Final proposal saved',
+          description: `${displayedFinalPrice === undefined ? 'The final price' : formatMoney(displayedFinalPrice)} is ready to review or publish.`,
+          variant: 'success',
+        })
         setProposalDeliveryPreview({ invoice, initialTab: 'email' })
       }
       setIsInvoiceModalOpen(false)
@@ -3116,7 +3212,10 @@ export default function LeadDetailPage({
       if (createRevision) void fetchAllData(false)
     } catch (err) {
       handoffWindow?.close()
-      const message = err instanceof Error ? err.message : 'Review the proposal fields and try again.'
+      const errorMessage = err instanceof Error ? err.message : 'Review the proposal fields and try again.'
+      const message = planningTimesSavedBeforeProposal && !savedPublicationInvoice.current
+        ? `Event times were saved to Event Details, but the proposal was not saved. ${errorMessage}`
+        : errorMessage
       setInvoiceSubmissionError(message)
       notify({ title: savedPublicationInvoice.current ? 'Proposal saved; delivery incomplete' : 'Final proposal not saved', description: message, variant: 'error' })
     } finally {
@@ -4140,12 +4239,27 @@ export default function LeadDetailPage({
   const marketingCampaigns = marketingEngagement?.campaigns ?? []
   const marketingTopCampaign = marketingCampaigns[0] ?? null
   const marketingLastTouchedAt = marketingEngagement?.latest_clicked_at || marketingEngagement?.latest_opened_at || null
+  const selectedEventProposalContext = selectedLeadEvent && currentProposalEvent?.id === selectedLeadEvent.id
+    ? currentProposalInvoice?.proposal_context
+    : null
+  const selectedEventBooking = [...eventBookings]
+    .filter((booking) => booking.status !== 'cancelled')
+    .sort((left, right) => new Date(right.updated_at || right.created_at).getTime() - new Date(left.updated_at || left.created_at).getTime())[0]
+  const resolvedPlanningTimes = resolveLuxorEventPlanningTimes(selectedLeadEvent?.metadata, selectedEventProposalContext)
+  const venueAccessTime = String(selectedEventBooking?.start_time || resolvedPlanningTimes.venueAccessTime)
+  const eventTime = String(
+    selectedEventProposalContext?.guest_arrival_time
+    || selectedEventProposalContext?.guestArrivalTime
+    || selectedEventBooking?.metadata?.guest_arrival_time
+    || selectedEventBooking?.metadata?.guestArrivalTime
+    || resolvedPlanningTimes.eventTime,
+  )
   const eventDetails: Array<{
     label: string
     value: string
     editValue: string
     copyValue: string
-    field: EditableLeadField
+    field: EventDetailsField
     icon: React.ReactNode
     inputType?: LeadDetailInputType
     placeholder?: string
@@ -4194,24 +4308,24 @@ export default function LeadDetailPage({
       inputType: 'date',
     },
     {
-      label: 'Tour Date',
-      value: lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'No tour scheduled',
-      editValue: lead.preferred_tour_date || '',
-      copyValue: lead.preferred_tour_date || '',
-      field: 'preferred_tour_date',
-      icon: <Calendar size={14} />,
-      inputType: 'date',
-      readOnly: true,
-    },
-    {
-      label: 'Tour Time',
-      value: lead.preferred_tour_time || 'N/A',
-      editValue: normalizeTimeInputValue(lead.preferred_tour_time),
-      copyValue: lead.preferred_tour_time || '',
-      field: 'preferred_tour_time',
+      label: 'Venue Access Time',
+      value: venueAccessTime ? formatTimeString(venueAccessTime) : 'Not set',
+      editValue: venueAccessTime,
+      copyValue: venueAccessTime,
+      field: 'venue_access_time',
       icon: <Clock size={14} />,
       inputType: 'time',
-      readOnly: true,
+      readOnly: Boolean(selectedEventBooking),
+    },
+    {
+      label: 'Event Time',
+      value: eventTime ? formatTimeString(eventTime) : 'Not set',
+      editValue: eventTime,
+      copyValue: eventTime,
+      field: 'event_time',
+      icon: <Clock size={14} />,
+      inputType: 'time',
+      readOnly: Boolean(selectedEventBooking),
     },
   ]
   const beginEventDetailsEdit = () => {
@@ -4221,10 +4335,17 @@ export default function LeadDetailPage({
   const saveEventDetails = async () => {
     for (const item of eventDetails) {
       if (item.readOnly) continue
+      if (item.field === 'venue_access_time' || item.field === 'event_time') continue
       const nextValue = eventDetailsDraft[item.field] ?? item.editValue
       if (normalizeComparableValue(nextValue) === normalizeComparableValue(item.editValue)) continue
       if (!await handleLeadFieldUpdate(item.field, nextValue)) return
     }
+    const nextVenueAccessTime = eventDetailsDraft.venue_access_time ?? venueAccessTime
+    const nextEventTime = eventDetailsDraft.event_time ?? eventTime
+    const timingUpdates: Record<string, unknown> = {}
+    if (nextVenueAccessTime.trim() !== venueAccessTime.trim()) timingUpdates.venue_access_time = nextVenueAccessTime.trim() || null
+    if (nextEventTime.trim() !== eventTime.trim()) timingUpdates.event_time = nextEventTime.trim() || null
+    if (Object.keys(timingUpdates).length && !await handleEventMetadataUpdate(timingUpdates)) return
     setEventDetailsEditing(false)
   }
   const cancelEventDetailsEdit = () => {
@@ -5513,7 +5634,7 @@ export default function LeadDetailPage({
                               placeholder={item.placeholder}
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
-                              onCommit={eventDetailsEditing && !item.readOnly ? (value) => handleLeadFieldUpdate(item.field, value) : undefined}
+                              onCommit={eventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
                               sectionEditing={eventDetailsEditing && !item.readOnly}
                               sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
                               onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
@@ -5534,7 +5655,7 @@ export default function LeadDetailPage({
                               placeholder={item.placeholder}
                               isMono={item.isMono}
                               isSaving={savingLeadField === item.field}
-                              onCommit={eventDetailsEditing && !item.readOnly ? (value) => handleLeadFieldUpdate(item.field, value) : undefined}
+                              onCommit={eventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
                               sectionEditing={eventDetailsEditing && !item.readOnly}
                               sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
                               onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
