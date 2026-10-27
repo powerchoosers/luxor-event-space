@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from 'lucide-react'
 
 type QueueStatusData = {
@@ -36,34 +36,67 @@ export function EmailQueueHealthWidget() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
+  const lifecycleRef = useRef<AbortController | null>(null)
+  const requestRef = useRef<{ signal?: AbortSignal } | null>(null)
+  const pendingRefreshRef = useRef<boolean | null>(null)
 
-  const fetchStatus = useCallback(async (isManual = false, signal?: AbortSignal) => {
+  const fetchStatus = useCallback(async (isManual = false, signal = lifecycleRef.current?.signal, queueIfBusy = false) => {
+    if (signal?.aborted) return
+    if (requestRef.current && !requestRef.current.signal?.aborted) {
+      if (isManual || queueIfBusy) {
+        pendingRefreshRef.current = Boolean(pendingRefreshRef.current || isManual)
+        if (isManual) setRefreshing(true)
+      }
+      return
+    }
+    const request = { signal }
+    requestRef.current = request
     if (isManual) setRefreshing(true)
     try {
       const response = await fetch('/api/email/queue-status', { cache: 'no-store', signal })
       const payload = await response.json().catch(() => null)
+      if (signal?.aborted) return
       if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Queue status is currently unavailable.')
       if (!isQueueStatusData(payload)) throw new Error('Queue status returned incomplete data.')
       setData(payload)
       setError('')
     } catch (caught) {
+      if (signal?.aborted) return
       if (caught instanceof DOMException && caught.name === 'AbortError') return
       setError(caught instanceof Error ? caught.message : 'Queue status is currently unavailable.')
     } finally {
+      if (requestRef.current !== request) return
+      requestRef.current = null
+      const pending = pendingRefreshRef.current
+      pendingRefreshRef.current = null
       if (!signal?.aborted) {
         setLoading(false)
         setRefreshing(false)
+        if (pending !== null && (pending || document.visibilityState === 'visible')) {
+          void fetchStatus(pending, signal)
+        }
       }
     }
   }, [])
 
   useEffect(() => {
     const controller = new AbortController()
+    lifecycleRef.current = controller
     void fetchStatus(false, controller.signal)
-    const timer = window.setInterval(() => void fetchStatus(), 45_000)
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void fetchStatus(false, controller.signal, true)
+    }
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchStatus(false, controller.signal)
+    }, 45_000)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    window.addEventListener('focus', refreshWhenVisible)
     return () => {
       controller.abort()
+      pendingRefreshRef.current = null
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      window.removeEventListener('focus', refreshWhenVisible)
     }
   }, [fetchStatus])
 
