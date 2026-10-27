@@ -2340,7 +2340,7 @@ export function ProposalBuilderModal({
                   <div className="max-w-2xl">
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#8c6529] dark:text-[#f1d27a]">Client email</p>
                     <h4 id="proposal-breakdown-email-title" className="mt-1 font-serif text-xl font-semibold">Email Proposal Breakdown</h4>
-                    <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Preview the four-package comparison and selected package details. Book Now opens the selected package’s secure proposal page. This email does not create a booking or collect payment.</p>
+                    <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Preview the four-package comparison and staff-prepared estimate. This informational email does not reserve the date or collect payment.</p>
                   </div>
                   {testRunId ? <span className="shrink-0 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-[10px] font-bold text-amber-900 dark:text-amber-100">Preview here · queue from saved review</span> : null}
                 </div>
