@@ -59,6 +59,7 @@ import { MailProviderSettings } from '@/components/portal/MailProviderSettings'
 import { TeamAccessManager } from '@/components/portal/TeamAccessManager'
 import { ElenaSettingsManager } from '@/components/portal/ElenaSettingsManager'
 import { ProposalPricingManager } from '@/components/portal/ProposalPricingManager'
+import { BrochureSettings } from '@/components/portal/BrochureSettings'
 
 const ASSET_CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -617,6 +618,7 @@ export default function SettingsPage() {
 
               {/* Brand Assets Manager */}
               {!isAgent ? <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-6 xl:col-span-2">
+                <BrochureSettings />
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Brand Assets Manager</h3>
                   <p className="text-[10px] text-[color:var(--portal-muted)] mt-1">Upload and manage image assets to use inside email campaigns and compose drawers.</p>
