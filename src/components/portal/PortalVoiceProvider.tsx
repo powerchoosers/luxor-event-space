@@ -78,22 +78,38 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
   const [dialMatch, setDialMatch] = useState<DialMatch | null>(null)
   const [isLookingUpNumber, setIsLookingUpNumber] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const unreadCountRequestRef = useRef<Promise<void> | null>(null)
   const deviceRef = useRef<Device | null>(null)
   const currentCallRef = useRef<Call | null>(null)
   const initializingRef = useRef<Promise<Device> | null>(null)
   const bridgeStartingRef = useRef(false)
 
-  const loadUnreadCount = useCallback(async () => {
+  const loadUnreadCount = useCallback(async (skipIfPending = false) => {
+    if (skipIfPending && unreadCountRequestRef.current) return
+
+    while (unreadCountRequestRef.current) {
+      await unreadCountRequestRef.current
+    }
+
+    const request = (async () => {
+      try {
+        const response = await fetch('/api/twilio/calls?unreadOnly=true&limit=100', {
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+        })
+        if (!response.ok) return
+        const calls = await response.json() as unknown[]
+        setUnreadCount(calls.length)
+      } catch {
+        // A temporary call-history failure should not take the phone offline.
+      }
+    })()
+
+    unreadCountRequestRef.current = request
     try {
-      const response = await fetch('/api/twilio/calls?unreadOnly=true&limit=100', {
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-      })
-      if (!response.ok) return
-      const calls = await response.json() as unknown[]
-      setUnreadCount(calls.length)
-    } catch {
-      // A temporary call-history failure should not take the phone offline.
+      await request
+    } finally {
+      if (unreadCountRequestRef.current === request) unreadCountRequestRef.current = null
     }
   }, [])
 
@@ -131,7 +147,7 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     void loadUnreadCount()
-    const intervalId = window.setInterval(loadUnreadCount, 30_000)
+    const intervalId = window.setInterval(() => void loadUnreadCount(true), 30_000)
     return () => window.clearInterval(intervalId)
   }, [loadUnreadCount])
 
@@ -368,7 +384,7 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ twilioCallSid: incomingCall.twilioCallSid, isRead: true }),
-      }).then(loadUnreadCount)
+      }).then(() => loadUnreadCount())
     }
   }, [incomingCall, loadUnreadCount])
 
@@ -380,7 +396,7 @@ export function PortalVoiceProvider({ children }: { children: React.ReactNode })
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ twilioCallSid: incomingCall.twilioCallSid, isRead: true }),
-      }).then(loadUnreadCount)
+      }).then(() => loadUnreadCount())
     }
     setIncomingCall(null)
   }, [incomingCall, loadUnreadCount])
