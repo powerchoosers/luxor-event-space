@@ -1,3 +1,4 @@
+import { requiresLuxorPayInFull } from '@/lib/luxorPaymentEligibility'
 import { NextRequest, NextResponse } from 'next/server'
 import { prepareLuxorAcceptedProposalBooking, queueLuxorAcceptedProposalAgreement } from '@/lib/luxorAgreementQueueServer'
 import { updateLuxorBooking } from '@/lib/luxorBookingsServer'
@@ -25,6 +26,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!invoice || invoice.inquiry_id !== inquiry.id || invoice.invoice_kind !== 'event' || invoice.status !== 'sent' || !invoice.price_locked_at || invoice.offer_status === 'withdrawn') {
       return NextResponse.json({ error: 'A published, price-locked final proposal is required before recording an in-person acceptance.' }, { status: 409 })
     }
+
+    if (invoice.proposal_context?.proposal_record_type === 'proposal_breakdown' && !invoice.proposal_accepted_at) return NextResponse.json({ error: 'This comparison cannot be accepted as a final proposal.' }, { status: 409 })
+    if (!invoice.proposal_accepted_at && requiresLuxorPayInFull(invoice.proposal_context?.event_date) && invoice.proposal_context?.payment_plan?.mode !== 'pay_in_full') return NextResponse.json({ error: 'Update the proposal to Pay in Full before recording acceptance.' }, { status: 409 })
 
     const acceptedAt = new Date().toISOString()
     const claimed = isWeekdayCustomRentalContext(invoice.proposal_context)

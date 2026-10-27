@@ -1,3 +1,4 @@
+import { requiresLuxorPayInFull, LUXOR_PAY_IN_FULL_REQUIRED } from './luxorPaymentEligibility'
 import type {
   LuxorInvoiceLineItem,
   LuxorProposalContext,
@@ -748,7 +749,7 @@ function planFromSelection(selection: LuxorProposalSelection, config: LuxorPropo
     })
     : undefined
   const validPaymentCount = paymentCount !== undefined && Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24
-  if (validPaymentCount && policyVersion >= 4) {
+  if (validPaymentCount && policyVersion >= 4 && plan.mode !== 'pay_in_full') {
     return {
       mode: 'deposit_and_balance',
       booking_payment_percent: 25,
@@ -774,12 +775,12 @@ function planFromSelection(selection: LuxorProposalSelection, config: LuxorPropo
     mode,
     booking_payment_percent: mode === 'pay_in_full' ? 100 : rounded(percentage),
     final_payment_due_days_before_event: finalDays,
-    ...(validPaymentCount ? { payment_count: paymentCount, payment_cadence: paymentCadence } : {}),
+    ...(validPaymentCount && mode !== 'pay_in_full' ? { payment_count: paymentCount, payment_cadence: paymentCadence } : {}),
     ...(bookingDate ? { booking_date: bookingDate } : {}),
-    ...(anchorPolicy ? { schedule_anchor_policy: anchorPolicy } : {}),
-    ...(scheduleStatus ? { schedule_status: scheduleStatus } : {}),
-    ...(scheduleReviewReason ? { schedule_review_reason: scheduleReviewReason } : {}),
-    ...(scheduleRows ? { schedule_rows: scheduleRows } : {}),
+    ...(mode !== 'pay_in_full' && anchorPolicy ? { schedule_anchor_policy: anchorPolicy } : {}),
+    ...(mode !== 'pay_in_full' && scheduleStatus ? { schedule_status: scheduleStatus } : {}),
+    ...(mode !== 'pay_in_full' && scheduleReviewReason ? { schedule_review_reason: scheduleReviewReason } : {}),
+    ...(mode !== 'pay_in_full' && scheduleRows ? { schedule_rows: scheduleRows } : {}),
     ...(bookingPaymentAmount !== undefined && bookingPaymentAmount >= 0.5 ? { booking_payment_amount: rounded(bookingPaymentAmount) } : {}),
     ...(preferredPaymentMethod ? { preferred_payment_method: preferredPaymentMethod } : {}),
   }
@@ -1900,7 +1901,7 @@ function calculatePreferredVendorProposal(selection: LuxorProposalSelection, con
   const estimatedVendorTotal = rounded(selectedVendorEstimateLines.reduce((sum, item) => sum + item.total, 0))
   const selectedPackageErrors = selectedPackageCalculation?.errors || errors
   const calculationErrors = [...new Set([...selectedPackageErrors, ...decor.errors, ...quoteErrors])]
-  const publicationErrors = !paymentPlan ? [PAYMENT_PLAN_REQUIRED] : paymentScheduleInvalid ? ['The selected payment schedule cannot meet the final-payment deadline.'] : []
+  const publicationErrors = !paymentPlan ? [PAYMENT_PLAN_REQUIRED] : requiresLuxorPayInFull(eventDate) && paymentPlan.mode !== 'pay_in_full' ? [LUXOR_PAY_IN_FULL_REQUIRED] : paymentScheduleInvalid ? ['The selected payment schedule cannot meet the final-payment deadline.'] : []
   const selectedPackageOption = packageTierId ? packageSettings.options[packageTierId] : null
   const packageSelectionSnapshot = selectedPackageOption && selectedTierPackage ? {
     schema_version: LUXOR_PACKAGE_SELECTION_SCHEMA_VERSION,

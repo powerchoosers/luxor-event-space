@@ -38,7 +38,8 @@ import { formatWeekdayCustomRentalDuration, formatWeekdayCustomRentalPriceBreakd
 import { formatLuxorCustomTimeRentalPriceBreakdownV4, getLuxorCustomTimeRentalSnapshotV4, validateLuxorCustomTimeScheduleV4, type LuxorCustomTimeRentalPolicyV4 } from '@/lib/luxorCustomTimeRentalV4'
 import { LuxorAvailabilityCalendar } from '@/components/portal/LuxorAvailabilityCalendar'
 import { isLuxorAvailabilityRangeOpen, type LuxorAvailabilityCalendar as LuxorAvailabilityMap } from '@/lib/luxorAvailability'
-import { buildLuxorProposalBreakdownEmail, luxorProposalBreakdownHasCompletePrices } from '@/lib/luxorProposalBreakdownEmail'
+import { requiresLuxorPayInFull } from '@/lib/luxorPaymentEligibility'
+import { buildLuxorProposalBreakdownEmail, isBreakdownPaymentError, luxorProposalBreakdownHasCompletePrices } from '@/lib/luxorProposalBreakdownEmail'
 import { PREFERRED_VENDOR_ESTIMATE_SERVICE_IDS } from '@/lib/luxorProposalDuplicateContext'
 
 const PREFERRED_VENDOR_ESTIMATE_SERVICE_ID_SET = new Set<string>(PREFERRED_VENDOR_ESTIMATE_SERVICE_IDS)
@@ -765,7 +766,7 @@ function getPaymentPlanDraft(context: ProposalBuilderContext): Partial<LuxorProp
   const preferredPaymentMethod = plan?.preferred_payment_method === 'card' || plan?.preferred_payment_method === 'cash' || plan?.preferred_payment_method === 'zelle' || plan?.preferred_payment_method === 'check'
     ? plan.preferred_payment_method
     : 'card'
-  if (plan && Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24) {
+  if (plan && plan.mode !== 'pay_in_full' && Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24) {
     return {
       mode: 'deposit_and_balance',
       payment_count: paymentCount,
@@ -785,7 +786,7 @@ function getPaymentPlanDraft(context: ProposalBuilderContext): Partial<LuxorProp
   const finalPaymentDays = asNumber(plan.final_payment_due_days_before_event)
   return {
     mode,
-    ...(Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24 ? { payment_count: paymentCount, payment_cadence: paymentCadence } : {}),
+    ...(mode !== 'pay_in_full' && Number.isInteger(paymentCount) && paymentCount >= 2 && paymentCount <= 24 ? { payment_count: paymentCount, payment_cadence: paymentCadence } : {}),
     ...(bookingPaymentPercent !== undefined ? { booking_payment_percent: bookingPaymentPercent } : {}),
     ...(finalPaymentDays !== undefined ? { final_payment_due_days_before_event: finalPaymentDays } : {}),
     ...(bookingPaymentAmount !== undefined ? { booking_payment_amount: bookingPaymentAmount } : {}),
@@ -1292,6 +1293,16 @@ export function ProposalBuilderModal({
     onProposalContextChange?.(next)
   }
 
+  // Normalize an opened or date-edited draft; never rewrite a read-only proposal.
+  useEffect(() => {
+    if (!isOpen || testProposalReadOnly || !requiresLuxorPayInFull(eventDateValue)) return
+    const plan = effectiveContext.payment_plan
+    if (plan?.mode === 'pay_in_full' && plan.payment_count == null && !plan.schedule_rows?.length) return
+    const next = { ...effectiveContext, payment_plan: { mode: 'pay_in_full' as const, booking_payment_percent: 100, final_payment_due_days_before_event: 60, preferred_payment_method: plan?.preferred_payment_method ?? 'card' as const } }
+    setLocalContext(next)
+    onProposalContextChange?.(next)
+  }, [isOpen, testProposalReadOnly, eventDateValue, effectiveContext, onProposalContextChange])
+
   const setSelectedPromotion = (nextPromotionId: string | null) => {
     const nextSelection = { ...(effectiveContext.pricing_selection || {}) }
     if (nextPromotionId) {
@@ -1368,7 +1379,7 @@ export function ProposalBuilderModal({
   }
 
   const setEventDate = (value: string) => {
-    updateProposalContext({ event_date: value })
+    updateProposalContext({ event_date: value, ...(requiresLuxorPayInFull(value) ? { payment_plan: { mode: 'pay_in_full', booking_payment_percent: 100, final_payment_due_days_before_event: 60, preferred_payment_method: paymentPlanDraft?.preferred_payment_method ?? 'card' } } : {}) })
     setValidationMessage(null)
     onEventDateChange?.(value)
     void refreshAvailability()
@@ -1834,6 +1845,8 @@ export function ProposalBuilderModal({
   const isCalculating = pricingStatus === 'loading'
   const hasFinalPrice = pricingStatus === 'ready' && !selectedPackageNeedsReview && typeof finalEventPrice === 'number' && finalEventPrice >= 0
   const canPublish = Boolean(eventDateValue && guestCount > 0 && Number.isInteger(guestCount) && (guestCount <= LUXOR_MAX_GUESTS || isPreservedSavedGuestCount) && availabilityStatus === 'ready' && currentRentalPeriodAvailable && timeValidation.valid && hasFinalPrice && pricingErrors.length === 0 && publicationErrors.length === 0 && !paymentPlanRequired)
+  const breakdownPublicationErrors = publicationErrors.filter((error) => !isBreakdownPaymentError(error))
+  const canSendBreakdown = Boolean(eventDateValue && guestCount > 0 && Number.isInteger(guestCount) && (guestCount <= LUXOR_MAX_GUESTS || isPreservedSavedGuestCount) && availabilityStatus === 'ready' && currentRentalPeriodAvailable && timeValidation.valid && hasFinalPrice && pricingErrors.length === 0 && breakdownPublicationErrors.length === 0)
   const missingPriceInputs = [!eventDateValue ? 'event date' : '', guestCount < 1 ? 'guest count' : ''].filter(Boolean)
   const reviewTogether = !testRunId && presentationMode === 'in_person'
   const publishDisabled = submitting || !clientEmail || !canPublish || hasUnmigratedLegacyDiscount
@@ -1867,7 +1880,10 @@ export function ProposalBuilderModal({
         return
       }
     }
-    if (stepIndex === 4) {
+    if (stepIndex === 4 && (requiresLuxorPayInFull(eventDateValue) || paymentPlanDraft?.mode === 'pay_in_full')) {
+      if (!hasFinalPrice) { setValidationMessage('Wait for final pricing before continuing.'); return }
+      updateProposalContext({ payment_plan: { mode: 'pay_in_full', booking_payment_percent: 100, final_payment_due_days_before_event: 60, preferred_payment_method: paymentPlanDraft?.preferred_payment_method ?? 'card' } })
+    } else if (stepIndex === 4) {
       const bookingDate = paymentPlanDraft?.booking_date || new Date().toISOString().slice(0, 10)
       const cadence = paymentPlanDraft?.payment_cadence ?? 'evenly_spaced'
       const schedule = calculateProposalPaymentSchedule({
@@ -2335,11 +2351,10 @@ export function ProposalBuilderModal({
                     <input type="email" autoComplete="email" value={breakdownRecipient} onChange={(event) => setBreakdownRecipient(event.target.value)} disabled={submitting} className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12 disabled:opacity-50" />
                   </label>}
                   <button type="button" onClick={() => setBreakdownPreviewOpen((open) => !open)} disabled={!breakdownPreview || submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-text)] transition hover:border-[#caa24c]/40 disabled:cursor-not-allowed disabled:opacity-45"><Eye size={14} />{breakdownPreviewOpen ? 'Hide preview' : 'Preview email'}</button>
-                  <button type="button" onClick={() => onSubmit('breakdown', { recipientEmail: breakdownRecipient.trim() })} disabled={submitting || (publicationPending && !breakdownRetryAvailable) || Boolean(testRunId) || Boolean(supersedesInvoiceId) || !breakdownPreview || (!publicationPending && !canPublish) || hasUnmigratedLegacyDiscount || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(breakdownRecipient.trim())} title={testRunId ? 'Queue this email from the saved proposal review panel after saving the test proposal.' : supersedesInvoiceId ? 'Use the final proposal action for revisions so the prior offer is replaced through the existing revision flow.' : paymentPlanRequired ? 'Set the payment plan in Step 5, then return here.' : !canPublish ? publicationErrors[0] || 'Complete the required event details and pricing first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45"><Mail size={14} />{testRunId ? 'Queue from saved review' : submitting ? 'Sending…' : breakdownRetryAvailable ? 'Retry Breakdown' : breakdownPublished ? 'Breakdown sent' : 'Send Breakdown'}</button>
+                  <button type="button" onClick={() => onSubmit('breakdown', { recipientEmail: breakdownRecipient.trim() })} disabled={submitting || (publicationPending && !breakdownRetryAvailable) || Boolean(testRunId) || Boolean(supersedesInvoiceId) || !breakdownPreview || (!publicationPending && !canSendBreakdown) || hasUnmigratedLegacyDiscount || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(breakdownRecipient.trim())} title={testRunId ? 'Queue this email from the saved proposal review panel after saving the test proposal.' : supersedesInvoiceId ? 'Use the final proposal action for revisions so the prior offer is replaced through the existing revision flow.' : !canSendBreakdown ? breakdownPublicationErrors[0] || 'Complete the required event details and pricing first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45"><Mail size={14} />{testRunId ? 'Queue from saved review' : submitting ? 'Sending…' : breakdownRetryAvailable ? 'Retry Breakdown' : breakdownPublished ? 'Breakdown sent' : 'Send Breakdown'}</button>
                 </div>
                 {breakdownPublished ? <p role="status" className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/7 px-3 py-2 text-xs leading-5 text-emerald-900 dark:text-emerald-100">Proposal Breakdown sent and saved. Continue to the final step if you also want to email the individual proposal.</p> : null}
                 {supersedesInvoiceId ? <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/7 px-3 py-2 text-xs leading-5 text-amber-900 dark:text-amber-100">For revised pricing, publish the updated proposal from the final step so the existing offer stays active until the normal revision flow replaces it.</p> : null}
-                {paymentPlanRequired && !pricingErrors.length ? <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/7 px-3 py-2 text-xs leading-5 text-amber-900 dark:text-amber-100">Complete the owner-approved payment plan in Step 5, then return here to publish and email the breakdown.</p> : null}
                 {breakdownPreviewOpen && breakdownPreview ? <div className="mt-4 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-white"><iframe title="Proposal Breakdown email preview" srcDoc={breakdownPreview.html} sandbox="" className="h-[680px] w-full border-0 sm:h-[760px]" /></div> : null}
                 {!breakdownPriceReady && pricingStatus === 'ready' ? <p className="mt-3 text-xs text-amber-900 dark:text-amber-100">The package comparison is unavailable until every package has a current calculated price.</p> : null}
               </section>
@@ -2509,7 +2524,8 @@ export function ProposalBuilderModal({
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Step 5 of 6</p>
               </div>
 
-              {isCalculating ? <ProposalPaymentScheduleSkeleton /> : <ProposalPaymentSchedule
+              <div className="rounded-xl border border-[color:var(--portal-border)] p-4"><p className="text-sm font-semibold">Payment plan</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{requiresLuxorPayInFull(eventDateValue) ? 'Pay in Full is required within 60 days of the event.' : 'Choose Pay in Full or an eligible installment schedule.'}</p><div className="mt-3 flex gap-2"><button type="button" onClick={() => updatePaymentPlan({ mode: 'pay_in_full', booking_payment_percent: 100, final_payment_due_days_before_event: 60 })} className="rounded-lg border border-[color:var(--portal-border)] px-4 py-2 text-sm" aria-pressed={requiresLuxorPayInFull(eventDateValue) || paymentPlanDraft?.mode === 'pay_in_full'}>Pay in Full</button>{!requiresLuxorPayInFull(eventDateValue) ? <button type="button" onClick={() => updatePaymentPlan({ mode: 'deposit_and_balance', booking_payment_percent: 25, final_payment_due_days_before_event: 60 })} className="rounded-lg border border-[color:var(--portal-border)] px-4 py-2 text-sm" aria-pressed={paymentPlanDraft?.mode === 'deposit_and_balance'}>Installments</button> : null}</div></div>
+              {(requiresLuxorPayInFull(eventDateValue) || paymentPlanDraft?.mode === 'pay_in_full') ? <p className="text-sm text-[color:var(--portal-muted)]">The full event price is due after the agreement is signed.</p> : isCalculating ? <ProposalPaymentScheduleSkeleton /> : <ProposalPaymentSchedule
                 finalEventPrice={finalEventPrice}
                 venueServicesTotal={venueServicesTotal}
                 eventServicesTotal={eventServicesTotal}

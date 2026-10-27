@@ -1,3 +1,4 @@
+import { requiresLuxorPayInFull } from '@/lib/luxorPaymentEligibility'
 import { NextResponse } from 'next/server'
 import { prepareLuxorAcceptedProposalBooking, queueLuxorAcceptedProposalAgreement } from '@/lib/luxorAgreementQueueServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
@@ -33,6 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     if (!invoice || invoice.status === 'cancelled' || invoice.offer_status === 'withdrawn') {
       return NextResponse.json({ error: 'This proposal is no longer available.' }, { status: 404 })
     }
+    if (invoice.proposal_context?.proposal_record_type === 'proposal_breakdown' && !invoice.proposal_accepted_at) return NextResponse.json({ error: 'This comparison is informational. Contact Luxor for a final proposal.' }, { status: 409 })
     if (invoice.invoice_kind !== 'event' || !invoice.price_locked_at || invoice.status !== 'sent') {
       return NextResponse.json({ error: 'Luxor must publish the final proposal before it can be accepted.' }, { status: 409 })
     }
@@ -42,6 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     if (!invoice.proposal_accepted_at && isLuxorOfferExpired(invoice)) {
       return NextResponse.json({ error: 'This proposal has expired. Please contact Luxor for a refreshed proposal.' }, { status: 410 })
     }
+    if (!invoice.proposal_accepted_at && requiresLuxorPayInFull(invoice.proposal_context?.event_date) && invoice.proposal_context?.payment_plan?.mode !== 'pay_in_full') return NextResponse.json({ error: 'Please contact Luxor for an updated proposal before accepting.' }, { status: 409 })
     if (!invoice.inquiry_id) return NextResponse.json({ error: 'This proposal is missing its client record.' }, { status: 409 })
 
     const inquiry = await getLuxorInquiry(invoice.inquiry_id)

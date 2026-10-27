@@ -1,3 +1,4 @@
+import { requiresLuxorPayInFull, LUXOR_PAY_IN_FULL_REQUIRED } from '@/lib/luxorPaymentEligibility'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -314,6 +315,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (!proposalContext) {
         return NextResponse.json({ error: 'Pricing configuration required — administrator review.' }, { status: 409 })
       }
+      if (!invoice.proposal_accepted_at && requiresLuxorPayInFull(proposalContext.event_date) && plan?.mode !== 'pay_in_full') return NextResponse.json({ error: LUXOR_PAY_IN_FULL_REQUIRED }, { status: 409 })
       if (publicationErrors.length) {
         return NextResponse.json({ error: publicationErrors[0] }, { status: 409 })
       }

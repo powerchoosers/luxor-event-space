@@ -22,6 +22,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const booking = invoice.booking_id
     ? await getLuxorBooking(invoice.booking_id)
     : bookings.find((item) => item.invoice_id === invoice.id)
+  if (invoice.proposal_context?.proposal_record_type === 'proposal_breakdown' && (!invoice.proposal_accepted_at || booking?.contract_status !== 'signed')) return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
   if (!booking || booking.contract_status !== 'signed') {
     return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=contract-required`, _request.url))
   }

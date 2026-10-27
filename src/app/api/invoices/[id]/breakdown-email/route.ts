@@ -10,14 +10,13 @@ import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { getPublicLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 import { formatCatalogTime } from '@/lib/luxorPricingCatalog'
-import { buildLuxorProposalBreakdownEmail, luxorProposalBreakdownHasCompletePrices } from '@/lib/luxorProposalBreakdownEmail'
+import { buildLuxorProposalBreakdownEmail, isBreakdownPaymentError, luxorProposalBreakdownHasCompletePrices } from '@/lib/luxorProposalBreakdownEmail'
 import { calculateLuxorProposalBreakdownForInvoice } from '@/lib/luxorProposalBreakdownServer'
 import { getLuxorActiveProposalDeliveryVariant } from '@/lib/luxorProposalDeliveryReceipt'
 import { getLuxorProposalDeliveryReceipt } from '@/lib/luxorProposalDeliveryReceipt'
 import { getLuxorProposalDeliverySnapshot } from '@/lib/luxorProposalDeliveryReceipt'
 import type { LuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
 
-const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing the proposal breakdown.'
 const DELIVERY_VARIANT = 'proposal_breakdown_email' as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -27,17 +26,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function validEmail(value: unknown): value is string {
   return typeof value === 'string' && value === value.trim() && value.length <= 254
     && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(value)
-}
-
-function completePaymentPlan(value: unknown) {
-  if (!isRecord(value)) return false
-  return (value.mode === 'deposit_and_balance' || value.mode === 'pay_in_full')
-    && Number.isFinite(Number(value.booking_payment_percent))
-    && Number(value.booking_payment_percent) >= 0
-    && Number(value.booking_payment_percent) <= 100
-    && Number.isInteger(Number(value.final_payment_due_days_before_event))
-    && Number(value.final_payment_due_days_before_event) >= 0
-    && (value.mode !== 'deposit_and_balance' || Number(value.booking_payment_percent) > 0)
 }
 
 function formatClock(value: unknown) {
@@ -100,8 +88,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!context) return NextResponse.json({ error: 'Pricing configuration required — administrator review.' }, { status: 409 })
     const calculationErrors = Array.isArray(context.calculation_errors) ? context.calculation_errors.filter(Boolean) : []
     const publicationErrors = Array.isArray(context.publication_errors) ? context.publication_errors.filter((error): error is string => typeof error === 'string' && Boolean(error.trim())) : []
-    if (publicationErrors.length) return NextResponse.json({ error: publicationErrors[0] }, { status: 409 })
-    if (!completePaymentPlan(context.payment_plan)) return NextResponse.json({ error: PAYMENT_PLAN_REQUIRED }, { status: 409 })
+    const blockingPublicationError = publicationErrors.find((error) => !isBreakdownPaymentError(error))
+    if (blockingPublicationError) return NextResponse.json({ error: blockingPublicationError }, { status: 409 })
     if (calculationErrors.length) return NextResponse.json({ error: 'Pricing configuration required — administrator review.' }, { status: 409 })
     if (Math.abs(Number(context.final_event_price || 0) - Number(invoice.total || 0)) >= 0.005) {
       return NextResponse.json({ error: 'The saved proposal price does not match its pricing snapshot. Create a revised proposal before sending the breakdown.' }, { status: 409 })
@@ -113,6 +101,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const storedReceipt = getLuxorProposalDeliveryReceipt(context, DELIVERY_VARIANT)
     if (storedReceipt) {
       return NextResponse.json({ invoice, alreadyCompleted: true, reviewUrl: `${publicOrigin()}/proposal/${invoice.public_token}` })
+    }
+    if (storedEmail && typeof storedEmail.html === 'string' && /Book Now/i.test(storedEmail.html)) {
+      return NextResponse.json({ error: 'This earlier breakdown contains a booking link. Review its delivery status and create a new comparison before sending.' }, { status: 409 })
     }
     const hasReusableEmail = Boolean(storedEmail && typeof storedEmail.subject === 'string' && typeof storedEmail.html === 'string'
       && typeof storedEmail.recipient_email === 'string' && typeof storedEmail.review_url === 'string')
@@ -246,7 +237,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     })
     if (!preparedInvoice || preparedInvoice.public_token !== publicToken) {
-      throw new Error('The Proposal Breakdown was not saved with its private Book Now link. No email was sent; retry to recover the saved proposal.')
+      throw new Error('The Proposal Breakdown could not be saved. No email was sent; retry to recover the saved proposal.')
     }
 
     const emailJob = {
@@ -254,7 +245,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       jobType: 'booking_package' as const,
       recipientEmail: breakdownEmail.recipient_email,
       subject: breakdownEmail.subject,
-      body: `Your Luxor Proposal Breakdown is ready. Book the selected package here: ${reviewUrl}`,
+      body: `Your Luxor package comparison is ready. Contact Luxor to discuss your preferred package.`,
       scheduledFor: now,
       metadata: { manual: true, requestedBy: session.email, flow_stage: 'proposal_breakdown', proposal_version: preparedInvoice.proposal_version || 1, price_locked_at: preparedInvoice.price_locked_at, review_url: reviewUrl, proposal_record_type: 'proposal_breakdown' },
     }

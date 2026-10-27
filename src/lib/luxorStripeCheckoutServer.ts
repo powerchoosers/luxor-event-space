@@ -53,6 +53,10 @@ export async function createLuxorPostContractCheckout(input: {
   const { invoice, inquiry, booking } = input
   await assertLuxorProductionSideEffectsAllowed(inquiry.id)
   const master = await assertLuxorSameDayPaymentAllowed(invoice, booking)
+  const comparison = invoice.proposal_context?.proposal_record_type === 'proposal_breakdown' ? invoice : master?.proposal_context?.proposal_record_type === 'proposal_breakdown' ? master : null
+  if (comparison && (!comparison.proposal_accepted_at || booking.contract_status !== 'signed')) {
+    throw new Error('Informational proposal comparisons cannot be used for checkout.')
+  }
   const sameDay = master?.same_day_booking_status !== 'eligible' ? sameDayBookingPromotion(master) : null
   const fingerprint = sameDay?.coverage_amount && master ? sameDayTermsFingerprint(master, booking) : ''
   if (inquiry.status === 'closed_lost') {
