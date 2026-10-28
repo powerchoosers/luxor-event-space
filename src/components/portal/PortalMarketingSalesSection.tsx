@@ -202,9 +202,9 @@ export function PortalMarketingSalesSection({
   )
 
   return (
-    <div className="space-y-6 pt-2">
+    <div className="space-y-4 sm:space-y-6 pt-0 sm:pt-2">
       {/* SECTION HEADER & GLOBAL DATE PICKER */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-[color:var(--portal-border)] pb-4">
+      <div className="flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-[color:var(--portal-border)] pb-3 sm:pb-4">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--portal-text)] tracking-tight">

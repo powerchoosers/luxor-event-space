@@ -490,14 +490,14 @@ export default async function PortalOverview() {
     }));
 
   return (
-    <PortalPageFrame className="min-h-full pb-10 group/portal space-y-4 sm:space-y-6">
+    <PortalPageFrame className="min-h-full pb-28 sm:pb-10 group/portal !gap-2.5 sm:!gap-6">
       <PortalPageHeader
         icon={<Activity size={18} />}
         title="Luxor Operations Hub"
         description="Your daily view of bookings, revenue, and venue operations."
         actions={
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 md:pt-1">
-            <span className="hidden sm:inline text-[10px] font-semibold tracking-wider text-[color:var(--portal-faint)]">
+          <div className="hidden sm:flex flex-wrap items-center gap-x-4 gap-y-1.5 md:pt-1">
+            <span className="text-[10px] font-semibold tracking-wider text-[color:var(--portal-faint)]">
               LUXOR AT LAS PALMAS • HQ
             </span>
           </div>

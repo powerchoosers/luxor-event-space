@@ -55,9 +55,9 @@ export function PortalPageHeader({
   }
 
   return (
-    <div className={`flex shrink-0 gap-3 ${mobileActionsInline ? 'flex-wrap items-center justify-between gap-x-2 sm:flex-nowrap sm:gap-3' : 'flex-col md:flex-row md:items-start md:justify-between'}`}>
-      <div className={`${description ? 'space-y-1.5' : ''} ${mobileActionsInline ? 'min-w-0 shrink-0' : ''}`}>
-        <div className={`flex items-center ${mobileActionsInline ? 'gap-2 sm:gap-3' : 'gap-3'}`}>
+    <div className={`flex shrink-0 gap-2 sm:gap-3 ${mobileActionsInline ? 'flex-wrap items-center justify-between gap-x-2 sm:flex-nowrap sm:gap-3' : 'flex-col md:flex-row md:items-start md:justify-between'}`}>
+      <div className={`${description ? 'space-y-1 sm:space-y-1.5' : ''} ${mobileActionsInline ? 'min-w-0 shrink-0' : ''}`}>
+        <div className={`flex items-center ${mobileActionsInline ? 'gap-2 sm:gap-3' : 'gap-2.5 sm:gap-3'}`}>
           {canGoBack && !hideBackButton ? (
             <button
               type="button"
@@ -73,7 +73,7 @@ export function PortalPageHeader({
           <h1 className={`font-serif font-semibold leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-3xl' : 'text-2xl sm:text-3xl')}`}>{title}</h1>
           {titleAccessory}
         </div>
-        {description ? <p className="max-w-2xl text-sm font-medium leading-6 text-zinc-500">{description}</p> : null}
+        {description ? <p className="max-w-2xl text-xs sm:text-sm font-medium leading-relaxed sm:leading-6 text-zinc-500">{description}</p> : null}
       </div>
       {actions ? <div className={`flex flex-wrap items-center gap-3 ${mobileActionsInline ? 'ml-auto shrink-0' : ''}`}>{actions}</div> : null}
     </div>

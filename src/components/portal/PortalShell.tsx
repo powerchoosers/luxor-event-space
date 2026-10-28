@@ -1029,8 +1029,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             </div>
 
           <div className="flex items-center justify-self-end gap-1.5 sm:gap-5">
-            {/* Mobile Header Actions Segmented Control (Search | Phone | Notifications) */}
-            <div className="flex h-9 items-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 px-1 shadow-xs backdrop-blur-md sm:hidden gap-0.5">
+            {/* Mobile Header Actions (Search | Phone | Notifications) */}
+            <div className="flex h-9 items-center sm:hidden gap-1">
               {/* 1. Mobile Search Toggle */}
               <button
                 type="button"
@@ -1041,7 +1041,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                     return next
                   })
                 }}
-                className={`portal-header-action relative flex h-7 w-7 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
+                className={`portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
                   mobileSearchOpen
                     ? 'bg-[#caa24c]/15 text-[#caa24c] shadow-xs'
                     : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10'
@@ -1049,20 +1049,20 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 aria-label={mobileSearchOpen ? 'Close search' : 'Open search'}
                 aria-expanded={mobileSearchOpen}
               >
-                <Search size={14} />
+                <Search size={18} />
               </button>
 
               {/* Vertical divider */}
-              <div className="h-3.5 w-px bg-[color:var(--portal-border)]/70 shrink-0 mx-0.5" aria-hidden="true" />
+              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
 
               {/* 2. Phone Button */}
               <PortalPhoneButton
                 compact
-                className="portal-header-action relative flex h-7 w-7 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
+                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
               />
 
               {/* Vertical divider */}
-              <div className="h-3.5 w-px bg-[color:var(--portal-border)]/70 shrink-0 mx-0.5" aria-hidden="true" />
+              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
 
               {/* 3. Bell Notifications */}
               <div className="relative flex items-center justify-center">
@@ -1070,7 +1070,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   ref={bellButtonRef}
                   type="button"
                   onClick={() => setNotificationsOpen((prev) => !prev)}
-                  className={`portal-header-action relative flex h-7 w-7 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
+                  className={`portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
                     notificationsOpen
                       ? 'bg-[#caa24c]/15 text-[#caa24c] shadow-xs'
                       : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10'
@@ -1079,9 +1079,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   title="Notifications"
                 >
                   <div className="relative inline-flex items-center justify-center">
-                    <Bell size={14} />
+                    <Bell size={18} />
                     {notificationCount > 0 && (
-                      <span className="portal-notification-number absolute -top-1.5 -right-2.5 z-10 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[8px] font-black text-white shadow-xs ring-2 ring-[color:var(--portal-card)]">
+                      <span className="portal-notification-number absolute -top-1 -right-2 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[8px] font-black text-white shadow-xs ring-2 ring-[color:var(--portal-card)]">
                         {notificationCount > 99 ? '99+' : notificationCount}
                       </span>
                     )}
