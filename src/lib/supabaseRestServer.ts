@@ -20,6 +20,15 @@ function getSupabaseConfig() {
 }
 
 export async function supabaseRest<T>(path: string, init: RequestInit = {}) {
+  return supabaseRestRequest<T>(path, init, false)
+}
+
+/** Like supabaseRest, but missing tables are errors rather than empty results. */
+export async function supabaseRestStrict<T>(path: string, init: RequestInit = {}) {
+  return supabaseRestRequest<T>(path, init, true)
+}
+
+async function supabaseRestRequest<T>(path: string, init: RequestInit, strict: boolean) {
   const { url, serviceRoleKey } = getSupabaseConfig()
   const method = (init.method ?? 'GET').toUpperCase()
   const response = await fetch(`${url}/rest/v1/${path}`, {
@@ -36,7 +45,7 @@ export async function supabaseRest<T>(path: string, init: RequestInit = {}) {
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as SupabaseError
 
-    if (method === 'GET' && response.status === 404 && payload.code === 'PGRST205') {
+    if (!strict && method === 'GET' && response.status === 404 && payload.code === 'PGRST205') {
       return [] as T
     }
 

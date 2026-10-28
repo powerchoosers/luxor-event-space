@@ -82,7 +82,7 @@ export function isLuxorTestAvailabilityBooking(booking: LuxorAvailabilityBooking
   const metadata = booking.metadata
   return booking.is_test === true
     || booking.inquiry_id === LUXOR_PERMANENT_TEST_LEAD_ID
-    || Boolean(metadata?.test_run_id || metadata?.testRunId)
+    || metadata?.is_test_record === true
 }
 
 function isActiveBooking(booking: LuxorAvailabilityBooking) {

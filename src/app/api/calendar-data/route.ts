@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { listLuxorBookingsWithPayments } from '@/lib/luxorBookingsServer'
+import { annotateTestBookings, getVerifiedTestInquiryIds, listLuxorBookingsWithPayments } from '@/lib/luxorBookingsServer'
 import { listLuxorConfirmedTours } from '@/lib/luxorInquiriesServer'
 import { listAllTasks } from '@/lib/luxorTasksServer'
 import { listUpcomingLuxorTourSlots } from '@/lib/luxorTourSlotsServer'
@@ -18,7 +18,7 @@ export async function GET() {
     const [tours, slots, bookings, tasks, invoiceResult] = await Promise.all([
       listLuxorConfirmedTours(),
       listUpcomingLuxorTourSlots(1000),
-      listLuxorBookingsWithPayments(1000),
+      listLuxorBookingsWithPayments(1000, true),
       listAllTasks().catch(() => []),
       listInvoices(1000).then((invoices) => ({ invoices, error: null as string | null })).catch((error: unknown) => ({
         invoices: [],
@@ -31,13 +31,16 @@ export async function GET() {
       .then((activities) => ({ activities, error: null as string | null }))
       .catch(() => ({ activities: [] as LuxorProposalActivitySummary[], error: 'Pending proposal activity history could not be verified.' }))
     const pendingProposalsError = invoiceResult.error || activityResult.error
-    const ownerBookings = bookings.filter((booking) => !isLuxorTestAvailabilityBooking(booking))
+    const inquiryIds = bookings.map((booking) => booking.inquiry_id).filter((id): id is string => Boolean(id))
+    const testTourIds = await getVerifiedTestInquiryIds([...inquiryIds, ...tours.map((tour) => tour.id)])
+    const annotatedBookings = await annotateTestBookings(bookings, testTourIds)
+    const ownerBookings = annotatedBookings.filter((booking) => !isLuxorTestAvailabilityBooking(booking))
     const pendingProposals = pendingProposalsError
       ? []
       : listLuxorPendingProposals(invoiceResult.invoices, ownerBookings, Date.now(), activityResult.activities)
 
     return NextResponse.json({
-      tours,
+      tours: tours.filter((tour) => !testTourIds.has(tour.id)),
       slots,
       bookings: ownerBookings,
       tasks,

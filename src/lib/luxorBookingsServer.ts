@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { LuxorBooking, LuxorBookingStatus, LuxorContractStatus, LuxorPayment, LuxorBookingExpense } from './luxorInquiryTypes'
-import { supabaseRest } from './supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
 import { isWeekdayCustomRentalContext } from './luxorWeekdayRental'
 import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
 import { luxorAvailabilityConflicts } from './luxorAvailability'
@@ -12,10 +12,37 @@ export type LuxorBookingWithPayments = LuxorBooking & {
   balance_due?: number
 }
 
-export async function listLuxorBookings(limit = 1000) {
-  return supabaseRest<LuxorBooking[]>(
+export async function listLuxorBookings(limit = 1000, strict = false) {
+  return (strict ? supabaseRestStrict<LuxorBooking[]> : supabaseRest<LuxorBooking[]>)(
     `luxor_bookings?select=*&order=event_date.asc,created_at.desc&limit=${encodeURIComponent(limit)}`,
   )
+}
+
+export async function getVerifiedTestInquiryIds(inquiryIds: string[]) {
+  const ids = [...new Set(inquiryIds)]
+  const testIds = new Set<string>()
+  if (!ids.length) return testIds
+  const batches = Array.from({ length: Math.ceil(ids.length / 100) }, (_, index) => ids.slice(index * 100, index * 100 + 100))
+  await Promise.all(batches.map(async (batch) => {
+    const filter = batch.map(encodeURIComponent).join(',')
+    const [inquiries, exemptions] = await Promise.all([
+      supabaseRestStrict<Array<{ id: string; is_test: boolean; metadata: Record<string, unknown> | null }>>(
+        `luxor_inquiries?select=id,is_test,metadata&id=in.(${filter})`,
+      ),
+      supabaseRestStrict<Array<{ inquiry_id: string }>>(
+        `luxor_test_identifier_collision_exemptions?select=inquiry_id&reason=eq.owner_confirmed_legacy_test&inquiry_id=in.(${filter})`,
+      ),
+    ])
+    for (const inquiry of inquiries) if (inquiry.is_test || inquiry.metadata?.is_test_record === true) testIds.add(inquiry.id)
+    for (const exemption of exemptions) testIds.add(exemption.inquiry_id)
+  }))
+  return testIds
+}
+
+export async function annotateTestBookings<T extends LuxorBooking>(bookings: T[], verifiedIds?: ReadonlySet<string>) {
+  const ids = bookings.map((booking) => booking.inquiry_id).filter((id): id is string => Boolean(id))
+  const testIds = verifiedIds ?? await getVerifiedTestInquiryIds(ids)
+  return bookings.map((booking) => ({ ...booking, is_test: Boolean(booking.inquiry_id && testIds.has(booking.inquiry_id)) }))
 }
 
 export async function listLuxorBookingsByInquiry(inquiryId: string) {
@@ -53,7 +80,7 @@ export async function findLuxorBookingConflicts(
     'status=in.(tentative,confirmed)',
   ]
   if (excludeId) filters.push(`id=neq.${encodeURIComponent(excludeId)}`)
-  const bookings = await supabaseRest<LuxorBooking[]>(`luxor_bookings?${filters.join('&')}&limit=1000`)
+  const bookings = await annotateTestBookings(await supabaseRestStrict<LuxorBooking[]>(`luxor_bookings?${filters.join('&')}&limit=1000`))
   return luxorAvailabilityConflicts(bookings, eventDate, startTime, endTime, options)
 }
 
@@ -63,8 +90,8 @@ export async function listLuxorPaymentsByBooking(bookingId: string) {
   )
 }
 
-export async function listLuxorBookingsWithPayments(limit = 1000): Promise<LuxorBookingWithPayments[]> {
-  const bookings = await listLuxorBookings(limit)
+export async function listLuxorBookingsWithPayments(limit = 1000, strict = false): Promise<LuxorBookingWithPayments[]> {
+  const bookings = await listLuxorBookings(limit, strict)
   if (bookings.length === 0) return []
 
   const ids = bookings.map((booking) => booking.id).join(',')
