@@ -79,6 +79,7 @@ export default function CalendarPage() {
   const [view, setView] = useState<PortalCalendarView>('schedule')
   const [data, setData] = useState<CalendarPayload>({ tours: [], slots: [], bookings: [], tasks: [], availability: {}, pendingProposals: [], pendingProposalCounts: {} })
   const [selectedEventDate, setSelectedEventDate] = useState(() => luxorTodayKey())
+  const [scheduleToday, setScheduleToday] = useState(() => luxorTodayKey())
   const [loading, setLoading] = useState(true)
   const initialLoadComplete = useRef(false)
   const [error, setError] = useState<string | null>(null)
@@ -107,6 +108,18 @@ export default function CalendarPage() {
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  useEffect(() => {
+    const refreshToday = () => setScheduleToday(luxorTodayKey())
+    const timer = window.setInterval(refreshToday, 60_000)
+    window.addEventListener('focus', refreshToday)
+    document.addEventListener('visibilitychange', refreshToday)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refreshToday)
+      document.removeEventListener('visibilitychange', refreshToday)
+    }
+  }, [])
 
   useEffect(() => {
     const supabase = getPortalSupabaseClient()
@@ -273,9 +286,10 @@ export default function CalendarPage() {
   }, [data.tasks])
 
   const eventItems = useMemo<PortalCalendarItem[]>(() => {
-    const todayKey = luxorTodayKey()
+    const todayKey = scheduleToday
     return data.bookings
-      .filter((booking) => booking.event_date)
+      .filter((booking) => booking.event_date
+        && (view !== 'schedule' || (booking.status === 'confirmed' && luxorDateKey(booking.event_date) >= todayKey)))
       .map((booking) => ({
         id: `booking-${booking.id}`,
         date: booking.event_date!,
@@ -293,7 +307,7 @@ export default function CalendarPage() {
           />
         ),
       } satisfies PortalCalendarItem))
-  }, [busyId, data.bookings])
+  }, [busyId, data.bookings, scheduleToday, view])
 
   const todayStats = useMemo(() => {
     const todayKey = luxorTodayKey()
