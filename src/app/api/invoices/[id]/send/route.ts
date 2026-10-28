@@ -1,3 +1,4 @@
+import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import { requiresLuxorPayInFull, LUXOR_PAY_IN_FULL_REQUIRED } from '@/lib/luxorPaymentEligibility'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     invoiceId = id
     let invoice = await getInvoice(id)
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
+    if (invoice.invoice_kind === 'deposit' && isLuxorBookingDepositPaused()) return NextResponse.json({ error: 'Booking deposit payments are temporarily unavailable.' }, { status: 503 })
     invoice = await reconcileLuxorProposalDeliveryReceipt(invoice)
     assertLuxorWeekdayRentalPublication(invoice)
     if (sameDayBookingRequiresRevision(invoice)) return NextResponse.json({ error: SAME_DAY_REVISION_MESSAGE }, { status: 410 })

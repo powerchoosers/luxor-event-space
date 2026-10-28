@@ -1,3 +1,4 @@
+import { LuxorBookingDepositPausedError } from './luxorDepositMaintenanceServer'
 import 'server-only'
 
 import { LUXOR_GRAND_OPENING } from './luxorGrandOpening'
@@ -1319,6 +1320,15 @@ export async function processLuxorEmailJobs(
       results.push({ id: job.id, status: 'sent' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Email send failed.'
+      if (error instanceof LuxorBookingDepositPausedError && !providerAttemptStarted && !providerAccepted) {
+        await supabaseRest<LuxorEmailJob[]>(`luxor_email_jobs?select=id&id=eq.${encodeURIComponent(job.id)}&status=eq.${markSending ? 'queued' : 'sending'}&updated_at=eq.${encodeURIComponent(job.updated_at)}`, {
+          method: 'PATCH', headers: { Prefer: 'return=representation' },
+          body: JSON.stringify({ status: 'queued', last_error: message, scheduled_for: new Date(Date.now() + 5 * 60_000).toISOString(),
+            ...(markSending ? {} : { attempts: Math.max(0, Number(job.attempts || 0) - 1) }), updated_at: new Date().toISOString() }),
+        })
+        results.push({ id: job.id, status: 'skipped', error: message })
+        continue
+      }
       if (isCustomWorkflowJob) {
         await recordCustomWorkflowEmailOutcome(
           job,

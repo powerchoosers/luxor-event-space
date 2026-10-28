@@ -1,3 +1,4 @@
+import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember } from '@/lib/luxorPortalAccess'
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params
     const invoice = await getInvoice(id)
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
+    if (invoice.invoice_kind === 'deposit' && isLuxorBookingDepositPaused()) return NextResponse.json({ error: 'Booking deposit payments are temporarily unavailable.' }, { status: 503 })
 
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
     if (inquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)

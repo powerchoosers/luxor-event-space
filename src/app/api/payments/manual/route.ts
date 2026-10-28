@@ -1,3 +1,4 @@
+import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
@@ -164,6 +165,8 @@ export async function POST(request: NextRequest) {
     if (!bookingId || !kind) {
       return NextResponse.json({ error: 'bookingId and paymentKind are required.' }, { status: 400 })
     }
+
+    if (kind === 'deposit' && isLuxorBookingDepositPaused()) return NextResponse.json({ error: 'Booking deposit payments are temporarily unavailable.' }, { status: 503 })
 
     // Check this before the helper can create a deposit/final invoice. A lost
     // lead may retain historic paid records, but it must not gain a new manual

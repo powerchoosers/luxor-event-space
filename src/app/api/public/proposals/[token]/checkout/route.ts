@@ -1,3 +1,4 @@
+import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import { NextResponse } from 'next/server'
 import { getInvoiceByPublicToken, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
@@ -13,6 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   if (!invoice || invoice.status === 'cancelled') {
     return NextResponse.redirect(new URL('/payment/cancelled', _request.url))
   }
+  if (invoice.invoice_kind === 'deposit' && isLuxorBookingDepositPaused()) return new Response('Booking deposit payments are temporarily unavailable. Please contact Luxor before attempting payment.', { status: 503, headers: { 'cache-control': 'no-store' } })
   if (isLuxorOfferExpired(invoice)) {
     await updateInvoice(invoice.id, { offer_status: 'expired', stripe_checkout_session_id: null, stripe_checkout_url: null })
     return NextResponse.redirect(new URL(`/proposal/${encodeURIComponent(token)}?payment=offer-expired`, _request.url))

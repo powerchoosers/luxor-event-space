@@ -1,3 +1,4 @@
+import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorBooking } from '@/lib/luxorBookingsServer'
 import { ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
@@ -10,6 +11,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getLuxorPortalSession()
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    if (isLuxorBookingDepositPaused()) return NextResponse.json({ error: 'Booking deposit payments are temporarily unavailable.' }, { status: 503 })
     const { bookingId } = await request.json().catch(() => ({})) as { bookingId?: string }
     const booking = bookingId ? await getLuxorBooking(bookingId) : null
     if (!booking || booking.contract_status !== 'signed' || booking.status === 'cancelled') return NextResponse.json({ error: 'A signed active booking is required before opening card payment.' }, { status: 409 })

@@ -11,6 +11,7 @@ import { isLuxorOfferExpired, luxorOfferSnapshot } from './luxorOffer'
 import { assertLuxorSameDayPaymentAllowed, sameDayTermsFingerprint } from './luxorSameDayBookingServer'
 import { sameDayBookingPromotion } from './luxorSameDayBooking'
 import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
+import { assertLuxorBookingDepositAvailable } from './luxorDepositMaintenanceServer'
 
 /**
  * A checkout URL remains usable even after its reference is removed from our
@@ -51,6 +52,7 @@ export async function createLuxorPostContractCheckout(input: {
   masterInvoiceId?: string
 }) {
   const { invoice, inquiry, booking } = input
+  if (invoice.invoice_kind === 'deposit') assertLuxorBookingDepositAvailable()
   await assertLuxorProductionSideEffectsAllowed(inquiry.id)
   const master = await assertLuxorSameDayPaymentAllowed(invoice, booking)
   const comparison = invoice.proposal_context?.proposal_record_type === 'proposal_breakdown' ? invoice : master?.proposal_context?.proposal_record_type === 'proposal_breakdown' ? master : null

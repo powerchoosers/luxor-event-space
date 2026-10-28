@@ -1,3 +1,4 @@
+import { assertLuxorBookingDepositAvailable, LuxorBookingDepositPausedError, queuePausedDepositFollowUp } from './luxorDepositMaintenanceServer'
 import 'server-only'
 import { sameDayBookingPromotion, sameDayBookingRequiresRevision } from './luxorSameDayBooking'
 import { SAME_DAY_REVISION_MESSAGE, sameDayTermsFingerprint, reconcileLuxorSameDayReceipts, finalizeLuxorSameDayBooking } from './luxorSameDayBookingServer'
@@ -1009,6 +1010,7 @@ export async function signLuxorSignatureRequest(input: {
     // The booking status is verified as signed above before either the child
     // invoice or Stripe Checkout can be created. `ensure…` reuses the same
     // deposit record if this completion path is retried.
+    assertLuxorBookingDepositAvailable()
     paymentInvoice = await ensureLuxorDepositInvoice({
       masterInvoice,
       bookingId: booking.id,
@@ -1033,6 +1035,7 @@ export async function signLuxorSignatureRequest(input: {
       throw new Error('Stripe did not return a secure payment link for the signed booking.')
     }
   } catch (paymentError) {
+    if (paymentError instanceof LuxorBookingDepositPausedError) await queuePausedDepositFollowUp(signature.inquiry_id, signature.id)
     console.error('Contract was signed, but the post-sign Stripe payment request could not be created:', paymentError)
   }
 
