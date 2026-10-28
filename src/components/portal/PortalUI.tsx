@@ -987,7 +987,7 @@ export function PortalSelect({
         className={`portal-select-trigger flex min-h-11 w-full cursor-pointer items-center justify-between gap-2.5 rounded-lg border px-3 py-1.5 text-xs transition-all duration-150 hover:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-8 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${buttonClassName}`}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
-        <span className={`text-[10px] text-[color:var(--portal-muted)] transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+        <ChevronDown size={14} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {typeof document !== 'undefined' ? createPortal(
         <AnimatePresence initial={false}>

@@ -65,11 +65,11 @@ export function PortalLoading({ className = '' }: { className?: string }) {
   return (
     <motion.div
       data-luxor-loading="true"
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, scale: 0.99, filter: 'blur(10px)' }}
+      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.99, filter: 'blur(10px)' }}
       animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, filter: 'blur(0px)' }}
-      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.982, filter: 'blur(16px)' }}
-      transition={{ duration: 0.28, ease: LUXOR_EASE }}
-      className={`flex flex-1 flex-col items-center justify-center my-auto min-h-[calc(100vh-10rem)] w-full py-10 px-4 transform-gpu ${className}`}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, filter: 'blur(20px)' }}
+      transition={{ duration: 0.35, ease: LUXOR_EASE }}
+      className={`flex flex-1 flex-col items-center justify-center my-auto min-h-[calc(100vh-10rem)] w-full py-10 px-4 transform-gpu will-change-[opacity,filter,transform] ${className}`}
     >
       <PortalLoadingCard />
     </motion.div>

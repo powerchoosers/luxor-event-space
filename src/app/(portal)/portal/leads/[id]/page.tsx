@@ -5093,7 +5093,7 @@ export default function LeadDetailPage({
                 aria-haspopup="menu"
                 aria-label="More lead options"
                 title="More options"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/10 hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
               >
                 <MoreVertical size={16} />
               </button>

@@ -2050,11 +2050,16 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 }
 
 @media (hover: none) and (pointer: coarse) {
-  body[data-portal-theme] button[aria-label],
-  body[data-portal-theme] button[title],
-  body[data-portal-theme] button:has(svg):not(:has(span)) {
+  body[data-portal-theme] button[aria-label]:not(.portal-header-action),
+  body[data-portal-theme] button[title]:not(.portal-header-action),
+  body[data-portal-theme] button:has(svg):not(:has(span)):not(.portal-header-action) {
     min-width: 44px;
     min-height: 44px;
+  }
+
+  body[data-portal-theme] .portal-header-action {
+    min-width: 0 !important;
+    min-height: 0 !important;
   }
 
   body[data-portal-theme] [role='menuitem'],

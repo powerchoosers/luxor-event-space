@@ -64,7 +64,8 @@ function MetricSparkBar({
     <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/45">
       <motion.div
         className={`h-full rounded-full ${barColor}`}
-        initial={{ width: prefersReducedMotion ? `${clamped}%` : '0%' }}
+        initial={{ width: prefersReducedMotion ? `${clamped}%` : 0 }}
+        style={{ width: prefersReducedMotion ? `${clamped}%` : 0 }}
         whileInView={{ width: `${clamped}%` }}
         viewport={{ once: true, margin: '0px 0px -30px 0px' }}
         transition={{
@@ -210,7 +211,7 @@ export function PortalMarketingSalesSection({
               Marketing & Sales
             </h2>
             <span className="inline-flex items-center rounded-full bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#caa24c]">
-              Sales Command Center
+              Command Center
             </span>
           </div>
           <p className="mt-1 text-xs sm:text-sm text-[color:var(--portal-muted)]">
@@ -357,14 +358,16 @@ export function PortalMarketingSalesSection({
                   <div className="flex h-2 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50 p-0.5 gap-0.5">
                     <motion.div
                       className="h-full rounded-l-full bg-[#caa24c]"
-                      initial={{ width: prefersReducedMotion ? '75%' : '0%' }}
+                      initial={{ width: prefersReducedMotion ? '75%' : 0 }}
+                      style={{ width: prefersReducedMotion ? '75%' : 0 }}
                       whileInView={{ width: '75%' }}
                       viewport={{ once: true, margin: '0px 0px -30px 0px' }}
                       transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
                     />
                     <motion.div
                       className="h-full rounded-r-full bg-emerald-500"
-                      initial={{ width: prefersReducedMotion ? '25%' : '0%' }}
+                      initial={{ width: prefersReducedMotion ? '25%' : 0 }}
+                      style={{ width: prefersReducedMotion ? '25%' : 0 }}
                       whileInView={{ width: '25%' }}
                       viewport={{ once: true, margin: '0px 0px -30px 0px' }}
                       transition={{ duration: 0.8, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
@@ -417,18 +420,20 @@ export function PortalMarketingSalesSection({
               {/* Metric 1: Website Visitors */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[color:var(--portal-muted)]">
-                      <Users size={16} strokeWidth={1.6} />
-                    </span>
-                    <span className="text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 text-[color:var(--portal-muted)]">
+                        <Users size={14} strokeWidth={1.6} />
+                      </span>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                        Website Visitors
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
                       Site
                     </span>
                   </div>
-                  <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
-                    Website Visitors
-                  </p>
-                  <p className="mt-1 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
+                  <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(metrics.websiteVisitors)}
                   </p>
                   <MetricSparkBar percent={100} color="neutral" delay={0.05} />
@@ -442,18 +447,20 @@ export function PortalMarketingSalesSection({
               {/* Metric 2: Visit Page Visits */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[color:var(--portal-muted)]">
-                      <Eye size={16} strokeWidth={1.6} />
-                    </span>
-                    <span className="text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 text-[color:var(--portal-muted)]">
+                        <Eye size={14} strokeWidth={1.6} />
+                      </span>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                        Visit Page Visits
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
                       Traffic
                     </span>
                   </div>
-                  <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
-                    Visit Page Visits
-                  </p>
-                  <p className="mt-1 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
+                  <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(visitPageCount)}
                   </p>
                   <MetricSparkBar
@@ -471,11 +478,16 @@ export function PortalMarketingSalesSection({
               {/* Metric 3: Visit Clicks */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#caa24c]">
-                      <MousePointerClick size={16} strokeWidth={1.6} />
-                    </span>
-                    <div className="relative group/tip cursor-help">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 text-[#caa24c]">
+                        <MousePointerClick size={14} strokeWidth={1.6} />
+                      </span>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                        Visit Clicks
+                      </p>
+                    </div>
+                    <div className="relative group/tip cursor-help shrink-0">
                       <Info size={13} className="text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors" />
                       <div className="absolute right-0 top-5 z-50 hidden w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[11px] font-normal leading-relaxed text-[color:var(--portal-text)] shadow-2xl backdrop-blur-xl group-hover/tip:block">
                         <p className="font-bold text-[#caa24c] mb-1">Visit Clicks (Intent)</p>
@@ -483,10 +495,7 @@ export function PortalMarketingSalesSection({
                       </div>
                     </div>
                   </div>
-                  <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
-                    Visit Clicks
-                  </p>
-                  <p className="mt-1 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
+                  <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(metrics.tourClicks)}
                   </p>
                   <MetricSparkBar
@@ -537,11 +546,16 @@ export function PortalMarketingSalesSection({
               <div className="relative overflow-hidden rounded-xl border border-[#caa24c]/45 bg-gradient-to-b from-[#caa24c]/[0.09] to-[color:var(--portal-card)] p-3.5 flex flex-col justify-between shadow-xs">
                 <BorderBeam size={70} duration={9} borderWidth={1.2} colorFrom="#f1d27a" colorTo="#caa24c" />
                 <div className="relative z-10">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#caa24c]">
-                      <CalendarCheck2 size={16} strokeWidth={1.75} />
-                    </span>
-                    <div className="flex items-center gap-1">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 text-[#caa24c]">
+                        <CalendarCheck2 size={14} strokeWidth={1.75} />
+                      </span>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#caa24c] truncate">
+                        Visits Scheduled
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
                       <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#caa24c] text-[8px] text-[#18130d] font-bold">
                         ★
                       </span>
@@ -554,10 +568,7 @@ export function PortalMarketingSalesSection({
                       </div>
                     </div>
                   </div>
-                  <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#caa24c]">
-                    Visits Scheduled
-                  </p>
-                  <p className="mt-1 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
+                  <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(visitsScheduledCount)}
                   </p>
                   <MetricSparkBar
@@ -575,18 +586,20 @@ export function PortalMarketingSalesSection({
               {/* Metric 5: Tours Completed */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[color:var(--portal-muted)]">
-                      <CheckCircle2 size={16} strokeWidth={1.6} />
-                    </span>
-                    <span className="text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 text-[color:var(--portal-muted)]">
+                        <CheckCircle2 size={14} strokeWidth={1.6} />
+                      </span>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                        Tours Completed
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
                       Attended
                     </span>
                   </div>
-                  <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
-                    Tours Completed
-                  </p>
-                  <p className="mt-1 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
+                  <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {metrics.tourAnalyticsAvailable ? formatStaticValue(metrics.toursCompleted) : 'Unavailable'}
                   </p>
                   <MetricSparkBar percent={tourCompletionNum} color="gold" delay={0.28} />
@@ -632,18 +645,20 @@ export function PortalMarketingSalesSection({
               {/* Metric 6: Proposals Sent */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[color:var(--portal-muted)]">
-                      <FileText size={16} strokeWidth={1.6} />
-                    </span>
-                    <span className="text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 text-[color:var(--portal-muted)]">
+                        <FileText size={14} strokeWidth={1.6} />
+                      </span>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                        Proposals Sent
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
                       Sales
                     </span>
                   </div>
-                  <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
-                    Proposals Sent
-                  </p>
-                  <p className="mt-1 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
+                  <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(metrics.proposalsSent)}
                   </p>
                   <MetricSparkBar
@@ -661,18 +676,20 @@ export function PortalMarketingSalesSection({
               {/* Metric 7: Bookings */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-emerald-500">
-                      <BookmarkCheck size={16} strokeWidth={1.6} />
-                    </span>
-                    <span className="text-[10px] uppercase text-emerald-600 dark:text-emerald-400 font-semibold tracking-wider">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 text-emerald-500">
+                        <BookmarkCheck size={14} strokeWidth={1.6} />
+                      </span>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                        Bookings
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[10px] uppercase text-emerald-600 dark:text-emerald-400 font-semibold tracking-wider">
                       Closed
                     </span>
                   </div>
-                  <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
-                    Bookings
-                  </p>
-                  <p className="mt-1 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
+                  <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(metrics.bookings)}
                   </p>
                   <MetricSparkBar percent={closeRateNum} color="emerald" delay={0.4} />
@@ -687,18 +704,20 @@ export function PortalMarketingSalesSection({
               <div className="relative overflow-hidden rounded-xl border border-[#caa24c]/40 bg-gradient-to-b from-[#caa24c]/[0.08] to-[color:var(--portal-card)] p-3.5 flex flex-col justify-between shadow-xs">
                 <BorderBeam size={75} duration={11} delay={3} borderWidth={1.2} colorFrom="#f1d27a" colorTo="#caa24c" />
                 <div className="relative z-10">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#caa24c]">
-                      <DollarSign size={16} strokeWidth={1.75} />
-                    </span>
-                    <span className="text-[10px] uppercase text-[#caa24c] font-bold tracking-wider">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 text-[#caa24c]">
+                        <DollarSign size={14} strokeWidth={1.75} />
+                      </span>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#caa24c] truncate">
+                        Revenue
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[10px] uppercase text-[#caa24c] font-bold tracking-wider">
                       Total
                     </span>
                   </div>
-                  <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#caa24c]">
-                    Revenue
-                  </p>
-                  <p className="mt-1 text-xl sm:text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
+                  <p className="mt-2 text-xl sm:text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(metrics.revenue, {
                       prefix: '$',
                       decimals: metrics.revenue % 1 !== 0 ? 2 : 0,
@@ -901,8 +920,10 @@ export function PortalMarketingSalesSection({
                           ? 'bg-gradient-to-r from-[#caa24c] to-[#f1d27a]'
                           : 'bg-gradient-to-r from-[#caa24c]/60 to-[#caa24c]'
                       }`}
-                      initial={{ width: prefersReducedMotion ? `${barWidthPct}%` : '0%' }}
-                      animate={{ width: `${barWidthPct}%` }}
+                      initial={{ width: prefersReducedMotion ? `${barWidthPct}%` : 0 }}
+                      style={{ width: prefersReducedMotion ? `${barWidthPct}%` : 0 }}
+                      whileInView={{ width: `${barWidthPct}%` }}
+                      viewport={{ once: true, margin: '0px 0px -30px 0px' }}
                       transition={{
                         duration: prefersReducedMotion ? 0 : 0.9,
                         delay: prefersReducedMotion ? 0 : index * 0.08,
@@ -975,9 +996,11 @@ export function PortalMarketingSalesSection({
                               <div className="h-1 w-24 overflow-hidden rounded-full bg-[color:var(--portal-border)]/40">
                                 <motion.div
                                   className="h-full rounded-full bg-[#caa24c]"
-                                  initial={{ width: prefersReducedMotion ? `${visitorSharePct}%` : '0%' }}
-                                  animate={{ width: `${visitorSharePct}%` }}
-                                  transition={{ duration: 0.7, delay: idx * 0.05 }}
+                                  initial={{ width: prefersReducedMotion ? `${visitorSharePct}%` : 0 }}
+                                  style={{ width: prefersReducedMotion ? `${visitorSharePct}%` : 0 }}
+                                  whileInView={{ width: `${visitorSharePct}%` }}
+                                  viewport={{ once: true, margin: '0px 0px -30px 0px' }}
+                                  transition={{ duration: 0.7, delay: idx * 0.05, ease: [0.22, 1, 0.36, 1] }}
                                 />
                               </div>
                             )}
@@ -1063,7 +1086,8 @@ export function PortalMarketingSalesSection({
                               <div className="h-1 w-24 overflow-hidden rounded-full bg-[color:var(--portal-border)]/40">
                                 <motion.div
                                   className="h-full rounded-full bg-[#caa24c]/80"
-                                  initial={{ width: prefersReducedMotion ? `${viewSharePct}%` : '0%' }}
+                                  initial={{ width: prefersReducedMotion ? `${viewSharePct}%` : 0 }}
+                                  style={{ width: prefersReducedMotion ? `${viewSharePct}%` : 0 }}
                                   whileInView={{ width: `${viewSharePct}%` }}
                                   viewport={{ once: true, margin: '0px 0px -30px 0px' }}
                                   transition={{ duration: 0.7, delay: idx * 0.05, ease: [0.22, 1, 0.36, 1] }}

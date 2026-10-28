@@ -29,6 +29,7 @@ import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
 import { BillsDueCard } from "@/components/portal/BillsDueCard";
 import { PortalMarketingSalesSection } from "@/components/portal/PortalMarketingSalesSection";
+import { PortalHomeActionBar } from "@/components/portal/PortalHomeActionBar";
 import { MagicCard } from "@/components/ui/magic-card";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { AnimatedCircularProgressBar } from "@/components/ui/animated-circular-progress-bar";
@@ -496,11 +497,7 @@ export default async function PortalOverview() {
         description="Your daily view of bookings, revenue, and venue operations."
         actions={
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 md:pt-1">
-            <div className="flex items-center gap-2 text-[color:var(--portal-text)]">
-              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" aria-hidden="true" />
-              <span className="text-[10px] uppercase font-bold tracking-wider">Communications operational</span>
-            </div>
-            <span className="hidden text-[10px] font-semibold tracking-wider text-[color:var(--portal-faint)] sm:block">
+            <span className="hidden sm:inline text-[10px] font-semibold tracking-wider text-[color:var(--portal-faint)]">
               LUXOR AT LAS PALMAS • HQ
             </span>
           </div>
@@ -541,7 +538,7 @@ export default async function PortalOverview() {
       <PortalStaggerGroup className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-4">
         {/* Bookings Card */}
         <PortalStaggerCard className="min-w-0 w-full h-full">
-          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
+          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             <div className="flex items-start justify-between gap-3 w-full">
               <div className="min-w-0 flex-1 pr-2">
                 <span className="text-[#caa24c] mb-3 block">
@@ -576,7 +573,7 @@ export default async function PortalOverview() {
 
         {/* Cash Flow Card */}
         <PortalStaggerCard className="min-w-0 w-full h-full">
-          <MagicCard className="relative flex h-full min-h-[156px] w-full flex-col justify-between overflow-hidden p-4 sm:min-h-[180px] sm:p-6">
+          <MagicCard className="relative flex h-full min-h-[156px] w-full flex-col justify-between overflow-hidden rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             <BorderBeam size={95} duration={11} borderWidth={1.2} />
             <div className="flex justify-between items-start z-10 relative w-full">
               <div>
@@ -608,7 +605,7 @@ export default async function PortalOverview() {
 
         {/* Next Event Card */}
         <PortalStaggerCard className="min-w-0 w-full h-full">
-          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
+          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             {nextBooking ? (
               <>
                 <div>
@@ -645,7 +642,7 @@ export default async function PortalOverview() {
 
         {/* Needs Attention Card */}
         <PortalStaggerCard className="min-w-0 w-full h-full">
-          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between p-4 sm:min-h-[180px] sm:p-6">
+          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             <div>
               <span className="text-[#caa24c] mb-3 block">
                 <Bell size={22} strokeWidth={1.5} />
@@ -927,6 +924,8 @@ export default async function PortalOverview() {
           ELEGANT SPACES. UNFORGETTABLE EVENTS.
         </span>
       </div>
+
+      <PortalHomeActionBar />
     </PortalPageFrame>
   );
 }

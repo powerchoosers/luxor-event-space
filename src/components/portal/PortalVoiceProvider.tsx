@@ -643,9 +643,11 @@ const indicatorCoreVariants = {
 
 export function PhoneStatusIndicator({
   state,
+  compact = false,
   className = '',
 }: {
   state: PhoneIndicatorState
+  compact?: boolean
   className?: string
 }) {
   const reduceMotion = useReducedMotion()
@@ -693,7 +695,9 @@ export function PhoneStatusIndicator({
           damping: 24,
           borderColor: { duration: 0.3, ease: 'easeInOut' },
         }}
-        className="relative z-10 block h-2.5 w-2.5 rounded-full border border-solid"
+        className={`relative z-10 block rounded-full border border-solid ${
+          compact ? 'h-2 w-2' : 'h-2.5 w-2.5'
+        }`}
       />
     </div>
   )
@@ -701,8 +705,12 @@ export function PhoneStatusIndicator({
 
 export function PortalPhoneButton({
   overrideState,
+  compact = false,
+  className = '',
 }: {
   overrideState?: PhoneIndicatorState
+  compact?: boolean
+  className?: string
 } = {}) {
   const { activeCall, callQuality, isPanelOpen, openPanel, closePanel, phoneState } = usePortalVoice()
   const [isHovered, setIsHovered] = useState(false)
@@ -727,7 +735,12 @@ export function PortalPhoneButton({
       onClick={isPanelOpen ? closePanel : openPanel}
       onPointerEnter={() => setIsHovered(true)}
       onPointerLeave={() => setIsHovered(false)}
-      className="relative flex items-center justify-center rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer group"
+      className={
+        className ||
+        (compact
+          ? 'portal-header-action relative flex h-7 w-7 !min-w-0 !min-h-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group'
+          : 'relative flex items-center justify-center rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer group')
+      }
       aria-label={activeCall ? 'Open active call' : 'Open Luxor phone'}
       title={
         computedState === 'ready'
@@ -743,23 +756,28 @@ export function PortalPhoneButton({
           : 'Phone disconnected'
       }
     >
-      <Phone
-        size={20}
-        className={`transition-colors duration-200 ${
-          activeCall
-            ? computedState === 'active_good'
-              ? 'text-emerald-400'
-              : computedState === 'active_medium'
-              ? 'text-amber-400'
-              : 'text-red-400'
-            : phoneState === 'ready'
-            ? 'text-emerald-400 dark:text-emerald-400'
-            : 'text-[color:var(--portal-muted)] group-hover:text-[#caa24c]'
-        }`}
-      />
-      {/* Active Circle Indicator positioned top-right close to the phone handset, matching HubSpot */}
-      <div className="absolute right-[7px] top-[7px] pointer-events-none">
-        <PhoneStatusIndicator state={computedState === 'disconnected' && isHovered ? 'hover' : computedState} />
+      <div className="relative inline-flex items-center justify-center">
+        <Phone
+          size={compact ? 15 : 20}
+          className={`transition-colors duration-200 ${
+            activeCall
+              ? computedState === 'active_good'
+                ? 'text-emerald-400'
+                : computedState === 'active_medium'
+                ? 'text-amber-400'
+                : 'text-red-400'
+              : phoneState === 'ready'
+              ? 'text-emerald-400 dark:text-emerald-400'
+              : 'text-[color:var(--portal-muted)] group-hover:text-[#caa24c]'
+          }`}
+        />
+        {/* Active Circle Indicator positioned right at the ear piece of the handset */}
+        <div className={`pointer-events-none absolute ${compact ? '-top-1 -right-1' : '-top-1 -right-1'}`}>
+          <PhoneStatusIndicator
+            state={computedState === 'disconnected' && isHovered ? 'hover' : computedState}
+            compact={compact}
+          />
+        </div>
       </div>
     </button>
   )

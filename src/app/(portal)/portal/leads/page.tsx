@@ -1733,9 +1733,7 @@ function LeadsDashboard({
             <div>
               <div className="flex items-center justify-between pb-4 border-b border-[color:var(--portal-border)]/60 mb-5">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c]">
-                    <TrendingUp size={16} />
-                  </span>
+                  <TrendingUp size={18} className="shrink-0 text-[#caa24c]" />
                   <div>
                     <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">
                       Sales Funnel Analysis
@@ -1773,7 +1771,8 @@ function LeadsDashboard({
                   <div className="h-2 w-full rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)]/60 overflow-hidden">
                     <motion.div
                       className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]"
-                      initial={{ width: '0%' }}
+                      initial={{ width: 0 }}
+                      style={{ width: 0 }}
                       whileInView={{ width: `${Math.max(0, Math.min(100, Number(tourPct)))}%` }}
                       viewport={{ once: true, margin: '0px 0px -30px 0px' }}
                       transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
@@ -1792,7 +1791,8 @@ function LeadsDashboard({
                   <div className="h-2 w-full rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)]/60 overflow-hidden">
                     <motion.div
                       className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-400"
-                      initial={{ width: '0%' }}
+                      initial={{ width: 0 }}
+                      style={{ width: 0 }}
                       whileInView={{ width: `${Math.max(0, Math.min(100, Number(proposalPct)))}%` }}
                       viewport={{ once: true, margin: '0px 0px -30px 0px' }}
                       transition={{ duration: 0.85, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
@@ -1811,7 +1811,8 @@ function LeadsDashboard({
                   <div className="h-2 w-full rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)]/60 overflow-hidden">
                     <motion.div
                       className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
-                      initial={{ width: '0%' }}
+                      initial={{ width: 0 }}
+                      style={{ width: 0 }}
                       whileInView={{ width: `${Math.max(0, Math.min(100, Number(bookedPct)))}%` }}
                       viewport={{ once: true, margin: '0px 0px -30px 0px' }}
                       transition={{ duration: 0.85, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
@@ -1837,9 +1838,7 @@ function LeadsDashboard({
             controls={
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c]">
-                    <Calendar size={15} />
-                  </span>
+                  <Calendar size={18} className="shrink-0 text-[#caa24c]" />
                   <div>
                     <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">
                       Upcoming Scheduled Tours
@@ -1915,9 +1914,7 @@ function LeadsDashboard({
         controls={
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c]">
-                <Users size={15} />
-              </span>
+              <Users size={18} className="shrink-0 text-[#caa24c]" />
               <div>
                 <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Recent Lead Submissions</h3>
                 <p className="text-[10px] text-[color:var(--portal-muted)]">Direct website inquiries & intake form submissions</p>
@@ -2041,7 +2038,8 @@ function StatsCard({
           <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
             <motion.div
               className={`h-full rounded-full bg-gradient-to-r ${barGradients[tone ?? 'neutral']}`}
-              initial={{ width: '0%' }}
+              initial={{ width: 0 }}
+              style={{ width: 0 }}
               whileInView={{ width: `${Math.max(6, Math.min(100, progress))}%` }}
               viewport={{ once: true, margin: '0px 0px -30px 0px' }}
               transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}

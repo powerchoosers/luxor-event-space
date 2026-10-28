@@ -31,6 +31,7 @@ import {
   SlidersHorizontal,
   ArrowUpRight,
   Loader2,
+  X,
 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -582,6 +583,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   // Header Global Search State
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null)
   const deferredSearchQuery = useDeferredValue(searchQuery)
 
 
@@ -1025,40 +1028,103 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               </AnimatePresence>
             </div>
 
-          <div className="flex items-center justify-self-end gap-2 sm:gap-5">
-            <PortalPhoneButton />
-            
-            {/* Bell Notifications */}
-            <div className="relative">
+          <div className="flex items-center justify-self-end gap-1.5 sm:gap-5">
+            {/* Mobile Header Actions Segmented Control (Search | Phone | Notifications) */}
+            <div className="flex h-9 items-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 px-1 shadow-xs backdrop-blur-md sm:hidden gap-0.5">
+              {/* 1. Mobile Search Toggle */}
               <button
-                ref={bellButtonRef}
                 type="button"
-                onClick={() => setNotificationsOpen((prev) => !prev)}
-                className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer"
-                aria-label="Notifications"
-                title="Notifications"
+                onClick={() => {
+                  setMobileSearchOpen((prev) => {
+                    const next = !prev
+                    if (next) setTimeout(() => mobileSearchInputRef.current?.focus(), 150)
+                    return next
+                  })
+                }}
+                className={`portal-header-action relative flex h-7 w-7 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
+                  mobileSearchOpen
+                    ? 'bg-[#caa24c]/15 text-[#caa24c] shadow-xs'
+                    : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10'
+                }`}
+                aria-label={mobileSearchOpen ? 'Close search' : 'Open search'}
+                aria-expanded={mobileSearchOpen}
               >
-                <Bell size={20} className="text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors" />
-                {notificationCount > 0 && (
-                  <span className="portal-notification-number absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full border border-[color:var(--portal-card)] bg-blue-600 px-0.5 font-mono text-[9px] font-black text-white shadow-xs ring-2 ring-blue-500/40 animate-pulse">
-                    {notificationCount > 99 ? '99+' : notificationCount}
-                  </span>
-                )}
+                <Search size={14} />
               </button>
 
-              <PortalNotificationModal
-                isOpen={notificationsOpen}
-                triggerRef={bellButtonRef}
-                onClose={() => setNotificationsOpen(false)}
-                items={notificationItems}
-                unreadCount={notificationCount}
-                unreadCountsByType={unreadCountsByType}
-                loading={notificationsLoading}
-                onMarkAsRead={markAsRead}
-                onMarkAllAsRead={markAllAsRead}
-                onRefresh={refreshNotifications}
+              {/* Vertical divider */}
+              <div className="h-3.5 w-px bg-[color:var(--portal-border)]/70 shrink-0 mx-0.5" aria-hidden="true" />
+
+              {/* 2. Phone Button */}
+              <PortalPhoneButton
+                compact
+                className="portal-header-action relative flex h-7 w-7 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
               />
+
+              {/* Vertical divider */}
+              <div className="h-3.5 w-px bg-[color:var(--portal-border)]/70 shrink-0 mx-0.5" aria-hidden="true" />
+
+              {/* 3. Bell Notifications */}
+              <div className="relative flex items-center justify-center">
+                <button
+                  ref={bellButtonRef}
+                  type="button"
+                  onClick={() => setNotificationsOpen((prev) => !prev)}
+                  className={`portal-header-action relative flex h-7 w-7 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
+                    notificationsOpen
+                      ? 'bg-[#caa24c]/15 text-[#caa24c] shadow-xs'
+                      : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10'
+                  }`}
+                  aria-label="Notifications"
+                  title="Notifications"
+                >
+                  <div className="relative inline-flex items-center justify-center">
+                    <Bell size={14} />
+                    {notificationCount > 0 && (
+                      <span className="portal-notification-number absolute -top-1.5 -right-2.5 z-10 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[8px] font-black text-white shadow-xs ring-2 ring-[color:var(--portal-card)]">
+                        {notificationCount > 99 ? '99+' : notificationCount}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </div>
             </div>
+
+            {/* Desktop Items (Hidden on Mobile) */}
+            <div className="hidden sm:flex sm:items-center sm:gap-4">
+              <PortalPhoneButton />
+              
+              {/* Bell Notifications */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setNotificationsOpen((prev) => !prev)}
+                  className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer"
+                  aria-label="Notifications"
+                  title="Notifications"
+                >
+                  <Bell size={20} className="text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors" />
+                  {notificationCount > 0 && (
+                    <span className="portal-notification-number absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full border border-[color:var(--portal-card)] bg-blue-600 px-0.5 font-mono text-[9px] font-black text-white shadow-xs ring-2 ring-blue-500/40 animate-pulse">
+                      {notificationCount > 99 ? '99+' : notificationCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <PortalNotificationModal
+              isOpen={notificationsOpen}
+              triggerRef={bellButtonRef}
+              onClose={() => setNotificationsOpen(false)}
+              items={notificationItems}
+              unreadCount={notificationCount}
+              unreadCountsByType={unreadCountsByType}
+              loading={notificationsLoading}
+              onMarkAsRead={markAsRead}
+              onMarkAllAsRead={markAllAsRead}
+              onRefresh={refreshNotifications}
+            />
 
             <Link href="/portal/messages?tab=sms" prefetch className="hidden rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer sm:inline-flex" aria-label="Text messages">
               <MessageSquare size={20} className="text-zinc-400" />
@@ -1085,6 +1151,94 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             
           </div>
         </header>
+
+        {/* Mobile Search Bar that pushes in from the bottom of the header */}
+        <AnimatePresence>
+          {mobileSearchOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              className="relative z-40 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/98 backdrop-blur-xl sm:hidden shadow-lg overflow-visible"
+            >
+              <div className="p-3">
+                <div className="flex h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 focus-within:border-[#caa24c]/60 focus-within:ring-2 focus-within:ring-[#caa24c]/20 transition-all">
+                  <Search size={15} className="shrink-0 text-[#caa24c]" />
+                  <input
+                    ref={mobileSearchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search clients, events, or emails..."
+                    className="portal-input-transparent h-full flex-1 bg-transparent text-xs font-semibold text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('')
+                      mobileSearchInputRef.current?.focus()
+                    }}
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer ${
+                      searchQuery ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                    }`}
+                    aria-label="Clear search"
+                    tabIndex={searchQuery ? 0 : -1}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Mobile Search Results Floating Dropdown Overlay */}
+              <AnimatePresence>
+                {searchResults.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.99 }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute left-3 right-3 top-[calc(100%+0.375rem)] z-50 max-h-80 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]/40 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/98 backdrop-blur-2xl shadow-2xl"
+                  >
+                    <div className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1.5 bg-[color:var(--portal-soft)]/50">
+                      Matching Dossier Records
+                    </div>
+                    {searchResults.map((result) => (
+                      <Link
+                        key={result.id}
+                        href={`/portal/leads/${result.id}`}
+                        onClick={() => {
+                          selectSearchResult(result.id)
+                          setMobileSearchOpen(false)
+                        }}
+                        className="flex items-center justify-between p-2.5 hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <PortalContactAvatar
+                            name={result.full_name}
+                            avatarUrl={typeof result.metadata?.avatar_url === 'string' ? result.metadata.avatar_url : undefined}
+                            size="sm"
+                          />
+                          <div className="truncate min-w-0 flex-1">
+                            <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate">
+                              {result.full_name}
+                            </p>
+                            <p className="text-[10px] text-[color:var(--portal-muted)] truncate mt-0.5">
+                              {result.email || 'No email registered'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded shrink-0 ml-2">
+                          {result.event_type || 'Lead'}
+                        </span>
+                      </Link>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* The shell reserves the bottom bar; detail pages also reserve their action row. */}
         <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalTableScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-44 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : 'p-4 sm:p-6 lg:p-8'} ${

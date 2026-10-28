@@ -705,7 +705,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       initial={{ x: '100%' }}
       animate={{ x: isOpen ? 0 : '100%' }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-      className="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px]"
+      className="fixed right-0 top-0 z-[65] flex w-full flex-col border-l border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px] max-lg:bottom-[var(--portal-mobile-nav-height)] max-lg:h-[calc(100dvh-var(--portal-mobile-nav-height))] lg:bottom-0 lg:h-full"
       aria-hidden={!isOpen}
       inert={!isOpen}
     >
@@ -722,7 +722,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             />
           </div>
           <div>
-            <h3 className="font-serif text-base font-medium leading-none text-zinc-300">Elena AI</h3>
+            <h3 className="font-serif text-base font-medium leading-none text-[color:var(--portal-text)]">Elena AI</h3>
             <span className="mt-1 flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-green-500">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               CRM Intelligence Connected
@@ -1198,7 +1198,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         </div>
 
         {/* Input */}
-        <div className="border-t border-[#caa24c]/10 bg-zinc-950/60 p-3">
+        <div className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-md p-3 shrink-0">
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2 px-0.5">
               {attachments.map((att) => (
@@ -1223,7 +1223,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               e.preventDefault()
               handleSend(input)
             }}
-            className="relative flex items-center rounded-xl border border-zinc-800 bg-[#050505] px-3 py-1.5 focus-within:border-[#caa24c]/40 transition-colors"
+            className="relative flex items-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 focus-within:border-[#caa24c]/50 transition-colors"
           >
             <input 
               type="file" 
@@ -1238,7 +1238,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               type="button"
               onClick={() => fileInputRef.current?.click()}
               title="Attach image or document"
-              className="mr-2 text-zinc-500 hover:text-[#caa24c] transition-colors p-1 rounded-md cursor-pointer"
+              className="mr-2 text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors p-1 rounded-md cursor-pointer"
             >
               <Paperclip size={14} />
             </button>
@@ -1248,7 +1248,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={isListening ? 'Listening to your voice...' : 'Type a message or ask Elena anything...'}
-              className="portal-input-transparent flex-1 bg-transparent py-1 text-xs text-zinc-200 placeholder-zinc-600 outline-none"
+              className="portal-input-transparent flex-1 bg-transparent py-1 text-xs text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] outline-none"
               disabled={isLoading}
             />
 
@@ -1259,7 +1259,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               className={`mx-1 p-1.5 rounded-lg transition-all cursor-pointer ${
                 isListening
                   ? 'text-[#caa24c] animate-pulse ring-1 ring-[#caa24c]/50 bg-[#caa24c]/15'
-                  : 'text-zinc-500 hover:text-[#caa24c]'
+                  : 'text-[color:var(--portal-muted)] hover:text-[#caa24c]'
               }`}
             >
               {isListening ? <MicOff size={14} /> : <Mic size={14} />}
@@ -1273,7 +1273,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               <Send size={14} />
             </button>
           </form>
-          <p className="mt-1.5 text-[9px] text-center text-zinc-650 flex items-center justify-center gap-1">
+          <p className="mt-1.5 text-[9px] text-center text-[color:var(--portal-muted)] flex items-center justify-center gap-1">
             <Info size={9} />
             Queries run securely on the server with owner authorization.
           </p>

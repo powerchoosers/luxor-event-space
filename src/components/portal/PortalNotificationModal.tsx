@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
 import { AlertCircle, ArrowRight, Bell, CalendarCheck2, Check, CheckCircle2, ClipboardList, Eye, FileSignature, Mail, MessageSquare, PhoneMissed, Receipt, RotateCw, Search, X } from 'lucide-react'
 import { NotificationType, PortalNotificationItem, usePortalNotifications } from '@/hooks/usePortalNotifications'
 
@@ -59,6 +59,102 @@ function relativeTime(value: string) {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`
   if (seconds < 172800) return 'Yesterday'
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function SwipeableNotificationItem({
+  item,
+  onOpen,
+  onClear,
+}: {
+  item: PortalNotificationItem
+  onOpen: () => void
+  onClear: () => void
+}) {
+  const x = useMotionValue(0)
+
+  // As the user swipes right (0 to 140px):
+  // 1. Background fill transitions from 0 opacity to rich Luxor gold
+  const bgOpacity = useTransform(x, [0, 40, 120], [0, 0.45, 1])
+  // 2. Action badge ("✓ Clear") fades in and subtly scales up
+  const badgeOpacity = useTransform(x, [10, 45, 100], [0, 0.7, 1])
+  const badgeScale = useTransform(x, [10, 80], [0.85, 1])
+  const badgeX = useTransform(x, [0, 80], [-8, 0])
+
+  return (
+    <div className="relative overflow-hidden border-b border-[color:var(--portal-border)]/70 select-none">
+      {/* Background reveal underneath that gets more solid Luxor gold as you swipe */}
+      <motion.div
+        aria-hidden="true"
+        style={{ opacity: bgOpacity }}
+        className="pointer-events-none absolute inset-0 flex items-center justify-start pl-5 bg-[#caa24c] dark:bg-[#b08732]"
+      >
+        <motion.div
+          style={{ opacity: badgeOpacity, scale: badgeScale, x: badgeX }}
+          className="flex items-center gap-2 font-bold text-white tracking-wide text-xs"
+        >
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 shadow-xs">
+            <Check size={13} className="text-white stroke-[2.5]" />
+          </div>
+          <span>Clear</span>
+        </motion.div>
+      </motion.div>
+
+      {/* Foreground card that can be dragged to the right */}
+      <motion.div
+        style={{ x, y: 0 }}
+        drag="x"
+        dragDirectionLock
+        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+        dragElastic={{ left: 0, right: 0.85 }}
+        onDragEnd={(_e, info) => {
+          // If swiped right past 80px or with sufficient velocity, clear it!
+          if (info.offset.x > 80 || info.velocity.x > 350) {
+            onClear()
+          }
+        }}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, x: 120, height: 0, transition: { duration: 0.22 } }}
+        transition={{ duration: 0.18 }}
+        onClick={onOpen}
+        className="group relative flex cursor-pointer items-start gap-3 bg-[color:var(--portal-card)] px-4 py-3.5 hover:bg-[color:var(--portal-soft)]/65 active:cursor-grabbing transform-gpu will-change-transform"
+      >
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--portal-soft)]">
+          {notificationIcon(item.type)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <h4 className={`line-clamp-2 text-xs leading-5 ${item.isRead ? 'font-medium' : 'font-bold'}`}>
+              {item.title}
+            </h4>
+            <span className="shrink-0 pt-0.5 text-[10px] text-[color:var(--portal-faint)]">
+              {relativeTime(item.timestamp)}
+            </span>
+          </div>
+          <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[color:var(--portal-muted)]">
+            {item.subtitle}
+          </p>
+          <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#9b7425] dark:text-[#dfbd6d]">
+            Open <ArrowRight size={10} />
+          </span>
+        </div>
+        {!item.isRead ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onClear()
+            }}
+            className="portal-notification-action absolute bottom-2 right-2 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] opacity-100 shadow-xs transition-opacity hover:border-emerald-500/40 hover:text-emerald-600 focus:opacity-100 group-hover:opacity-100 md:opacity-0 dark:hover:text-emerald-400"
+            aria-label={`Mark ${item.title} handled`}
+            title="Mark handled"
+          >
+            <Check size={13} />
+          </button>
+        ) : null}
+      </motion.div>
+    </div>
+  )
 }
 
 export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, unreadCount, loading, unreadCountsByType: _unreadCountsByType, onMarkAsRead, onMarkAllAsRead, onRefresh }: PortalNotificationModalProps) {
@@ -157,19 +253,22 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
 
       <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <AnimatePresence initial={false} mode="popLayout">
-          {visibleItems.length ? visibleItems.map((item) => <motion.div layout key={item.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 20, height: 0 }} transition={{ duration: 0.18 }} onClick={() => openItem(item)} className="group relative flex cursor-pointer items-start gap-3 border-b border-[color:var(--portal-border)]/70 px-4 py-3.5 hover:bg-[color:var(--portal-soft)]/65">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--portal-soft)]">{notificationIcon(item.type)}</div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-3"><h4 className={`line-clamp-2 text-xs leading-5 ${item.isRead ? 'font-medium' : 'font-bold'}`}>{item.title}</h4><span className="shrink-0 pt-0.5 text-[10px] text-[color:var(--portal-faint)]">{relativeTime(item.timestamp)}</span></div>
-              <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[color:var(--portal-muted)]">{item.subtitle}</p>
-              <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#9b7425] dark:text-[#dfbd6d]">Open <ArrowRight size={10} /></span>
-            </div>
-            {!item.isRead ? <button type="button" onClick={(event) => handleItem(event, item)} className="portal-notification-action absolute bottom-2 right-2 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] opacity-100 shadow-xs transition-opacity hover:border-emerald-500/40 hover:text-emerald-600 focus:opacity-100 group-hover:opacity-100 md:opacity-0 dark:hover:text-emerald-400" aria-label={`Mark ${item.title} handled`} title="Mark handled"><Check size={13} /></button> : null}
-          </motion.div>) : <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-64 flex-col items-center justify-center px-8 text-center">
-            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"><Check size={20} /></div>
-            <p className="text-sm font-semibold">{searchQuery ? 'No matches' : view === 'unread' ? 'All caught up' : 'No recent history'}</p>
-            <p className="mt-1 max-w-56 text-[11px] leading-4 text-[color:var(--portal-muted)]">{searchQuery ? 'Try a different name or subject.' : view === 'unread' ? 'Handled notifications move to Earlier.' : 'Read notifications are kept here for 30 days.'}</p>
-          </motion.div>}
+          {visibleItems.length ? (
+            visibleItems.map((item) => (
+              <SwipeableNotificationItem
+                key={item.id}
+                item={item}
+                onOpen={() => openItem(item)}
+                onClear={() => onMarkAsRead(item.id)}
+              />
+            ))
+          ) : (
+            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-64 flex-col items-center justify-center px-8 text-center">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"><Check size={20} /></div>
+              <p className="text-sm font-semibold">{searchQuery ? 'No matches' : view === 'unread' ? 'All caught up' : 'No recent history'}</p>
+              <p className="mt-1 max-w-56 text-[11px] leading-4 text-[color:var(--portal-muted)]">{searchQuery ? 'Try a different name or subject.' : view === 'unread' ? 'Handled notifications move to Earlier.' : 'Read notifications are kept here for 30 days.'}</p>
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
 

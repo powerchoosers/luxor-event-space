@@ -38,7 +38,7 @@ function isNodeLoading(node: React.ReactNode): boolean {
   }
   if (typeof type === 'object' && type !== null) {
     const obj = type as unknown as LuxorLoadingType
-    if (obj.isLuxorLoading || obj.name === 'Loading') {
+    if (obj.isLuxorLoading || obj.name === 'Loading' || ('displayName' in obj && typeof (obj as { displayName?: string }).displayName === 'string' && (obj as { displayName: string }).displayName.includes('Loading'))) {
       return true
     }
   }
@@ -147,7 +147,7 @@ export function RouteTransition({
               initial={
                 reduceMotion
                   ? { opacity: 0 }
-                  : { opacity: 0.85, filter: 'blur(8px)', scale: 0.99 }
+                  : { opacity: 0, filter: 'blur(10px)', scale: 0.99 }
               }
               animate={
                 reduceMotion
@@ -159,13 +159,13 @@ export function RouteTransition({
                   ? { opacity: 0 }
                   : {
                       opacity: 0,
-                      filter: 'blur(16px)',
-                      scale: 0.985,
-                      transition: { duration: 0.35, ease: LUXOR_EASE },
+                      filter: 'blur(20px)',
+                      scale: 0.98,
+                      transition: { duration: 0.42, ease: LUXOR_EASE },
                     }
               }
-              transition={{ duration: 0.25, ease: LUXOR_EASE }}
-              className="fixed inset-0 z-[100] flex items-center justify-center p-4 portal-loading-backdrop transform-gpu"
+              transition={{ duration: 0.3, ease: LUXOR_EASE }}
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 portal-loading-backdrop transform-gpu will-change-[opacity,filter,transform]"
             >
               <PortalLoadingCard />
             </motion.div>
