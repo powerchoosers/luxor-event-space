@@ -1438,6 +1438,34 @@ thead.sticky th,
   -webkit-backdrop-filter: blur(14px);
 }
 
+.portal-route-loader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.portal-route-loader-bar {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(202, 162, 76, 0.4) 20%, #caa24c 50%, #f7efe3 75%, transparent 100%);
+  background-size: 200% 100%;
+  animation: portal-loader-glide 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes portal-loader-glide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 /* Keep every owner-portal data table visually aligned with the polished lead list. */
 .portal-data-table {
   color: var(--portal-text);

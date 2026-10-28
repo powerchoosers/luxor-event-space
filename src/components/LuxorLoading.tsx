@@ -2,6 +2,7 @@
 
 import React, { useSyncExternalStore } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
+import { usePathname } from 'next/navigation'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { usePortalLoadingSignal } from '@/lib/luxorLoadingSignal'
 
@@ -64,12 +65,12 @@ export function PortalLoadingCard({ className = '' }: { className?: string }) {
 ;(PortalLoadingCard as unknown as { isLuxorLoading?: boolean }).isLuxorLoading = true
 
 export function PortalLoading({ className = '' }: { className?: string }) {
-  usePortalLoadingSignal()
+  const pathname = usePathname()
+  usePortalLoadingSignal(pathname)
   const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot)
 
-  // During SSR (before hydration), render static card so initial HTML is never blank.
-  // Once hydrated on client, RouteTransition's AnimatePresence overlay manages the smooth entrance/exit blur.
-  if (!hydrated) {
+  // During SSR before hydration on initial home entrance, render the static card
+  if (!hydrated && pathname === '/portal') {
     return (
       <div
         data-luxor-loading="true"
@@ -80,14 +81,27 @@ export function PortalLoading({ className = '' }: { className?: string }) {
     )
   }
 
-  // Client-side placeholder: triggers usePortalLoadingSignal, keeps layout height stable, invisible to user so only the AnimatePresence overlay is shown.
+  // Structured in-page skeleton for subpages or initial suspense to fill layout gaps smoothly
   return (
     <div
       data-luxor-loading="true"
-      aria-hidden="true"
-      className={`flex flex-1 flex-col items-center justify-center my-auto min-h-[calc(100vh-10rem)] w-full py-10 px-4 opacity-0 pointer-events-none ${className}`}
+      aria-busy="true"
+      className={`flex flex-1 flex-col w-full py-6 px-4 sm:px-8 space-y-6 ${className}`}
     >
-      <div className="sr-only">Syncing Workspace...</div>
+      <div className="flex flex-col gap-2">
+        <div className="h-6 w-44 rounded-xl luxor-skeleton" />
+        <div className="h-3 w-60 rounded-lg luxor-skeleton opacity-60" />
+      </div>
+      <div className="flex items-center justify-between gap-4 pt-1">
+        <div className="h-9 w-64 rounded-xl luxor-skeleton" />
+        <div className="h-9 w-24 rounded-xl luxor-skeleton" />
+      </div>
+      <div className="h-72 w-full rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-3.5">
+        <div className="h-3.5 w-full rounded luxor-skeleton opacity-75" />
+        <div className="h-3.5 w-11/12 rounded luxor-skeleton opacity-60" />
+        <div className="h-3.5 w-4/5 rounded luxor-skeleton opacity-45" />
+        <div className="h-3.5 w-3/4 rounded luxor-skeleton opacity-30" />
+      </div>
     </div>
   )
 }

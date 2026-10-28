@@ -4,58 +4,135 @@ import { useEffect, useSyncExternalStore } from 'react'
 
 type PortalLoadingListener = () => void
 
-const portalLoadingListeners = new Set<PortalLoadingListener>()
-let isPortalLoadingGlobal = false
+const listeners = new Set<PortalLoadingListener>()
+
+let isInitialOverlayActive = false
+let isRouteLoadingActive = false
+let initialSyncDone = false
 let safetyTimer: ReturnType<typeof setTimeout> | null = null
 
+function notify() {
+  listeners.forEach((listener) => {
+    try {
+      listener()
+    } catch {
+      // ignore
+    }
+  })
+}
+
 function subscribe(callback: PortalLoadingListener) {
-  portalLoadingListeners.add(callback)
+  listeners.add(callback)
   return () => {
-    portalLoadingListeners.delete(callback)
+    listeners.delete(callback)
   }
 }
 
-function getSnapshot() {
-  return isPortalLoadingGlobal
-}
-
-function getServerSnapshot() {
+export function hasCompletedInitialSync(): boolean {
+  if (typeof window === 'undefined') return true
+  if (initialSyncDone) return true
+  try {
+    if (sessionStorage.getItem('luxor_portal_synced') === 'true') {
+      initialSyncDone = true
+      return true
+    }
+  } catch {
+    // ignore
+  }
   return false
 }
 
-export function setPortalLoadingSignal(loading: boolean) {
+export function markInitialSyncComplete() {
+  initialSyncDone = true
+  try {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('luxor_portal_synced', 'true')
+    }
+  } catch {
+    // ignore
+  }
+  if (isInitialOverlayActive) {
+    isInitialOverlayActive = false
+    notify()
+  }
+}
+
+export function setPortalInitialOverlay(active: boolean) {
+  if (isInitialOverlayActive === active) return
+  isInitialOverlayActive = active
+  notify()
+}
+
+export function setRouteLoadingSignal(active: boolean) {
   if (safetyTimer) {
     clearTimeout(safetyTimer)
     safetyTimer = null
   }
 
-  // Safety watchdog: never let portal loading stay stuck on indefinitely
-  if (loading) {
+  if (active) {
     safetyTimer = setTimeout(() => {
-      setPortalLoadingSignal(false)
-    }, 12000)
+      setRouteLoadingSignal(false)
+    }, 10000)
   }
 
-  if (isPortalLoadingGlobal === loading) return
-  isPortalLoadingGlobal = loading
-  portalLoadingListeners.forEach((listener) => {
-    try {
-      listener()
-    } catch {
-      // ignore observer errors
-    }
-  })
+  if (isRouteLoadingActive === active) return
+  isRouteLoadingActive = active
+  notify()
 }
 
-export function usePortalLoadingState(): boolean {
+export interface PortalLoadingStatus {
+  isInitialOverlay: boolean
+  isRouteLoading: boolean
+}
+
+let cachedSnapshot: PortalLoadingStatus = {
+  isInitialOverlay: false,
+  isRouteLoading: false,
+}
+
+function getSnapshot(): PortalLoadingStatus {
+  if (
+    cachedSnapshot.isInitialOverlay !== isInitialOverlayActive ||
+    cachedSnapshot.isRouteLoading !== isRouteLoadingActive
+  ) {
+    cachedSnapshot = {
+      isInitialOverlay: isInitialOverlayActive,
+      isRouteLoading: isRouteLoadingActive,
+    }
+  }
+  return cachedSnapshot
+}
+
+const serverSnapshot: PortalLoadingStatus = {
+  isInitialOverlay: false,
+  isRouteLoading: false,
+}
+
+function getServerSnapshot(): PortalLoadingStatus {
+  return serverSnapshot
+}
+
+export function usePortalLoadingState(): PortalLoadingStatus {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
-export function usePortalLoadingSignal() {
+export function usePortalLoadingSignal(pathname?: string) {
   useEffect(() => {
-    setPortalLoadingSignal(true)
-    return () => {
-      setPortalLoadingSignal(false)
+    const isHome = pathname === '/portal'
+    const needsInitialSync = isHome && !hasCompletedInitialSync()
+
+    if (needsInitialSync) {
+      setPortalInitialOverlay(true)
+    } else {
+      setRouteLoadingSignal(true)
     }
-  }, [])
+
+    return () => {
+      if (needsInitialSync) {
+        // Will be marked complete by the presentation timer in RouteTransition
+      } else {
+        setRouteLoadingSignal(false)
+      }
+    }
+  }, [pathname])
 }

@@ -4,7 +4,11 @@ import React, { useRef, useState, useSyncExternalStore } from 'react'
 import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion'
 import { usePathname } from 'next/navigation'
 import { PortalLoadingCard } from '@/components/LuxorLoading'
-import { usePortalLoadingState } from '@/lib/luxorLoadingSignal'
+import {
+  usePortalLoadingState,
+  hasCompletedInitialSync,
+  markInitialSyncComplete,
+} from '@/lib/luxorLoadingSignal'
 
 const LUXOR_EASE = [0.22, 1, 0.36, 1] as const
 const subscribeToHydration = () => () => {}
@@ -75,13 +79,34 @@ export function RouteTransition({
     ? 'flex-1 min-h-0 min-w-0 h-full w-full flex flex-col overflow-hidden'
     : 'flex-1 min-h-full min-w-0 w-full flex flex-col'
 
-  const isSignalLoading = usePortalLoadingState()
-  const isLoading = isNodeLoading(children) || isSignalLoading
-  const [contentCache, setContentCache] = useState<{ content: React.ReactNode }>({
-    content: isLoading ? null : children,
+  const { isRouteLoading } = usePortalLoadingState()
+  const isSuspenseLoading = isNodeLoading(children)
+  const isNavigating = isSuspenseLoading || isRouteLoading
+
+  // Initial home screen overlay: only triggers on cold first-time entrance to '/portal'
+  const [initialOverlayActive, setInitialOverlayActive] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return pathname === '/portal' && !hasCompletedInitialSync()
   })
 
-  if (!isLoading && children && children !== contentCache.content) {
+  useEffect(() => {
+    if (!initialOverlayActive) return
+
+    // Intentional presentation window (750ms) before initiating the exit blur dissolve
+    const timer = setTimeout(() => {
+      setInitialOverlayActive(false)
+      markInitialSyncComplete()
+    }, 750)
+
+    return () => clearTimeout(timer)
+  }, [initialOverlayActive])
+
+  // Hold previous page content during navigation so transitions are 100% gap-free
+  const [contentCache, setContentCache] = useState<{ content: React.ReactNode }>({
+    content: isNavigating ? null : children,
+  })
+
+  if (!isNavigating && children && children !== contentCache.content) {
     setContentCache({ content: children })
   }
 
@@ -94,7 +119,7 @@ export function RouteTransition({
       opacity: 0.65,
       y: 6,
       scale: 0.998,
-      filter: 'blur(10px)',
+      filter: 'blur(12px)',
     },
     animate: {
       opacity: 1,
@@ -102,7 +127,7 @@ export function RouteTransition({
       scale: 1,
       filter: 'blur(0px)',
       transition: {
-        duration: 0.28,
+        duration: 0.32,
         ease: LUXOR_EASE,
       },
       transitionEnd: {
@@ -124,12 +149,19 @@ export function RouteTransition({
   // Replace the portal stage atomically so the destination's first frame is
   // already blurred, instead of showing it in the outgoing page first.
   if (isPortal) {
-    const contentToDisplay = isLoading ? contentCache.content : children
+    const contentToDisplay = isNavigating ? (contentCache.content || children) : children
 
     return (
       <div className={`relative ${portalClass}`}>
+        {/* Subtle, non-intrusive luxury gold progress indicator across top edge during route navigation */}
+        {isNavigating && !initialOverlayActive && (
+          <div className="portal-route-loader" aria-hidden="true">
+            <div className="portal-route-loader-bar" />
+          </div>
+        )}
+
         <motion.div
-          key={`${pathname}-${isLoading ? 'loading' : 'ready'}`}
+          key={pathname}
           id={`route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`}
           className={`luxor-route-stage surface-portal ${portalClass}`}
           initial="initial"
@@ -140,9 +172,9 @@ export function RouteTransition({
         </motion.div>
 
         <AnimatePresence>
-          {isLoading && (
+          {initialOverlayActive && (
             <motion.div
-              key="portal-loading-overlay"
+              key="portal-initial-overlay"
               id="portal-loading-overlay"
               aria-live="polite"
               aria-busy="true"
@@ -151,7 +183,7 @@ export function RouteTransition({
                   ? { opacity: 0 }
                   : {
                       opacity: 0,
-                      filter: 'blur(12px)',
+                      filter: 'blur(16px)',
                       backdropFilter: 'blur(0px)',
                       scale: 0.99,
                     }
@@ -171,14 +203,14 @@ export function RouteTransition({
                   ? { opacity: 0 }
                   : {
                       opacity: 0,
-                      filter: 'blur(24px)',
+                      filter: 'blur(36px)',
                       backdropFilter: 'blur(0px)',
-                      scale: 0.97,
+                      scale: 0.96,
                       pointerEvents: 'none' as const,
-                      transition: { duration: 0.45, ease: LUXOR_EASE },
+                      transition: { duration: 0.65, ease: [0.16, 1, 0.3, 1] },
                     }
               }
-              transition={{ duration: 0.3, ease: LUXOR_EASE }}
+              transition={{ duration: 0.35, ease: LUXOR_EASE }}
               className="fixed inset-0 z-[100] flex items-center justify-center p-4 portal-loading-backdrop transform-gpu will-change-[opacity,filter,transform]"
             >
               <PortalLoadingCard />
