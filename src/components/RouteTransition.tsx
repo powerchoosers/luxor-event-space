@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion'
 import { usePathname } from 'next/navigation'
 import { PortalLoadingCard } from '@/components/LuxorLoading'
@@ -240,7 +240,7 @@ export function RouteTransition({
     },
   }
 
-  const transitionKey = `${pathname}-${isLoading ? 'loading' : 'content'}`
+  const transitionKey = `${pathname}-${isSuspenseLoading ? 'loading' : 'content'}`
 
   return (
     <motion.div
