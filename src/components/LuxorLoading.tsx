@@ -1,10 +1,14 @@
 'use client'
 
-import React from 'react'
+import React, { useSyncExternalStore } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
+import { usePortalLoadingSignal } from '@/lib/luxorLoadingSignal'
 
 const LUXOR_EASE = [0.22, 1, 0.36, 1] as const
+const subscribeToHydration = () => () => {}
+const clientSnapshot = () => true
+const serverSnapshot = () => false
 
 export function SiteLoading() {
   const reduceMotion = useReducedMotion()
@@ -60,19 +64,31 @@ export function PortalLoadingCard({ className = '' }: { className?: string }) {
 ;(PortalLoadingCard as unknown as { isLuxorLoading?: boolean }).isLuxorLoading = true
 
 export function PortalLoading({ className = '' }: { className?: string }) {
-  const reduceMotion = useReducedMotion()
+  usePortalLoadingSignal()
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot)
 
+  // During SSR (before hydration), render static card so initial HTML is never blank.
+  // Once hydrated on client, RouteTransition's AnimatePresence overlay manages the smooth entrance/exit blur.
+  if (!hydrated) {
+    return (
+      <div
+        data-luxor-loading="true"
+        className={`flex flex-1 flex-col items-center justify-center my-auto min-h-[calc(100vh-10rem)] w-full py-10 px-4 ${className}`}
+      >
+        <PortalLoadingCard />
+      </div>
+    )
+  }
+
+  // Client-side placeholder: triggers usePortalLoadingSignal, keeps layout height stable, invisible to user so only the AnimatePresence overlay is shown.
   return (
-    <motion.div
+    <div
       data-luxor-loading="true"
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.99, filter: 'blur(10px)' }}
-      animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, filter: 'blur(0px)' }}
-      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, filter: 'blur(20px)' }}
-      transition={{ duration: 0.35, ease: LUXOR_EASE }}
-      className={`flex flex-1 flex-col items-center justify-center my-auto min-h-[calc(100vh-10rem)] w-full py-10 px-4 transform-gpu will-change-[opacity,filter,transform] ${className}`}
+      aria-hidden="true"
+      className={`flex flex-1 flex-col items-center justify-center my-auto min-h-[calc(100vh-10rem)] w-full py-10 px-4 opacity-0 pointer-events-none ${className}`}
     >
-      <PortalLoadingCard />
-    </motion.div>
+      <div className="sr-only">Syncing Workspace...</div>
+    </div>
   )
 }
 ;(PortalLoading as unknown as { isLuxorLoading?: boolean }).isLuxorLoading = true

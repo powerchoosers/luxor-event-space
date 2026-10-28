@@ -27,6 +27,7 @@ export function LuxorCrmRecordCard({
   lead,
   avatar,
   badges,
+  headerAction,
   subtitle,
   contact,
   children,
@@ -43,6 +44,7 @@ export function LuxorCrmRecordCard({
   lead: LuxorInquiry
   avatar?: ReactNode
   badges?: LuxorCrmCardBadge[]
+  headerAction?: ReactNode
   subtitle?: ReactNode
   contact?: ReactNode
   contentColumn?: boolean
@@ -87,7 +89,7 @@ export function LuxorCrmRecordCard({
               <h3 className={`${responsiveContentColumn ? 'break-words [overflow-wrap:anywhere]' : 'truncate'} text-sm font-semibold leading-tight text-[color:var(--portal-text)]`}>{lead.full_name}</h3>
               {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)]">{subtitle}</div> : null}
             </div>
-            {badges?.length ? <div className="flex max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-end">{badges.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} />)}</div> : null}
+            {(badges?.length || headerAction) ? <div className="flex max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-end">{badges?.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} />)}{headerAction}</div> : null}
           </div>
           {contact ? <div className="mt-1 break-all text-[10px] text-[color:var(--portal-muted)]">{contact}</div> : null}
         </div>
@@ -104,9 +106,10 @@ export function LuxorCrmRecordCard({
                 <h3 className="truncate text-sm font-semibold leading-tight text-[color:var(--portal-text)]">{lead.full_name}</h3>
                 {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)]">{subtitle}</div> : null}
               </div>
-              {badges?.length ? (
+              {(badges?.length || headerAction) ? (
                 <div className="flex max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-end">
-                  {badges.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} />)}
+                  {badges?.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} />)}
+                  {headerAction}
                 </div>
               ) : null}
             </div>

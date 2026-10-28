@@ -4,6 +4,7 @@ import React, { useRef, useState, useSyncExternalStore } from 'react'
 import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion'
 import { usePathname } from 'next/navigation'
 import { PortalLoadingCard } from '@/components/LuxorLoading'
+import { usePortalLoadingState } from '@/lib/luxorLoadingSignal'
 
 const LUXOR_EASE = [0.22, 1, 0.36, 1] as const
 const subscribeToHydration = () => () => {}
@@ -74,7 +75,8 @@ export function RouteTransition({
     ? 'flex-1 min-h-0 min-w-0 h-full w-full flex flex-col overflow-hidden'
     : 'flex-1 min-h-full min-w-0 w-full flex flex-col'
 
-  const isLoading = isNodeLoading(children)
+  const isSignalLoading = usePortalLoadingState()
+  const isLoading = isNodeLoading(children) || isSignalLoading
   const [contentCache, setContentCache] = useState<{ content: React.ReactNode }>({
     content: isLoading ? null : children,
   })
@@ -127,7 +129,7 @@ export function RouteTransition({
     return (
       <div className={`relative ${portalClass}`}>
         <motion.div
-          key={pathname}
+          key={`${pathname}-${isLoading ? 'loading' : 'ready'}`}
           id={`route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`}
           className={`luxor-route-stage surface-portal ${portalClass}`}
           initial="initial"
@@ -147,21 +149,33 @@ export function RouteTransition({
               initial={
                 reduceMotion
                   ? { opacity: 0 }
-                  : { opacity: 0, filter: 'blur(10px)', scale: 0.99 }
+                  : {
+                      opacity: 0,
+                      filter: 'blur(12px)',
+                      backdropFilter: 'blur(0px)',
+                      scale: 0.99,
+                    }
               }
               animate={
                 reduceMotion
                   ? { opacity: 1 }
-                  : { opacity: 1, filter: 'blur(0px)', scale: 1 }
+                  : {
+                      opacity: 1,
+                      filter: 'blur(0px)',
+                      backdropFilter: 'blur(14px)',
+                      scale: 1,
+                    }
               }
               exit={
                 reduceMotion
                   ? { opacity: 0 }
                   : {
                       opacity: 0,
-                      filter: 'blur(20px)',
-                      scale: 0.98,
-                      transition: { duration: 0.42, ease: LUXOR_EASE },
+                      filter: 'blur(24px)',
+                      backdropFilter: 'blur(0px)',
+                      scale: 0.97,
+                      pointerEvents: 'none' as const,
+                      transition: { duration: 0.45, ease: LUXOR_EASE },
                     }
               }
               transition={{ duration: 0.3, ease: LUXOR_EASE }}

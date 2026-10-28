@@ -90,6 +90,7 @@ import { WeekdayRentalSummary } from '@/components/portal/WeekdayRentalSummary'
 import { LuxorTestLeadPanel } from '@/components/portal/LuxorTestLeadPanel'
 import { LuxorTestLeadWorkflow } from '@/components/portal/LuxorTestLeadWorkflow'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
+import { useDualPaneStickyScroll } from '@/components/portal/useDualPaneStickyScroll'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -907,6 +908,16 @@ export default function LeadDetailPage({
   const sectionMenuPanelRef = useRef<HTMLDivElement>(null)
   const sectionMenuId = React.useId()
   const [showClientSidebar, setShowClientSidebar] = useState(true)
+
+  const {
+    containerRef: dualPaneContainerRef,
+    leftPaneRef: dualPaneLeftRef,
+    rightPaneRef: dualPaneRightRef,
+  } = useDualPaneStickyScroll({
+    enabled: showClientSidebar,
+    topOffset: 80,
+    bottomOffset: 24,
+  })
 
   useEffect(() => {
     if (!mobileSectionDrawerOpen) return
@@ -5476,9 +5487,9 @@ export default function LeadDetailPage({
       </section>
 
       {activeLeadTab === 'overview' || activeLeadTab === 'planning' ? (
-        <div className="mt-4 flex flex-col gap-6 pb-12 sm:pb-16 xl:flex-row xl:items-start xl:gap-0">
+        <div ref={dualPaneContainerRef} className="mt-4 flex flex-col gap-6 pb-12 sm:pb-16 xl:flex-row xl:items-start xl:gap-0">
           {/* Left Column (Columns 1 & 2): Dossier main sections */}
-          <div className="min-w-0 flex-1 space-y-6">
+          <div ref={dualPaneLeftRef} className="min-w-0 flex-1 space-y-6">
             {activeLeadTab === 'planning' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="planning" onOpenProposal={() => openProposalBuilder()} /> : null}
 
             
@@ -7643,9 +7654,9 @@ export default function LeadDetailPage({
                 animate={{ width: 'auto', opacity: 1, x: 0 }}
                 exit={{ width: 0, opacity: 0, x: 56 }}
                 transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-                className="w-full shrink-0 overflow-hidden xl:sticky xl:top-6 xl:self-start xl:w-auto"
+                className="w-full shrink-0 overflow-hidden xl:w-auto"
               >
-                <div className="min-w-0 space-y-6 py-0.5 pr-0.5 xl:w-[370px] 2xl:w-[420px] xl:pl-6">
+                <div ref={dualPaneRightRef} className="min-w-0 space-y-6 py-0.5 pr-0.5 xl:w-[370px] 2xl:w-[420px] xl:pl-6">
             {(() => {
               const currentStage = selectedStageOverride || activeStage
               

@@ -26,7 +26,6 @@ import {
   ListMinus,
   ArrowUp,
   ArrowDown,
-  LayoutGrid,
   List,
   Languages,
   Star,
@@ -2131,8 +2130,6 @@ function LeadsToursTab({
   busyTourOutcomeIds: string[]
 }) {
   type TourView = 'all' | TourCategory
-  type TourViewMode = 'cards' | 'list'
-  type TourSortKey = 'client' | 'date' | 'event' | 'stage'
   type TourCategory = ScheduledTourCategory
 
   const [view, setView] = useState<TourView>(() => {
@@ -2140,46 +2137,10 @@ function LeadsToursTab({
     const saved = window.localStorage.getItem('luxor_leads_tours_view')
     return saved === 'past' ? 'needs_outcome' : saved && ['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'].includes(saved) ? saved as TourView : 'all'
   })
-  const [viewMode, setViewMode] = useState<TourViewMode>(() => {
-    if (typeof window === 'undefined') return 'cards'
-    const saved = window.localStorage.getItem('luxor_leads_tours_view_mode')
-    return saved && ['cards', 'list'].includes(saved) ? saved as TourViewMode : 'cards'
-  })
-  const [sort, setSort] = useState<TableSort<TourSortKey>>(() => {
-    if (typeof window === 'undefined') return { key: 'date', direction: 'asc' }
-    const saved = window.localStorage.getItem('luxor_leads_tours_sort')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as TableSort<TourSortKey>
-        if (['client', 'date', 'event', 'stage'].includes(parsed.key) && ['asc', 'desc'].includes(parsed.direction)) return parsed
-      } catch {
-        // Ignore malformed browser preferences and retain the default.
-      }
-    }
-    return { key: 'date', direction: 'asc' }
-  })
-  const [currentPage, setCurrentPage] = useState(1)
 
   const saveView = (nextView: TourView) => {
     setView(nextView)
-    setCurrentPage(1)
     window.localStorage.setItem('luxor_leads_tours_view', nextView)
-  }
-
-  const saveViewMode = (nextMode: TourViewMode) => {
-    setViewMode(nextMode)
-    window.localStorage.setItem('luxor_leads_tours_view_mode', nextMode)
-  }
-
-  const handleSort = (key: TourSortKey, direction?: SortDirection) => {
-    const nextSort = direction
-      ? { key, direction }
-      : sort.key === key
-        ? { key, direction: sort.direction === 'asc' ? 'desc' : 'asc' } as TableSort<TourSortKey>
-        : { key, direction: 'asc' } as TableSort<TourSortKey>
-    setSort(nextSort)
-    setCurrentPage(1)
-    window.localStorage.setItem('luxor_leads_tours_sort', JSON.stringify(nextSort))
   }
 
   const [todayKey, setTodayKey] = useState(() => luxorTodayKey())
@@ -2199,38 +2160,15 @@ function LeadsToursTab({
       const category = getLuxorTourSection(tour, todayKey)
       if (category) result[category].push(tour)
     })
-    const compare = (a: LuxorInquiry, b: LuxorInquiry) => {
-      const values: Record<TourSortKey, number> = {
-        client: a.full_name.localeCompare(b.full_name),
-        date: compareLuxorScheduledTours(a, b, 'asc'),
-        event: (a.event_type || '').localeCompare(b.event_type || ''),
-        stage: getPipelineStage(a).localeCompare(getPipelineStage(b)),
-      }
-      const value = values[sort.key]
-      return sort.direction === 'asc' ? value : -value
-    }
     Object.entries(result).forEach(([category, items]) => {
       const defaultDirection = ['completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'].includes(category) ? 'desc' : 'asc'
-      items.sort(sort.key === 'date' ? (a, b) => compareLuxorScheduledTours(a, b, defaultDirection) : compare)
+      items.sort((a, b) => compareLuxorScheduledTours(a, b, defaultDirection))
     })
     return result
-  }, [sort, todayKey, tours])
+  }, [todayKey, tours])
 
   const categoryLabels: Record<TourCategory, string> = { today: 'Today', upcoming: 'Upcoming', completed: 'Completed', no_shows: 'No Shows', needs_outcome: 'Needs Outcome', needs_schedule: 'Needs Schedule', cancelled: 'Cancelled' }
   const categoryOrder: TourCategory[] = ['today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled']
-  const visibleTours = view === 'all' ? categoryOrder.flatMap((category) => grouped[category]) : grouped[view]
-  const pageSize = 25
-  const totalPages = Math.max(1, Math.ceil(visibleTours.length / pageSize))
-  const activePage = Math.min(currentPage, totalPages)
-  const pageTours = visibleTours.slice((activePage - 1) * pageSize, activePage * pageSize)
-  const firstShown = visibleTours.length === 0 ? 0 : (activePage - 1) * pageSize + 1
-  const lastShown = Math.min(activePage * pageSize, visibleTours.length)
-  const listFooter = viewMode === 'list' ? (
-    <div className="flex w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">
-      <span>{visibleTours.length ? `Showing ${firstShown}–${lastShown} of ${visibleTours.length} tours` : 'No tours to show'}</span>
-      <PortalPagination currentPage={activePage} totalPages={totalPages} onPageChange={setCurrentPage} />
-    </div>
-  ) : null
 
   const tourStatusTones: Record<TourCategory, PortalStatusTone> = {
     today: 'blue', upcoming: 'gold', completed: 'green', no_shows: 'red',
@@ -2244,20 +2182,22 @@ function LeadsToursTab({
         key={tour.id}
         lead={tour}
         badges={[{ label: statusLabel, tone: tourStatusTones[category], warning: category === 'needs_outcome' }]}
+        headerAction={
+          <LeadLifecycleActionsMenu
+            lead={tour}
+            onAction={(action) => onLifecycleAction(tour, action)}
+            className="!h-7 !w-7"
+          />
+        }
         subtitle={<>{tour.event_type || 'Quinceañera'} · {tour.target_date || 'Event date not set'}{tour.guest_count ? <> · {tour.guest_count} guests</> : null}</>}
         contact={tour.email || (tour.phone ? formatPhoneDisplay(tour.phone) : 'No contact details')}
         className={category === 'no_shows' ? 'border-rose-300 dark:border-rose-400/40' : ''}
+        onOpen={() => { window.location.href = `/portal/leads/${tour.id}` }}
+        interactionLabel={`Open lead record for ${tour.full_name}`}
         actions={
-          <div className="grid w-full min-w-0 gap-2.5">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="shrink-0 text-[10px] font-semibold text-[color:var(--portal-muted)]">Stage</span>
-              <PortalSelect aria-label={`Pipeline stage for ${tour.full_name}`} className="min-w-0 flex-1" value={getPipelineStage(tour)} onChange={(value) => onMovePipelineStage(tour.id, value as LuxorPipelineStage)} options={PIPELINE_STAGE_OPTIONS} />
-            </div>
-            <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5">
-              <Link href={'/portal/leads/' + tour.id + '?stage=tour'} className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-[#a8792f] px-3 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><Calendar size={14} /> Manage Tour</Link>
-              <Link href={'/portal/leads/' + tour.id} className="inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"><Eye size={14} /> View</Link>
-              <LeadLifecycleActionsMenu lead={tour} onAction={(action) => onLifecycleAction(tour, action)} className="!h-11 !w-11" />
-            </div>
+          <div className="flex w-full min-w-0 items-center gap-3">
+            <span className="shrink-0 text-[10px] font-semibold text-[color:var(--portal-muted)]">Stage</span>
+            <PortalSelect aria-label={`Pipeline stage for ${tour.full_name}`} className="min-w-0 flex-1" value={getPipelineStage(tour)} onChange={(value) => onMovePipelineStage(tour.id, value as LuxorPipelineStage)} options={PIPELINE_STAGE_OPTIONS} />
           </div>
         }
       >
@@ -2279,75 +2219,38 @@ function LeadsToursTab({
       controls={
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Scheduled Tours ({loading ? '…' : tours.length})</h3>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <div className="flex max-w-full flex-wrap items-center justify-start gap-1 rounded-lg border border-[color:var(--portal-border)] p-1 sm:justify-end" role="tablist" aria-label="Tour date filter">
-              {(['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'] as TourView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => saveView(option)} className={`rounded-md px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${view === option ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{option === 'all' ? 'All' : `${categoryLabels[option]} (${grouped[option].length})`}</button>)}
-            </div>
-            {viewMode === 'list' ? <div className="w-full sm:w-56"><PortalSelect value={sort.key + ':' + sort.direction} onChange={(value) => { const [key, direction] = value.split(':'); handleSort(key as TourSortKey, direction as SortDirection) }} aria-label="Sort tours" options={[
-              { value: 'date:asc', label: 'Tour time · Earliest first' }, { value: 'date:desc', label: 'Tour time · Latest first' },
-              { value: 'client:asc', label: 'Client · A to Z' }, { value: 'client:desc', label: 'Client · Z to A' },
-              { value: 'event:asc', label: 'Event · A to Z' }, { value: 'event:desc', label: 'Event · Z to A' },
-              { value: 'stage:asc', label: 'Lifecycle · A to Z' }, { value: 'stage:desc', label: 'Lifecycle · Z to A' },
-            ]} /></div> : null}
-            <div className="flex items-center rounded-lg border border-[color:var(--portal-border)] p-1" aria-label="Tour view mode">
-              <button type="button" aria-pressed={viewMode === 'cards'} aria-label="Card view" onClick={() => saveViewMode('cards')} className={`rounded-md p-1.5 ${viewMode === 'cards' ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}><LayoutGrid size={15} /></button>
-              <button type="button" aria-pressed={viewMode === 'list'} aria-label="List view" onClick={() => saveViewMode('list')} className={`rounded-md p-1.5 ${viewMode === 'list' ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}><List size={15} /></button>
-            </div>
+          <div className="flex max-w-full flex-wrap items-center justify-start gap-1 rounded-lg border border-[color:var(--portal-border)] p-1 sm:justify-end" role="tablist" aria-label="Tour date filter">
+            {(['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'] as TourView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => saveView(option)} className={`rounded-md px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${view === option ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{option === 'all' ? 'All' : `${categoryLabels[option]} (${grouped[option].length})`}</button>)}
           </div>
         </div>
       }
-      footer={listFooter}
     >
       <PortalSkeletonTransition
         loading={loading}
         skeleton={
-          viewMode === 'cards' ? (
-            <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
-              <section aria-label="Loading scheduled tours">
-                <div className="mb-3 flex items-center gap-3">
-                  <PortalSkeleton className="h-3 w-28 rounded" />
-                  <PortalSkeleton className="h-3 w-6 rounded-full" />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <PortalTourCardSkeleton key={i} />
-                  ))}
-                </div>
-              </section>
-            </div>
-          ) : (
-            <div className="space-y-5 overflow-y-auto p-4 sm:p-6">
-              <section aria-label="Loading scheduled tours">
-                <div className="mb-3">
-                  <PortalSkeleton className="h-3 w-24 rounded" />
-                </div>
-                <div className="space-y-3">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <PortalTourCardSkeleton key={i} />
-                  ))}
-                </div>
-              </section>
-            </div>
-          )
+          <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
+            <section aria-label="Loading scheduled tours">
+              <div className="mb-3 flex items-center gap-3">
+                <PortalSkeleton className="h-3 w-28 rounded" />
+                <PortalSkeleton className="h-3 w-6 rounded-full" />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <PortalTourCardSkeleton key={i} />
+                ))}
+              </div>
+            </section>
+          </div>
         }
       >
-        {viewMode === 'cards' ? (
-          <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
-            {(view === 'all' ? categoryOrder : [view]).map((category) => (
-              <section key={category} aria-labelledby={'tour-' + category + '-heading'}>
-                <div className="mb-3 flex items-center gap-3"><h4 id={'tour-' + category + '-heading'} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
-                {grouped[category].length === 0 ? <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{grouped[category].map(renderTourCard)}</div>}
-              </section>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-5 overflow-y-auto p-4 sm:p-6">
-            {view === 'all' ? categoryOrder.map((category) => {
-              const records = pageTours.filter((tour) => getLuxorTourSection(tour, todayKey) === category)
-              return records.length ? <section key={category} aria-label={categoryLabels[category]}><h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{categoryLabels[category]}</h4><div className="space-y-3">{records.map(renderTourCard)}</div></section> : null
-            }) : pageTours.length ? pageTours.map(renderTourCard) : <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-10 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p>}
-          </div>
-        )}
+        <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
+          {(view === 'all' ? categoryOrder : [view]).map((category) => (
+            <section key={category} aria-labelledby={'tour-' + category + '-heading'}>
+              <div className="mb-3 flex items-center gap-3"><h4 id={'tour-' + category + '-heading'} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
+              {grouped[category].length === 0 ? <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{grouped[category].map(renderTourCard)}</div>}
+            </section>
+          ))}
+        </div>
       </PortalSkeletonTransition>
     </PortalTableCard>
   )
