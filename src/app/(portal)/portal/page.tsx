@@ -1,5 +1,5 @@
 import React, { Suspense } from "react";
-import { PortalOverviewSkeleton } from "./loading";
+import { PortalOverviewSkeleton } from "./PortalOverviewSkeleton";
 import { PortalHomeFrame } from "@/components/portal/PortalHomeFrame";
 import { PortalHomeReady, PortalHomeTransition } from "@/components/portal/PortalHomeTransition";
 import {

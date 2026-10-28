@@ -1,12 +1,6 @@
-import { PortalHomeFrame } from '@/components/portal/PortalHomeFrame'
 import React from 'react'
 import { Calendar, DollarSign, Bell, ListTodo, Clock } from 'lucide-react'
 import { PortalSkeleton } from '@/components/portal/PortalUI'
-import { PortalRouteLoading } from '@/components/portal/PortalRouteLoading'
-
-export default function PortalOverviewLoading() {
-  return <PortalRouteLoading><PortalHomeFrame><PortalOverviewSkeleton /></PortalHomeFrame></PortalRouteLoading>
-}
 
 export function PortalOverviewSkeleton() {
   return (
@@ -245,4 +239,3 @@ export function PortalOverviewSkeleton() {
     </div>
   )
 }
-;(PortalOverviewLoading as unknown as { isLuxorLoading?: boolean }).isLuxorLoading = true
