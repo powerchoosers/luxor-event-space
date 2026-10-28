@@ -20,10 +20,12 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
 import type { LuxorInvoice, LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
-import { recordLuxorSameDayPayment, recordLuxorSameDayScheduledPayment, sameDayTermsFingerprint, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
+import { recordLuxorSameDayScheduledPayment, sameDayTermsFingerprint, finalizeLuxorSameDayBooking } from '@/lib/luxorSameDayBookingServer'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { syncLuxorPaymentInstallments, usesFirstDepositScheduleAnchor } from '@/lib/luxorPaymentInstallmentsServer'
+import { acquireDepositCheckoutClaim, recordClaimedDeposit, recordClaimedSameDayDeposit } from '@/lib/luxorDepositClaimsServer'
+import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 
 type ManualPaymentKind = 'deposit' | 'final' | 'security_deposit'
 
@@ -165,6 +167,7 @@ export async function POST(request: NextRequest) {
     if (!bookingId || !kind) {
       return NextResponse.json({ error: 'bookingId and paymentKind are required.' }, { status: 400 })
     }
+    if (kind === 'deposit' && isLuxorBookingDepositPaused()) return NextResponse.json({ error: 'Booking deposit payments are temporarily unavailable. Please contact Luxor before recording a payment.' }, { status: 503 })
 
     if (kind === 'deposit' && isLuxorBookingDepositPaused()) return NextResponse.json({ error: 'Booking deposit payments are temporarily unavailable.' }, { status: 503 })
 
@@ -181,7 +184,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled. Do not record a new payment; review any historic payment in Stripe or the ledger instead.' }, { status: 409 })
     }
 
-    const { booking, masterInvoice, invoice } = await resolveManualPaymentInvoice(bookingId, kind)
+    const resolved = await resolveManualPaymentInvoice(bookingId, kind)
+    let { booking } = resolved
+    const { masterInvoice, invoice } = resolved
+    const priorBookingStatus = booking.status
     const luxorOnlyCollection = luxorCollectionAmounts(masterInvoice).scoped
     const inquiryId = booking.inquiry_id || masterInvoice.inquiry_id || null
     const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
@@ -201,25 +207,27 @@ export async function POST(request: NextRequest) {
       const evidence = typeof body.receiptEvidence === 'string' ? body.receiptEvidence.trim().slice(0, 1000) : ''
       if (received && (!Number.isFinite(received.getTime()) || received.getTime() > Date.now())) return NextResponse.json({ error: 'Enter the actual receipt time with its timezone; it cannot be in the future.' }, { status: 400 })
       const fingerprint = sameDayTermsFingerprint(masterInvoice, booking)
-      let competingCheckout = false
+      const competingCheckout = false
       if (amount > MONEY_EPSILON && invoice.stripe_checkout_session_id) {
-        try { await expireLuxorCheckoutForRepricing(invoice) } catch { competingCheckout = true }
+        return NextResponse.json({ error: 'The existing payment link needs reconciliation before recording a manual deposit.' }, { status: 409 })
       }
       await updateInvoice(invoice.id, { proposal_context: { ...invoice.proposal_context, version: invoice.proposal_context?.version || 1, same_day_payment_fingerprint: fingerprint } })
       if (amount > MONEY_EPSILON) {
-        const guarded = await recordLuxorSameDayPayment({ invoice, master: masterInvoice, booking, amount,
+        const reservation = await acquireDepositCheckoutClaim(booking, invoice, { account: 'manual', livemode: false, currency: 'usd' })
+        if (!reservation.created) return NextResponse.json({ error: 'A payment is in progress and needs reconciliation.' }, { status: 409 })
+        const guarded = await recordClaimedSameDayDeposit({ bookingId: booking.id, invoiceId: invoice.id, claimId: reservation.claim.id, amount,
           paidAt: received?.toISOString() || null, processor: 'manual', reference: 'manual:' + invoice.id + ':full-balance',
-          paymentMethod: paymentMethod(body.paymentMethod), eventId: 'manual:' + invoice.id + ':full-balance',
+          method: paymentMethod(body.paymentMethod), eventId: 'manual:' + invoice.id + ':full-balance',
           timingVerified: Boolean(received && evidence && body.receiptTimingConfirmed === true), fingerprint,
           metadata: { ...paymentMetadata(kind, invoice, body.paymentMethod), recorded_at: now,
             receipt_evidence: evidence, receipt_timing_attested_by: session.email, same_day_fingerprint: fingerprint, competing_checkout: competingCheckout } })
-        if (guarded.eligibility !== 'eligible') {
-          await closeSameDayReviewCheckout(invoice.id)
+        if (guarded.review || !guarded.payment) {
           return NextResponse.json({ payment: guarded.payment, reviewRequired: true,
           message: 'Receipt recorded for owner review. The date is pending and no payment confirmation was sent. Do not collect another payment.' }, { status: 202 })
         }
         guardedManualPayment = guarded.payment
         actualPaidAt = guarded.payment.paid_at || received!.toISOString()
+        booking = await getLuxorBooking(booking.id) || booking
       } else if (masterInvoice.same_day_booking_status !== 'eligible') {
         return NextResponse.json({ error: 'A received payment is awaiting review. Do not collect or record another payment.' }, { status: 409 })
       }
@@ -320,8 +328,25 @@ export async function POST(request: NextRequest) {
     // A manual receipt replaces, rather than competes with, an outstanding
     // Stripe link. Expire that link first so the same invoice cannot be paid
     // twice after an owner records a cash, check, or Zelle payment.
+    if (kind === 'deposit' && invoice.stripe_checkout_session_id && !guardedManualPayment) {
+      return NextResponse.json({ error: 'The existing payment link needs reconciliation before recording a manual deposit.' }, { status: 409 })
+    }
     if (invoice.stripe_checkout_session_id && !guardedManualPayment) {
       await expireLuxorCheckoutForRepricing(invoice)
+    }
+
+    if (kind === 'deposit' && !guardedManualPayment) {
+      const reservation = await acquireDepositCheckoutClaim(booking, invoice, { account: 'manual', livemode: false, currency: 'usd' })
+      if (!reservation.created) return NextResponse.json({ error: 'A card payment is in progress; reconcile it before recording a manual deposit.' }, { status: 409 })
+      const recorded = await recordClaimedDeposit({ bookingId: booking.id, invoiceId: invoice.id,
+        claimId: reservation.claim.id, amount, processor: 'manual', reference: 'manual:' + invoice.id + ':full-balance',
+        paidAt: actualPaidAt, method: paymentMethod(body.paymentMethod), metadata: paymentMetadata(kind, invoice, body.paymentMethod) })
+      if (recorded.review) return NextResponse.json({ payment: recorded.payment, reviewRequired: true,
+        message: 'The receipt was recorded for owner review. Do not collect another payment.' }, { status: 202 })
+      guardedManualPayment = recorded.payment
+      const refreshed = await getLuxorBooking(booking.id)
+      if (!refreshed) throw new Error('The confirmed booking could not be reloaded.')
+      booking = refreshed
     }
 
     const [payment] = guardedManualPayment ? [guardedManualPayment] : await supabaseRest<LuxorPayment[]>('luxor_payments?on_conflict=processor,processor_reference&select=*', {
@@ -399,7 +424,7 @@ export async function POST(request: NextRequest) {
       await syncLuxorPaymentInstallments({ booking: updatedBooking, invoice: masterInvoice })
     }
 
-    if (kind === 'deposit' && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
+    if (kind === 'deposit' && priorBookingStatus !== 'confirmed' && updatedBooking?.status === 'confirmed') {
       await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
         .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
     }

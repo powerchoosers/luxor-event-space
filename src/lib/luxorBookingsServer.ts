@@ -5,6 +5,7 @@ import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
 import { isWeekdayCustomRentalContext } from './luxorWeekdayRental'
 import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
 import { luxorAvailabilityConflicts } from './luxorAvailability'
+import { annotateLuxorReviewAvailability } from './luxorAvailabilityReviewServer'
 
 export type LuxorBookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -77,10 +78,9 @@ export async function findLuxorBookingConflicts(
   const filters = [
     'select=id,client_name,event_date,start_time,end_time,status,inquiry_id,metadata',
     `event_date=eq.${encodeURIComponent(eventDate)}`,
-    'status=in.(tentative,confirmed)',
   ]
   if (excludeId) filters.push(`id=neq.${encodeURIComponent(excludeId)}`)
-  const bookings = await annotateTestBookings(await supabaseRestStrict<LuxorBooking[]>(`luxor_bookings?${filters.join('&')}&limit=1000`))
+  const bookings = await annotateLuxorReviewAvailability(await annotateTestBookings(await supabaseRestStrict<LuxorBooking[]>(`luxor_bookings?${filters.join('&')}&limit=1000`)))
   return luxorAvailabilityConflicts(bookings, eventDate, startTime, endTime, options)
 }
 
@@ -95,9 +95,10 @@ export async function listLuxorBookingsWithPayments(limit = 1000, strict = false
   if (bookings.length === 0) return []
 
   const ids = bookings.map((booking) => booking.id).join(',')
-  const payments = await supabaseRest<LuxorPayment[]>(
-    `luxor_payments?select=*&booking_id=in.(${ids})&order=created_at.desc`,
-  ).catch(() => [])
+  const paymentPath = `luxor_payments?select=*&booking_id=in.(${ids})&order=created_at.desc`
+  const payments = strict
+    ? await supabaseRestStrict<LuxorPayment[]>(paymentPath)
+    : await supabaseRest<LuxorPayment[]>(paymentPath).catch(() => [])
 
   return bookings.map((booking) => {
     const bookingPayments = payments.filter((payment) => payment.booking_id === booking.id)

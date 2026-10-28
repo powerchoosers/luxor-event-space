@@ -10,7 +10,8 @@ import { sendLuxorZohoEmail } from './zohoMailServer'
 import { buildAiTailoredInvoiceReminderEmail } from './luxorLifecycleEmailsServer'
 import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
 import { isLuxorOfferExpired } from './luxorOffer'
-import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
+import { createLuxorPostContractCheckout, prepareLuxorDepositPaymentLink } from './luxorStripeCheckoutServer'
+import { LuxorBookingDepositPausedError } from './luxorDepositMaintenanceServer'
 import { getLuxorBooking } from './luxorBookingsServer'
 import { getLuxorInquiry } from './luxorInquiriesServer'
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
@@ -917,7 +918,11 @@ async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<L
   }
 
   const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
-  const checkout = await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin })
+  const deferredUrl = invoice.invoice_kind === 'deposit'
+    ? await prepareLuxorDepositPaymentLink({ invoice, inquiry, booking, origin }) : null
+  const checkout = invoice.invoice_kind === 'deposit'
+    ? deferredUrl && { checkoutUrl: deferredUrl, checkoutId: null, paymentAmount: balanceDue }
+    : await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin })
   if (!checkout) {
     await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Payment invoice no longer has a balance due.' })
     return null
@@ -933,12 +938,13 @@ async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<L
     dueDate: finalBalance ? booking.final_payment_due_date : invoice.due_date || null,
     kind: finalBalance ? 'final_payment' : 'unpaid_invoice',
   })
-  const refreshedMetadata = {
+  const refreshedMetadata: Record<string, unknown> = {
     ...metadata,
-    checkout_session_id: checkout.checkoutId,
     flow_stage: 'post_signature_payment',
     balance_due: checkout.paymentAmount,
   }
+  if (checkout.checkoutId) refreshedMetadata.checkout_session_id = checkout.checkoutId
+  else delete refreshedMetadata.checkout_session_id
   await updateLuxorEmailJob(job.id, { subject: email.subject, body: email.body, metadata: refreshedMetadata })
   return { ...job, subject: email.subject, body: email.body, metadata: refreshedMetadata }
 }

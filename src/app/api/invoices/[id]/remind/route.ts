@@ -9,7 +9,8 @@ import { listNotesByInquiry, createNote } from '@/lib/luxorNotesServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { createLuxorEmailJob, updateLuxorEmailJob, processLuxorEmailJobs, listLuxorEmailJobsForInquiry } from '@/lib/luxorEmailJobsServer'
 import { buildAiTailoredInvoiceReminderEmail } from '@/lib/luxorLifecycleEmailsServer'
-import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
+import { createLuxorPostContractCheckout, prepareLuxorDepositPaymentLink } from '@/lib/luxorStripeCheckoutServer'
+import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import { getLuxorPaymentReminderBookingLookup, getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
@@ -107,7 +108,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           return reservation
         },
         prepareContent: async () => {
-          const checkout = await createLuxorPostContractCheckout({ invoice, inquiry, booking: booking!, origin })
+          const deferredUrl = invoice.invoice_kind === 'deposit'
+            ? await prepareLuxorDepositPaymentLink({ invoice, inquiry, booking: booking!, origin }) : null
+          const checkout = invoice.invoice_kind === 'deposit'
+            ? deferredUrl && { checkoutUrl: deferredUrl, checkoutId: null, paymentAmount: balanceDue }
+            : await createLuxorPostContractCheckout({ invoice, inquiry, booking: booking!, origin })
           if (!checkout) throw new Error('This payment invoice no longer has a balance due.')
           const email = await buildAiTailoredInvoiceReminderEmail({
             inquiry, invoice, booking, reviewUrl: checkout.checkoutUrl, balanceDue: checkout.paymentAmount,
@@ -138,7 +143,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
     let reviewUrl: string
     let checkoutId: string | null = null
-    if (isPaymentInvoice && booking) {
+    if (invoice.invoice_kind === 'deposit' && booking) {
+      const deferredUrl = await prepareLuxorDepositPaymentLink({ invoice, inquiry, booking, origin })
+      if (!deferredUrl) return NextResponse.json({ error: 'This payment invoice no longer has a balance due.' }, { status: 409 })
+      reviewUrl = deferredUrl
+    } else if (isPaymentInvoice && booking) {
       // Never reuse a stored URL blindly: Checkout Sessions expire. Creating
       // through the post-contract helper either reuses a valid session or
       // safely replaces it, and guarantees that the email CTA is Stripe.

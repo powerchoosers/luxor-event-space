@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(bookings)
     }
 
-    const bookings = await listLuxorBookingsWithPayments(1000)
+    const bookings = await listLuxorBookingsWithPayments(1000, searchParams.get('strictMetrics') === '1')
     return NextResponse.json(bookings)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch bookings.'
@@ -81,6 +81,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    if (body.metadata && typeof body.metadata === 'object' &&
+        ('deposit_checkout_claim' in body.metadata || 'deposit_checkout_claim_history' in body.metadata)) {
+      return NextResponse.json({ error: 'Payment reservation data is managed by the payment workflow.' }, { status: 409 })
+    }
     const proposalId = typeof body.invoice_id === 'string' ? body.invoice_id.trim() : ''
     if (!proposalId) {
       return NextResponse.json({ error: 'Bookings are created automatically after the client accepts a published final proposal. Publish the proposal instead of creating a standalone booking.' }, { status: 409 })
@@ -260,6 +264,13 @@ export async function PATCH(request: NextRequest) {
 
     const existing = await getLuxorBooking(id)
     if (!existing) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+    if (updates.metadata !== undefined && (
+      (updates.metadata && typeof updates.metadata === 'object' &&
+        ('deposit_checkout_claim' in updates.metadata || 'deposit_checkout_claim_history' in updates.metadata)) ||
+      existing.metadata?.deposit_checkout_claim !== undefined || existing.metadata?.deposit_checkout_claim_history !== undefined
+    )) {
+      return NextResponse.json({ error: 'Payment reservation data is managed by the payment workflow.' }, { status: 409 })
+    }
     if (existing.inquiry_id) {
       const inquiry = await getLuxorInquiry(existing.inquiry_id)
       if (inquiry?.is_test) {

@@ -6,6 +6,7 @@ import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { createLuxorPostContractCheckout } from '@/lib/luxorStripeCheckoutServer'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 
 export async function POST(request: NextRequest) {
   try {

@@ -104,11 +104,24 @@ export async function syncLuxorPaymentInstallments(input: { booking: LuxorBookin
       updated_at: new Date().toISOString(),
     }
     if (current) {
-      const [updated] = await supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?id=eq.${encodeURIComponent(current.id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(payload) })
+      const [updated] = await supabaseRest<LuxorPaymentInstallment[]>(`luxor_payment_installments?id=eq.${encodeURIComponent(current.id)}&status=in.(scheduled,sent)&updated_at=eq.${encodeURIComponent(current.updated_at)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(payload) })
       if (updated) rows.push(updated)
+      else {
+        const fresh = (await listLuxorPaymentInstallments(input.booking.id)).find((item) => item.id === current.id)
+        if (!fresh) throw new Error('Payment installment changed while the schedule was being updated.')
+        rows.push(fresh)
+      }
     } else {
-      const [created] = await supabaseRest<LuxorPaymentInstallment[]>('luxor_payment_installments?select=*', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(payload) })
-      if (created) rows.push(created)
+      try {
+        const [created] = await supabaseRest<LuxorPaymentInstallment[]>('luxor_payment_installments?select=*', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(payload) })
+        if (!created) throw new Error('Payment installment could not be saved.')
+        rows.push(created)
+      } catch (error) {
+        if (!(error instanceof Error) || !/duplicate key|unique constraint/i.test(error.message)) throw error
+        const fresh = (await listLuxorPaymentInstallments(input.booking.id)).find((item) => item.installment_order === row.installment_order)
+        if (!fresh) throw error
+        rows.push(fresh)
+      }
     }
   }
 

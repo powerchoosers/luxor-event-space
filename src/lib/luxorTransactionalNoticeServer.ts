@@ -157,7 +157,9 @@ export async function getLuxorAgreementClientEmailStatus(
 function isSecurePaymentUrl(value: string) {
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' && (url.hostname === 'checkout.stripe.com' || url.hostname === 'buy.stripe.com')
+    const deferredLuxorCheckout = url.hostname === 'www.luxoratlaspalmas.com' &&
+      /^\/api\/public\/proposals\/[0-9a-f-]{36}\/checkout$/i.test(url.pathname) && !url.search && !url.hash
+    return url.protocol === 'https:' && (url.hostname === 'checkout.stripe.com' || url.hostname === 'buy.stripe.com' || deferredLuxorCheckout)
   } catch {
     return false
   }

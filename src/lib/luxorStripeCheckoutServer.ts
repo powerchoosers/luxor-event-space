@@ -6,12 +6,49 @@ import type { LuxorBooking, LuxorInquiry, LuxorInvoice } from './luxorInquiryTyp
 import { getInvoice, listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
 import { getLuxorBooking } from './luxorBookingsServer'
 import { getLuxorInquiry } from './luxorInquiriesServer'
-import { supabaseRest } from './supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
 import { isLuxorOfferExpired, luxorOfferSnapshot } from './luxorOffer'
 import { assertLuxorSameDayPaymentAllowed, sameDayTermsFingerprint } from './luxorSameDayBookingServer'
 import { sameDayBookingPromotion } from './luxorSameDayBooking'
 import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
+import { acquireDepositCheckoutClaim, assertNoPendingProviderPaidReview, releaseExpiredDepositClaim, updateDepositCheckoutClaim } from './luxorDepositClaimsServer'
 import { assertLuxorBookingDepositAvailable } from './luxorDepositMaintenanceServer'
+
+/** Prepare a link without opening a Stripe session or reserving a date. */
+export async function prepareLuxorDepositPaymentLink(input: {
+  invoice: LuxorInvoice
+  inquiry: LuxorInquiry
+  booking: LuxorBooking
+  origin: string
+}) {
+  const { invoice, inquiry, booking } = input
+  assertLuxorBookingDepositAvailable()
+  if (invoice.invoice_kind !== 'deposit' || invoice.booking_id !== booking.id ||
+      invoice.inquiry_id !== inquiry.id || booking.inquiry_id !== inquiry.id ||
+      booking.contract_status !== 'signed' || booking.status === 'cancelled' ||
+      inquiry.status === 'closed_lost' || invoice.status === 'cancelled') {
+    throw new Error('A signed, active booking and its deposit invoice are required.')
+  }
+  await assertLuxorProductionSideEffectsAllowed(inquiry.id)
+  await assertLuxorSameDayPaymentAllowed(invoice, booking)
+  const payments = await listPaidPaymentsByInvoice(invoice.id)
+  const paid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+  if (Number(invoice.total || 0) - paid < 0.005) return null
+
+  // Assign the public token only once. Concurrent email requests must not
+  // invalidate a link that has already been sent to the client.
+  let token = invoice.public_token
+  if (!token) {
+    const candidate = crypto.randomUUID()
+    const rows = await supabaseRestStrict<Array<{ public_token: string }>>(
+      `luxor_invoices?id=eq.${encodeURIComponent(invoice.id)}&public_token=is.null&select=public_token`,
+      { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ public_token: candidate }) },
+    )
+    token = rows[0]?.public_token || (await getInvoice(invoice.id))?.public_token || null
+    if (!token) throw new Error('The payment link could not be prepared. Please retry.')
+  }
+  return `${input.origin.replace(/\/$/, '')}/api/public/proposals/${encodeURIComponent(token)}/checkout`
+}
 
 /**
  * A checkout URL remains usable even after its reference is removed from our
@@ -68,7 +105,7 @@ export async function createLuxorPostContractCheckout(input: {
     throw new Error('This booking is cancelled, so a new Stripe checkout link cannot be created.')
   }
   if (isLuxorOfferExpired(invoice)) {
-    await updateInvoice(invoice.id, { offer_status: 'expired', stripe_checkout_session_id: null, stripe_checkout_url: null })
+    await updateInvoice(invoice.id, { offer_status: 'expired' })
     throw new Error('This offer has expired. Please contact Luxor for an updated proposal.')
   }
   const paidPayments = await listPaidPaymentsByInvoice(invoice.id)
@@ -156,6 +193,45 @@ export async function createLuxorPostContractCheckout(input: {
   const expiresAt = sameDay?.coverage_amount ? sameDay.expires_at : offer.expiresAt
   const offerExpirySeconds = expiresAt ? Math.floor(new Date(expiresAt).getTime() / 1000) : null
   const checkoutExpiry = offerExpirySeconds ? Math.min(offerExpirySeconds, maximumSessionExpiry) : undefined
+  // Claims are acquired immediately before a customer opens a deposit
+  // checkout. Unknown provider outcomes stay fenced for reconciliation.
+  const expectedLiveMode = /^(sk|rk)_live_/.test(secretKey) ? true : /^(sk|rk)_test_/.test(secretKey) ? false : null
+  if (isInitialBookingPayment && expectedLiveMode === null) throw new Error('The Stripe account mode could not be verified.')
+  const account = isInitialBookingPayment ? await stripe.accounts.retrieve(null) : null
+  if (isInitialBookingPayment && (!account?.id || !/^acct_[A-Za-z0-9]+$/.test(account.id))) {
+    throw new Error('The Stripe account could not be verified.')
+  }
+  const depositReservation = isInitialBookingPayment && account && expectedLiveMode !== null
+    ? await acquireDepositCheckoutClaim(booking, invoice, { account: account.id, livemode: expectedLiveMode, currency: 'usd' }) : null
+  if (depositReservation) {
+    const frozen = depositReservation.claim
+    if (!Number.isFinite(Number(frozen.invoice_total)) || !Number.isFinite(Number(frozen.paid_before)) ||
+        Math.round(Number(frozen.invoice_total) * 100) !== Math.round(Number(invoice.total) * 100) ||
+        Math.round(Number(frozen.paid_before) * 100) !== Math.round(paidTotal * 100) ||
+        Math.round((Number(frozen.invoice_total) - Number(frozen.paid_before)) * 100) !== Math.round(paymentAmount * 100) ||
+        frozen.master_invoice_id !== booking.invoice_id || frozen.master_invoice_id !== invoice.parent_invoice_id ||
+        frozen.event_date !== booking.event_date || frozen.start_time !== booking.start_time || frozen.end_time !== booking.end_time) {
+      throw new Error('The booking or payment terms changed. The payment reservation needs reconciliation.')
+    }
+  }
+  if (depositReservation && !depositReservation.created) {
+    const session = await stripe.checkout.sessions.retrieve(depositReservation.claim.session_id!)
+    const matchesClaim = expectedLiveMode !== null && session.livemode === expectedLiveMode &&
+      session.metadata?.deposit_claim_id === depositReservation.claim.id && session.metadata?.invoice_id === invoice.id &&
+      session.metadata?.booking_id === booking.id && session.currency === 'usd' &&
+      Number(session.amount_total) === Math.round(paymentAmount * 100)
+    if (matchesClaim && session.status === 'expired' && session.payment_status === 'unpaid' && session.payment_intent == null) {
+      await releaseExpiredDepositClaim(booking.id, depositReservation.claim.id, session.id,
+        { account: account!.id, livemode: expectedLiveMode!, currency: 'usd' })
+      throw new Error('The previous checkout expired without payment. Please try again to open a new checkout.')
+    }
+    if (session.status !== 'open' || session.payment_status !== 'unpaid' || !session.url ||
+        !matchesClaim) {
+      throw new Error('The earlier payment needs reconciliation before another checkout can be opened.')
+    }
+    await assertNoPendingProviderPaidReview(booking.id)
+    return { checkoutId: session.id, checkoutUrl: session.url, paymentAmount, paymentLabel, balanceDue, paidTotal, reused: true }
+  }
   let previousSessionMarker = invoice.stripe_checkout_session_id || 'first'
   if (invoice.stripe_checkout_session_id) {
     try {
@@ -203,9 +279,12 @@ export async function createLuxorPostContractCheckout(input: {
     ? `Original proposal sales tax: $${Number(master.proposal_context?.pricing_snapshot && (master.proposal_context.pricing_snapshot as Record<string, unknown>).tax_amount || disclosedBenefit.coverage_amount).toFixed(2)}. LUXOR pays $${disclosedBenefit.coverage_amount.toFixed(2)} of that sales tax${master.same_day_booking_status === 'eligible' ? '; the booking qualified on its original proposal day' : ` only if agreement and required initial payment complete before ${disclosedBenefit.expires_at} (midnight America/Chicago)`}. This invoice collects the locked scheduled payment only.`
     : ''
 
-  const checkout = await stripe.checkout.sessions.create({
+  if (depositReservation) await assertNoPendingProviderPaidReview(booking.id)
+  let checkout: Stripe.Checkout.Session
+  try {
+    checkout = await stripe.checkout.sessions.create({
     mode: 'payment',
-    integration_identifier: `luxor-post-contract-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
+    integration_identifier: `luxor-post-contract-${(depositReservation?.claim.id || crypto.randomUUID()).replace(/-/g, '').slice(0, 8)}`,
     customer_email: inquiry.email || booking.email || undefined,
     client_reference_id: invoice.id,
     line_items: [{
@@ -224,6 +303,7 @@ export async function createLuxorPostContractCheckout(input: {
       master_invoice_id: input.masterInvoiceId || invoice.parent_invoice_id || invoice.id,
       inquiry_id: inquiry.id,
       booking_id: booking.id,
+      ...(depositReservation ? { deposit_claim_id: depositReservation.claim.id } : {}),
       invoice_kind: invoice.invoice_kind || 'event',
       payment_label: paymentLabel,
       contract_signed: booking.contract_status === 'signed' ? 'true' : 'false',
@@ -253,8 +333,14 @@ export async function createLuxorPostContractCheckout(input: {
     success_url: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/payment/cancelled`,
   }, {
-    idempotencyKey: `luxor-${invoice.invoice_kind || 'event'}-${booking.id}-${invoice.id}-${Math.round(paymentAmount * 100)}-${Math.round(paidTotal * 100)}-${previousSessionMarker}`,
+    idempotencyKey: depositReservation ? `luxor-deposit-claim-${depositReservation.claim.id}` : `luxor-${invoice.invoice_kind || 'event'}-${booking.id}-${invoice.id}-${Math.round(paymentAmount * 100)}-${Math.round(paidTotal * 100)}-${previousSessionMarker}`,
   })
+  } catch (error) {
+    if (depositReservation) await updateDepositCheckoutClaim(booking.id, depositReservation.claim.id, 'uncertain').catch(() => null)
+    throw error
+  }
+  if (depositReservation) await updateDepositCheckoutClaim(booking.id, depositReservation.claim.id, 'open', checkout.id)
+  if (depositReservation) await assertNoPendingProviderPaidReview(booking.id)
   if (!checkout.url) throw new Error('Stripe did not return a checkout link.')
   try { await verifyCurrentSameDayState(checkout.id) } catch (error) { await stripe.checkout.sessions.expire(checkout.id); throw error }
   await updateInvoice(invoice.id, {

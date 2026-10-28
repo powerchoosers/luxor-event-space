@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
+import { getLuxorBooking } from '@/lib/luxorBookingsServer'
 import { ensureDocumentBucket } from '@/lib/luxorDocumentsServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getInvoice } from '@/lib/luxorInvoicesServer'
@@ -74,17 +74,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
     if (!document) throw new Error('The agreement was stored but its document record could not be created.')
     const signedUpdate = {
-      ...(!benefit?.coverage_amount ? { status: 'confirmed' as const } : {}), contract_status: 'signed', contract_signed_at: actualSignedAt.toISOString(),
+      contract_status: 'signed', contract_signed_at: actualSignedAt.toISOString(),
       metadata: { ...booking.metadata, manual_signed_agreement_document_id: document.id, manual_signed_agreement_uploaded_at: uploadedAt, manual_signed_agreement_uploaded_by: session.email, reservation_state: 'awaiting_initial_payment' },
     } as const
-    const claimed = benefit?.coverage_amount ? (await supabaseRest<LuxorBooking[]>(`luxor_bookings?select=*&id=eq.${encodeURIComponent(booking.id)}&status=not.in.(cancelled,completed)&contract_status=${booking.contract_status ? 'eq.' + encodeURIComponent(booking.contract_status) : 'is.null'}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(signedUpdate) }))[0] : null
-    if (benefit?.coverage_amount && !claimed) {
+    const claimed = (await supabaseRest<LuxorBooking[]>(`luxor_bookings?select=*&id=eq.${encodeURIComponent(booking.id)}&status=not.in.(cancelled,completed)&contract_status=${booking.contract_status ? 'eq.' + encodeURIComponent(booking.contract_status) : 'is.null'}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(signedUpdate) }))[0]
+    if (!claimed) {
       const winner = await getLuxorBooking(booking.id)
       if (winner?.contract_status !== 'signed') return NextResponse.json({ error: 'The booking was closed or changed during upload. Review its current state.' }, { status: 409 })
-      await reconcileLuxorSameDayReceipts(booking.id)
+      if (benefit?.coverage_amount) await reconcileLuxorSameDayReceipts(booking.id)
       return NextResponse.json({ booking: await getLuxorBooking(booking.id), alreadySigned: true })
     }
-    const signedBooking = claimed || await updateLuxorBooking(booking.id, signedUpdate) || booking
+    const signedBooking = claimed
     if (benefit?.coverage_amount) await reconcileLuxorSameDayReceipts(booking.id)
     const completedInvoice = benefit?.coverage_amount ? await getInvoice(invoice.id) : invoice
     const completedBooking = benefit?.coverage_amount ? await getLuxorBooking(booking.id) || signedBooking : signedBooking

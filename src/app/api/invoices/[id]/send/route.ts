@@ -15,7 +15,8 @@ import { cancelQueuedLuxorEmailJobs, createLuxorEmailJob, createUniqueLuxorEmail
 import { buildAiOfferReminderEmail, buildContractReminderEmail, buildFinalPaymentReminderEmail, buildPaymentReminderEmail, lifecycleAutomationKey } from '@/lib/luxorLifecycleEmailsServer'
 import { createUniqueTextJob, queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
-import { createLuxorPostContractCheckout, expireLuxorCheckoutForRepricing } from '@/lib/luxorStripeCheckoutServer'
+import { createLuxorPostContractCheckout, expireLuxorCheckoutForRepricing, prepareLuxorDepositPaymentLink } from '@/lib/luxorStripeCheckoutServer'
+import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
 import { calculateLuxorOfferPricing, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
 
@@ -162,19 +163,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const signingUrl = `${origin}/secure-portal/sign/${signature.token}`
       const depositInvoice = await ensureLuxorDepositInvoice({ masterInvoice: invoice, bookingId: booking.id, reservationDepositAmount: depositAmount })
 
-      const checkout = await createLuxorPostContractCheckout({
+      const depositPaymentUrl = await prepareLuxorDepositPaymentLink({
         invoice: depositInvoice,
         inquiry,
         booking,
         origin,
-        paymentAmount: depositAmount,
-        paymentLabel,
-        masterInvoiceId: invoice.id,
       })
 
-      if (!checkout) return NextResponse.json({ error: 'No deposit payment due.' }, { status: 400 })
+      if (!depositPaymentUrl) return NextResponse.json({ error: 'No deposit payment due.' }, { status: 400 })
 
-      const publicToken = depositInvoice.public_token || crypto.randomUUID()
+      const refreshedDepositInvoice = await getInvoice(depositInvoice.id)
+      const publicToken = refreshedDepositInvoice?.public_token
+      if (!publicToken) throw new Error('The deposit payment link could not be prepared.')
       const depositReviewUrl = `${origin}/proposal/${publicToken}`
       const updatedDepositInvoice = await updateInvoice(depositInvoice.id, {
         public_token: publicToken,
@@ -183,8 +183,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         payment_requested_at: now,
         payment_requested_amount: depositAmount,
         payment_requested_label: paymentLabel,
-        stripe_checkout_session_id: checkout.checkoutId,
-        stripe_checkout_url: checkout.checkoutUrl,
       }) || depositInvoice
 
       const [depositPdf, contractPdf, guide] = await Promise.all([
@@ -214,7 +212,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         jobType: 'booking_package',
         recipientEmail: inquiry.email,
         subject: email.subject,
-        body: `Your booking package is ready. Pay the negotiated reservation deposit: ${checkout.checkoutUrl} Sign the agreement: ${signingUrl}`,
+        body: `Your booking package is ready. Pay the negotiated reservation deposit: ${depositPaymentUrl} Sign the agreement: ${signingUrl}`,
         scheduledFor: now,
         metadata: { manual: true, requestedBy: session.email, deposit_invoice_id: updatedDepositInvoice.id, master_invoice_id: invoice.id, includes_deposit_invoice: true, includes_contract: true, includes_guest_guide: true },
       })
@@ -285,11 +283,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await Promise.all([
         createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_view_reminder', recipientEmail: inquiry.email, subject: viewReminder.subject, body: viewReminder.body, scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_view_reminder', signature.id), metadata: { invoice_id: updatedDepositInvoice.id, offer_expires_at: updatedDepositInvoice.offer_expires_at } }),
         createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, signatureRequestId: signature.id, jobType: 'contract_signature_reminder', recipientEmail: inquiry.email, subject: signatureReminder.subject, body: signatureReminder.body, scheduledFor: new Date(Date.now() + 5 * 24 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('contract_signature_reminder', signature.id), metadata: { invoice_id: updatedDepositInvoice.id, offer_expires_at: updatedDepositInvoice.offer_expires_at } }),
-        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, jobType: 'proposal_payment_reminder', recipientEmail: inquiry.email, subject: paymentReminder.subject, body: paymentReminder.body, scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('proposal_payment_reminder', checkout.checkoutId), metadata: { invoice_id: updatedDepositInvoice.id, checkout_session_id: checkout.checkoutId, flow_stage: 'booking_package_deposit', offer_expires_at: updatedDepositInvoice.offer_expires_at } }),
+        createUniqueLuxorEmailJob({ inquiryId: inquiry.id, bookingId: booking.id, jobType: 'proposal_payment_reminder', recipientEmail: inquiry.email, subject: paymentReminder.subject, body: paymentReminder.body, scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(), automationKey: lifecycleAutomationKey('proposal_payment_reminder', updatedDepositInvoice.id), metadata: { invoice_id: updatedDepositInvoice.id, flow_stage: 'booking_package_deposit', offer_expires_at: updatedDepositInvoice.offer_expires_at } }),
         ...offerReminderJobs,
       ])
 
-      return NextResponse.json({ invoice: updated, depositInvoice: updatedDepositInvoice, inquiry: updatedInquiry, booking, signature, signingUrl, checkoutUrl: checkout.checkoutUrl, paymentAmount: depositAmount, mode: 'date_lock_deposit' })
+      return NextResponse.json({ invoice: updated, depositInvoice: updatedDepositInvoice, inquiry: updatedInquiry, booking, signature, signingUrl, checkoutUrl: depositPaymentUrl, paymentAmount: depositAmount, mode: 'date_lock_deposit' })
     }
 
     if (body.mode === 'proposal' || body.mode === 'proposal_in_person') {
@@ -835,22 +833,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const explicitPaymentAmount = Number.isFinite(requestedAmount) ? Math.round(requestedAmount * 100) / 100 : undefined
     const explicitPaymentLabel = body.paymentLabel ? String(body.paymentLabel).trim().slice(0, 80) : undefined
     const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
-    const checkout = await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin, paymentAmount: explicitPaymentAmount, paymentLabel: explicitPaymentLabel })
+    if (explicitPaymentAmount !== undefined && Math.abs(explicitPaymentAmount - balanceDue) > 0.01) {
+      return NextResponse.json({ error: 'The payment must equal the approved invoice balance.' }, { status: 400 })
+    }
+    const deferredUrl = invoice.invoice_kind === 'deposit'
+      ? await prepareLuxorDepositPaymentLink({ invoice, inquiry, booking, origin }) : null
+    const checkout = invoice.invoice_kind === 'deposit'
+      ? deferredUrl && { checkoutUrl: deferredUrl, checkoutId: null, paymentAmount: balanceDue,
+          paymentLabel: 'Initial Booking Payment - Luxor at Las Palmas Events', reused: false }
+      : await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin, paymentAmount: explicitPaymentAmount, paymentLabel: explicitPaymentLabel })
     if (!checkout) return NextResponse.json({ error: 'No payment remains on this invoice.' }, { status: 400 })
     const { paymentAmount, paymentLabel } = checkout
 
     const pdf = await buildLuxorInvoicePdf(invoice, inquiry)
     await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
     const now = new Date().toISOString()
-    const publicToken = invoice.public_token || crypto.randomUUID()
+    const publicToken = invoice.invoice_kind === 'deposit'
+      ? (await getInvoice(invoice.id))?.public_token
+      : invoice.public_token || crypto.randomUUID()
+    if (!publicToken) throw new Error('The payment link could not be prepared.')
     const paymentUrl = checkout.checkoutUrl
+    const paymentRequestKey = checkout.checkoutId || invoice.id
     await updateInvoice(invoice.id, {
       public_token: publicToken,
       payment_requested_at: now,
       payment_requested_amount: paymentAmount,
       payment_requested_label: paymentLabel,
-      stripe_checkout_session_id: checkout.checkoutId,
-      stripe_checkout_url: checkout.checkoutUrl,
+      ...(checkout.checkoutId ? { stripe_checkout_session_id: checkout.checkoutId, stripe_checkout_url: checkout.checkoutUrl } : {}),
     })
     const notes = await listNotesByInquiry(inquiry.id).catch(() => [])
     const email = await buildLuxorPaymentRequestEmail({ invoice, inquiry, booking, notes, paymentUrl, paymentAmount, paymentLabel, paidTotal, balanceDue })
@@ -902,8 +911,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           subject: reminder.subject,
           body: reminder.body,
           scheduledFor: new Date(Date.now() + 48 * 60 * 60_000).toISOString(),
-          automationKey: lifecycleAutomationKey('final_payment_reminder', checkout.checkoutId),
-          metadata: { invoice_id: invoice.id, checkout_session_id: checkout.checkoutId, reminder_sequence: 1 },
+          automationKey: lifecycleAutomationKey('final_payment_reminder', paymentRequestKey),
+          metadata: { invoice_id: invoice.id, ...(checkout.checkoutId ? { checkout_session_id: checkout.checkoutId } : {}), reminder_sequence: 1 },
         })
       } else {
         const paymentReminder = buildPaymentReminderEmail({ inquiry, reviewUrl: paymentUrl, paymentAmount, paymentLabel })
@@ -915,8 +924,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           subject: paymentReminder.subject,
           body: paymentReminder.body,
           scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(),
-          automationKey: lifecycleAutomationKey('proposal_payment_reminder', checkout.checkoutId),
-          metadata: { invoice_id: invoice.id, checkout_session_id: checkout.checkoutId, reminder_sequence: 1, flow_stage: 'post_signature_payment' },
+          automationKey: lifecycleAutomationKey('proposal_payment_reminder', paymentRequestKey),
+          metadata: { invoice_id: invoice.id, ...(checkout.checkoutId ? { checkout_session_id: checkout.checkoutId } : {}), reminder_sequence: 1, flow_stage: 'post_signature_payment' },
         })
       }
     } catch (automationError) {
@@ -935,10 +944,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           bookingId: booking?.id,
           invoiceId: invoice.id,
           scheduledFor: new Date(Date.now() + 72 * 60 * 60_000).toISOString(),
-          automationKey: `invoice_payment_request:${invoice.id}:${checkout.checkoutId}`,
+          automationKey: `invoice_payment_request:${invoice.id}:${paymentRequestKey}`,
           body: `Luxor Event Space: Hi ${inquiry.full_name.split(/\s+/)[0] || 'there'}, this is a reminder that your ${paymentAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} payment request is still open. Pay securely here: ${paymentUrl} Reply STOP to opt out.`,
           requiredScope: 'invoice',
-          metadata: { checkout_session_id: checkout.checkoutId, due_date: invoice.due_date },
+          metadata: { ...(checkout.checkoutId ? { checkout_session_id: checkout.checkoutId } : {}), due_date: invoice.due_date },
         })
       } catch (automationError) {
         console.error('[invoice-payment-request] text reminder queue failed after the proposal was delivered', automationError)

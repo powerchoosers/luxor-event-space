@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRest } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestCount, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 
 import { LuxorPayment } from '@/lib/luxorInquiryTypes'
@@ -27,7 +27,16 @@ export async function GET(request: NextRequest) {
       path = `luxor_payments?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc`
     }
 
-    const payments = await supabaseRest(path)
+    const expected = await supabaseRestCount(path)
+    const payments: LuxorPayment[] = []
+    for (let offset = 0; offset < expected; offset += 500) {
+      const page = await supabaseRestStrict<LuxorPayment[]>(`${path}&limit=500&offset=${offset}`)
+      payments.push(...page)
+      if (page.length < Math.min(500, expected - offset)) throw new Error('Payment records could not be fully verified.')
+    }
+    if (payments.length !== expected || new Set(payments.map((payment) => payment.id)).size !== expected || await supabaseRestCount(path) !== expected) {
+      throw new Error('Payment records changed while loading. Please refresh.')
+    }
     return NextResponse.json(payments)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch payments.'

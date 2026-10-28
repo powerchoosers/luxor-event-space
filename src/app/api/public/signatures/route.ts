@@ -71,15 +71,17 @@ async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof ge
       }
     : null
   const sameDayInfo = benefit ? { same_day_booking: benefit, same_day_completed: masterInvoice?.same_day_booking_status === 'eligible' } : {}
-  // The signature flow creates Checkout only after it has verified the signed
-  // agreement. The client may now choose Card, Cash, or Zelle; only Card
-  // continues to Stripe, while the other methods remain owner-confirmed.
-  if (!invoice.stripe_checkout_url) return paymentOptions ? { ...sameDayInfo, payment_options: paymentOptions } : sameDayInfo
-  const paymentEmailStatus = await getLuxorAgreementClientEmailStatus(signature.id, signature.client_email, invoice.stripe_checkout_url)
+  // Create a provider session only when the client chooses to open payment.
+  const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
+  const paymentUrl = invoice.invoice_kind === 'deposit' && invoice.public_token
+    ? `${origin}/api/public/proposals/${encodeURIComponent(invoice.public_token)}/checkout`
+    : invoice.stripe_checkout_url
+  if (!paymentUrl) return paymentOptions ? { ...sameDayInfo, payment_options: paymentOptions } : sameDayInfo
+  const paymentEmailStatus = await getLuxorAgreementClientEmailStatus(signature.id, signature.client_email, paymentUrl)
   return {
     ...sameDayInfo,
     payment_email_status: paymentEmailStatus,
-    payment_url: invoice.stripe_checkout_url,
+    payment_url: paymentUrl,
     payment_amount: Number(invoice.payment_requested_amount || invoice.total || 0),
     payment_label: invoice.payment_requested_label || 'Initial Booking Payment - Luxor at Las Palmas Events',
     ...(paymentOptions ? { payment_options: paymentOptions } : {}),

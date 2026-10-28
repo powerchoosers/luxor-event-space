@@ -9,7 +9,7 @@ export type CorrectedPaymentReservation = {
 export type CorrectedPaymentContent = {
   subject: string
   body: string
-  checkoutSessionId: string
+  checkoutSessionId: string | null
   balanceDue: number
 }
 

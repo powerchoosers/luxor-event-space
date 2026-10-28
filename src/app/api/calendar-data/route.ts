@@ -7,6 +7,7 @@ import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { listInvoices, listLuxorProposalActivitiesForFamilies } from '@/lib/luxorInvoicesServer'
 import { buildLuxorAvailabilityCalendar, isLuxorTestAvailabilityBooking } from '@/lib/luxorAvailability'
 import { countLuxorPendingProposalsByDate, listLuxorPendingProposals, type LuxorProposalActivitySummary } from '@/lib/luxorPendingProposals'
+import { annotateLuxorReviewAvailability } from '@/lib/luxorAvailabilityReviewServer'
 
 export async function GET() {
   try {
@@ -44,7 +45,7 @@ export async function GET() {
       slots,
       bookings: ownerBookings,
       tasks,
-      availability: buildLuxorAvailabilityCalendar(ownerBookings),
+      availability: buildLuxorAvailabilityCalendar(await annotateLuxorReviewAvailability(ownerBookings)),
       pendingProposals,
       pendingProposalCounts: pendingProposalsError ? {} : countLuxorPendingProposalsByDate(pendingProposals),
       pendingProposalsError,

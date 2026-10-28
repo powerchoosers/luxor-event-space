@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState, useMemo, useDeferredValue } from 'react'
+import React, { useCallback, useEffect, useState, useMemo, useDeferredValue, useRef } from 'react'
 import {
   Calendar,
   CalendarRange,
@@ -45,6 +45,7 @@ import {
 import type { LuxorBooking, LuxorBookingStatus, LuxorPayment } from '@/lib/luxorInquiryTypes'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { WeekdayRentalSummary } from '@/components/portal/WeekdayRentalSummary'
+import { isLuxorTestAvailabilityBooking } from '@/lib/luxorAvailability'
 
 const BOOKING_STATUS_OPTIONS: Array<{ value: LuxorBookingStatus; label: string }> = [
   { value: 'draft', label: 'Draft' },
@@ -60,8 +61,28 @@ type BookingWithPayments = LuxorBooking & {
   balance_due?: number
 }
 
+function eventObject(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
+function eventAmount(value: unknown) { return (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) && Number.isFinite(Number(value)) }
+function eventOptionalString(value: unknown) { return value == null || typeof value === 'string' }
+
+function validEventRows(value: unknown, requirePayments = true): value is BookingWithPayments[] {
+  return Array.isArray(value) && value.every((row) => eventObject(row)
+    && Object.prototype.hasOwnProperty.call(row, 'inquiry_id') && Object.prototype.hasOwnProperty.call(row, 'metadata')
+    && typeof row.id === 'string' && row.id.length > 0 && typeof row.client_name === 'string'
+    && typeof row.status === 'string' && ['draft', 'tentative', 'confirmed', 'completed', 'cancelled'].includes(row.status)
+    && eventOptionalString(row.event_type) && eventOptionalString(row.inquiry_id)
+    && (row.metadata == null || eventObject(row.metadata)) && eventAmount(row.contract_total) && eventAmount(row.deposit_required)
+    && (!requirePayments || (eventAmount(row.paid_total) && eventAmount(row.balance_due) && Array.isArray(row.payments)
+      && row.payments.every((payment) => eventObject(payment) && typeof payment.id === 'string' && payment.id.length > 0
+        && typeof payment.status === 'string' && ['pending', 'paid', 'failed', 'refunded', 'void'].includes(payment.status)
+        && eventAmount(payment.amount) && eventOptionalString(payment.payment_method) && eventOptionalString(payment.paid_at)
+        && eventOptionalString(payment.notes) && (payment.metadata == null || eventObject(payment.metadata))))))
+}
+
 export default function EventsPage() {
-  const [bookings, setBookings] = useState<BookingWithPayments[]>([])
+  const [snapshot, setSnapshot] = useState<{ bookings: BookingWithPayments[]; testInquiryIds: ReadonlySet<string>; classificationVerified: boolean }>({ bookings: [], testInquiryIds: new Set(), classificationVerified: false })
+  const { bookings, testInquiryIds, classificationVerified } = snapshot
+  const refreshGeneration = useRef(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -75,26 +96,57 @@ export default function EventsPage() {
   const [bulkStatus, setBulkStatus] = useState<LuxorBookingStatus>('confirmed')
 
   const fetchBookings = useCallback(async () => {
+    const generation = ++refreshGeneration.current
+    let data: BookingWithPayments[] | null = null
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch('/api/bookings')
+      const res = await fetch('/api/bookings?strictMetrics=1')
       if (!res.ok) throw new Error('Failed to load bookings.')
-      const data = await res.json()
-      setBookings(data)
-      if (data.length > 0) {
-        setSelectedEventId(data[0].id)
-      }
+      const payload: unknown = await res.json()
+      if (!validEventRows(payload)) throw new Error('Invalid bookings response.')
+      data = payload
+      if (generation !== refreshGeneration.current) return
+      const inquiryIds = [...new Set(data.map((booking) => booking.inquiry_id).filter((id): id is string => Boolean(id)))]
+      const classification = await fetch('/api/portal/test-inquiry-classification', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryIds }),
+      })
+      if (!classification.ok) throw new Error('Test classification could not be verified.')
+      const result = await classification.json() as { testInquiryIds?: unknown; testBookingIds?: unknown; unresolvedBookingIds?: unknown }
+      const requested = new Set(inquiryIds.map((id) => id.toLowerCase()))
+      if (!Array.isArray(result.testInquiryIds) || !result.testInquiryIds.every((id) => typeof id === 'string' && requested.has(id.toLowerCase()))
+        || !Array.isArray(result.testBookingIds) || result.testBookingIds.length !== 0
+        || !Array.isArray(result.unresolvedBookingIds) || result.unresolvedBookingIds.length !== 0) throw new Error('Test classification could not be verified.')
+      if (generation !== refreshGeneration.current) return
+      setSnapshot({ bookings: data, testInquiryIds: new Set(result.testInquiryIds.map((id) => id.toLowerCase())), classificationVerified: true })
+      const refreshed = data
+      setSelectedEventId((current) => current && refreshed.some((booking) => booking.id === current) ? current : refreshed[0]?.id || null)
     } catch (err) {
+      if (generation !== refreshGeneration.current) return
+      if (!data) {
+        try {
+          const response = await fetch('/api/bookings')
+          const payload: unknown = response.ok ? await response.json() : null
+          if (validEventRows(payload)) data = payload
+        } catch { /* Keep the previous operational snapshot. */ }
+      }
+      if (generation !== refreshGeneration.current) return
+      if (data) {
+        setSnapshot({ bookings: data, testInquiryIds: new Set(), classificationVerified: false })
+        const refreshed = data
+        setSelectedEventId((current) => current && refreshed.some((booking) => booking.id === current) ? current : refreshed[0]?.id || null)
+      }
+      else setSnapshot((previous) => ({ ...previous, classificationVerified: false }))
       console.error(err)
       setError(err instanceof Error ? err.message : 'Failed to fetch booked events.')
     } finally {
-      setLoading(false)
+      if (generation === refreshGeneration.current) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     void fetchBookings()
+    return () => { refreshGeneration.current++ }
   }, [fetchBookings])
 
   useEffect(() => {
@@ -147,6 +199,7 @@ export default function EventsPage() {
     setBulkBusy(status)
     const updatedIds: string[] = []
     const errors: string[] = []
+    let invalidResponse = false
     for (const id of ids) {
       try {
         const response = await fetch('/api/bookings', {
@@ -154,16 +207,25 @@ export default function EventsPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, status }),
         })
-        const payload = await response.json().catch(() => ({})) as BookingWithPayments & { error?: string }
-        if (!response.ok) throw new Error(payload.error || 'Event could not be updated.')
+        const payload: unknown = await response.json().catch(() => null)
+        if (!response.ok) throw new Error(eventObject(payload) && typeof payload.error === 'string' ? payload.error : 'Event could not be updated.')
+        if (!validEventRows([payload], false) || !eventObject(payload) || payload.id !== id || payload.status !== status) {
+          invalidResponse = true
+          throw new Error('The event may have changed, but its response was invalid. Refresh the page.')
+        }
         updatedIds.push(id)
       } catch (updateError) {
+        invalidResponse = true
         errors.push(updateError instanceof Error ? updateError.message : 'Event could not be updated.')
       }
     }
-    setBookings((current) => current.map((booking) => updatedIds.includes(booking.id) ? { ...booking, status } : booking))
+    refreshGeneration.current++
+    setLoading(false)
+    setSnapshot((current) => ({ ...current, classificationVerified: false, bookings: current.bookings.map((booking) => updatedIds.includes(booking.id) ? { ...booking, status } : booking) }))
+    if (invalidResponse) setError('An event may have changed. Refresh the page to verify counts.')
     bulkSelection.clear()
     setBulkBusy(null)
+    if (updatedIds.length) void fetchBookings()
     if (errors.length) alert(`${updatedIds.length} event${updatedIds.length === 1 ? '' : 's'} updated. ${errors.length} could not be changed.`)
   }
 
@@ -177,14 +239,29 @@ export default function EventsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resource: 'bookings', action: 'delete', ids }),
       })
-      const payload = await response.json().catch(() => ({})) as { error?: string; ids?: string[]; warning?: string }
-      if (!response.ok) throw new Error(payload.error || 'Unable to delete events.')
-      const deletedIds = payload.ids || []
-      setBookings((current) => current.filter((booking) => !deletedIds.includes(booking.id)))
+      const payload: unknown = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(eventObject(payload) && typeof payload.error === 'string' ? payload.error : 'Unable to delete events.')
+      if (!eventObject(payload) || !Array.isArray(payload.ids) || !payload.ids.every((id) => typeof id === 'string' && ids.includes(id))
+        || (payload.warning != null && typeof payload.warning !== 'string')) {
+        refreshGeneration.current++
+        setLoading(false)
+        setSnapshot((current) => ({ ...current, classificationVerified: false }))
+        setError('Events may have changed. Refresh the page to verify counts.')
+        throw new Error('Events may have changed, but the response was invalid. Refresh the page.')
+      }
+      const deletedIds = payload.ids as string[]
+      refreshGeneration.current++
+      setLoading(false)
+      setSnapshot((current) => ({ ...current, classificationVerified: false, bookings: current.bookings.filter((booking) => !deletedIds.includes(booking.id)) }))
       bulkSelection.clear()
       setConfirmBulkDelete(false)
-      if (payload.warning) alert(payload.warning)
+      void fetchBookings()
+      if (typeof payload.warning === 'string' && payload.warning) alert(payload.warning)
     } catch (deleteError) {
+      refreshGeneration.current++
+      setLoading(false)
+      setSnapshot((current) => ({ ...current, classificationVerified: false }))
+      setError('Events may have changed. Refresh the page to verify counts.')
       alert(deleteError instanceof Error ? deleteError.message : 'Unable to delete events.')
     } finally {
       setBulkBusy(null)
@@ -192,7 +269,9 @@ export default function EventsPage() {
   }
 
   // Sub-metrics
-  const confirmedCount = useMemo(() => bookings.filter((b) => b.status === 'confirmed').length, [bookings])
+  const businessBookings = useMemo(() => bookings.filter((booking) => !isLuxorTestAvailabilityBooking(booking)
+    && !(booking.inquiry_id && testInquiryIds.has(booking.inquiry_id))), [bookings, testInquiryIds])
+  const confirmedCount = useMemo(() => businessBookings.filter((booking) => booking.status === 'confirmed').length, [businessBookings])
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-clip flex flex-col gap-6 max-lg:h-auto max-lg:min-h-full max-lg:overflow-visible">
@@ -224,7 +303,7 @@ export default function EventsPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Active Contracts</span>
                   <span className="text-[10px] tabular-nums font-bold text-[#a37d2c] dark:text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-0.5 rounded">
-                    {confirmedCount} Confirmed / {bookings.length} Total
+                    {loading ? 'Loading counts…' : error || !classificationVerified ? 'Counts unavailable' : `${confirmedCount} Confirmed / ${businessBookings.length} Total`}
                   </span>
                 </div>
                 {matchingBookingIds.length > 0 ? (

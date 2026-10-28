@@ -486,6 +486,7 @@ export default function LeadDetailPage({
   const selectedLeadEventIdRef = useRef<string | null>(null)
   const initializedEventPreferenceRef = useRef(false)
   const [payments, setPayments] = useState<LuxorPayment[]>([])
+  const [paymentLoadError, setPaymentLoadError] = useState<string | null>(null)
   const [paymentInstallments, setPaymentInstallments] = useState<LuxorPaymentInstallment[]>([])
   const [paymentInstallmentRefresh, setPaymentInstallmentRefresh] = useState(0)
   const [tourEmailJobs, setTourEmailJobs] = useState<LuxorEmailJob[]>([])
@@ -1809,8 +1810,13 @@ export default function LeadDetailPage({
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
         fetch(`/api/payments?inquiryId=${id}`)
-          .then(async (res) => (res.ok ? await res.json() : []))
-          .catch(() => []),
+          .then(async (res) => {
+            if (!res.ok) throw new Error('Payment records could not be verified.')
+            const result: unknown = await res.json()
+            if (!Array.isArray(result)) throw new Error('Payment records could not be verified.')
+            return result as LuxorPayment[]
+          })
+          .catch(() => null),
         fetch(`/api/tour-actions?inquiryId=${id}`)
           .then(async (res) => res.ok ? ((await res.json()).jobs || []) : [])
           .catch(() => []),
@@ -1851,7 +1857,8 @@ export default function LeadDetailPage({
       }
       contractStatusSnapshotRef.current = Object.fromEntries(nextBookings.map((booking) => [booking.id, booking.contract_status || 'not_sent']))
       setBookings(nextBookings)
-      setPayments(paymentsData)
+      setPaymentLoadError(paymentsData === null ? 'Payment records could not be verified. Refresh before collecting another payment or confirming a date.' : null)
+      setPayments(paymentsData || [])
       setTourEmailJobs(tourJobsData)
       void fetch(`/api/leads/${encodeURIComponent(id)}/correct-email-resend`, { cache: 'no-store' })
         .then(async (response) => response.ok ? response.json() : { options: [] })
@@ -4856,7 +4863,8 @@ export default function LeadDetailPage({
         <p className="text-xs text-[color:var(--portal-muted)]">{loadingTestRun ? 'Preparing the isolated Test Lead run…' : 'This lead needs an active isolated run before tours or proposals can be simulated.'}</p>
         {!loadingTestRun ? <button type="button" onClick={() => void ensureActiveTestRun(true)} className="min-h-10 rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white">Start or resume isolated run</button> : null}
       </div> : null}
-{invoices.some(invoice => invoice.same_day_booking_status === 'review') || payments.some(payment => payment.metadata?.receipt_received && payment.status !== 'paid') ? <div role="alert" className="mb-4 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-text)]"><p className="font-semibold">Payment received — owner review required</p><p className="text-[color:var(--portal-muted)]">Funds are recorded in the ledger but have not qualified the same-day booking. Do not collect again or revise a received-payment proposal. Verify receipt evidence or reconcile the exception with the client.</p></div> : null}
+{invoices.some(invoice => invoice.same_day_booking_status === 'review') || payments.some(payment => payment.metadata?.deposit_receipt_review === true || (payment.metadata?.receipt_received && payment.status !== 'paid')) ? <div role="alert" className="mb-4 border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-text)]"><p className="font-semibold">Payment received — owner review required</p><p className="text-[color:var(--portal-muted)]">A payment needs review before the date can be confirmed. Do not collect another payment. Check the receipt and the date, including any other payment link in progress, before making changes.</p></div> : null}
+{paymentLoadError ? <div role="alert" className="mb-4 border border-red-500/30 bg-red-500/5 p-4 text-sm text-[color:var(--portal-text)]">{paymentLoadError}</div> : null}
 
       <div className="mb-4 flex shrink-0 items-center justify-between">
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
@@ -7386,7 +7394,7 @@ export default function LeadDetailPage({
                     />
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
                       <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Payment history</p><span className="text-[10px] font-bold text-[color:var(--portal-muted)]">Event payments only</span></div>
-                      <div className="space-y-3">{sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).length ? sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).map((payment) => <div key={payment.id} className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3 text-xs"><div><p className="font-bold text-[color:var(--portal-text)]">{String(payment.metadata?.payment_kind || 'Event payment').replaceAll('_', ' ')}</p><p className="text-[10px] text-[color:var(--portal-muted)]">{payment.paid_at ? `Paid ${formatDisplayDate(payment.paid_at)}` : formatTimelineDate(payment.created_at)}</p></div><span className="tabular-nums font-bold text-emerald-700 dark:text-emerald-300">{formatMoney(payment.amount)}</span></div>) : <p className="text-xs text-[color:var(--portal-muted)]">No event payments have been recorded yet.</p>}</div>
+                      <div className="space-y-3">{sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).length ? sortedPayments.filter((payment) => !/security deposit/i.test(String(payment.metadata?.payment_kind || payment.metadata?.description || ''))).map((payment) => { const needsReview = payment.metadata?.deposit_receipt_review === true || Boolean(payment.metadata?.receipt_received && payment.status !== 'paid'); return <div key={payment.id} className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3 text-xs"><div><p className="font-bold text-[color:var(--portal-text)]">{String(payment.metadata?.payment_kind || 'Event payment').replaceAll('_', ' ')}</p><p className="text-[10px] text-[color:var(--portal-muted)]">{needsReview ? 'Received — review required' : payment.paid_at ? `Paid ${formatDisplayDate(payment.paid_at)}` : formatTimelineDate(payment.created_at)}</p></div><span className={`tabular-nums font-bold ${needsReview ? 'text-amber-800 dark:text-amber-200' : 'text-emerald-700 dark:text-emerald-300'}`}>{formatMoney(payment.amount)}</span></div> }) : <p className="text-xs text-[color:var(--portal-muted)]">No event payments have been recorded yet.</p>}</div>
                     </section>
                   </>
                 )

@@ -10,6 +10,8 @@ export type LuxorAvailabilityBooking = {
   end_time: string | null
   status: string
   is_test?: boolean
+  availability_payment_review?: boolean
+  availability_deposit_paid?: boolean
   metadata?: Record<string, unknown> | null
 }
 
@@ -86,7 +88,11 @@ export function isLuxorTestAvailabilityBooking(booking: LuxorAvailabilityBooking
 }
 
 function isActiveBooking(booking: LuxorAvailabilityBooking) {
-  return booking.status === 'tentative' || booking.status === 'confirmed'
+  const claim = booking.metadata?.deposit_checkout_claim
+  const claimState = claim && typeof claim === 'object' && !Array.isArray(claim)
+    ? (claim as Record<string, unknown>).state : null
+  return booking.status === 'confirmed' || booking.availability_payment_review === true || (booking.status === 'tentative' && booking.availability_deposit_paid === true) ||
+    claimState === 'starting' || claimState === 'open' || claimState === 'uncertain'
 }
 
 function isCalendarBooking(booking: LuxorAvailabilityBooking) {

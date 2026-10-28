@@ -1,4 +1,3 @@
-import { assertLuxorBookingDepositAvailable, LuxorBookingDepositPausedError, queuePausedDepositFollowUp } from './luxorDepositMaintenanceServer'
 import 'server-only'
 import { sameDayBookingPromotion, sameDayBookingRequiresRevision } from './luxorSameDayBooking'
 import { SAME_DAY_REVISION_MESSAGE, sameDayTermsFingerprint, reconcileLuxorSameDayReceipts, finalizeLuxorSameDayBooking } from './luxorSameDayBookingServer'
@@ -16,7 +15,8 @@ import { getLuxorInquiry, updateLuxorInquiry } from './luxorInquiriesServer'
 import { ensureLuxorDepositInvoice, ensureLuxorFinalBalanceInvoice, ensureLuxorSecurityDepositInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate } from './luxorInvoicesServer'
 import { syncLuxorPaymentInstallments } from './luxorPaymentInstallmentsServer'
 import { createNote, listNotesByInquiry } from './luxorNotesServer'
-import { createLuxorPostContractCheckout } from './luxorStripeCheckoutServer'
+import { prepareLuxorDepositPaymentLink } from './luxorStripeCheckoutServer'
+import { assertLuxorBookingDepositAvailable, LuxorBookingDepositPausedError, queuePausedDepositFollowUp } from './luxorDepositMaintenanceServer'
 
 const DEFAULT_OWNER_SIGNER_NAME = 'Arianna Patterson'
 
@@ -250,6 +250,11 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking, options
   const ownerEmail = process.env.LUXOR_OWNER_SIGNER_EMAIL || 'booking@luxoratlaspalmas.com'
   const parsedName = parseClientName(booking.client_name)
   const proposal = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
+  if (!proposal || proposal.id !== booking.invoice_id || proposal.inquiry_id !== booking.inquiry_id ||
+      proposal.invoice_kind !== 'event' || proposal.status !== 'sent' || !proposal.price_locked_at ||
+      !proposal.proposal_accepted_at || !Number.isInteger(proposal.proposal_version) || Number(proposal.proposal_version) < 1) {
+    throw new Error('The signed agreement requires its accepted, locked proposal revision.')
+  }
   let created: LuxorSignatureRequest | null = null
   try {
     const [inserted] = await supabaseRest<LuxorSignatureRequest[]>('luxor_signature_requests?select=*', {
@@ -279,6 +284,8 @@ export async function createLuxorSignatureRequest(booking: LuxorBooking, options
           guestCount: booking.guest_count,
           contractTotal: booking.contract_total,
           bookingFingerprint: getLuxorBookingContractFingerprint(booking),
+          claim_master_invoice_id: proposal.id,
+          claim_master_proposal_version: proposal.proposal_version,
           ...(sameDayBookingPromotion(proposal)?.coverage_amount && proposal ? { sameDayTermsFingerprint: sameDayTermsFingerprint(proposal, booking) } : {}),
           signingMode: options?.signingMode || 'email',
           documentPreparationState: 'preparing',
@@ -706,7 +713,7 @@ async function claimLuxorClientSignature(signature: LuxorSignatureRequest, input
   signatureDataUrl: string
   ip?: string | null
   userAgent?: string | null
-}, signedAt: string) {
+}, signedAt: string, binding: Record<string, unknown>) {
   // The status predicate is the concurrency gate. Only one simultaneous POST
   // can preserve the original image and advance the agreement to signed.
   const [claimed] = await supabaseRest<LuxorSignatureRequest[]>(
@@ -722,6 +729,7 @@ async function claimLuxorClientSignature(signature: LuxorSignatureRequest, input
         signer_user_agent: input.userAgent || null,
         metadata: {
           ...(signature.metadata || {}),
+          ...binding,
           clientSignatureDataUrl: input.signatureDataUrl,
           clientSignatureSha256: crypto.createHash('sha256').update(input.signatureDataUrl).digest('hex'),
           clientSignatureRecordedAt: signedAt,
@@ -765,9 +773,35 @@ export async function signLuxorSignatureRequest(input: {
   let signatureRecordedByThisAttempt = false
   if (signature.status !== 'signed') {
     const master = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
+    if (!master || master.id !== booking.invoice_id || master.inquiry_id !== booking.inquiry_id || master.invoice_kind !== 'event' ||
+        master.status !== 'sent' || !master.price_locked_at || !master.proposal_accepted_at ||
+        !Number.isInteger(master.proposal_version) || Number(master.proposal_version) < 1 ||
+        signature.metadata?.bookingFingerprint !== getLuxorBookingContractFingerprint(booking) ||
+        (signature.metadata?.claim_master_invoice_id !== undefined && signature.metadata.claim_master_invoice_id !== master.id) ||
+        (signature.metadata?.claim_master_proposal_version !== undefined && signature.metadata.claim_master_proposal_version !== master.proposal_version)) {
+      throw new Error('This agreement cannot be verified against the current accepted proposal. Please contact Luxor for a new agreement.')
+    }
     if (master && sameDayBookingRequiresRevision(master)) throw new Error(SAME_DAY_REVISION_MESSAGE)
     if (master && sameDayBookingPromotion(master)?.coverage_amount && signature.metadata?.bookingFingerprint !== getLuxorBookingContractFingerprint(booking)) throw new Error('This agreement belongs to an earlier proposal version. Request a fresh agreement.')
-    updated = await claimLuxorClientSignature(signature, input, signedAt)
+    const metadata = booking.metadata || {}
+    const binding = {
+      claim_master_invoice_id: master.id,
+      claim_master_proposal_version: master.proposal_version,
+      claim_master_proposal_context: master.proposal_context,
+      claim_booking_terms: {
+        client_name: booking.client_name, email: booking.email ?? null, event_type: booking.event_type ?? null, event_date: booking.event_date ?? null,
+        start_time: booking.start_time ?? null, end_time: booking.end_time ?? null, guest_count: booking.guest_count ?? null, package_name: booking.package_name ?? null,
+        contract_total: booking.contract_total == null ? null : Number(booking.contract_total),
+        deposit_required: booking.deposit_required == null ? null : Number(booking.deposit_required),
+        security_deposit_amount: booking.security_deposit_amount == null ? null : Number(booking.security_deposit_amount),
+        final_payment_due_date: booking.final_payment_due_date ?? null,
+        notes: booking.notes ?? null, proposal_line_items: metadata.proposalLineItems === undefined ? [] : metadata.proposalLineItems,
+        proposal_tax_rate: metadata.proposalTaxRate === undefined ? 0 : metadata.proposalTaxRate,
+        proposal_offer: metadata.proposalOffer === undefined ? {} : metadata.proposalOffer,
+        final_proposal_context: metadata.final_proposal_context === undefined ? null : metadata.final_proposal_context,
+      },
+    }
+    updated = await claimLuxorClientSignature(signature, input, signedAt, binding)
     if (!updated) {
       // Another tab/request may have won the first-write race. Re-fetch and
       // resume only that exact signature; never overwrite its image.
@@ -1021,22 +1055,18 @@ export async function signLuxorSignatureRequest(input: {
     securityDue.setUTCDate(securityDue.getUTCDate() - 30)
     await ensureLuxorSecurityDepositInvoice({ masterInvoice, bookingId: booking.id, dueDate: securityDue.toISOString().slice(0, 10) })
     const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
-    const checkout = await createLuxorPostContractCheckout({
+    checkoutUrl = await prepareLuxorDepositPaymentLink({
       invoice: paymentInvoice,
       inquiry,
       booking,
       origin,
-      paymentAmount: Number(paymentInvoice.total || 0),
-      paymentLabel: 'Initial Booking Payment - Luxor at Las Palmas Events',
-      masterInvoiceId: masterInvoice.id,
     })
-    checkoutUrl = checkout?.checkoutUrl || null
     if (!checkoutUrl) {
-      throw new Error('Stripe did not return a secure payment link for the signed booking.')
+      throw new Error('A secure payment link could not be prepared for the signed booking.')
     }
   } catch (paymentError) {
     if (paymentError instanceof LuxorBookingDepositPausedError) await queuePausedDepositFollowUp(signature.inquiry_id, signature.id)
-    console.error('Contract was signed, but the post-sign Stripe payment request could not be created:', paymentError)
+    console.error('Contract was signed, but the payment link could not be prepared:', paymentError)
   }
 
   const paymentBreakdown = paymentInvoice ? getInitialPaymentBreakdown(paymentInvoice) : null

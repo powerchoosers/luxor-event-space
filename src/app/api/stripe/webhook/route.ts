@@ -18,6 +18,7 @@ import { recordLuxorSameDayPayment, recordLuxorSameDayScheduledPayment, stripeSu
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { syncLuxorPaymentInstallments, usesFirstDepositScheduleAnchor } from '@/lib/luxorPaymentInstallmentsServer'
+import { recordClaimedDeposit, recordClaimedSameDayDeposit, recordUnmatchedDepositReview, updateDepositCheckoutClaim } from '@/lib/luxorDepositClaimsServer'
 
 function escapeNoticeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
@@ -88,7 +89,94 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
   // or its success arrived late. The atomic guard prevents booking/notice
   // side effects until immutable timing and agreement identity qualify it.
   let promotedPayment: LuxorPayment | null = null
-  if (collectionMasterInvoice && sameDayBookingPromotion(collectionMasterInvoice)?.coverage_amount && invoice.invoice_kind === 'deposit') {
+  const claimId = session.metadata?.deposit_claim_id
+  const bookingClaim = booking?.metadata?.deposit_checkout_claim as { id?: string } | undefined
+  if (invoice.invoice_kind === 'deposit' && (!claimId || bookingClaim?.id !== claimId)) {
+    if (!booking || booking.id !== invoice.booking_id || session.metadata?.invoice_id !== invoice.id ||
+        session.metadata?.booking_id !== booking.id || session.currency !== 'usd' || Number(session.amount_total || 0) <= 0) {
+      throw new Error('The unmatched deposit cannot be associated with its booking safely.')
+    }
+    const providerSession = await stripe.checkout.sessions.retrieve(session.id)
+    const secretKey = process.env.STRIPE_SECRET_KEY || ''
+    const expectedLiveMode = /^(sk|rk)_live_/.test(secretKey) ? true : /^(sk|rk)_test_/.test(secretKey) ? false : null
+    if (expectedLiveMode === null || providerSession.livemode !== expectedLiveMode || session.livemode !== expectedLiveMode || providerSession.payment_status !== 'paid' ||
+        providerSession.metadata?.invoice_id !== invoice.id || providerSession.metadata?.booking_id !== booking.id ||
+        providerSession.currency !== 'usd' || providerSession.amount_total !== session.amount_total) {
+      throw new Error('The unmatched deposit could not be verified with Stripe.')
+    }
+    const review = await recordUnmatchedDepositReview({ bookingId: booking.id, invoiceId: invoice.id, amount: Number(session.amount_total) / 100,
+      reference: session.id, eventId: event.id, paidAt, metadata: { currency: session.currency,
+        payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id } })
+    console.error(`Stripe deposit ${session.id} recorded for owner review because its payment reservation is missing or changed.${review.in_flight_session ? ' Another checkout is in flight and requires reconciliation.' : ''}`)
+    return
+  }
+  if (claimId && invoice.invoice_kind === 'deposit') {
+    if (!booking || booking.id !== session.metadata?.booking_id || invoice.id !== session.metadata?.invoice_id ||
+        session.currency !== 'usd' || !Number.isFinite(Number(session.amount_total)) || Number(session.amount_total) <= 0) {
+      throw new Error('The Stripe deposit receipt does not match its payment reservation.')
+    }
+    const claim = booking.metadata?.deposit_checkout_claim as { id?: string; state?: string; session_id?: string; provider_account?: string; livemode?: boolean; currency?: string } | undefined
+    if (!claim || claim.id !== claimId) throw new Error('The Stripe deposit claim is unavailable for reconciliation.')
+    const account = await stripe.accounts.retrieve(null)
+    if (claim.provider_account !== account.id || claim.livemode !== session.livemode || claim.currency !== session.currency) {
+      throw new Error('The Stripe deposit does not match the reserved provider account or mode.')
+    }
+    if (!claim.session_id && claim.state !== 'paid') await updateDepositCheckoutClaim(booking.id, claimId, 'open', session.id)
+    const evidence = sameDay ? await stripeSuccessfulPaymentEvidence(stripe, session, event) : null
+    const recorded = sameDay ? await recordClaimedSameDayDeposit({ bookingId: booking.id, invoiceId: invoice.id, claimId,
+      amount: Number(session.amount_total) / 100, processor: 'stripe', reference: session.id,
+      paidAt: evidence?.paidAt || null, method: 'stripe_checkout', eventId: evidence?.eventId || event.id,
+      timingVerified: Boolean(evidence), fingerprint: session.metadata?.same_day_fingerprint || '',
+      metadata: { payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
+        payment_label: session.metadata?.payment_label, payment_kind: kind, currency: session.currency,
+        same_day_fingerprint: session.metadata?.same_day_fingerprint, successful_event_id: evidence?.eventId || null } })
+      : await recordClaimedDeposit({ bookingId: booking.id, invoiceId: invoice.id, claimId,
+      amount: Number(session.amount_total) / 100, processor: 'stripe', reference: session.id, paidAt,
+      method: 'stripe_checkout', metadata: { payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
+        payment_label: session.metadata?.payment_label, payment_kind: kind, currency: session.currency } })
+    if (recorded.review) {
+      console.error(`Stripe deposit ${session.id} recorded for owner review: ${recorded.reason || 'booking changed'}`)
+      return
+    }
+    if (!recorded.payment) throw new Error('The deposit receipt could not be verified.')
+    if (!recorded.invoiceApplied) {
+      throw new Error('The paid deposit invoice requires reconciliation before its receipt can be completed.')
+    }
+    // The receipt RPC owns booking state, Stripe deposit security bookkeeping
+    // and invoice settlement, including on replay. Never reapply a stale
+    // booking or inquiry patch here.
+    const currentBooking = await getLuxorBooking(booking.id)
+    const paidInvoice = await getInvoice(invoice.id)
+    if (!currentBooking || !paidInvoice || paidInvoice.status !== 'paid') throw new Error('The paid deposit could not be reloaded.')
+    const currentInquiry = currentBooking.inquiry_id ? await getLuxorInquiry(currentBooking.inquiry_id) : null
+    const currentMaster = currentBooking.invoice_id ? await getInvoice(currentBooking.invoice_id) : null
+    if (!recorded.replay && !recorded.bookingTerminal && currentBooking.status === 'confirmed' && currentInquiry?.status !== 'closed_lost') {
+      await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: currentBooking.id, inquiryId: currentBooking.inquiry_id })
+        .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
+    }
+    if (!recorded.bookingTerminal && currentBooking.status === 'confirmed' && currentMaster && currentInquiry?.status !== 'closed_lost') {
+      const dueDate = configuredFinalPaymentDueDate(currentBooking)
+      if (dueDate) await ensureLuxorFinalBalanceInvoice({ masterInvoice: currentMaster, bookingId: currentBooking.id,
+        dueDate, depositPaid: Number(currentBooking.deposit_required || 0) })
+      if (usesFirstDepositScheduleAnchor(currentMaster)) await syncLuxorPaymentInstallments({ booking: currentBooking, invoice: currentMaster })
+    }
+    if (currentInquiry?.email) {
+      const pdf = await buildLuxorInvoicePdf(paidInvoice, currentInquiry)
+      await saveLuxorInvoicePdf({ invoice: paidInvoice, inquiryId: currentInquiry.id, pdf, createdBy: 'Stripe Automation' })
+      await queueLuxorTransactionalNotice({ kind: 'paid_invoice', sourceId: session.id, inquiryId: currentInquiry.id,
+        bookingId: currentBooking.id, recipient: currentInquiry.email, subject: 'Your Luxor payment receipt',
+        html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto"><h1>Payment received</h1><p>Hi ${escapeNoticeHtml(currentInquiry.full_name.split(/\s+/)[0] || currentInquiry.full_name)},</p><p>We received your booking payment of <strong>${formatMoney(recorded.payment.amount)}</strong>. Your paid invoice is attached.</p><p>Please contact Luxor if you have questions about your booking.</p></div>`,
+        scheduledFor: recorded.payment.paid_at || paidAt, pdf,
+        filename: `Luxor-Paid-Booking-Payment-Invoice-${paidInvoice.id.slice(0, 8)}.pdf`,
+        legacyAutomationKey: `deposit_payment_confirmation:${session.id}` })
+    }
+    if (currentInquiry?.status !== 'closed_lost') {
+      await queuePaymentConfirmationText(recorded.payment, { phone: currentInquiry?.phone || currentBooking.phone,
+        name: currentInquiry?.full_name || currentBooking.client_name, inquiryId: currentInquiry?.id || currentBooking.inquiry_id })
+    }
+    return
+  }
+  if (!promotedPayment && collectionMasterInvoice && sameDayBookingPromotion(collectionMasterInvoice)?.coverage_amount && invoice.invoice_kind === 'deposit') {
     if (!booking) throw new Error('A promoted payment requires its booking for durable reconciliation.')
     const evidence = await stripeSuccessfulPaymentEvidence(stripe, session, event)
     const guarded = await recordLuxorSameDayPayment({ invoice, master: collectionMasterInvoice, booking,

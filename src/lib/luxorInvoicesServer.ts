@@ -759,7 +759,8 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
         : `Final Event Price balance after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} initial booking payment. The refundable security deposit was collected separately with the initial payment and remains held through post-event inspection.`,
     }) || existing
   }
-  return createInvoice({
+  try {
+    return await createInvoice({
     inquiry_id: input.masterInvoice.inquiry_id,
     booking_id: input.bookingId,
     parent_invoice_id: input.masterInvoice.id,
@@ -776,7 +777,13 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
     notes: collection.scoped
       ? `Internal collection note: this Stripe balance settles Luxor-controlled services only. Planner-managed services remain on the complete contract total and are collected separately. Luxor-controlled total: ${collection.luxorServicesTotal.toFixed(2)}; planner-managed total: ${collection.plannerServicesTotal.toFixed(2)}.`
       : `Final Event Price balance after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} initial booking payment. The refundable security deposit was collected separately with the initial payment and remains held through post-event inspection.`,
-  })
+    })
+  } catch (error) {
+    if (!(error instanceof Error) || !/duplicate key|unique constraint/i.test(error.message)) throw error
+    const concurrent = await getInvoiceByBookingAndKind(input.bookingId, 'final_balance')
+    if (!concurrent) throw error
+    return concurrent
+  }
 }
 
 export function calculateLuxorDepositAmounts(params: {
