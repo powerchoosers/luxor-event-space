@@ -4996,14 +4996,13 @@ export default function LeadDetailPage({
                     <AnimatePresence>
                       {showEventPicker ? (
                         <motion.div
-                          initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                          initial={{ opacity: 0, y: -4, scale: 0.98 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -5, scale: 0.98 }}
-                          transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                          exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                          transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
                           role="listbox"
                           ref={eventPickerMenuRef}
-                          style={{ position: 'fixed', top: eventPickerPosition.top, left: eventPickerPosition.left, maxHeight: eventPickerPosition.maxHeight, width: 'min(340px, calc(100vw - 1rem))' }}
-                          className="portal-dropdown z-[71] overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                          className="portal-dropdown absolute left-0 top-full mt-1.5 z-[71] w-[min(340px,calc(100vw-2rem))] max-h-80 overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
                         >
                           <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
                           {leadEvents.map((event) => (

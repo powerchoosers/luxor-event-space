@@ -114,9 +114,10 @@ body {
 @media (max-width: 1023px) and (display-mode: standalone) {
   /* Keep the standalone shell inside the visible viewport on fresh iOS installs. */
   body.portal-shell {
-    position: relative;
-    inset: auto;
+    position: fixed;
+    inset: 0;
     height: 100dvh;
+    overflow: hidden;
   }
 
   /* Anchor navigation to the same visible viewport as the standalone shell.
@@ -130,7 +131,10 @@ body {
   }
 
   .portal-mobile-nav {
-    position: absolute;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
     padding-bottom: var(--portal-mobile-nav-bottom-clearance);
   }
 
@@ -2050,14 +2054,17 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 }
 
 @media (hover: none) and (pointer: coarse) {
-  body[data-portal-theme] button[aria-label]:not(.portal-header-action),
-  body[data-portal-theme] button[title]:not(.portal-header-action),
-  body[data-portal-theme] button:has(svg):not(:has(span)):not(.portal-header-action) {
+  body[data-portal-theme] button[aria-label]:not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox),
+  body[data-portal-theme] button[title]:not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox),
+  body[data-portal-theme] button:has(svg):not(:has(span)):not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox) {
     min-width: 44px;
     min-height: 44px;
   }
 
-  body[data-portal-theme] .portal-header-action {
+  body[data-portal-theme] .portal-header-action,
+  body[data-portal-theme] .portal-inline-action,
+  body[data-portal-theme] [role="checkbox"],
+  body[data-portal-theme] .portal-checkbox {
     min-width: 0 !important;
     min-height: 0 !important;
   }

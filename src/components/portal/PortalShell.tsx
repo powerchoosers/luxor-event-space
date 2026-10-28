@@ -1028,7 +1028,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               </AnimatePresence>
             </div>
 
-          <div className="flex items-center justify-self-end gap-1.5 sm:gap-5">
+          <div className="flex items-center justify-self-end">
             {/* Mobile Header Actions (Search | Phone | Notifications) */}
             <div className="flex h-9 items-center sm:hidden gap-1">
               {/* 1. Mobile Search Toggle */}
@@ -1067,7 +1067,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               {/* 3. Bell Notifications */}
               <div className="relative flex items-center justify-center">
                 <button
-                  ref={bellButtonRef}
+                  ref={(el) => {
+                    if (el) bellButtonRef.current = el
+                  }}
                   type="button"
                   onClick={() => setNotificationsOpen((prev) => !prev)}
                   className={`portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
@@ -1090,27 +1092,81 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               </div>
             </div>
 
-            {/* Desktop Items (Hidden on Mobile) */}
-            <div className="hidden sm:flex sm:items-center sm:gap-4">
-              <PortalPhoneButton />
-              
-              {/* Bell Notifications */}
-              <div className="relative">
+            {/* Desktop Header Actions (Phone | Bell | Messages | Elena) */}
+            <div className="hidden sm:flex h-9 items-center gap-1">
+              {/* 1. Phone Button */}
+              <PortalPhoneButton
+                compact
+                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
+              />
+
+              {/* Vertical divider 1 */}
+              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
+
+              {/* 2. Bell Notifications */}
+              <div className="relative flex items-center justify-center">
                 <button
+                  ref={(el) => {
+                    if (el) bellButtonRef.current = el
+                  }}
                   type="button"
                   onClick={() => setNotificationsOpen((prev) => !prev)}
-                  className="relative rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer"
+                  className={`portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
+                    notificationsOpen
+                      ? 'bg-[#caa24c]/15 text-[#caa24c] shadow-xs'
+                      : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10'
+                  }`}
                   aria-label="Notifications"
                   title="Notifications"
                 >
-                  <Bell size={20} className="text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-colors" />
-                  {notificationCount > 0 && (
-                    <span className="portal-notification-number absolute -right-1 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full border border-[color:var(--portal-card)] bg-blue-600 px-0.5 font-mono text-[9px] font-black text-white shadow-xs ring-2 ring-blue-500/40 animate-pulse">
-                      {notificationCount > 99 ? '99+' : notificationCount}
-                    </span>
-                  )}
+                  <div className="relative inline-flex items-center justify-center">
+                    <Bell size={18} />
+                    {notificationCount > 0 && (
+                      <span className="portal-notification-number absolute -top-1 -right-2 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[8px] font-black text-white shadow-xs ring-2 ring-[color:var(--portal-card)]">
+                        {notificationCount > 99 ? '99+' : notificationCount}
+                      </span>
+                    )}
+                  </div>
                 </button>
               </div>
+
+              {/* Vertical divider 2 */}
+              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
+
+              {/* 3. Text messages */}
+              <Link
+                href="/portal/messages?tab=sms"
+                prefetch
+                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10"
+                aria-label="Text messages"
+                title="Text messages"
+              >
+                <MessageSquare size={18} />
+              </Link>
+
+              {/* Vertical divider 3 */}
+              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
+
+              {/* 4. Elena AI Concierge */}
+              <button
+                type="button"
+                onClick={() => setElenaOpen((current) => !current)}
+                className={`relative flex h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer ${
+                  elenaOpen 
+                    ? 'border-[#caa24c] ring-2 ring-[#caa24c]/30' 
+                    : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/40'
+                }`}
+                aria-label="Toggle Elena AI Concierge"
+                title="Elena AI Assistant"
+              >
+                <Image 
+                  src="/luxor-concierge.png" 
+                  alt="Elena AI Assistant" 
+                  fill 
+                  sizes="36px"
+                  className="object-cover"
+                />
+              </button>
             </div>
 
             <PortalNotificationModal
@@ -1125,29 +1181,6 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               onMarkAllAsRead={markAllAsRead}
               onRefresh={refreshNotifications}
             />
-
-            <Link href="/portal/messages?tab=sms" prefetch className="hidden rounded-full p-2 transition-colors hover:bg-[color:var(--portal-soft)] cursor-pointer sm:inline-flex" aria-label="Text messages">
-              <MessageSquare size={20} className="text-zinc-400" />
-            </Link>
-            
-            <button
-              type="button"
-              onClick={() => setElenaOpen((current) => !current)}
-              className={`relative hidden h-9 w-9 shrink-0 overflow-hidden rounded-full border transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 sm:block ${
-                elenaOpen 
-                  ? 'border-[#caa24c] ring-2 ring-[#caa24c]/30' 
-                  : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/30'
-              }`}
-              aria-label="Toggle Elena AI Concierge"
-            >
-              <Image 
-                src="/luxor-concierge.png" 
-                alt="Elena AI Assistant" 
-                fill 
-                sizes="36px"
-                className="object-cover"
-              />
-            </button>
             
           </div>
         </header>

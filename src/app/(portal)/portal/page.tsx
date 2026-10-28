@@ -706,7 +706,7 @@ export default async function PortalOverview() {
         </PortalStaggerCard>
 
         {/* Bills Due */}
-        <PortalStaggerCard className="md:col-span-2 2xl:col-span-1">
+        <PortalStaggerCard className="portal-card-surface relative flex flex-col justify-between overflow-hidden p-6 md:col-span-2 2xl:col-span-1">
           <BillsDueCard initialBills={bills} />
         </PortalStaggerCard>
       </PortalStaggerGroup>

@@ -943,7 +943,7 @@ export default function LeadsPage() {
           {PIPELINE_COLUMNS.map((col, colIndex, colArray) => {
             const colLeads = sortedLeads.filter(l => getPipelineStage(l) === col.id)
             return (
-              <div key={col.id} className="portal-card-surface flex-1 min-w-[280px] max-w-[340px] flex flex-col h-full overflow-hidden">
+              <div key={col.id} className="portal-card-surface flex-1 min-w-[280px] max-w-[340px] flex flex-col h-full overflow-hidden rounded-none sm:rounded-xl">
                 {/* Column Header */}
                 <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
                   <div className="flex items-center gap-2">
@@ -996,7 +996,7 @@ export default function LeadsPage() {
           })}
 
           {/* Lost Leads Drawer / Collapsed Last Column */}
-          <div className="portal-card-surface flex min-w-[280px] max-w-[340px] flex-1 flex-col overflow-hidden opacity-75 transition-opacity duration-300 hover:opacity-100">
+          <div className="portal-card-surface flex min-w-[280px] max-w-[340px] flex-1 flex-col overflow-hidden opacity-75 transition-opacity duration-300 hover:opacity-100 rounded-none sm:rounded-xl">
             <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
               <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[color:var(--portal-muted)]" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Closed Lost</span></div>
               <span className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-0.5 tabular-nums text-[9px] font-bold text-[color:var(--portal-muted)]">{sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length}</span>

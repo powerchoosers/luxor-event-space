@@ -144,7 +144,7 @@ export function PortalCalendar({
               <button type="button" aria-label="Next date range" onClick={() => setAnchor((date) => moveAnchor(date, view, 1))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
                 <ChevronRight size={16} />
               </button>
-              <button type="button" aria-label="Calendar options" aria-haspopup="menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
+              <button type="button" aria-label="Calendar options" aria-haspopup="menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen((open) => !open)} className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
                 <MoreHorizontal size={18} />
               </button>
               <AnimatePresence>

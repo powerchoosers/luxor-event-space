@@ -53,7 +53,8 @@ export function LeadMobileActionBar({
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-50 h-[52px] overflow-hidden sm:hidden"
+      style={{ bottom: 'var(--portal-mobile-nav-height, 3.75rem)' }}
+      className="pointer-events-none fixed inset-x-0 z-50 h-[52px] overflow-hidden sm:hidden"
       onKeyDown={(event) => {
         if (event.key !== 'Escape' || !expanded) return
         event.preventDefault()

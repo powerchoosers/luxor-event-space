@@ -802,7 +802,7 @@ export function ContactListsTab({
                                 <Mail size={14} />
                               </button>
                             )}
-                            <button type="button" aria-label={`More actions for ${contact.full_name}`} className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)]">
+                            <button type="button" aria-label={`More actions for ${contact.full_name}`} className="rounded-md p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
                               <MoreVertical size={14} />
                             </button>
                           </div>

@@ -355,7 +355,7 @@ export function PortalTableCard({
     ? mobilePageScrollUntil === 'lg' ? 'max-lg:flex-none max-lg:overflow-visible' : 'max-md:flex-none max-md:overflow-visible'
     : ''
   return (
-    <section className={`nodal-void-card portal-render-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${mobilePageScrollContainerClass} ${className}`}>
+    <section className={`nodal-void-card portal-render-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-none sm:rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${mobilePageScrollContainerClass} ${className}`}>
       {controls ? <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 px-4 sm:px-6">{controls}</div> : null}
       <div className={`portal-scrollbar flex-1 overflow-auto ${mobilePageScrollContentClass}`} data-portal-table-scroller>
         {children}
@@ -381,6 +381,7 @@ export function PortalFilterBar({
   children,
   defaultExpanded = false,
   className = '',
+  searchWidthClassName = 'w-full sm:w-72 md:w-80',
 }: {
   searchValue: string
   onSearchChange: (value: string) => void
@@ -391,58 +392,63 @@ export function PortalFilterBar({
   children?: React.ReactNode
   defaultExpanded?: boolean
   className?: string
+  searchWidthClassName?: string
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const hasFilterControls = Boolean(children)
 
   return (
     <div className={`space-y-3 ${className}`}>
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-        <div className="relative min-w-0 flex-1">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
+      <div className="flex items-center justify-between gap-3">
+        <div className={`relative min-w-0 ${searchWidthClassName}`}>
+          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
           <input
             type="search"
             value={searchValue}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder={searchPlaceholder}
-            className="h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] pl-9 pr-9 text-xs font-semibold text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10"
+            className={`h-9 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] pl-9 text-xs font-semibold text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10 ${
+              searchValue && hasFilterControls ? 'pr-16' : hasFilterControls || searchValue ? 'pr-10' : 'pr-4'
+            }`}
           />
-          {searchValue ? (
-            <button
-              type="button"
-              onClick={() => onSearchChange('')}
-              aria-label="Clear search"
-              className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
-            >
-              <X size={12} />
-            </button>
-          ) : null}
+          <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
+            {searchValue ? (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                aria-label="Clear search"
+                className="portal-inline-action inline-flex h-6 w-6 !min-w-0 !min-h-0 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
+              >
+                <X size={12} />
+              </button>
+            ) : null}
+
+            {hasFilterControls ? (
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-label={activeFilters.length ? `Filter options (${activeFilters.length} active)` : 'Filter options'}
+                title={activeFilters.length ? `Filters (${activeFilters.length} active)` : 'Filters'}
+                onClick={() => setExpanded((current) => !current)}
+                className={`portal-inline-action relative inline-flex h-6 w-6 !min-w-0 !min-h-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer ${
+                  expanded || activeFilters.length
+                    ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]'
+                    : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
+                }`}
+              >
+                <SlidersHorizontal size={13} />
+                {activeFilters.length ? (
+                  <span className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#caa24c] px-0.5 text-[8px] font-black text-[#18130d] leading-none shadow-xs">
+                    {activeFilters.length}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
+          </div>
         </div>
 
-        {hasFilterControls ? (
-          <button
-            type="button"
-            aria-expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border px-3 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${
-              expanded || activeFilters.length
-                ? 'border-[#caa24c]/30 bg-[#caa24c]/10 text-[#9a712e] dark:text-[#f1d27a]'
-                : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-            }`}
-          >
-            <SlidersHorizontal size={13} />
-            Filters
-            {activeFilters.length ? (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#caa24c]/15 px-1.5 tabular-nums font-bold text-[9px] text-[#9a712e] dark:text-[#f1d27a]">
-                {activeFilters.length}
-              </span>
-            ) : null}
-            <ChevronDown size={12} className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-          </button>
-        ) : null}
-
         {resultLabel ? (
-          <span className="shrink-0 px-1 tabular-nums text-[9px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+          <span className="shrink-0 px-1 tabular-nums text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
             {resultLabel}
           </span>
         ) : null}
@@ -907,20 +913,21 @@ export function PortalSelect({
   const selectedOption = options.find((opt) => opt.value === value)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
-  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number; maxHeight: number }>({ top: 0, left: 0, width: 0, maxHeight: 240 })
+  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number; maxHeight: number }>({ top: 0, left: 0, width: 0, maxHeight: 360 })
   const isLight = theme === 'light'
 
   const updateCoords = React.useCallback(() => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
       const viewportPadding = 8
-      const dropdownHeight = dropdownRef.current ? Math.max(dropdownRef.current.scrollHeight, 180) : 240
       const width = Math.min(rect.width, Math.max(0, window.innerWidth - viewportPadding * 2))
       const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding)
       const spaceAbove = Math.max(0, rect.top - viewportPadding)
-      const opensAbove = spaceBelow < Math.min(dropdownHeight, 240) + 6 && spaceAbove > spaceBelow
-      const maxHeight = Math.min(240, opensAbove ? spaceAbove : spaceBelow)
-      const height = Math.min(dropdownHeight, maxHeight)
+      const dropdownScrollHeight = dropdownRef.current ? dropdownRef.current.scrollHeight : 220
+      const opensAbove = spaceBelow < Math.min(dropdownScrollHeight, 220) + 6 && spaceAbove > spaceBelow
+      const availableSpace = Math.max(160, opensAbove ? spaceAbove : spaceBelow)
+      const maxHeight = Math.min(380, availableSpace)
+      const height = Math.min(dropdownScrollHeight, maxHeight)
       const top = opensAbove ? rect.top - height - 6 : rect.bottom + 6
       const nextCoords = {
         top: Math.max(viewportPadding, Math.min(top, window.innerHeight - height - viewportPadding)),
@@ -1011,7 +1018,7 @@ export function PortalSelect({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.985 }}
                 transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                className={`portal-scrollbar fixed z-[9999] max-h-60 overflow-y-auto overscroll-contain rounded-md border p-1.5 shadow-2xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
+                className={`portal-scrollbar fixed z-[9999] max-h-[380px] overflow-y-auto overscroll-contain rounded-md border p-1.5 shadow-2xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
                 style={{
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,

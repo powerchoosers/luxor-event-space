@@ -76,7 +76,7 @@ function timeLabel(value?: string | null) {
 
 export default function CalendarPage() {
   const [activeCalendar, setActiveCalendar] = useState<'tours' | 'events'>('tours')
-  const [view, setView] = useState<PortalCalendarView>('month')
+  const [view, setView] = useState<PortalCalendarView>('schedule')
   const [data, setData] = useState<CalendarPayload>({ tours: [], slots: [], bookings: [], tasks: [], availability: {}, pendingProposals: [], pendingProposalCounts: {} })
   const [selectedEventDate, setSelectedEventDate] = useState(() => luxorTodayKey())
   const [loading, setLoading] = useState(true)
@@ -314,8 +314,17 @@ export default function CalendarPage() {
         actions={
           <div className="flex flex-wrap items-center gap-3">
             {activeCalendar === 'tours' ? (
-              <PortalButton type="button" variant="secondary" size="sm" onClick={() => setScheduleOpen(true)} aria-haspopup="dialog" className="min-h-10">
-                <Settings2 size={14} aria-hidden="true" /> <span>Tour schedule</span>
+              <PortalButton
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setScheduleOpen(true)}
+                aria-haspopup="dialog"
+                aria-label="Tour schedule"
+                title="Tour schedule"
+                className="h-10 w-10 p-0 shrink-0"
+              >
+                <Settings2 size={16} aria-hidden="true" />
               </PortalButton>
             ) : null}
             <div className="relative inline-flex items-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1 text-[10px] font-black uppercase tracking-widest">

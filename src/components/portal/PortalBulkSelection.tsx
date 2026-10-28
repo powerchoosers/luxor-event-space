@@ -108,16 +108,16 @@ export function PortalBulkRowSelector({
       aria-checked={checked}
       aria-label={checked ? `Deselect ${label}` : `Select ${label}`}
       onClick={(event) => { event.stopPropagation(); onChange() }}
-      className={`group/selector relative flex h-5 w-5 items-center justify-center rounded-[4px] border text-[9px] font-mono font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/55 ${
+      className={`portal-checkbox group/selector relative inline-flex h-[18px] w-[18px] !min-w-[18px] !min-h-[18px] !max-w-[18px] !max-h-[18px] shrink-0 items-center justify-center rounded-[4px] border text-[9px] font-mono font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/55 cursor-pointer ${
         checked
-          ? 'border-[#caa24c] bg-[#caa24c] text-white'
-          : 'border-transparent text-[color:var(--portal-faint)] hover:border-[#caa24c]/45 hover:bg-[#caa24c] hover:text-white focus-visible:border-[#caa24c]/45 focus-visible:bg-[#caa24c] focus-visible:text-white'
+          ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-xs'
+          : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-faint)] hover:border-[#caa24c]/60 hover:text-[color:var(--portal-text)] focus-visible:border-[#caa24c]'
       }`}
     >
       <span className={checked ? 'hidden' : 'group-hover/selector:hidden group-focus-visible/selector:hidden'}>{index}</span>
       <Check
-        size={10}
-        strokeWidth={3.25}
+        size={11}
+        strokeWidth={3}
         aria-hidden="true"
         className={`${checked ? 'block' : 'hidden group-hover/selector:block group-focus-visible/selector:block'} !text-white !stroke-white`}
         style={{ color: '#fff', stroke: '#fff' }}
@@ -142,13 +142,13 @@ export function PortalBulkHeaderSelector({
       aria-checked={state === 'some' ? 'mixed' : state === 'all'}
       aria-label={label}
       onClick={onChange}
-      className={`flex h-5 w-5 items-center justify-center rounded-[4px] border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/55 ${
+      className={`portal-checkbox relative inline-flex h-[18px] w-[18px] !min-w-[18px] !min-h-[18px] !max-w-[18px] !max-h-[18px] shrink-0 items-center justify-center rounded-[4px] border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/55 cursor-pointer ${
         state === 'none'
-          ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-transparent hover:border-[#caa24c]/45'
-          : 'border-[#caa24c] bg-[#caa24c] text-white'
+          ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-transparent hover:border-[#caa24c]/60'
+          : 'border-[#caa24c] bg-[#caa24c] text-white shadow-xs'
       }`}
     >
-      {state === 'some' ? <Minus size={10} strokeWidth={3.25} className="!stroke-white" /> : state === 'all' ? <Check size={10} strokeWidth={3.25} className="!stroke-white" /> : null}
+      {state === 'some' ? <Minus size={11} strokeWidth={3} className="!stroke-white" /> : state === 'all' ? <Check size={11} strokeWidth={3} className="!stroke-white" /> : null}
     </button>
   )
 }

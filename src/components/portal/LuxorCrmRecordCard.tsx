@@ -64,7 +64,7 @@ export function LuxorCrmRecordCard({
   />
   return (
     <article
-      className={`portal-card-surface relative rounded-xl border p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-150 ${onOpen ? 'cursor-pointer hover:-translate-y-0.5 hover:border-[#caa24c]/80 hover:shadow-md active:translate-y-0' : ''} ${selected ? 'border-[#caa24c]/60 bg-[#caa24c]/[0.04]' : ''} ${className}`}
+      className={`portal-card-surface relative rounded-none sm:rounded-xl border p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-150 ${onOpen ? 'cursor-pointer hover:-translate-y-0.5 hover:border-[#caa24c]/80 hover:shadow-md active:translate-y-0' : ''} ${selected ? 'border-[#caa24c]/60 bg-[#caa24c]/[0.04]' : ''} ${className}`}
       onClick={(event) => {
         const target = event.target as HTMLElement
         if (target.closest('a,button,input,select,textarea,[role="menuitem"]')) return
@@ -77,7 +77,7 @@ export function LuxorCrmRecordCard({
         aria-expanded={expanded}
         aria-controls={expandedContentId}
         onClick={(event) => { event.stopPropagation(); onOpen() }}
-        className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#a8792f]"
+        className="absolute inset-0 z-0 rounded-none sm:rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#a8792f]"
       /> : null}
       {responsiveContentColumn ? <div className="relative z-10 grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3">
         <div className="row-start-1 col-start-1">{cardAvatar}</div>

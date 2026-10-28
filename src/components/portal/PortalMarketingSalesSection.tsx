@@ -205,21 +205,27 @@ export function PortalMarketingSalesSection({
     <div className="space-y-4 sm:space-y-6 pt-0 sm:pt-2">
       {/* SECTION HEADER & GLOBAL DATE PICKER */}
       <div className="flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-[color:var(--portal-border)] pb-3 sm:pb-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2.5">
             <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--portal-text)] tracking-tight">
               Marketing & Sales
             </h2>
-            <span className="inline-flex items-center rounded-full bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#caa24c]">
+            <span className="inline-flex items-center rounded-full bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#caa24c] shrink-0 sm:hidden">
               Command Center
             </span>
           </div>
           <p className="mt-1 text-xs sm:text-sm text-[color:var(--portal-muted)]">
-            See how people are discovering Luxor and moving from website visitor to booked event.
+            <span className="sm:hidden">From website visitor to booked event.</span>
+            <span className="hidden sm:inline">
+              See how people are discovering Luxor and moving from website visitor to booked event.
+            </span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <span className="hidden sm:inline-flex items-center rounded-full bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#caa24c] shrink-0">
+            Command Center
+          </span>
           <Filter size={13} className="text-[color:var(--portal-muted)] shrink-0 hidden sm:block" />
           <PortalSelect
             value={preset}
@@ -420,18 +426,13 @@ export function PortalMarketingSalesSection({
               {/* Metric 1: Website Visitors */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="shrink-0 text-[color:var(--portal-muted)]">
-                        <Users size={14} strokeWidth={1.6} />
-                      </span>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
-                        Website Visitors
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
-                      Site
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="shrink-0 text-[color:var(--portal-muted)]">
+                      <Users size={14} strokeWidth={1.6} />
                     </span>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                      Website Visitors
+                    </p>
                   </div>
                   <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(metrics.websiteVisitors)}
@@ -447,18 +448,13 @@ export function PortalMarketingSalesSection({
               {/* Metric 2: Visit Page Visits */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="shrink-0 text-[color:var(--portal-muted)]">
-                        <Eye size={14} strokeWidth={1.6} />
-                      </span>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
-                        Visit Page Visits
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
-                      Traffic
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="shrink-0 text-[color:var(--portal-muted)]">
+                      <Eye size={14} strokeWidth={1.6} />
                     </span>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                      Visit Page Visits
+                    </p>
                   </div>
                   <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(visitPageCount)}
@@ -586,18 +582,13 @@ export function PortalMarketingSalesSection({
               {/* Metric 5: Tours Completed */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="shrink-0 text-[color:var(--portal-muted)]">
-                        <CheckCircle2 size={14} strokeWidth={1.6} />
-                      </span>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
-                        Tours Completed
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
-                      Attended
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="shrink-0 text-[color:var(--portal-muted)]">
+                      <CheckCircle2 size={14} strokeWidth={1.6} />
                     </span>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                      Tours Completed
+                    </p>
                   </div>
                   <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {metrics.tourAnalyticsAvailable ? formatStaticValue(metrics.toursCompleted) : 'Unavailable'}
@@ -645,18 +636,13 @@ export function PortalMarketingSalesSection({
               {/* Metric 6: Proposals Sent */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="shrink-0 text-[color:var(--portal-muted)]">
-                        <FileText size={14} strokeWidth={1.6} />
-                      </span>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
-                        Proposals Sent
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[10px] uppercase text-[color:var(--portal-faint)] font-semibold tracking-wider">
-                      Sales
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="shrink-0 text-[color:var(--portal-muted)]">
+                      <FileText size={14} strokeWidth={1.6} />
                     </span>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                      Proposals Sent
+                    </p>
                   </div>
                   <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(metrics.proposalsSent)}
@@ -676,18 +662,13 @@ export function PortalMarketingSalesSection({
               {/* Metric 7: Bookings */}
               <MagicCard className="rounded-xl p-3.5 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="shrink-0 text-emerald-500">
-                        <BookmarkCheck size={14} strokeWidth={1.6} />
-                      </span>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
-                        Bookings
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[10px] uppercase text-emerald-600 dark:text-emerald-400 font-semibold tracking-wider">
-                      Closed
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="shrink-0 text-emerald-500">
+                      <BookmarkCheck size={14} strokeWidth={1.6} />
                     </span>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--portal-muted)] truncate">
+                      Bookings
+                    </p>
                   </div>
                   <p className="mt-2 text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(metrics.bookings)}
@@ -704,18 +685,13 @@ export function PortalMarketingSalesSection({
               <div className="relative overflow-hidden rounded-xl border border-[#caa24c]/40 bg-gradient-to-b from-[#caa24c]/[0.08] to-[color:var(--portal-card)] p-3.5 flex flex-col justify-between shadow-xs">
                 <BorderBeam size={75} duration={11} delay={3} borderWidth={1.2} colorFrom="#f1d27a" colorTo="#caa24c" />
                 <div className="relative z-10">
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="shrink-0 text-[#caa24c]">
-                        <DollarSign size={14} strokeWidth={1.75} />
-                      </span>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#caa24c] truncate">
-                        Revenue
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[10px] uppercase text-[#caa24c] font-bold tracking-wider">
-                      Total
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="shrink-0 text-[#caa24c]">
+                      <DollarSign size={14} strokeWidth={1.75} />
                     </span>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#caa24c] truncate">
+                      Revenue
+                    </p>
                   </div>
                   <p className="mt-2 text-xl sm:text-2xl font-extrabold text-[color:var(--portal-text)] tracking-tight tabular-nums">
                     {formatStaticValue(metrics.revenue, {
