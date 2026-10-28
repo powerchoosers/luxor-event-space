@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRest } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       path = `luxor_booking_expenses?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=incurred_on.desc,created_at.desc`
     }
 
-    const expenses = await supabaseRest(path)
+    const expenses = await (searchParams.get('strictMetrics') === '1' ? supabaseRestStrict : supabaseRest)(path)
     return NextResponse.json(expenses)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch expenses.'

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useMemo, useDeferredValue } from 'react'
+import React, { useEffect, useState, useMemo, useDeferredValue, useRef } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import {
@@ -35,6 +35,7 @@ import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment } from '@/lib/luxorInquiryTypes'
+import { getLuxorBusinessFinanceRows } from '@/lib/luxorFinanceReporting'
 
 type BookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -48,6 +49,10 @@ export default function FinancesPage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [bookings, setBookings] = useState<BookingWithPayments[]>([])
+  const [verifiedTestInquiryIds, setVerifiedTestInquiryIds] = useState<ReadonlySet<string>>(new Set())
+  const [verifiedTestBookingIds, setVerifiedTestBookingIds] = useState<ReadonlySet<string>>(new Set())
+  const [testClassificationVerified, setTestClassificationVerified] = useState(false)
+  const refreshGeneration = useRef(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -75,13 +80,15 @@ type LuxorBookingExpense = {
   const [expenses, setExpenses] = useState<LuxorBookingExpense[]>([])
 
   const fetchFinanceData = async () => {
+    const generation = ++refreshGeneration.current
     try {
       setLoading(true)
       setError(null)
+      setTestClassificationVerified(false)
       const [invRes, bookRes, expRes] = await Promise.all([
         fetch('/api/invoices'),
-        fetch('/api/bookings'),
-        fetch('/api/expenses')
+        fetch('/api/bookings?strictMetrics=1'),
+        fetch('/api/expenses?strictMetrics=1')
       ])
 
       if (!invRes.ok || !bookRes.ok || !expRes.ok) throw new Error('Failed to load financial records.')
@@ -92,14 +99,42 @@ type LuxorBookingExpense = {
         expRes.json()
       ])
 
+      if (!Array.isArray(invData) || !Array.isArray(bookData) || !Array.isArray(expData)) throw new Error('Financial records could not be verified.')
+      if (generation !== refreshGeneration.current) return
       setInvoices(invData)
       setBookings(bookData)
       setExpenses(expData)
+
+      const inquiryIds = [...new Set([...invData, ...bookData].map((record) => record.inquiry_id).filter((id): id is string => typeof id === 'string' && Boolean(id)))]
+      const knownBookingIds = new Set(bookData.map((booking) => booking.id).filter((id): id is string => typeof id === 'string'))
+      const bookingIds = [...new Set([...invData, ...expData].map((record) => record.booking_id).filter((id): id is string => typeof id === 'string' && Boolean(id) && !knownBookingIds.has(id)))]
+      const classificationResponse = await fetch('/api/portal/test-inquiry-classification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryIds, bookingIds }),
+      })
+      if (!classificationResponse.ok) throw new Error('Verified test classification is unavailable; business metrics are hidden.')
+      const classification = await classificationResponse.json() as { testInquiryIds?: unknown; testBookingIds?: unknown; unresolvedBookingIds?: unknown }
+      const requestedInquiryIds = new Set(inquiryIds.map((id) => id.toLowerCase()))
+      const requestedBookingIds = new Set(bookingIds.map((id) => id.toLowerCase()))
+      if (!Array.isArray(classification.testInquiryIds)
+        || !classification.testInquiryIds.every((id) => typeof id === 'string' && requestedInquiryIds.has(id.toLowerCase()))
+        || !Array.isArray(classification.testBookingIds)
+        || !classification.testBookingIds.every((id) => typeof id === 'string' && requestedBookingIds.has(id.toLowerCase()))
+        || !Array.isArray(classification.unresolvedBookingIds)
+        || classification.unresolvedBookingIds.length > 0) {
+        throw new Error('Verified test classification is unavailable; business metrics are hidden.')
+      }
+      if (generation !== refreshGeneration.current) return
+      setVerifiedTestInquiryIds(new Set(classification.testInquiryIds.map((id) => id.toLowerCase())))
+      setVerifiedTestBookingIds(new Set(classification.testBookingIds.map((id) => id.toLowerCase())))
+      setTestClassificationVerified(true)
     } catch (err) {
+      if (generation !== refreshGeneration.current) return
       console.error(err)
       setError(err instanceof Error ? err.message : 'Failed to fetch financial metrics.')
     } finally {
-      setLoading(false)
+      if (generation === refreshGeneration.current) setLoading(false)
     }
   }
 
@@ -157,17 +192,25 @@ type LuxorBookingExpense = {
   }
 
   // Financial Calculations (Memoized for high performance)
-  const paidInvoices = useMemo(() => invoices.filter((inv) => inv.status === 'paid'), [invoices])
+  const { invoices: businessInvoices, bookings: businessBookings, expenses: businessExpenses } = useMemo(() => getLuxorBusinessFinanceRows({
+    invoices,
+    bookings,
+    expenses,
+    testInquiryIds: verifiedTestInquiryIds,
+    testBookingIds: verifiedTestBookingIds,
+  }), [invoices, bookings, expenses, verifiedTestInquiryIds, verifiedTestBookingIds])
+
+  const paidInvoices = useMemo(() => businessInvoices.filter((inv) => inv.status === 'paid'), [businessInvoices])
   const netRevenue = useMemo(() => paidInvoices.reduce((acc, inv) => acc + Number(inv.total), 0), [paidInvoices])
 
-  const outstandingInvoices = useMemo(() => invoices.filter((inv) => inv.status === 'sent' || inv.status === 'overdue'), [invoices])
+  const outstandingInvoices = useMemo(() => businessInvoices.filter((inv) => inv.status === 'sent' || inv.status === 'overdue'), [businessInvoices])
   const outstandingAR = useMemo(() => outstandingInvoices.reduce((acc, inv) => acc + Number(inv.total), 0), [outstandingInvoices])
 
-  const overdueInvoices = useMemo(() => invoices.filter((inv) => inv.status === 'overdue'), [invoices])
+  const overdueInvoices = useMemo(() => businessInvoices.filter((inv) => inv.status === 'overdue'), [businessInvoices])
   const overdueAR = useMemo(() => overdueInvoices.reduce((acc, inv) => acc + Number(inv.total), 0), [overdueInvoices])
-  const unpaidRetainers = useMemo(() => bookings.reduce((sum, booking) => sum + Math.max(Number(booking.deposit_required || 0) - Number(booking.paid_total || 0), 0), 0), [bookings])
+  const unpaidRetainers = useMemo(() => businessBookings.reduce((sum, booking) => sum + Math.max(Number(booking.deposit_required || 0) - Number(booking.paid_total || 0), 0), 0), [businessBookings])
 
-  const totalExpenses = useMemo(() => expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0), [expenses])
+  const totalExpenses = useMemo(() => businessExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0), [businessExpenses])
   const monthlyProfit = useMemo(() => Math.max(netRevenue - totalExpenses, 0), [netRevenue, totalExpenses])
 
   // Payments extraction
@@ -244,7 +287,10 @@ type LuxorBookingExpense = {
 
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
       {/* DASHBOARD TAB */}
-      {activeTab === 'dashboard' && (
+      {activeTab === 'dashboard' && !loading && !testClassificationVerified && (
+        <p role="status" className="p-4 text-sm text-[color:var(--portal-muted)]">Business metrics are unavailable until test records are verified. Refresh the ledger to retry.</p>
+      )}
+      {activeTab === 'dashboard' && testClassificationVerified && !error && !loading && (
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="space-y-6">
             {/* Top Cards */}
@@ -265,7 +311,7 @@ type LuxorBookingExpense = {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300 mt-4 font-bold tabular-nums">
-                    <ArrowUpRight size={16} /> <span>+{invoices.length} billing items</span>
+                    <ArrowUpRight size={16} /> <span>+{businessInvoices.length} billing items</span>
                   </div>
                 </MagicCard>
               </PortalStaggerCard>
@@ -286,7 +332,7 @@ type LuxorBookingExpense = {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 mt-4 font-bold tabular-nums">
-                    <ArrowDownRight size={16} /> <span>-{expenses.length} payments out</span>
+                    <ArrowDownRight size={16} /> <span>-{businessExpenses.length} payments out</span>
                   </div>
                 </MagicCard>
               </PortalStaggerCard>
