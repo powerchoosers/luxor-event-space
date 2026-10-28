@@ -2,7 +2,7 @@
 
 import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
 import React from 'react'
-import { PortalModal, PortalStaggerGroup, PortalStaggerCard } from './PortalUI'
+import { PortalModal, PortalSkeleton, PortalSkeletonTransition } from './PortalUI'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export type PortalCalendarView = 'month' | 'week' | 'day' | 'schedule'
@@ -88,12 +88,16 @@ export function PortalCalendar({
   view,
   onViewChange,
   dayStatuses,
+  loading = false,
+  animateLoadingTransition = false,
 }: {
   title: string
   items: PortalCalendarItem[]
   view: PortalCalendarView
   onViewChange: (view: PortalCalendarView) => void
   dayStatuses?: Record<string, PortalCalendarDayStatus>
+  loading?: boolean
+  animateLoadingTransition?: boolean
 }) {
   const [anchor, setAnchor] = React.useState(() => new Date())
   const [selectedDay, setSelectedDay] = React.useState<string | null>(null)
@@ -210,10 +214,15 @@ export function PortalCalendar({
         </div>
       </div>
 
-      <div className="portal-scrollbar min-h-[26rem] flex-1 overflow-auto p-1 sm:min-h-[36rem] sm:p-4">
-        {view === 'schedule' ? (
-          <ScheduleView items={items} onSelectItem={setSelectedItem} />
-        ) : (
+      <div aria-busy={loading} className="portal-scrollbar min-h-[26rem] flex-1 overflow-auto p-1 sm:min-h-[36rem] sm:p-4">
+        <CalendarSkeletonHandoff
+          enabled={animateLoadingTransition}
+          loading={loading}
+          view={view}
+        >
+          {view === 'schedule' ? (
+            <ScheduleView items={items} onSelectItem={setSelectedItem} />
+          ) : (
         <div className={`grid overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-border)] gap-px ${view === 'day' ? 'grid-cols-1' : view === 'month' ? 'grid-cols-7 min-w-[316px]' : 'grid-cols-1 sm:grid-cols-7'}`}>
           {visibleDays.map((day) => {
             const iso = toIsoDate(day)
@@ -282,7 +291,8 @@ export function PortalCalendar({
             )
           })}
         </div>
-        )}
+          )}
+        </CalendarSkeletonHandoff>
       </div>
 
       <PortalModal
@@ -378,9 +388,9 @@ function ScheduleView({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-4 sm:px-6 sm:py-6">
-      <PortalStaggerGroup staggerDelay={0.05} className="space-y-6">
+      <div className="space-y-6">
         {dates.map((date) => (
-          <PortalStaggerCard key={date} className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4 sm:p-5 shadow-sm">
+          <article key={date} className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4 shadow-sm sm:p-5">
             <div className="grid gap-3 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:gap-6">
               <div className="border-b border-[color:var(--portal-border)] pb-2.5 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-6">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-[#a8792f]">{new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(new Date(`${date}T12:00:00`))}</p>
@@ -400,10 +410,84 @@ function ScheduleView({
                 ))}
               </div>
             </div>
-          </PortalStaggerCard>
+          </article>
         ))}
-      </PortalStaggerGroup>
+      </div>
     </div>
+  )
+}
+
+function CalendarViewSkeleton({ view }: { view: PortalCalendarView }) {
+  if (view === 'schedule') {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-4 sm:px-6 sm:py-6" aria-hidden="true">
+        {Array.from({ length: 4 }).map((_, index) => {
+          const warningRow = index % 2 === 0
+          return (
+          <div key={index} className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4 shadow-sm sm:p-5">
+            <div className="grid gap-3 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:gap-6">
+              <div className="border-b border-[color:var(--portal-border)] pb-2.5 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-6">
+                <PortalSkeleton className="h-4 w-10 rounded" />
+                <PortalSkeleton className="mt-1 h-8 w-16 rounded" />
+              </div>
+              <div className="space-y-2.5">
+                <div className={`flex ${warningRow ? 'min-h-[6.125rem]' : 'min-h-[4.5625rem]'} items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3.5 sm:p-4`}>
+                  <span className="h-9 w-1 shrink-0 rounded-full bg-[color:var(--portal-border)]" />
+                  <span className="min-w-0 flex-1 space-y-1">
+                    <PortalSkeleton className="h-4 w-2/5 rounded" />
+                    {warningRow ? <PortalSkeleton className="h-3 w-1/3 rounded" /> : null}
+                    <PortalSkeleton className="h-4 w-3/5 rounded" />
+                  </span>
+                  <PortalSkeleton className="h-4 w-16 shrink-0 rounded" />
+                </div>
+              </div>
+            </div>
+          </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const rows = view === 'month' ? 42 : view === 'week' ? 7 : 1
+  return (
+    <div
+      aria-hidden="true"
+      className={`grid gap-px overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-border)] ${view === 'month' ? 'grid-cols-7 min-w-[316px]' : view === 'day' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-7'}`}
+    >
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={index} className={`flex min-w-0 flex-col bg-[color:var(--portal-card)] p-2 sm:p-3 ${view === 'month' ? 'h-20 min-h-20 sm:h-32 sm:min-h-32 lg:h-40 lg:min-h-40' : view === 'day' ? 'min-h-[28rem]' : 'h-64 min-h-64'}`}>
+          <PortalSkeleton className="h-3 w-10 rounded" />
+          <PortalSkeleton className="mt-2 h-4 w-7 rounded" />
+          <PortalSkeleton className="mt-3 h-8 w-full rounded-lg" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CalendarSkeletonHandoff({
+  enabled,
+  loading,
+  view,
+  children,
+}: {
+  enabled: boolean
+  loading: boolean
+  view: PortalCalendarView
+  children: React.ReactNode
+}) {
+  if (!enabled) return <>{children}</>
+
+  return (
+    <PortalSkeletonTransition
+      loading={loading}
+      overlap
+      className="min-w-0"
+      skeleton={<CalendarViewSkeleton view={view} />}
+    >
+      {children}
+    </PortalSkeletonTransition>
   )
 }
 

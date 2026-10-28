@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Calendar as CalendarIcon, Check, Settings2, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
 import { LuxorAvailabilityCalendar } from '@/components/portal/LuxorAvailabilityCalendar'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
-import { PortalButton, PortalModal, PortalPageFrame, PortalPageHeader, PortalStatusBadge, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard, type PortalStatusTone } from '@/components/portal/PortalUI'
+import { PortalButton, PortalModal, PortalPageFrame, PortalPageHeader, PortalSkeleton, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard, type PortalStatusTone } from '@/components/portal/PortalUI'
 import { motion } from 'framer-motion'
 import type { LuxorBooking, LuxorInquiry, LuxorTask, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
@@ -80,6 +80,7 @@ export default function CalendarPage() {
   const [data, setData] = useState<CalendarPayload>({ tours: [], slots: [], bookings: [], tasks: [], availability: {}, pendingProposals: [], pendingProposalCounts: {} })
   const [selectedEventDate, setSelectedEventDate] = useState(() => luxorTodayKey())
   const [loading, setLoading] = useState(true)
+  const initialLoadComplete = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [scheduleOpen, setScheduleOpen] = useState(false)
@@ -87,7 +88,7 @@ export default function CalendarPage() {
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
-      setLoading(true)
+      if (!initialLoadComplete.current) setLoading(true)
       setError(null)
       const response = await fetch('/api/calendar-data')
       const payload = await response.json()
@@ -99,6 +100,7 @@ export default function CalendarPage() {
       return false
     } finally {
       setLoading(false)
+      initialLoadComplete.current = true
     }
   }, [])
 
@@ -371,38 +373,26 @@ export default function CalendarPage() {
 
       <PortalTabTransition activeKey={activeCalendar} className="flex-1 min-h-0 flex flex-col space-y-4">
         {activeCalendar === 'tours' ? (
-          <PortalStaggerGroup staggerDelay={0.06} className="flex-1 min-h-0 flex flex-col space-y-4">
-            <PortalStaggerCard>
+          <div className="flex-1 min-h-0 flex flex-col space-y-4">
+            <div>
               <div className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Today at a glance">
-                <GlanceStat label="Tours today" value={todayStats.tours} />
-                <GlanceStat label="Tasks due today" value={todayStats.tasks} />
-                <GlanceStat label="Open tour times" value={todayStats.openTimes} />
+                <GlanceStat label="Tours today" value={todayStats.tours} loading={loading} />
+                <GlanceStat label="Tasks due today" value={todayStats.tasks} loading={loading} />
+                <GlanceStat label="Open tour times" value={todayStats.openTimes} loading={loading} />
               </div>
-            </PortalStaggerCard>
-            <PortalStaggerCard className="flex-1 min-h-0 flex flex-col">
-              {loading ? (
-                <div className="portal-card-surface space-y-6 p-8">
-                  <div className="flex items-center justify-between">
-                    <div className="h-6 w-48 rounded luxor-skeleton" />
-                    <div className="h-8 w-32 rounded-lg luxor-skeleton" />
-                  </div>
-                  <div className="grid grid-cols-7 gap-3 pt-4">
-                    {Array.from({ length: 28 }).map((_, i) => (
-                      <div key={i} className="h-20 rounded-xl luxor-skeleton" />
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <PortalCalendar
-                  title="Tours & tasks"
-                  items={[...tourItems, ...taskItems]}
-                  view={view}
-                  onViewChange={setView}
-                  dayStatuses={tourDayStatuses}
-                />
-              )}
-            </PortalStaggerCard>
-          </PortalStaggerGroup>
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col">
+              <PortalCalendar
+                title="Tours & tasks"
+                items={[...tourItems, ...taskItems]}
+                view={view}
+                onViewChange={setView}
+                dayStatuses={tourDayStatuses}
+                loading={loading}
+                animateLoadingTransition
+              />
+            </div>
+          </div>
         ) : (
           <PortalStaggerGroup staggerDelay={0.06} className="flex-1 min-h-0 flex flex-col space-y-4">
             <PortalStaggerCard className="flex-1 min-h-0 flex flex-col">
@@ -492,11 +482,18 @@ export default function CalendarPage() {
   )
 }
 
-function GlanceStat({ label, value }: { label: string; value: number }) {
+function GlanceStat({ label, value, loading }: { label: string; value: number; loading: boolean }) {
   return (
     <div className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 sm:px-4 sm:py-3">
       <p className="truncate text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)] sm:text-[10px]">{label}</p>
-      <p className="mt-0.5 font-serif text-2xl font-semibold tabular-nums leading-none text-[color:var(--portal-text)] sm:text-3xl">{value}</p>
+      <PortalSkeletonTransition
+        loading={loading}
+        overlap
+        className="mt-0.5 h-8 w-16 sm:h-9"
+        skeleton={<PortalSkeleton className="h-full w-full rounded" />}
+      >
+        <p className="whitespace-nowrap font-serif text-2xl font-semibold tabular-nums leading-none text-[color:var(--portal-text)] sm:text-3xl">{value}</p>
+      </PortalSkeletonTransition>
     </div>
   )
 }
