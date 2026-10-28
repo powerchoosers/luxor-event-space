@@ -11,7 +11,6 @@ import { buildAiTailoredInvoiceReminderEmail } from './luxorLifecycleEmailsServe
 import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
 import { isLuxorOfferExpired } from './luxorOffer'
 import { createLuxorPostContractCheckout, prepareLuxorDepositPaymentLink } from './luxorStripeCheckoutServer'
-import { LuxorBookingDepositPausedError } from './luxorDepositMaintenanceServer'
 import { getLuxorBooking } from './luxorBookingsServer'
 import { getLuxorInquiry } from './luxorInquiriesServer'
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'

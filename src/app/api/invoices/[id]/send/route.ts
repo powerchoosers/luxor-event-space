@@ -16,7 +16,6 @@ import { buildAiOfferReminderEmail, buildContractReminderEmail, buildFinalPaymen
 import { createUniqueTextJob, queueInvoiceReminderTexts } from '@/lib/luxorTextCampaignsServer'
 import { createLuxorSignatureRequest, getActiveLuxorSignatureRequestByBooking, getLuxorBookingContractFingerprint, recordLuxorSignatureEvent, updateLuxorSignatureRequest } from '@/lib/luxorSignaturesServer'
 import { createLuxorPostContractCheckout, expireLuxorCheckoutForRepricing, prepareLuxorDepositPaymentLink } from '@/lib/luxorStripeCheckoutServer'
-import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
 import { calculateLuxorOfferPricing, isLuxorOfferExpired, luxorOfferSnapshot } from '@/lib/luxorOffer'
 

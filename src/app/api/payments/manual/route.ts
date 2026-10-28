@@ -25,7 +25,6 @@ import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { syncLuxorPaymentInstallments, usesFirstDepositScheduleAnchor } from '@/lib/luxorPaymentInstallmentsServer'
 import { acquireDepositCheckoutClaim, recordClaimedDeposit, recordClaimedSameDayDeposit } from '@/lib/luxorDepositClaimsServer'
-import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 
 type ManualPaymentKind = 'deposit' | 'final' | 'security_deposit'
 
