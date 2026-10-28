@@ -546,7 +546,7 @@ export function PortalPagination({
         value={String(currentPage)}
         onChange={(value) => onPageChange(Number(value))}
         options={pageOptions}
-        className="!min-w-0 w-[5.5rem] sm:w-[124px]"
+        className="!min-w-0 w-28 sm:w-[124px]"
         buttonClassName="h-11 rounded-md bg-[color:var(--portal-card)] px-2 tabular-nums text-[10px] font-semibold sm:h-8"
       />
       <button type="button" aria-label="Next page" title="Next page" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} className={buttonClass}>
@@ -1571,11 +1571,9 @@ export function PortalStaggerCard({
     <motion.div
       ref={ref}
       variants={{
-        hidden: { opacity: 0.55, y: 8, scale: 0.994, filter: 'blur(10px)' },
+        hidden: { opacity: 0.55, filter: 'blur(10px)' },
         show: {
           opacity: 1,
-          y: 0,
-          scale: 1,
           filter: 'blur(0px)',
           transition: {
             duration: 0.32,
@@ -1614,10 +1612,10 @@ export function PortalSkeletonTransition({
       {loading ? (
         <motion.div
           key="portal-skeleton-state"
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, filter: 'blur(10px)' }}
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0.75, filter: 'blur(0px)' }}
           animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.985, filter: 'blur(12px)' }}
-          transition={{ duration: reduceMotion ? 0.05 : 0.20, ease: LUXOR_PORTAL_EASE }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }}
+          transition={{ duration: reduceMotion ? 0.05 : 0.28, ease: LUXOR_PORTAL_EASE }}
           className={className}
         >
           {skeleton}
@@ -1625,10 +1623,10 @@ export function PortalSkeletonTransition({
       ) : (
         <motion.div
           key="portal-content-state"
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, y: 6, scale: 0.998, filter: 'blur(10px)' }}
-          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.996, filter: 'blur(10px)' }}
-          transition={{ duration: reduceMotion ? 0.05 : 0.26, ease: LUXOR_PORTAL_EASE }}
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, filter: 'blur(12px)' }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }}
+          transition={{ duration: reduceMotion ? 0.05 : 0.32, ease: LUXOR_PORTAL_EASE }}
           onAnimationComplete={(definition) => {
             if (definition === 'animate' && typeof document !== 'undefined') {
               const elements = document.querySelectorAll('[data-portal-blur-cleanup="true"]')

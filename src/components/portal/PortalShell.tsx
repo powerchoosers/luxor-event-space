@@ -1144,9 +1144,6 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 <MessageSquare size={18} />
               </Link>
 
-              {/* Vertical divider 3 */}
-              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
-
               {/* 4. Elena AI Concierge */}
               <button
                 type="button"

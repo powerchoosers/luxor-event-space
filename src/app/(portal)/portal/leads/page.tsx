@@ -672,7 +672,7 @@ export default function LeadsPage() {
         />
       </div>
 
-      {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 flex flex-col overflow-visible mt-0">
+      {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 flex flex-col overflow-visible mt-0 ${activeTab === 'dashboard' ? '' : '-mx-4 sm:mx-0'}`}>
         {activeTab === 'dashboard' && (
           <LeadsDashboard
             leads={leads}
@@ -740,16 +740,20 @@ export default function LeadsPage() {
             </PortalFilterBar>
           }
           footer={
-            <div className="flex w-full flex-col justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none sm:flex-row sm:items-center">
-              <div>
-                Showing <span className="tabular-nums font-bold text-[color:var(--portal-text)]">{startIndex + 1}</span> -{' '}
-                <span className="tabular-nums font-bold text-[color:var(--portal-text)]">{Math.min(startIndex + 25, totalCount)}</span> of{' '}
-                <span className="tabular-nums font-bold text-[color:var(--portal-text)]">{totalCount}</span> leads
-              </div>
-              {totalPages > 1 && (
+            <>
+              {/* Reserve room in the scrolling page for the fixed mobile bar. */}
+              <div aria-hidden="true" className="h-11 md:hidden" />
+              <div className="hidden w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none md:flex">
+                <div>Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}</span> - <span className="tabular-nums text-[color:var(--portal-text)]">{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</div>
                 <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+              </div>
+              {typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex min-h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] md:hidden">
+                  <span className="min-w-0">Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}–{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</span>
+                  <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+                </div>, document.body
               )}
-            </div>
+            </>
           }
         >
           <div className="hidden overflow-x-auto md:block">
@@ -2271,7 +2275,7 @@ function LeadsProposalsTab({
       <PortalSkeletonTransition
         loading={loading}
         skeleton={
-          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 py-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <PortalClientCardSkeleton key={i} />
             ))}
@@ -2281,7 +2285,7 @@ function LeadsProposalsTab({
         {proposals.length === 0 ? (
           <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No sent proposals are waiting for client review.</div>
         ) : (
-          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 py-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
             {proposals.map((lead) => (
               <LuxorCrmRecordCard
                 key={lead.id}

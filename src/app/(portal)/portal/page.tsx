@@ -1,4 +1,7 @@
-import React from "react";
+import React, { Suspense } from "react";
+import { PortalOverviewSkeleton } from "./loading";
+import { PortalHomeFrame } from "@/components/portal/PortalHomeFrame";
+import { PortalHomeReady, PortalHomeTransition } from "@/components/portal/PortalHomeTransition";
 import {
   Calendar,
   DollarSign,
@@ -24,7 +27,7 @@ import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { listAllTasks } from "@/lib/luxorTasksServer";
 import { listAllBills } from "@/lib/luxorInvoicesServer";
 import { isLuxorNonRevenueTestInquiry, LuxorInquiry, LuxorNote, LuxorPayment, LuxorBookingExpense, LuxorTask, LuxorBill } from "@/lib/luxorInquiryTypes";
-import { PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard, PortalProgressBar } from "@/components/portal/PortalUI";
+import { PortalProgressBar } from "@/components/portal/PortalUI";
 import { CashFlowSparkline } from "@/components/portal/CashFlowSparkline";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
 import { BillsDueCard } from "@/components/portal/BillsDueCard";
@@ -80,7 +83,19 @@ function formatActivityTime(date: Date, now: Date): string {
   });
 }
 
-export default async function PortalOverview() {
+export default function PortalOverview() {
+  return (
+    <PortalHomeFrame>
+    <PortalHomeTransition skeleton={<PortalOverviewSkeleton />}>
+      <Suspense fallback={null}>
+        <PortalHomeReady><PortalOverviewContent /></PortalHomeReady>
+      </Suspense>
+    </PortalHomeTransition>
+    </PortalHomeFrame>
+  )
+}
+
+async function PortalOverviewContent() {
   let leads: LuxorInquiry[] = [];
   let recentNotes: LuxorNote[] = [];
   let bookings: Awaited<ReturnType<typeof listLuxorBookingsWithPayments>> = [];
@@ -88,9 +103,9 @@ export default async function PortalOverview() {
   let expenses: LuxorBookingExpense[] = [];
   let tasks: LuxorTask[] = [];
   let bills: LuxorBill[] = [];
+  let marketingSalesMetrics: Awaited<ReturnType<typeof fetchMarketingAndSalesMetrics>> | null = null;
   let loadError: string | null = null;
 
-  let marketingSalesMetrics: Awaited<ReturnType<typeof fetchMarketingAndSalesMetrics>> | null = null;
   const initialRange = getDateRangeFromPreset('30d');
 
   try {
@@ -490,19 +505,8 @@ export default async function PortalOverview() {
     }));
 
   return (
-    <PortalPageFrame className="min-h-full pb-28 sm:pb-10 group/portal !gap-2.5 sm:!gap-6">
-      <PortalPageHeader
-        icon={<Activity size={18} />}
-        title="Luxor Operations Hub"
-        description="Your daily view of bookings, revenue, and venue operations."
-        actions={
-          <div className="hidden sm:flex flex-wrap items-center gap-x-4 gap-y-1.5 md:pt-1">
-            <span className="text-[10px] font-semibold tracking-wider text-[color:var(--portal-faint)]">
-              LUXOR AT LAS PALMAS • HQ
-            </span>
-          </div>
-        }
-      />
+    <div className="flex flex-col gap-2.5 pb-28 sm:gap-6 sm:pb-10">
+
 
       {loadError && (
         <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-medium text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300">
@@ -535,9 +539,9 @@ export default async function PortalOverview() {
       </div>
 
       {/* TOP ROW: 4 Metric Cards */}
-      <PortalStaggerGroup className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-4">
+      <div className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-4">
         {/* Bookings Card */}
-        <PortalStaggerCard className="min-w-0 w-full h-full">
+        <div className="min-w-0 w-full h-full">
           <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             <div className="flex items-start justify-between gap-3 w-full">
               <div className="min-w-0 flex-1 pr-2">
@@ -569,10 +573,10 @@ export default async function PortalOverview() {
               <p className="text-[10px] font-bold text-[color:var(--portal-muted)] mt-2 tabular-nums">{bookingsPercentage}% to monthly goal</p>
             </div>
           </MagicCard>
-        </PortalStaggerCard>
+        </div>
 
         {/* Cash Flow Card */}
-        <PortalStaggerCard className="min-w-0 w-full h-full">
+        <div className="min-w-0 w-full h-full">
           <MagicCard className="relative flex h-full min-h-[156px] w-full flex-col justify-between overflow-hidden rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             <BorderBeam size={95} duration={11} borderWidth={1.2} />
             <div className="flex justify-between items-start z-10 relative w-full">
@@ -601,10 +605,10 @@ export default async function PortalOverview() {
               <span className="text-[color:var(--portal-muted)]">${totalOutflow.toLocaleString()} out</span>
             </div>
           </MagicCard>
-        </PortalStaggerCard>
+        </div>
 
         {/* Next Event Card */}
-        <PortalStaggerCard className="min-w-0 w-full h-full">
+        <div className="min-w-0 w-full h-full">
           <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             {nextBooking ? (
               <>
@@ -638,10 +642,10 @@ export default async function PortalOverview() {
               </>
             )}
           </MagicCard>
-        </PortalStaggerCard>
+        </div>
 
         {/* Needs Attention Card */}
-        <PortalStaggerCard className="min-w-0 w-full h-full">
+        <div className="min-w-0 w-full h-full">
           <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             <div>
               <span className="text-[#caa24c] mb-3 block">
@@ -657,13 +661,13 @@ export default async function PortalOverview() {
               </Link>
             </div>
           </MagicCard>
-        </PortalStaggerCard>
-      </PortalStaggerGroup>
+        </div>
+      </div>
 
       {/* MIDDLE ROW: 3 Columns (Today's Priorities, This Week, Bills Due) */}
-      <PortalStaggerGroup className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3">
         {/* Today's Priorities */}
-        <PortalStaggerCard className="portal-card-surface flex flex-col justify-between p-6">
+        <div className="portal-card-surface flex flex-col justify-between p-6">
           <div>
             <div className="flex items-center gap-2.5 mb-6">
               <ListTodo className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -698,23 +702,23 @@ export default async function PortalOverview() {
               View all tasks <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
           </div>
-        </PortalStaggerCard>
+        </div>
 
         {/* This Week / Calendar Outlook */}
-        <PortalStaggerCard className="portal-card-surface relative flex flex-col justify-between overflow-hidden p-6">
+        <div className="portal-card-surface relative flex flex-col justify-between overflow-hidden p-6">
           <ThisWeekCalendar days={calendarDays} />
-        </PortalStaggerCard>
+        </div>
 
         {/* Bills Due */}
-        <PortalStaggerCard className="portal-card-surface relative flex flex-col justify-between overflow-hidden p-6 md:col-span-2 2xl:col-span-1">
+        <div className="portal-card-surface relative flex flex-col justify-between overflow-hidden p-6 md:col-span-2 2xl:col-span-1">
           <BillsDueCard initialBills={bills} />
-        </PortalStaggerCard>
-      </PortalStaggerGroup>
+        </div>
+      </div>
 
       {/* BOTTOM ROW: 3 Columns (Recent Activity, Month at a Glance, Quick Actions) */}
-      <PortalStaggerGroup className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3 items-stretch">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3 items-stretch">
         {/* Recent Activity */}
-        <PortalStaggerCard className="portal-card-surface flex flex-col justify-between p-5">
+        <div className="portal-card-surface flex flex-col justify-between p-5">
           <div>
             <div className="flex items-center gap-2.5 mb-3.5">
               <Activity className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -767,10 +771,10 @@ export default async function PortalOverview() {
               View all activity <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
           </div>
-        </PortalStaggerCard>
+        </div>
 
         {/* This Month At A Glance */}
-        <PortalStaggerCard className="portal-card-surface flex flex-col justify-between p-5">
+        <div className="portal-card-surface flex flex-col justify-between p-5">
           <div>
             <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-[color:var(--portal-border)]/60">
               <div className="flex items-center gap-2.5 min-w-0 pr-2">
@@ -845,10 +849,10 @@ export default async function PortalOverview() {
               View full report <ChevronRight size={14} className="translate-y-[0.5px]" />
             </Link>
           </div>
-        </PortalStaggerCard>
+        </div>
 
         {/* Quick Actions */}
-        <PortalStaggerCard className="portal-card-surface flex flex-col justify-between p-5">
+        <div className="portal-card-surface flex flex-col justify-between p-5">
           <div>
             <div className="flex items-center gap-2.5 mb-3.5">
               <Zap className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
@@ -908,8 +912,8 @@ export default async function PortalOverview() {
               <span>Add Vendor</span>
             </Link>
           </div>
-        </PortalStaggerCard>
-      </PortalStaggerGroup>
+        </div>
+      </div>
 
       {/* Brand Tagline Footer */}
       <div className="flex flex-col items-center justify-center pt-8 border-t border-[color:var(--portal-border)] mt-12 mb-6">
@@ -926,6 +930,6 @@ export default async function PortalOverview() {
       </div>
 
       <PortalHomeActionBar />
-    </PortalPageFrame>
+    </div>
   );
 }

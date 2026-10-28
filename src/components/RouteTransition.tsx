@@ -1,14 +1,8 @@
 'use client'
 
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion'
+import React, { useRef, useSyncExternalStore } from 'react'
+import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { usePathname } from 'next/navigation'
-import { PortalLoadingCard } from '@/components/LuxorLoading'
-import {
-  usePortalLoadingState,
-  hasCompletedInitialSync,
-  markInitialSyncComplete,
-} from '@/lib/luxorLoadingSignal'
 
 const LUXOR_EASE = [0.22, 1, 0.36, 1] as const
 const subscribeToHydration = () => () => {}
@@ -27,7 +21,7 @@ function isNodeLoading(node: React.ReactNode): boolean {
   }
   if (!React.isValidElement(node)) return false
   const props = node.props as Record<string, unknown> | null | undefined
-  if (props?.['data-luxor-loading']) return true
+  if (props?.['data-luxor-loading'] === true || props?.['data-luxor-loading'] === 'true') return true
   const type = node.type
   if (typeof type === 'function') {
     const fn = type as unknown as LuxorLoadingType
@@ -35,6 +29,7 @@ function isNodeLoading(node: React.ReactNode): boolean {
       fn.isLuxorLoading ||
       fn.name === 'Loading' ||
       fn.name === 'PortalLoading' ||
+      fn.name === 'PortalOverviewLoading' ||
       fn.name === 'PortalLoadingCard' ||
       fn.name === 'SiteLoading'
     ) {
@@ -43,7 +38,15 @@ function isNodeLoading(node: React.ReactNode): boolean {
   }
   if (typeof type === 'object' && type !== null) {
     const obj = type as unknown as LuxorLoadingType
-    if (obj.isLuxorLoading || obj.name === 'Loading' || ('displayName' in obj && typeof (obj as { displayName?: string }).displayName === 'string' && (obj as { displayName: string }).displayName.includes('Loading'))) {
+    if (
+      obj.isLuxorLoading ||
+      obj.name === 'Loading' ||
+      obj.name === 'PortalOverviewLoading' ||
+      ('displayName' in obj &&
+        typeof (obj as { displayName?: string }).displayName === 'string' &&
+        ((obj as { displayName: string }).displayName.includes('Loading') ||
+          (obj as { displayName: string }).displayName.includes('PortalOverviewLoading')))
+    ) {
       return true
     }
   }
@@ -79,37 +82,6 @@ export function RouteTransition({
     ? 'flex-1 min-h-0 min-w-0 h-full w-full flex flex-col overflow-hidden'
     : 'flex-1 min-h-full min-w-0 w-full flex flex-col'
 
-  const { isRouteLoading } = usePortalLoadingState()
-  const isSuspenseLoading = isNodeLoading(children)
-  const isNavigating = isSuspenseLoading || isRouteLoading
-
-  // Initial home screen overlay: only triggers on cold first-time entrance to '/portal'
-  const [initialOverlayActive, setInitialOverlayActive] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return pathname === '/portal' && !hasCompletedInitialSync()
-  })
-
-  useEffect(() => {
-    if (!initialOverlayActive) return
-
-    // Intentional presentation window (750ms) before initiating the exit blur dissolve
-    const timer = setTimeout(() => {
-      setInitialOverlayActive(false)
-      markInitialSyncComplete()
-    }, 750)
-
-    return () => clearTimeout(timer)
-  }, [initialOverlayActive])
-
-  // Hold previous page content during navigation so transitions are 100% gap-free
-  const [contentCache, setContentCache] = useState<{ content: React.ReactNode }>({
-    content: isNavigating ? null : children,
-  })
-
-  if (!isNavigating && children && children !== contentCache.content) {
-    setContentCache({ content: children })
-  }
-
   if (reduceMotion && hydrated && !isPortal) {
     return <div className="min-h-screen">{children}</div>
   }
@@ -117,14 +89,10 @@ export function RouteTransition({
   const portalVariants: Variants = {
     initial: {
       opacity: 0.65,
-      y: 6,
-      scale: 0.998,
       filter: 'blur(12px)',
     },
     animate: {
       opacity: 1,
-      y: 0,
-      scale: 1,
       filter: 'blur(0px)',
       transition: {
         duration: 0.32,
@@ -132,34 +100,19 @@ export function RouteTransition({
       },
       transitionEnd: {
         filter: 'none',
-        transform: 'none',
       },
     },
     reduced: {
       opacity: 1,
-      y: 0,
-      scale: 1,
       filter: 'none',
       transition: { duration: 0 },
-      transitionEnd: { transform: 'none' },
     },
   }
 
-  // Next's router child updates even inside an exiting presence wrapper.
-  // Replace the portal stage atomically so the destination's first frame is
-  // already blurred, instead of showing it in the outgoing page first.
   if (isPortal) {
-    const contentToDisplay = isNavigating ? (contentCache.content || children) : children
 
     return (
       <div className={`relative ${portalClass}`}>
-        {/* Subtle, non-intrusive luxury gold progress indicator across top edge during route navigation */}
-        {isNavigating && !initialOverlayActive && (
-          <div className="portal-route-loader" aria-hidden="true">
-            <div className="portal-route-loader-bar" />
-          </div>
-        )}
-
         <motion.div
           key={pathname}
           id={`route-transition-${pathname.replace(/[^a-zA-Z0-9-]/g, '_')}`}
@@ -168,55 +121,8 @@ export function RouteTransition({
           animate={reduceMotion && hydrated ? 'reduced' : 'animate'}
           variants={portalVariants}
         >
-          {contentToDisplay}
+          {children}
         </motion.div>
-
-        <AnimatePresence>
-          {initialOverlayActive && (
-            <motion.div
-              key="portal-initial-overlay"
-              id="portal-loading-overlay"
-              aria-live="polite"
-              aria-busy="true"
-              initial={
-                reduceMotion
-                  ? { opacity: 0 }
-                  : {
-                      opacity: 0,
-                      filter: 'blur(16px)',
-                      backdropFilter: 'blur(0px)',
-                      scale: 0.99,
-                    }
-              }
-              animate={
-                reduceMotion
-                  ? { opacity: 1 }
-                  : {
-                      opacity: 1,
-                      filter: 'blur(0px)',
-                      backdropFilter: 'blur(14px)',
-                      scale: 1,
-                    }
-              }
-              exit={
-                reduceMotion
-                  ? { opacity: 0 }
-                  : {
-                      opacity: 0,
-                      filter: 'blur(36px)',
-                      backdropFilter: 'blur(0px)',
-                      scale: 0.96,
-                      pointerEvents: 'none' as const,
-                      transition: { duration: 0.65, ease: [0.16, 1, 0.3, 1] },
-                    }
-              }
-              transition={{ duration: 0.35, ease: LUXOR_EASE }}
-              className="fixed inset-0 z-[100] flex items-center justify-center p-4 portal-loading-backdrop transform-gpu will-change-[opacity,filter,transform]"
-            >
-              <PortalLoadingCard />
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     )
   }
@@ -240,6 +146,7 @@ export function RouteTransition({
     },
   }
 
+  const isSuspenseLoading = isNodeLoading(children)
   const transitionKey = `${pathname}-${isSuspenseLoading ? 'loading' : 'content'}`
 
   return (

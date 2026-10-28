@@ -16,9 +16,9 @@ import {
   Info,
   ArrowDown,
   AlertTriangle,
-  Filter,
   BookOpen,
 } from 'lucide-react'
+import { PortalHomeDateControl } from './PortalHomeFrame'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { MagicCard } from '@/components/ui/magic-card'
@@ -202,31 +202,8 @@ export function PortalMarketingSalesSection({
   )
 
   return (
-    <div className="space-y-4 sm:space-y-6 pt-0 sm:pt-2">
-      {/* SECTION HEADER & GLOBAL DATE PICKER */}
-      <div className="flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-[color:var(--portal-border)] pb-3 sm:pb-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2.5">
-            <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--portal-text)] tracking-tight">
-              Marketing & Sales
-            </h2>
-            <span className="inline-flex items-center rounded-full bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#caa24c] shrink-0 sm:hidden">
-              Command Center
-            </span>
-          </div>
-          <p className="mt-1 text-xs sm:text-sm text-[color:var(--portal-muted)]">
-            <span className="sm:hidden">From website visitor to booked event.</span>
-            <span className="hidden sm:inline">
-              See how people are discovering Luxor and moving from website visitor to booked event.
-            </span>
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
-          <span className="hidden sm:inline-flex items-center rounded-full bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#caa24c] shrink-0">
-            Command Center
-          </span>
-          <Filter size={13} className="text-[color:var(--portal-muted)] shrink-0 hidden sm:block" />
+    <div className="space-y-4 sm:space-y-6">
+      <PortalHomeDateControl>
           <PortalSelect
             value={preset}
             onChange={handlePresetChange}
@@ -235,8 +212,7 @@ export function PortalMarketingSalesSection({
             className="w-44"
             buttonClassName="h-9 px-3 text-xs font-semibold bg-[color:var(--portal-card)] border-[color:var(--portal-border)] text-[color:var(--portal-text)]"
           />
-        </div>
-      </div>
+      </PortalHomeDateControl>
 
       {/* LEAD GENERATION COMPARISON WITH ANIMATED BEAM FLOW */}
       <div className="relative overflow-hidden rounded-2xl border border-[#caa24c]/30 bg-gradient-to-r from-[#caa24c]/[0.08] via-[color:var(--portal-card)] to-[#caa24c]/[0.04] p-4 sm:p-6 shadow-xs">
