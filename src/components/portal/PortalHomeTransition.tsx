@@ -19,6 +19,7 @@ export function PortalHomeTransition({ skeleton, children }: { skeleton: React.R
   const setReadyTrue = useCallback(() => setReady(true), [])
   return (
     <ReadyContext.Provider value={setReadyTrue}>
+      <style>{`@media (prefers-reduced-motion: no-preference) { .portal-home-revealing [data-home-reveal] { animation: portal-home-content-reveal 320ms cubic-bezier(.22,1,.36,1) both; } } @keyframes portal-home-content-reveal { from { opacity: .65; filter: blur(8px); } to { opacity: 1; filter: blur(0); } }`}</style>
       <div className="grid min-w-0 w-full" aria-busy={!ready}>
         {!ready && <span className="sr-only" role="status">Loading portal overview</span>}
         {!skeletonGone && (
@@ -34,7 +35,7 @@ export function PortalHomeTransition({ skeleton, children }: { skeleton: React.R
           </motion.div>
         )}
         <motion.div
-          className="col-start-1 row-start-1 min-w-0"
+          className={`col-start-1 row-start-1 min-w-0 ${ready && !reducedMotion ? 'portal-home-revealing' : ''}`}
           initial={false}
           animate={{ opacity: ready ? 1 : 0 }}
           transition={{ duration: 0 }}

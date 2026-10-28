@@ -2106,6 +2106,10 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
     min-height: 44px;
   }
 
+  body[data-portal-theme] .portal-select-trigger.portal-home-date-trigger {
+    min-height: 36px;
+  }
+
   body[data-portal-theme] .portal-notification-action {
     opacity: 1;
   }

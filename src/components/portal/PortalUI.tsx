@@ -1599,13 +1599,24 @@ export function PortalSkeletonTransition({
   skeleton,
   children,
   className = '',
+  overlap = false,
 }: {
   loading: boolean
   skeleton: React.ReactNode
   children: React.ReactNode
   className?: string
+  overlap?: boolean
 }) {
   const reduceMotion = useReducedMotion()
+
+  if (overlap) {
+    return <div className={`grid min-w-0 ${className}`} aria-busy={loading}>
+      <AnimatePresence initial={false}>
+        {loading && <motion.div key="skeleton" className="col-start-1 row-start-1 z-10 pointer-events-none" initial={false} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }} transition={{ duration: reduceMotion ? 0 : 0.28 }}>{skeleton}</motion.div>}
+      </AnimatePresence>
+      {!loading && <motion.div className="col-start-1 row-start-1 min-w-0" initial={reduceMotion ? false : { opacity: 0.65, filter: 'blur(12px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: reduceMotion ? 0 : 0.32, ease: LUXOR_PORTAL_EASE }}>{children}</motion.div>}
+    </div>
+  }
 
   return (
     <AnimatePresence mode="wait" initial={false}>

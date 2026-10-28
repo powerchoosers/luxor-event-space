@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   Users,
   Plus,
@@ -154,6 +154,7 @@ const DEFAULT_CLIENT_SORT: TableSort<ClientSortKey> = { key: 'targetDate', direc
 
 export default function LeadsPage() {
   const { notify } = useToast()
+  const reduceMotion = useReducedMotion()
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
   const boardRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
@@ -700,7 +701,7 @@ export default function LeadsPage() {
               searchValue={searchTerm}
               onSearchChange={setSearchTerm}
               searchPlaceholder="Search name, email, or phone"
-              resultLabel={`${totalCount.toLocaleString()} ${totalCount === 1 ? 'lead' : 'leads'}`}
+              resultLabel={loading ? 'Loading leads' : `${totalCount.toLocaleString()} ${totalCount === 1 ? 'lead' : 'leads'}`}
               activeFilters={activeLeadFilters}
               onClearFilters={() => {
                 setStatusFilter('all')
@@ -744,13 +745,16 @@ export default function LeadsPage() {
               {/* Reserve room in the scrolling page for the fixed mobile bar. */}
               <div aria-hidden="true" className="h-11 md:hidden" />
               <div className="hidden w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none md:flex">
+                {loading ? <PortalSkeleton className="h-4 w-44 rounded" /> : <>
                 <div>Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}</span> - <span className="tabular-nums text-[color:var(--portal-text)]">{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</div>
                 <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+                </>}
               </div>
               {typeof document !== 'undefined' && createPortal(
                 <div className="fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex min-h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] md:hidden">
-                  <span className="min-w-0">Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}–{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</span>
+                  {loading ? <><PortalSkeleton className="h-3 w-32 rounded" /><PortalSkeleton className="h-11 w-40 rounded-lg" /></> : <><span className="min-w-0">Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}–{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</span>
                   <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+                  </>}
                 </div>, document.body
               )}
             </>
@@ -772,7 +776,8 @@ export default function LeadsPage() {
                 <th scope="col" className="min-w-[235px] whitespace-nowrap px-8 py-3.5 text-right">Engagement &amp; Actions</th>
               </tr>
             </PortalStickyThead>
-            <tbody className="divide-y divide-[color:var(--portal-border)]">
+            <AnimatePresence mode="wait" initial={false}>
+            <motion.tbody key={loading ? 'loading' : 'loaded'} initial={reduceMotion ? { opacity: 0 } : { opacity: 0.65, filter: 'blur(12px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, transition: { duration: 0 } }} transition={{ duration: reduceMotion ? 0 : 0.28 }} className="divide-y divide-[color:var(--portal-border)]">
               {!loading && activeTab === 'pipeline' && permanentTestLead ? <PinnedTestLeadTableRow lead={permanentTestLead} /> : null}
               {loading ? (
                 <PortalTableSkeleton cols={8} rows={12} />
@@ -924,10 +929,12 @@ export default function LeadsPage() {
                   </tr>
                 ))
               )}
-            </tbody>
+            </motion.tbody>
+            </AnimatePresence>
           </PortalStickyTable>
           </div>
-          <MobileLeadList
+          <PortalSkeletonTransition loading={loading} skeleton={<MobileLeadListSkeleton />} className="md:hidden" overlap>
+          {error ? <div className="px-5 py-12 text-sm text-red-500">{error}</div> : <MobileLeadList
             leads={paginatedLeads}
             testLead={activeTab === 'pipeline' ? permanentTestLead : null}
             startIndex={startIndex}
@@ -935,7 +942,8 @@ export default function LeadsPage() {
             onToggle={bulkSelection.toggle}
             onLifecycleAction={openLeadLifecycleAction}
             showPipelineStage
-          />
+          />}
+          </PortalSkeletonTransition>
         </PortalTableCard>
       ) : (
         <PortalSkeletonTransition
@@ -1937,6 +1945,20 @@ function PinnedTestLeadTableRow({ lead }: { lead: LuxorInquiry }) {
       </td>
     </tr>
   )
+}
+
+function MobileLeadListSkeleton() {
+  return <div aria-label="Loading leads" role="status" className="divide-y divide-[color:var(--portal-border)]">
+    <div className="flex items-center gap-3 px-4 py-3">
+      <PortalSkeleton className="h-3 w-10 rounded" /><PortalSkeleton className="h-8 w-8 shrink-0 rounded-full" />
+      <div className="flex-1 space-y-2"><PortalSkeleton className="h-4 w-36 rounded" /><PortalSkeleton className="h-3 w-48 max-w-full rounded" /></div>
+    </div>
+    {[0, 1, 2].map((item) => <div key={item} className="space-y-4 px-4 py-4">
+      <div className="flex items-start gap-3"><PortalSkeleton className="h-10 w-10 shrink-0 rounded-full" /><div className="flex-1 space-y-2"><PortalSkeleton className="h-4 w-36 rounded" /><PortalSkeleton className="h-3 w-48 max-w-full rounded" /><PortalSkeleton className="h-3 w-40 rounded" /><PortalSkeleton className="h-3 w-28 rounded" /></div><PortalSkeleton className="h-6 w-16 rounded-full" /></div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">{[0, 1, 2, 3].map((field) => <div key={field} className="space-y-2"><PortalSkeleton className="h-2.5 w-16 rounded" /><PortalSkeleton className="h-3.5 w-24 rounded" /></div>)}</div>
+      <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] pt-4"><PortalSkeleton className="h-5 w-5 rounded" /><PortalSkeleton className="h-5 w-6 rounded" /></div>
+    </div>)}
+  </div>
 }
 
 function MobileLeadList({

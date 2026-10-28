@@ -549,12 +549,12 @@ async function PortalOverviewContent() {
                   <Calendar size={22} strokeWidth={1.5} />
                 </span>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">BOOKINGS</p>
-                <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">
+                <p data-home-reveal className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">
                   {bookingsCount} <span className="text-xl font-normal text-[color:var(--portal-muted)]">/ {bookingsGoal}</span>
                 </p>
                 <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">monthly goal</p>
               </div>
-              <div className="ml-auto shrink-0">
+              <div data-home-reveal className="ml-auto shrink-0">
                 <AnimatedCircularProgressBar
                   value={bookingsPercentage}
                   size={56}
@@ -564,7 +564,7 @@ async function PortalOverviewContent() {
                 />
               </div>
             </div>
-            <div className="mt-4 w-full">
+            <div data-home-reveal className="mt-4 w-full">
               <PortalProgressBar
                 value={bookingsPercentage}
                 className="h-2 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden"
@@ -587,7 +587,7 @@ async function PortalOverviewContent() {
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">
                   CASH FLOW <span className="text-[9px] font-medium opacity-85">(THIS MONTH)</span>
                 </p>
-                <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">
+                <p data-home-reveal className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">
                   {netCashFlowStr}
                 </p>
                 <p className="text-xs text-[color:var(--portal-muted)] mt-0.5 font-medium">projected profit</p>
@@ -595,11 +595,11 @@ async function PortalOverviewContent() {
             </div>
             
             {/* Integrated Real Line Graph / Sparkline */}
-            <div className="relative z-20 mt-3 h-14 w-full overflow-visible">
+            <div data-home-reveal className="relative z-20 mt-3 h-14 w-full overflow-visible">
               <CashFlowSparkline data={sparklineData} />
             </div>
 
-            <div className="flex items-center gap-2 mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-bold tabular-nums z-10 relative w-full">
+            <div data-home-reveal className="flex items-center gap-2 mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-bold tabular-nums z-10 relative w-full">
               <span className="text-emerald-800 dark:text-emerald-300">${totalInflow.toLocaleString()} in</span>
               <span className="text-[color:var(--portal-muted)]/40">•</span>
               <span className="text-[color:var(--portal-muted)]">${totalOutflow.toLocaleString()} out</span>
@@ -617,10 +617,10 @@ async function PortalOverviewContent() {
                     <Calendar size={22} strokeWidth={1.5} />
                   </span>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
-                  <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">
+                  <p data-home-reveal className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">
                     {nextBookingDisplayTitle}
                   </p>
-                  <p className="text-xs font-bold text-[#caa24c] mt-1">{nextBookingRelativeStr}</p>
+                  <p data-home-reveal className="text-xs font-bold text-[#caa24c] mt-1">{nextBookingRelativeStr}</p>
                 </div>
                 <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">
                   {nextBookingDateFormatted}
@@ -652,7 +652,7 @@ async function PortalOverviewContent() {
                 <Bell size={22} strokeWidth={1.5} />
               </span>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEEDS ATTENTION</p>
-              <p className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">{needsAttentionCount}</p>
+              <p data-home-reveal className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">{needsAttentionCount}</p>
               <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">items</p>
             </div>
             <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50">
@@ -716,7 +716,7 @@ async function PortalOverviewContent() {
       </div>
 
       {/* BOTTOM ROW: 3 Columns (Recent Activity, Month at a Glance, Quick Actions) */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3 items-stretch">
+      <div data-home-reveal className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 2xl:grid-cols-3 items-stretch">
         {/* Recent Activity */}
         <div className="portal-card-surface flex flex-col justify-between p-5">
           <div>

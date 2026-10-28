@@ -209,8 +209,8 @@ export function PortalMarketingSalesSection({
             onChange={handlePresetChange}
             options={DATE_OPTIONS}
             disabled={isPending}
-            className="w-44"
-            buttonClassName="h-9 px-3 text-xs font-semibold bg-[color:var(--portal-card)] border-[color:var(--portal-border)] text-[color:var(--portal-text)]"
+            className="w-32 sm:w-44"
+            buttonClassName="portal-home-date-trigger h-9 !min-h-9 px-3 text-xs font-semibold bg-[color:var(--portal-card)] border-[color:var(--portal-border)] text-[color:var(--portal-text)]"
           />
       </PortalHomeDateControl>
 
@@ -238,6 +238,7 @@ export function PortalMarketingSalesSection({
           {/* Visual Flow Diagram with AnimatedBeam */}
           <div
             ref={beamContainerRef}
+            data-home-reveal
             className="relative flex flex-col sm:flex-row items-stretch gap-3 xl:w-[680px]"
           >
             <div className="hidden sm:block pointer-events-none">
@@ -367,7 +368,7 @@ export function PortalMarketingSalesSection({
 
       {/* 1. CONNECTED 3-STAGE FUNNEL PIPELINE WITH CIRCULAR GAUGES & SPARKBARS */}
       <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm overflow-hidden">
-        <div className="grid grid-cols-1 xl:grid-cols-12 divide-y xl:divide-y-0 xl:divide-x divide-[color:var(--portal-border)]">
+        <div data-home-reveal className="grid grid-cols-1 xl:grid-cols-12 divide-y xl:divide-y-0 xl:divide-x divide-[color:var(--portal-border)]">
           
           {/* STAGE 1: ACQUISITION & TRAFFIC (3 Metrics) */}
           <div className="p-4 sm:p-5 xl:col-span-5 flex flex-col justify-between">
@@ -707,7 +708,7 @@ export function PortalMarketingSalesSection({
           <span className="text-xs font-medium text-[color:var(--portal-muted)]">Period: {rangeLabel}</span>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div data-home-reveal className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Card 1: Total Tours Scheduled */}
           <MagicCard className="rounded-xl p-4 flex flex-col justify-between">
             <div className="flex items-center justify-between">
@@ -822,7 +823,7 @@ export function PortalMarketingSalesSection({
         </div>
 
         {/* Funnel progression display with animated fill bars */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+        <div data-home-reveal className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
           {metrics.funnel.map((item, index) => {
             const isFirst = index === 0
             const isTourBookedStage = item.stage === 'Tours Booked'
@@ -904,7 +905,7 @@ export function PortalMarketingSalesSection({
       </div>
 
       {/* 3. TRAFFIC SOURCES & WEBSITE PERFORMANCE TABLES WITH INLINE DATA BARS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div data-home-reveal className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Table 1: Where Are Visitors Coming From? */}
         <div className="luxor-glass-card rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col justify-between">
           <div>
@@ -1079,7 +1080,7 @@ export function PortalMarketingSalesSection({
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div data-home-reveal className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {metrics.diagnostics.map((diag) => (
             <div
               key={diag.id}

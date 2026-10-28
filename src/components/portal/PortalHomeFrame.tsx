@@ -5,16 +5,20 @@ import { createPortal } from 'react-dom'
 import { Activity } from 'lucide-react'
 import { PortalPageFrame, PortalPageHeader, PortalSkeleton } from './PortalUI'
 
-const DateSlot = createContext<HTMLElement | null>(null)
+const DateSlot = createContext<{ mobile: HTMLElement | null; desktop: HTMLElement | null }>({ mobile: null, desktop: null })
 
 export function PortalHomeDateControl({ children }: { children: React.ReactNode }) {
-  const target = useContext(DateSlot)
-  return target ? createPortal(children, target) : null
+  const targets = useContext(DateSlot)
+  return <>
+    {targets.mobile ? createPortal(children, targets.mobile, 'mobile') : null}
+    {targets.desktop ? createPortal(children, targets.desktop, 'desktop') : null}
+  </>
 }
 
 export function PortalHomeFrame({ children }: { children: React.ReactNode }) {
-  const [dateSlot, setDateSlot] = useState<HTMLDivElement | null>(null)
-  return <DateSlot.Provider value={dateSlot}>
+  const [mobileDateSlot, setMobileDateSlot] = useState<HTMLDivElement | null>(null)
+  const [desktopDateSlot, setDesktopDateSlot] = useState<HTMLDivElement | null>(null)
+  return <DateSlot.Provider value={{ mobile: mobileDateSlot, desktop: desktopDateSlot }}>
     <PortalPageFrame className="min-h-full group/portal !gap-2.5 sm:!gap-6">
       <PortalPageHeader
         icon={<Activity size={18} />}
@@ -31,15 +35,15 @@ export function PortalHomeFrame({ children }: { children: React.ReactNode }) {
       <div className="space-y-4 pt-0 sm:space-y-6 sm:pt-2">
         <div className="flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-[color:var(--portal-border)] pb-3 sm:pb-4">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
             <h2 className="text-xl sm:text-2xl font-bold text-[color:var(--portal-text)] tracking-tight">
               Marketing & Sales
             </h2>
-            <span className="inline-flex items-center rounded-full bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#caa24c] shrink-0 sm:hidden">
-              Command Center
-            </span>
+            <div ref={setMobileDateSlot} className="ml-auto w-32 shrink-0 sm:hidden [&:has(button)>.luxor-skeleton]:hidden">
+              <PortalSkeleton className="h-9 w-full rounded-lg" />
+            </div>
           </div>
-          <p className="mt-1 text-xs sm:text-sm text-[color:var(--portal-muted)]">
+          <p className="mt-0.5 text-xs sm:mt-1 sm:text-sm text-[color:var(--portal-muted)]">
             <span className="sm:hidden">From website visitor to booked event.</span>
             <span className="hidden sm:inline">
               See how people are discovering Luxor and moving from website visitor to booked event.
@@ -48,9 +52,8 @@ export function PortalHomeFrame({ children }: { children: React.ReactNode }) {
         </div>
 
 
-          <div className="flex items-center gap-2.5 self-start sm:self-auto">
-            <span className="hidden sm:inline-flex items-center rounded-full bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#caa24c] shrink-0">Command Center</span>
-            <div ref={setDateSlot} className="w-44 min-h-9 [&:has(button)>.luxor-skeleton]:hidden"><PortalSkeleton className="h-9 w-44 rounded-lg" /></div>
+          <div className="hidden items-center gap-2.5 self-auto sm:flex">
+            <div ref={setDesktopDateSlot} className="w-44 min-h-9 [&:has(button)>.luxor-skeleton]:hidden"><PortalSkeleton className="h-9 w-44 rounded-lg" /></div>
           </div>
         </div>
         {children}
