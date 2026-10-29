@@ -184,9 +184,7 @@ export default function CalendarPage() {
     if (!response.ok) throw new Error(payload.error || 'Task could not be dismissed.')
     if (payload.status !== 'cancelled') throw new Error('The task update could not be confirmed. Refresh and try again.')
 
-    setData((current) => ({ ...current, tasks: current.tasks.filter((task) => task.id !== taskId) }))
-    notify({ title: 'Task dismissed', description: 'It remains in task history.', variant: 'success' })
-  }, [notify])
+  }, [])
 
   const queueTourEmail = async (tour: LuxorInquiry, jobType: string) => {
     try {
@@ -296,8 +294,12 @@ export default function CalendarPage() {
         openLabel: buildTaskOpenLabel(task),
         content: <TaskSummary task={task} />,
         onDismiss: () => dismissTask(task.id),
+        onDismissed: () => {
+          setData((current) => ({ ...current, tasks: current.tasks.filter((currentTask) => currentTask.id !== task.id) }))
+          notify({ title: 'Task dismissed', description: 'It remains in task history.', variant: 'success' })
+        },
       } satisfies PortalCalendarItem))
-  }, [data.tasks, dismissTask])
+  }, [data.tasks, dismissTask, notify])
 
   const upcomingTaskItems = useMemo(() => view === 'schedule'
     ? taskItems.filter((item) => isLuxorDateInUpcomingSchedule(item.date, scheduleToday))

@@ -1,9 +1,9 @@
 'use client'
 
-import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, MoreHorizontal } from 'lucide-react'
 import React from 'react'
 import { PortalModal, PortalSkeleton, PortalSkeletonTransition } from './PortalUI'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 
 export type PortalCalendarView = 'month' | 'week' | 'day' | 'schedule'
 
@@ -18,6 +18,7 @@ export type PortalCalendarItem = {
   openLabel?: string
   content?: React.ReactNode
   onDismiss?: () => Promise<void>
+  onDismissed?: () => void
 }
 
 export type PortalCalendarDayStatus = 'open' | 'closed'
@@ -105,8 +106,11 @@ export function PortalCalendar({
   const [anchor, setAnchor] = React.useState(() => new Date())
   const [selectedDay, setSelectedDay] = React.useState<string | null>(null)
   const [selectedItem, setSelectedItem] = React.useState<PortalCalendarItem | null>(null)
-  const [dismissPending, setDismissPending] = React.useState(false)
-  const [dismissError, setDismissError] = React.useState<string | null>(null)
+  const [selectedItemSource, setSelectedItemSource] = React.useState<'primary' | 'supplemental'>('primary')
+  const [dismissPendingId, setDismissPendingId] = React.useState<string | null>(null)
+  const [dismissedId, setDismissedId] = React.useState<string | null>(null)
+  const [dismissAnimatingItem, setDismissAnimatingItem] = React.useState<{ item: PortalCalendarItem; source: 'primary' | 'supplemental' } | null>(null)
+  const [dismissError, setDismissError] = React.useState<{ id: string; message: string } | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const mobileMenuRef = React.useRef<HTMLDivElement>(null)
   const isCoarsePointer = React.useSyncExternalStore(subscribeToCoarsePointer, getCoarsePointerSnapshot, () => false)
@@ -120,6 +124,40 @@ export function PortalCalendar({
   }, [items])
   const formattedRange = React.useMemo(() => formatRange(anchor, view), [anchor, view])
   const todayIso = toIsoDate(new Date())
+
+  const selectItem = React.useCallback((item: PortalCalendarItem, source: 'primary' | 'supplemental' = 'primary') => {
+    setDismissError(null)
+    setSelectedItemSource(source)
+    setSelectedItem(item)
+  }, [])
+
+  const dismissItem = React.useCallback(async (item: PortalCalendarItem, source: 'primary' | 'supplemental' = selectedItemSource) => {
+    if (!item.onDismiss || dismissPendingId) return
+    setDismissPendingId(item.id)
+    setDismissError(null)
+    setDismissAnimatingItem({ item, source })
+    try {
+      await item.onDismiss()
+      setDismissedId(item.id)
+      await new Promise((resolve) => window.setTimeout(resolve, 450))
+      item.onDismissed?.()
+      setSelectedItem((current) => current?.id === item.id ? null : current)
+      setDismissAnimatingItem(null)
+    } catch (error) {
+      setDismissAnimatingItem(null)
+      setDismissError({ id: item.id, message: error instanceof Error ? error.message : 'Task could not be dismissed. Try again.' })
+    } finally {
+      setDismissPendingId(null)
+      setDismissedId(null)
+    }
+  }, [dismissPendingId, selectedItemSource])
+
+  const scheduledItems = dismissAnimatingItem?.source === 'primary' && !items.some((item) => item.id === dismissAnimatingItem.item.id)
+    ? [...items, dismissAnimatingItem.item]
+    : items
+  const overdueItems = dismissAnimatingItem?.source === 'supplemental' && !supplementalItems.some((item) => item.id === dismissAnimatingItem.item.id)
+    ? [...supplementalItems, dismissAnimatingItem.item]
+    : supplementalItems
 
   React.useEffect(() => {
     if (!mobileMenuOpen) return
@@ -227,19 +265,26 @@ export function PortalCalendar({
         >
           {view === 'schedule' ? (
             <>
-              <ScheduleView items={items} onSelectItem={(item) => { setDismissError(null); setSelectedItem(item) }} />
-              {supplementalItems.length ? (
+              <ScheduleView items={scheduledItems} onSelectItem={(item) => selectItem(item)} onDismissItem={(item) => void dismissItem(item, 'primary')} dismissPendingId={dismissPendingId} dismissedId={dismissedId} dismissError={dismissError} />
+              {overdueItems.length ? (
                 <details className="mx-auto mt-2 max-w-4xl rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50">
-                  <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-[color:var(--portal-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c] sm:px-6">
-                    Overdue tasks <span className="ml-1 text-xs font-normal">({supplementalItems.length})</span>
+                  <summary className="group flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[color:var(--portal-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c] sm:px-6">
+                    <span>Overdue tasks <span className="ml-1 text-xs font-normal">({overdueItems.length})</span></span>
+                    <ChevronRight size={15} className="shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
                   </summary>
                   <div className="space-y-1 border-t border-[color:var(--portal-border)] p-2 sm:p-3">
-                    {supplementalItems.map((item) => (
-                      <button key={item.id} type="button" onClick={() => { setDismissError(null); setSelectedItem(item) }} className="flex min-h-11 w-full min-w-0 items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-[color:var(--portal-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c] sm:px-3">
-                        <span className="w-24 shrink-0 text-xs text-[color:var(--portal-muted)]">{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(`${item.date}T12:00:00`))}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[color:var(--portal-text)]">{item.title}</span>
-                        {item.subtitle ? <span className="hidden max-w-[45%] truncate text-xs text-[color:var(--portal-muted)] sm:block">{item.subtitle}</span> : null}
-                      </button>
+                    {overdueItems.map((item) => (
+                      <div key={item.id} className="min-w-0 rounded-lg hover:bg-[color:var(--portal-card)]">
+                        <div className="flex min-w-0 items-center gap-2 px-2.5 py-1.5 sm:px-3">
+                          <button type="button" onClick={() => selectItem(item, 'supplemental')} className="flex min-h-10 min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]">
+                            <span className="w-24 shrink-0 text-xs text-[color:var(--portal-muted)]">{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(`${item.date}T12:00:00`))}</span>
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[color:var(--portal-text)]">{item.title}</span>
+                            {item.subtitle ? <span className="hidden max-w-[45%] truncate text-xs text-[color:var(--portal-muted)] sm:block">{item.subtitle}</span> : null}
+                          </button>
+                          {item.onDismiss ? <button type="button" aria-label={`Dismiss task: ${item.title}`} title="Dismiss task" disabled={Boolean(dismissPendingId)} onClick={() => void dismissItem(item, 'supplemental')} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition hover:border-[#caa24c] hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] disabled:cursor-wait disabled:opacity-60"><DismissIcon complete={dismissedId === item.id} /></button> : null}
+                        </div>
+                        {dismissError?.id === item.id ? <p role="alert" className="px-3 pb-2 text-xs text-rose-700 dark:text-rose-300">{dismissError.message}</p> : null}
+                      </div>
                     ))}
                   </div>
                 </details>
@@ -358,7 +403,7 @@ export function PortalCalendar({
                 </span>
               </div>
             ) : null}
-            {renderDayDetails(itemsByDate[selectedDay] || [], setSelectedItem)}
+            {renderDayDetails(itemsByDate[selectedDay] || [], (item) => selectItem(item))}
           </div>
         ) : null}
       </PortalModal>
@@ -384,28 +429,19 @@ export function PortalCalendar({
               </a>
             ) : null}
             {selectedItem.content ? <div>{selectedItem.content}</div> : null}
-            {dismissError ? <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{dismissError}</p> : null}
+            {dismissError?.id === selectedItem.id ? <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{dismissError.message}</p> : null}
             {selectedItem.onDismiss ? (
               <div className="flex justify-end border-t border-[color:var(--portal-border)] pt-3">
                 <button
                   type="button"
-                  disabled={dismissPending}
-                  onClick={async () => {
-                    if (!selectedItem.onDismiss || dismissPending) return
-                    setDismissPending(true)
-                    setDismissError(null)
-                    try {
-                      await selectedItem.onDismiss()
-                      setSelectedItem(null)
-                    } catch (error) {
-                      setDismissError(error instanceof Error ? error.message : 'Task could not be dismissed. Try again.')
-                    } finally {
-                      setDismissPending(false)
-                    }
-                  }}
-                  className="min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 py-2 text-xs font-bold text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:cursor-wait disabled:opacity-60"
+                  disabled={Boolean(dismissPendingId)}
+                  onClick={() => void dismissItem(selectedItem)}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-xs font-bold text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:cursor-wait disabled:opacity-60"
                 >
-                  {dismissPending ? 'Dismissing…' : 'Dismiss task'}
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full border border-current" aria-hidden="true">
+                    <DismissIcon complete={dismissedId === selectedItem.id} />
+                  </span>
+                  {dismissPendingId === selectedItem.id ? 'Dismissing…' : dismissedId === selectedItem.id ? 'Dismissed' : 'Dismiss task'}
                 </button>
               </div>
             ) : null}
@@ -419,9 +455,17 @@ export function PortalCalendar({
 function ScheduleView({
   items,
   onSelectItem,
+  onDismissItem,
+  dismissPendingId,
+  dismissedId,
+  dismissError,
 }: {
   items: PortalCalendarItem[]
   onSelectItem: (item: PortalCalendarItem) => void
+  onDismissItem: (item: PortalCalendarItem) => void
+  dismissPendingId: string | null
+  dismissedId: string | null
+  dismissError: { id: string; message: string } | null
 }) {
   const itemsByDate = items.reduce<Record<string, PortalCalendarItem[]>>((groups, item) => {
     groups[item.date] ??= []
@@ -446,15 +490,25 @@ function ScheduleView({
               </div>
               <div className="space-y-2.5">
                 {itemsByDate[date].map((item) => (
-                  <button key={item.id} type="button" aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`} onClick={() => onSelectItem(item)} className={`flex min-h-11 min-w-0 w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ${toneClass(item.tone)}`}>
+                  <div key={item.id} className={`flex min-h-11 min-w-0 items-center gap-3 rounded-xl border p-3.5 transition-all duration-150 sm:p-4 ${toneClass(item.tone)}`}>
                     <span className="h-9 w-1 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block break-words text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
-                      {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
-                      {item.subtitle ? <span className="mt-1 block break-words text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
-                    </span>
-                    <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{item.openLabel || 'Open'}</span>
-                  </button>
+                    <button type="button" aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`} onClick={() => onSelectItem(item)} className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
+                      <span className="min-w-0 flex-1">
+                        <span className="block break-words text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
+                        {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
+                        {item.subtitle ? <span className="mt-1 block break-words text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
+                      </span>
+                      <span className="hidden shrink-0 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] sm:inline">{item.openLabel || 'Open'}</span>
+                    </button>
+                    {item.onDismiss ? (
+                      <div className="flex shrink-0 flex-col items-center">
+                        <button type="button" aria-label={`Dismiss task: ${item.title}`} title="Dismiss task" disabled={Boolean(dismissPendingId)} onClick={() => onDismissItem(item)} className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition hover:border-[#caa24c] hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] disabled:cursor-wait disabled:opacity-60">
+                          <DismissIcon complete={dismissedId === item.id} />
+                        </button>
+                        {dismissError?.id === item.id ? <span role="alert" className="mt-1 max-w-36 text-center text-[10px] text-rose-700 dark:text-rose-300">{dismissError.message}</span> : null}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             </div>
@@ -462,6 +516,23 @@ function ScheduleView({
         ))}
       </div>
     </div>
+  )
+}
+
+function DismissIcon({ complete }: { complete: boolean }) {
+  const reduceMotion = useReducedMotion()
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      {complete ? (
+        <motion.span key="complete" initial={reduceMotion ? false : { scale: 0.5, opacity: 0, rotate: -25 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} exit={reduceMotion ? undefined : { scale: 0.7, opacity: 0 }} transition={reduceMotion ? { duration: 0.01 } : { type: 'spring', stiffness: 500, damping: 25 }}>
+          <Check size={18} aria-hidden="true" />
+        </motion.span>
+      ) : (
+        <motion.span key="open" initial={reduceMotion ? false : { scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={reduceMotion ? undefined : { scale: 0.55, opacity: 0 }} transition={reduceMotion ? { duration: 0.01 } : { duration: 0.16 }}>
+          <Circle size={18} aria-hidden="true" />
+        </motion.span>
+      )}
+    </AnimatePresence>
   )
 }
 
