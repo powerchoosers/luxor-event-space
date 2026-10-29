@@ -300,10 +300,10 @@ export default function CalendarPage() {
   }, [data.tasks, dismissTask])
 
   const upcomingTaskItems = useMemo(() => view === 'schedule'
-    ? taskItems.filter((item) => item.date >= scheduleToday)
+    ? taskItems.filter((item) => isLuxorDateInUpcomingSchedule(item.date, scheduleToday))
     : taskItems, [scheduleToday, taskItems, view])
   const overdueTaskItems = useMemo(() => view === 'schedule'
-    ? taskItems.filter((item) => item.date < scheduleToday)
+    ? taskItems.filter((item) => !isLuxorDateInUpcomingSchedule(item.date, scheduleToday))
     : [], [scheduleToday, taskItems, view])
 
   const eventItems = useMemo<PortalCalendarItem[]>(() => {
