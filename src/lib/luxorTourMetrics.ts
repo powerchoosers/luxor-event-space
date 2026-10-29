@@ -127,7 +127,7 @@ export function getCompletedTourLeads<T extends LuxorInquiry>(inquiries: T[]) {
 
 export function getLuxorPostTourFollowUpStatus(tasks: Array<{ status: string; description?: string | null }>) {
   const postTourTasks = tasks.filter((task) => /\[post-tour\]/i.test(task.description ?? ''))
-  if (postTourTasks.some((task) => task.status === 'pending')) return 'Follow-Up Scheduled'
+  if (postTourTasks.some((task) => task.status === 'pending')) return 'Needs Follow-Up'
   if (postTourTasks.some((task) => task.status === 'completed')) return 'Follow-Up Completed'
   return 'Needs Follow-Up'
 }

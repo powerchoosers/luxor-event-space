@@ -235,7 +235,19 @@ export async function POST(request: NextRequest) {
           warnings.push('The tour outcome was saved, but its activity note could not be recorded.')
         }
       }
-      return NextResponse.json({ inquiry: updated, leadEvent: updatedLeadEvent, noShowJob: null, warnings, idempotent: !outcomeChanged })
+      let postTourFollowUp: { outcome: string; task_id?: string; due_date?: string } | null = null
+      try {
+        postTourFollowUp = await supabaseRest('rpc/luxor_sync_post_tour_follow_up', {
+          method: 'POST', body: JSON.stringify({ p_inquiry_id: inquiryId }),
+        })
+        if (attendance === 'attended' && postTourFollowUp?.outcome === 'missing_tour_date') {
+          warnings.push('The tour was marked complete, but an automatic follow-up could not be scheduled because its tour date is missing.')
+        }
+      } catch (error) {
+        console.error('Tour outcome saved; automatic post-tour follow-up needs review:', error)
+        warnings.push('The tour outcome was saved, but its automatic post-tour follow-up could not be updated.')
+      }
+      return NextResponse.json({ inquiry: updated, leadEvent: updatedLeadEvent, noShowJob: null, postTourFollowUp, warnings, idempotent: !outcomeChanged })
     }
 
     if (action === 'schedule-tour') {
