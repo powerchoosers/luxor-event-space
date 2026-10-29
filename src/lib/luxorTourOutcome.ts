@@ -5,6 +5,9 @@ export function createLuxorTourAttendancePayload(input: {
   attendance: LuxorTourAttendanceStatus
   expectedAttendance: LuxorTourAttendanceStatus | null
   leadEventId?: string
+  visitId?: string | null
+  visitVersion?: number
+  calendarSequence?: number
 }) {
   return {
     inquiryId: input.inquiryId,
@@ -12,6 +15,9 @@ export function createLuxorTourAttendancePayload(input: {
     action: 'attendance' as const,
     attendance: input.attendance,
     expectedAttendance: input.expectedAttendance,
+    visitId: input.visitId ?? null,
+    expectedVisitVersion: input.visitVersion ?? 0,
+    expectedCalendarSequence: input.calendarSequence ?? null,
   }
 }
 

@@ -365,7 +365,7 @@ export default function LeadsPage() {
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createLuxorTourAttendancePayload({ inquiryId: lead.id, attendance, expectedAttendance: lead.tour_attendance_status || null })),
+        body: JSON.stringify(createLuxorTourAttendancePayload({ inquiryId: lead.id, attendance, expectedAttendance: lead.tour_attendance_status || null, visitId: lead.current_tour_visit_id, visitVersion: lead.current_tour_visit_version })),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; warnings?: string[] }
       if (!response.ok) throw new Error(payload.error || 'Tour outcome could not be saved.')

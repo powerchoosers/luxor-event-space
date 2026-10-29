@@ -10,6 +10,7 @@ type TourTemplate = { subject: string; body: string; text?: string; heroImage?: 
 type SavedTour = {
   event: LuxorCalendarEvent; inquiry: LuxorInquiry; replayed: boolean
   confirmationJobs: LuxorEmailJob[]; reminderJobs: LuxorEmailJob[]
+  visit: { id: string; inquiry_id: string; calendar_event_id: string | null; tour_date: string; attendance_status: string; version: number }
 }
 
 /** All mail is queued by this transaction; it never contacts an email provider. */
@@ -20,11 +21,18 @@ export async function saveLuxorTourSchedule(input: {
   tour: { meetingType: string; clientFacingNotes: string; responseToken: string; assignees: string[] }
   templates: { confirmation: TourTemplate; reminder_24: TourTemplate; reminder_2: TourTemplate }
   requestedBy: string
+  visitIntent: 'new_visit' | 'reschedule'
+  visitId: string
+  requestId: string
+  expectedVisitId: string | null
+  expectedVisitVersion: number
 }) {
   const state = normalizedState({ ...input.state, status: 'confirmed' })
-  return supabaseRest<SavedTour>('rpc/luxor_save_tour_schedule', { method: 'POST', body: JSON.stringify({
+  return supabaseRest<SavedTour>('rpc/luxor_save_tour_visit_schedule', { method: 'POST', body: JSON.stringify({
     p_inquiry_id: input.inquiry.id, p_expected_sequence: input.expectedSequence,
     p_state: state, p_tour: input.tour, p_templates: input.templates, p_requested_by: input.requestedBy,
+    p_visit_intent: input.visitIntent, p_visit_id: input.visitId, p_request_id: input.requestId,
+    p_expected_visit_id: input.expectedVisitId, p_expected_visit_version: input.expectedVisitVersion,
   }) })
 }
 

@@ -84,7 +84,12 @@ export async function updateTask(
   const [updated] = await supabaseRest<LuxorTask[]>(`luxor_tasks?select=*&id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=representation' },
-    body: JSON.stringify(updates),
+    // This helper is called by the authenticated task-edit API. Any owner
+    // mutation takes ownership of the task instead of allowing a later tour
+    // outcome replay to reactivate it as an automation-managed task.
+    body: JSON.stringify(Object.keys(updates).length
+      ? { ...updates, post_tour_reopen_cancelled: false, post_tour_user_modified: true }
+      : updates),
   })
 
   return updated ?? null

@@ -1,4 +1,5 @@
 import { after, NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listAllLuxorInquiries, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { hasValidLuxorInquiryConsentFlags, isGuestCountOverCapacity, isLuxorEventTypeRequiredFlow, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
@@ -49,6 +50,11 @@ async function scheduleTourFromPublicRequest(inquiry: LuxorInquiry) {
     tour: plan.tour,
     templates,
     requestedBy: 'Public tour request',
+    visitIntent: 'new_visit',
+    visitId: randomUUID(),
+    requestId: randomUUID(),
+    expectedVisitId: null,
+    expectedVisitVersion: 0,
   })
 
   const immediateJobs = (await listLuxorEmailJobsForInquiry(inquiry.id)).filter((job) =>

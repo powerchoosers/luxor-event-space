@@ -104,6 +104,8 @@ type TourInviteCardPayload = {
   meetingType: string
   durationMinutes: number
   clientFacingNotes: string
+  currentVisitId: string | null
+  currentVisitVersion: number
 }
 
 type SmartSuggestion = {
@@ -1430,6 +1432,9 @@ function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPa
   const [meetingType, setMeetingType] = useState(payload.meetingType || 'Private Venue Tour')
   const [durationMinutes, setDurationMinutes] = useState(String(payload.durationMinutes || 30))
   const [clientFacingNotes, setClientFacingNotes] = useState(payload.clientFacingNotes)
+  const [visitIntent, setVisitIntent] = useState<'new_visit' | 'reschedule' | ''>('')
+  const scheduleAttempt = useRef<{ signature: string; id: string } | null>(null)
+  const [visitId, setVisitId] = useState(() => crypto.randomUUID())
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -1437,6 +1442,7 @@ function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPa
     !payload.clientEmail ? 'client email' : null,
     !tourDate ? 'tour date' : null,
     !tourTime ? 'start time' : null,
+    !visitIntent ? 'whether this is a new visit or a reschedule' : null,
   ].filter(Boolean) as string[]
 
   const handleSend = async () => {
@@ -1445,18 +1451,27 @@ function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPa
     setError(null)
 
     try {
+      const scheduleBody = {
+        inquiryId: payload.inquiryId,
+        action: 'schedule-tour',
+        visitIntent,
+        visitId,
+        expectedVisitId: payload.currentVisitId,
+        expectedVisitVersion: payload.currentVisitVersion,
+        tourDate,
+        tourTime,
+        meetingType,
+        durationMinutes: Number(durationMinutes),
+        clientFacingNotes,
+      }
+      const signature = JSON.stringify(scheduleBody)
+      if (scheduleAttempt.current?.signature !== signature) {
+        scheduleAttempt.current = { signature, id: crypto.randomUUID() }
+      }
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inquiryId: payload.inquiryId,
-          action: 'schedule-tour',
-          tourDate,
-          tourTime,
-          meetingType,
-          durationMinutes: Number(durationMinutes),
-          clientFacingNotes,
-        }),
+        body: JSON.stringify({ ...scheduleBody, scheduleRequestId: scheduleAttempt.current.id }),
       })
       const result = await response.json().catch(() => ({})) as { error?: string; reminderJobs?: unknown[] }
       if (!response.ok) throw new Error(result.error || 'The invite could not be sent.')
@@ -1479,6 +1494,17 @@ function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPa
       </div>
 
       <div className="space-y-3 p-3.5">
+        <div>
+          <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Visit action</label>
+          <PortalSelect value={visitIntent} onChange={(value) => {
+            const intent = value as 'new_visit' | 'reschedule' | ''
+            setVisitIntent(intent)
+            setVisitId(intent === 'reschedule' && payload.currentVisitId ? payload.currentVisitId : crypto.randomUUID())
+          }} options={[
+            { value: 'new_visit', label: 'Schedule a separate visit' },
+            { value: 'reschedule', label: 'Reschedule the current visit' },
+          ]} className="w-full" buttonClassName="min-h-9" placeholder="Choose visit action" />
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Date</label>

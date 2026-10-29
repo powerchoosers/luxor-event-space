@@ -602,6 +602,11 @@ export default function LeadDetailPage({
 
   // Tour scheduling + Zoho invite state
   const [isTourScheduleModalOpen, setIsTourScheduleModalOpen] = useState(false)
+  const [tourVisitIntent, setTourVisitIntent] = useState<'new_visit' | 'reschedule'>('new_visit')
+  const tourScheduleAttempt = useRef<{ signature: string; id: string } | null>(null)
+  const [tourVisitId, setTourVisitId] = useState('')
+  const [tourExpectedVisitId, setTourExpectedVisitId] = useState<string | null>(null)
+  const [tourExpectedVisitVersion, setTourExpectedVisitVersion] = useState(0)
   const [tourScheduleDate, setTourScheduleDate] = useState('')
   const [tourScheduleTime, setTourScheduleTime] = useState('')
   const [tourScheduleDuration, setTourScheduleDuration] = useState('30')
@@ -3594,8 +3599,13 @@ export default function LeadDetailPage({
     }
   }
 
-  const openTourScheduleModal = () => {
+  const openTourScheduleModal = (intent: 'new_visit' | 'reschedule') => {
     if (!lead) return
+    setTourVisitIntent(intent)
+    tourScheduleAttempt.current = null
+    setTourExpectedVisitId(lead.current_tour_visit_id || null)
+    setTourExpectedVisitVersion(lead.current_tour_visit_version || 0)
+    setTourVisitId(intent === 'reschedule' && lead.current_tour_visit_id ? lead.current_tour_visit_id : crypto.randomUUID())
     setTourScheduleDate(lead.preferred_tour_date || '')
     setTourScheduleTime(normalizeTimeInputValue(lead.preferred_tour_time))
     setTourScheduleDuration(String(lead.metadata?.tourDurationMinutes || 30))
@@ -3801,7 +3811,7 @@ export default function LeadDetailPage({
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...createLuxorTourAttendancePayload({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, attendance, expectedAttendance: lead.tour_attendance_status || null }), expectedInquiryUpdatedAt: lead.updated_at }),
+        body: JSON.stringify({ ...createLuxorTourAttendancePayload({ inquiryId: lead.id, leadEventId: selectedLeadEvent?.id, attendance, expectedAttendance: lead.tour_attendance_status || null, visitId: lead.current_tour_visit_id, visitVersion: lead.current_tour_visit_version }), expectedInquiryUpdatedAt: lead.updated_at }),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: unknown; warnings?: string[]; simulated?: boolean }
       if (!response.ok) throw new Error(payload.error || 'Tour attendance could not be updated.')
@@ -3833,20 +3843,29 @@ export default function LeadDetailPage({
 
     try {
       setSchedulingTour(true)
+      const scheduleBody = {
+        inquiryId: id,
+        action: 'schedule-tour',
+        tourDate: tourScheduleDate,
+        tourTime: tourScheduleTime,
+        durationMinutes: Number(tourScheduleDuration),
+        meetingType: tourMeetingType,
+        clientFacingNotes: tourClientFacingNotes,
+        tourAssignees,
+        visitIntent: tourVisitIntent,
+        visitId: tourVisitId,
+        expectedVisitId: tourExpectedVisitId,
+        expectedVisitVersion: tourExpectedVisitVersion,
+        expectedInquiryUpdatedAt: lead.updated_at,
+      }
+      const signature = JSON.stringify(scheduleBody)
+      if (tourScheduleAttempt.current?.signature !== signature) {
+        tourScheduleAttempt.current = { signature, id: crypto.randomUUID() }
+      }
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inquiryId: id,
-          action: 'schedule-tour',
-          tourDate: tourScheduleDate,
-          tourTime: tourScheduleTime,
-          durationMinutes: Number(tourScheduleDuration),
-          meetingType: tourMeetingType,
-          clientFacingNotes: tourClientFacingNotes,
-          tourAssignees,
-          expectedInquiryUpdatedAt: lead.updated_at,
-        }),
+        body: JSON.stringify({ ...scheduleBody, scheduleRequestId: tourScheduleAttempt.current.id }),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; inquiry?: LuxorInquiry; simulated?: boolean; confirmationJob?: LuxorEmailJob | null; reminderJobs?: LuxorEmailJob[] }
       if (!response.ok) throw new Error(payload.error || 'The tour could not be scheduled.')
@@ -4483,7 +4502,7 @@ export default function LeadDetailPage({
       icon: <Calendar size={15} />,
       label: 'Schedule tour & send invite',
       detail: 'Create one branded calendar invite and later reminders',
-      onClick: openTourScheduleModal,
+      onClick: () => openTourScheduleModal('new_visit'),
       disabled: !lead.email,
     })
   } else if (derivedLeadStatus === 'tour_confirmed') {
@@ -4551,8 +4570,18 @@ export default function LeadDetailPage({
       icon: <Calendar size={15} />,
       label: 'Schedule tour & send invite',
       detail: lead.email ? 'Create one branded calendar invite and later reminders' : 'Add an email address first',
-      onClick: openTourScheduleModal,
+      onClick: () => openTourScheduleModal('new_visit'),
       disabled: !lead.email,
+    })
+  }
+
+  if (['attended', 'no_show', 'cancelled', 'rescheduled'].includes(lead.tour_attendance_status || '')) {
+    pushRecommendedAction({
+      icon: <Calendar size={15} />,
+      label: 'Schedule another visit',
+      detail: 'Create a separate visit and keep each visit’s follow-up history',
+      onClick: () => openTourScheduleModal('new_visit'),
+      disabled: !lead.email || lead.status === 'closed_lost',
     })
   }
 
@@ -5557,7 +5586,7 @@ export default function LeadDetailPage({
                           </button>
                           <button
                             type="button"
-                            onClick={openTourScheduleModal}
+                            onClick={() => openTourScheduleModal('new_visit')}
                             disabled={!lead.email}
                             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] dark:hover:text-[#f1d27a] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -5640,7 +5669,7 @@ export default function LeadDetailPage({
                         <div className="flex shrink-0 items-center gap-2 xl:justify-end">
                           <button
                             type="button"
-                            onClick={openTourScheduleModal}
+                            onClick={() => openTourScheduleModal('new_visit')}
                             disabled={!lead.email}
                             title={lead.email ? 'Schedule the tour and send the calendar invite' : 'Add an email address before sending an invite'}
                             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#caa24c]/10 transition-all hover:bg-[#dfbd68] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
@@ -5995,10 +6024,10 @@ export default function LeadDetailPage({
                           {tourDisplayStatus(lead) === 'Confirmed' ? (
                             <>
                               <button type="button" onClick={() => document.getElementById('lead-tour-details')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">View Tour Details</button>
-                              <button type="button" onClick={openTourScheduleModal} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-all hover:bg-[#caa24c]/20 dark:text-[#f1d27a]"><Calendar size={13} /> Reschedule Tour</button>
+                              <button type="button" onClick={() => openTourScheduleModal('reschedule')} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-all hover:bg-[#caa24c]/20 dark:text-[#f1d27a]"><Calendar size={13} /> Reschedule Tour</button>
                             </>
                           ) : (
-                            <button type="button" onClick={openTourScheduleModal} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-all hover:bg-[#caa24c]/20 dark:text-[#f1d27a]"><Calendar size={13} /> {tourDisplayStatus(lead) === 'Requested' ? 'Set Tour Time' : 'Schedule Tour'}</button>
+                            <button type="button" onClick={() => openTourScheduleModal('new_visit')} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-all hover:bg-[#caa24c]/20 dark:text-[#f1d27a]"><Calendar size={13} /> {tourDisplayStatus(lead) === 'Requested' ? 'Set Tour Time' : 'Schedule Tour'}</button>
                           )}
                         </div>
                       </div>
@@ -6072,7 +6101,7 @@ export default function LeadDetailPage({
                             <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">{lead.tour_attendance_status === 'no_show' ? 'Correct Outcome to Completed' : 'Mark Complete'}</button>
                           ) : null}
                           <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                            <button type="button" onClick={openTourScheduleModal} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Reschedule</button>
+                            <button type="button" onClick={() => openTourScheduleModal('reschedule')} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Reschedule</button>
                             {!['No show', 'Completed', 'Cancelled'].includes(tourDisplayStatus(lead)) ? <button type="button" onClick={() => handleTourAttendanceAction('no_show')} className="min-h-10 rounded-lg border border-red-500/25 px-3 text-[9px] font-black uppercase tracking-wider text-red-600 transition-colors hover:bg-red-500/8 dark:text-red-300">No Show</button> : null}
                             {hasCancellableTour(lead) ? <button type="button" onClick={() => setLeadLifecycleAction('cancel-tour')} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-red-500/30 hover:text-red-600 dark:hover:text-red-300">Cancel Tour</button> : null}
                             {lead.phone ? <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Call</button> : null}
@@ -7953,7 +7982,7 @@ export default function LeadDetailPage({
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Tour Email Delivery</p>
                       <p className="mt-1 text-[10px] text-zinc-600">Saved confirmations, reminders, delivery status, and scheduled send times</p>
                     </div>
-                    <button type="button" onClick={openTourScheduleModal} disabled={!lead.email} className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#caa24c] disabled:opacity-40">
+                    <button type="button" onClick={() => openTourScheduleModal('new_visit')} disabled={!lead.email} className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#caa24c] disabled:opacity-40">
                       Schedule Tour
                     </button>
                   </div>
@@ -9019,8 +9048,8 @@ export default function LeadDetailPage({
         <form onSubmit={handleScheduleTour} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[color:var(--portal-card)] text-[color:var(--portal-text)]">
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
             <div>
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Schedule Tour & Send Invite</h3>
-              <p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">This sends the calendar invitation, a branded confirmation, and the scheduled reminders.</p>
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{tourVisitIntent === 'new_visit' ? 'Schedule another visit' : 'Reschedule this visit'}</h3>
+              <p className="mt-1 text-[11px] leading-4 text-[color:var(--portal-muted)]">This {tourVisitIntent === 'new_visit' ? 'creates a separate visit with its own follow-up' : 'keeps this visit’s follow-up identity'} and sends a calendar invitation and reminders.</p>
             </div>
             <PortalCloseButton onClick={() => setIsTourScheduleModalOpen(false)} aria-label="Close tour scheduler" className="shrink-0" />
           </div>

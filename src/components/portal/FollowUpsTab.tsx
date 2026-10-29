@@ -98,6 +98,7 @@ const FOLLOW_UP_STATUS_TONES: Record<string, PortalStatusTone> = {
   'needs follow-up': 'gold',
   completed: 'green',
   'follow-up completed': 'green',
+  'follow-up resolved': 'neutral',
   paused: 'neutral',
 }
 function followUpStatusTone(status: string): PortalStatusTone {

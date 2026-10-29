@@ -266,6 +266,8 @@ export type LuxorInquiry = {
   is_test?: boolean
   pipeline_stage?: LuxorPipelineStage | null
   tour_attendance_status?: LuxorTourAttendanceStatus | null
+  current_tour_visit_id?: string | null
+  current_tour_visit_version?: number
   tour_confirmed_at?: string | null
   tour_reminder_sent_at?: string | null
   tour_no_show_email_sent_at?: string | null

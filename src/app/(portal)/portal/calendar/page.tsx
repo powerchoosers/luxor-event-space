@@ -164,7 +164,7 @@ export default function CalendarPage() {
       const response = await fetch('/api/tour-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createLuxorTourAttendancePayload({ inquiryId: tour.id, attendance, expectedAttendance: tour.tour_attendance_status || null })),
+        body: JSON.stringify(createLuxorTourAttendancePayload({ inquiryId: tour.id, attendance, expectedAttendance: tour.tour_attendance_status || null, visitId: tour.current_tour_visit_id, visitVersion: tour.current_tour_visit_version })),
       })
       const payload = await response.json() as { error?: string; warnings?: string[] }
       if (!response.ok) throw new Error(payload.error || 'Failed to update attendance.')

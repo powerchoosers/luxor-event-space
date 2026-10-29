@@ -129,6 +129,7 @@ export function getLuxorPostTourFollowUpStatus(tasks: Array<{ status: string; de
   const postTourTasks = tasks.filter((task) => /\[post-tour\]/i.test(task.description ?? ''))
   if (postTourTasks.some((task) => task.status === 'pending')) return 'Needs Follow-Up'
   if (postTourTasks.some((task) => task.status === 'completed')) return 'Follow-Up Completed'
+  if (postTourTasks.some((task) => task.status === 'cancelled')) return 'Follow-Up Resolved'
   return 'Needs Follow-Up'
 }
 

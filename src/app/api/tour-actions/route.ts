@@ -180,31 +180,34 @@ export async function POST(request: NextRequest) {
       if (precondition === 'stale') {
         return NextResponse.json({ error: 'The tour outcome changed since this view loaded. Refresh and review the current outcome before correcting it.' }, { status: 409 })
       }
+      if (precondition === 'already_applied' && !inquiry.current_tour_visit_id) {
+        return NextResponse.json({ inquiry, postTourFollowUp: null, warnings: [], idempotent: true })
+      }
       if (inquiry.tour_attendance_status === 'cancelled' && attendance !== 'cancelled') {
         return NextResponse.json({ error: 'A cancelled tour cannot be changed through attendance controls.' }, { status: 409 })
       }
-      const updates: Record<string, unknown> = { tour_attendance_status: attendance }
-      if (attendance === 'attended' && canAdvanceAttendedTour(inquiry.status, inquiry.pipeline_stage)) {
-        updates.status = 'tour_confirmed'
-        updates.pipeline_stage = 'proposal'
-      }
-      if (attendance === 'no_show' && canAdvanceAttendedTour(inquiry.status, inquiry.pipeline_stage)) updates.pipeline_stage = 'tour'
-      if (attendance === 'rescheduled' && PRE_PROPOSAL_STATUSES.has(inquiry.status)) updates.status = 'tour_requested'
-
       let updated = inquiry
       let outcomeChanged = false
-      if (inquiry.tour_attendance_status !== attendance) {
-        const saved = await updateLuxorInquiryIfTourAttendanceStatus(inquiryId, inquiry.tour_attendance_status, updates)
-        if (!saved) {
-          const current = await getLuxorInquiry(inquiryId)
-          if (!current || current.tour_attendance_status !== attendance) {
-            return NextResponse.json({ error: 'Another tour outcome was saved first. Refresh to review the current status.' }, { status: 409 })
-          }
-          updated = current
-        } else {
-          updated = saved
-          outcomeChanged = true
+      let postTourFollowUp: { outcome: string; task_id?: string; due_date?: string; visit_id?: string; version?: number } | null = null
+      if (attendance === 'attended' || attendance === 'no_show' || attendance === 'pending' || attendance === 'rescheduled') {
+        const visitId = typeof body.visitId === 'string' ? body.visitId : inquiry.current_tour_visit_id || null
+        const visitVersion = Number.isInteger(body.expectedVisitVersion) ? Number(body.expectedVisitVersion) : inquiry.current_tour_visit_version || 0
+        const calendar = visitId ? null : await getLuxorCalendarEvent(inquiryId)
+        const calendarSequence = Number.isInteger(body.expectedCalendarSequence)
+          ? Number(body.expectedCalendarSequence) : calendar?.sequence ?? -1
+        try {
+          postTourFollowUp = await supabaseRest('rpc/luxor_record_tour_visit_outcome', {
+            method: 'POST', body: JSON.stringify({
+              p_inquiry_id: inquiryId, p_visit_id: visitId,
+              p_expected_version: visitVersion, p_expected_sequence: calendarSequence,
+              p_attendance: attendance,
+            }),
+          })
+        } catch (error) {
+          return NextResponse.json({ error: error instanceof Error ? error.message : 'The visit changed before this outcome was saved.' }, { status: 409 })
         }
+        updated = await getLuxorInquiry(inquiryId) || inquiry
+        outcomeChanged = postTourFollowUp?.outcome !== 'already_applied'
       }
       const warnings: string[] = []
       let updatedLeadEvent = null
@@ -235,18 +238,6 @@ export async function POST(request: NextRequest) {
           warnings.push('The tour outcome was saved, but its activity note could not be recorded.')
         }
       }
-      let postTourFollowUp: { outcome: string; task_id?: string; due_date?: string } | null = null
-      try {
-        postTourFollowUp = await supabaseRest('rpc/luxor_sync_post_tour_follow_up', {
-          method: 'POST', body: JSON.stringify({ p_inquiry_id: inquiryId }),
-        })
-        if (attendance === 'attended' && postTourFollowUp?.outcome === 'missing_tour_date') {
-          warnings.push('The tour was marked complete, but an automatic follow-up could not be scheduled because its tour date is missing.')
-        }
-      } catch (error) {
-        console.error('Tour outcome saved; automatic post-tour follow-up needs review:', error)
-        warnings.push('The tour outcome was saved, but its automatic post-tour follow-up could not be updated.')
-      }
       return NextResponse.json({ inquiry: updated, leadEvent: updatedLeadEvent, noShowJob: null, postTourFollowUp, warnings, idempotent: !outcomeChanged })
     }
 
@@ -261,6 +252,17 @@ export async function POST(request: NextRequest) {
         ? body.tourAssignees.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 12)
         : []
       const durationMinutes = Math.min(Math.max(Number(body.durationMinutes) || 30, 30), 180)
+      const visitIntent = body.visitIntent === 'new_visit' || body.visitIntent === 'reschedule' ? body.visitIntent : null
+      const visitId = typeof body.visitId === 'string' && /^[0-9a-f-]{36}$/i.test(body.visitId) ? body.visitId : null
+      const expectedVisitId = typeof body.expectedVisitId === 'string' && /^[0-9a-f-]{36}$/i.test(body.expectedVisitId) ? body.expectedVisitId : null
+      const expectedVisitVersion = Number.isInteger(body.expectedVisitVersion) ? Number(body.expectedVisitVersion) : 0
+      const scheduleRequestId = typeof body.scheduleRequestId === 'string' && /^[0-9a-f-]{36}$/i.test(body.scheduleRequestId)
+        ? body.scheduleRequestId : null
+      if (!visitIntent || !visitId || !scheduleRequestId
+        || (body.expectedVisitId !== null && body.expectedVisitId !== undefined && !expectedVisitId)
+        || !Number.isInteger(body.expectedVisitVersion)) {
+        return NextResponse.json({ error: 'Choose whether this is a new visit or a reschedule, then refresh the current visit details.' }, { status: 409 })
+      }
       const token = inquiry.tour_response_token || createPublicToken()
       const links = getTourResponseLinks(token)
       const contactPhone = await getActiveLuxorPhoneNumber().catch((error) => {
@@ -280,7 +282,8 @@ export async function POST(request: NextRequest) {
       const saved = await saveLuxorTourSchedule({ inquiry, expectedSequence: existingCalendar?.sequence ?? -1,
         state: plan.state,
         tour: plan.tour,
-        templates, requestedBy: session.email })
+        templates, requestedBy: session.email, visitIntent, visitId, requestId: scheduleRequestId,
+        expectedVisitId, expectedVisitVersion })
       // Supabase commits the event revision and queued Resend notices together.
       // Secondary activity must not make a successful schedule retry its email.
       if (!saved.replayed) {

@@ -73,6 +73,8 @@ type ChatMessage = {
     meetingType: string
     durationMinutes: number
     clientFacingNotes: string
+    currentVisitId: string | null
+    currentVisitVersion: number
   }
 }
 
@@ -1728,7 +1730,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
               if (!/^[a-f0-9-]{36}$/i.test(inquiryId)) throw new Error('A verified Luxor lead is required before preparing an invite.')
 
               const records = await supabaseRest<Array<Record<string, unknown>>>(
-                `luxor_inquiries?select=id,full_name,email,event_type,message,preferred_tour_date,preferred_tour_time,metadata&id=eq.${encodeURIComponent(inquiryId)}&limit=1`
+                `luxor_inquiries?select=id,full_name,email,event_type,message,preferred_tour_date,preferred_tour_time,metadata,current_tour_visit_id,current_tour_visit_version&id=eq.${encodeURIComponent(inquiryId)}&limit=1`
               )
               const record = records?.[0]
               if (!record) throw new Error('That lead record could not be verified.')
@@ -1747,6 +1749,8 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
                   ? requestedDuration
                   : Number(metadata.tourDurationMinutes) || 30,
                 clientFacingNotes: String(args.clientFacingNotes || metadata.tourClientFacingNotes || record.message || '').trim().slice(0, 2_000),
+                currentVisitId: typeof record.current_tour_visit_id === 'string' ? record.current_tour_visit_id : null,
+                currentVisitVersion: Number(record.current_tour_visit_version) || 0,
               }
               openrouterMessages.push({
                 role: 'tool',
@@ -1754,7 +1758,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
                 name: 'prepare_tour_invite_card',
                 content: JSON.stringify({
                   ok: true,
-                  message: `Tour invite card is ready for ${tourInviteCardPayload.clientName}. ${!tourInviteCardPayload.clientEmail ? 'The lead needs an email address before an invite can be sent.' : !tourInviteCardPayload.tourDate || !tourInviteCardPayload.tourTime ? 'The card needs a tour date and time before it can be sent.' : 'The owner can review and send the invite from the card.'}`,
+                  message: `Tour invite card is ready for ${tourInviteCardPayload!.clientName}. ${!tourInviteCardPayload!.clientEmail ? 'The lead needs an email address before an invite can be sent.' : !tourInviteCardPayload!.tourDate || !tourInviteCardPayload!.tourTime ? 'The card needs a tour date and time before it can be sent.' : 'The owner can review and send the invite from the card.'}`,
                 })
               })
             } catch (tourInviteError) {
