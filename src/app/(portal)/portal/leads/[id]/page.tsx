@@ -5229,7 +5229,7 @@ export default function LeadDetailPage({
             { label: 'Event date', value: displayEventDate ? formatDisplayDate(displayEventDate) : 'Date TBD' },
             { label: 'Tour', value: lead.preferred_tour_date ? `${formatDisplayDate(lead.preferred_tour_date)}${lead.preferred_tour_time ? ` · ${formatTimeString(lead.preferred_tour_time)}` : ''}` : 'Not scheduled' },
             { label: 'Guests', value: displayGuestCount ? `${displayGuestCount} expected` : 'Not captured' },
-            { label: 'Budget', value: lead.budget || 'Not captured' },
+            { label: 'Package Interest', value: currentEventPackageInterest || 'Not captured' },
           ]).map((item) => (
             <div key={item.label} className="min-w-0 border-b border-r border-[color:var(--portal-border)] px-3 py-2.5 sm:px-4 sm:py-3 last:border-r-0 sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(3n)]:border-r xl:last:border-r-0">
               <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{item.label}</p>
