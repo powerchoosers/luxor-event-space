@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
-import { CalendarClock, Check, ChevronRight, CircleAlert, Clock3, Eye, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Phone, Plus, Search, Settings2, UserRound, X } from 'lucide-react'
+import { CalendarClock, Check, ChevronRight, CircleAlert, Clock3, Eye, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Pencil, Phone, Plus, Search, Settings2, UserRound, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
@@ -29,6 +29,12 @@ type CardMenuPosition = { leadId: string; left: number; width: number; above: bo
 
 function taskChannel(task: LuxorTask): Channel { return getLuxorFollowUpTaskChannel(task) }
 function taskNotes(task: LuxorTask) { return (task.description ?? '').replace(/^\[follow-up:(?:email|phone)\]\s*/, '').replace(/^\[post-tour\]\s*/, '') }
+function getLeadTelHref(phone: string | null | undefined) {
+  const value = phone?.trim()
+  if (!value) return null
+  const normalized = value.replace(/[\s().-]/g, '')
+  return /^\+?\d{7,15}$/.test(normalized) ? `tel:${normalized}` : null
+}
 function manualFollowUpDescription(channel: Channel, isPostTour: boolean, notes = '') {
   return `[follow-up:${channel}]${isPostTour ? ' [post-tour]' : ''}${notes.trim() ? ` ${notes.trim()}` : ''}`
 }
@@ -709,9 +715,15 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                     {row.postTourStatus && <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
                   </div>
                   <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0" onClick={(event) => event.stopPropagation()}>
-                    {row.next.channel === 'phone' && <button type="button" onClick={() => dial(lead)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>}
+                    {(() => {
+                      const phoneHref = getLeadTelHref(lead.phone)
+                      const unavailableLabel = lead.phone?.trim() ? 'Call unavailable: this lead has an invalid phone number' : 'Call unavailable: no phone number on this lead'
+                      return phoneHref
+                        ? <a href={phoneHref} aria-label={`Call ${lead.full_name}`} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition hover:bg-[#916825]"><Phone size={14} /> Call</a>
+                        : <button type="button" disabled title={unavailableLabel} aria-label={unavailableLabel} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white opacity-50"><Phone size={14} /> Call</button>
+                    })()}
                     {row.next.channel === 'email' && row.next.assignee !== 'Automated' && <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white disabled:opacity-50"><Mail size={14} /> Email</button>}
-                    <button type="button" onClick={() => logCall(lead, row.next.task)} disabled={!lead.phone} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Log</button>
+                    <button type="button" onClick={() => logCall(lead, row.next.task)} disabled={!lead.phone?.trim()} title={!lead.phone?.trim() ? 'Logging a call is unavailable: no phone number on this lead' : undefined} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"><Pencil size={14} /> Log</button>
                     <div className="relative" data-follow-up-menu-root="true">
                       <button id={`follow-up-menu-toggle-${row.inquiryId}`} type="button" aria-label={`More actions for ${lead.full_name}`} aria-haspopup="menu" aria-controls={`follow-up-menu-${row.inquiryId}`} aria-expanded={cardMenuLeadId === lead.id} onClick={(event) => toggleCardMenu(event, lead.id)} className="flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a]"><MoreHorizontal size={18} /></button>
                       {cardMenuLeadId === lead.id && <div id={`follow-up-menu-${row.inquiryId}`} role="menu" aria-label={`Actions for ${lead.full_name}`} onKeyDown={(event) => {
