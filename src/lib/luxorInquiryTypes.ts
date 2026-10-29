@@ -238,6 +238,9 @@ export type LuxorInquiry = {
   id: string
   created_at: string
   updated_at: string
+  /** CRM archive marker. Business status and bookings remain unchanged. */
+  archived_at?: string | null
+  archived_by?: string | null
   status: LuxorInquiryStatus
   source: string
   flow: string
@@ -269,6 +272,11 @@ export type LuxorInquiry = {
   tour_response_token?: string | null
   follow_up_disposition?: 'no_response' | 'not_interested' | 'lost_another_venue' | 'event_canceled' | null
   follow_up_disposition_reason?: string | null
+}
+
+/** Legacy closed-lost rows remain archived in the CRM without changing their business semantics. */
+export function isLuxorInquiryArchived(inquiry: Pick<LuxorInquiry, 'status' | 'pipeline_stage' | 'archived_at'> | null | undefined): boolean {
+  return Boolean(inquiry && (inquiry.archived_at || inquiry.status === 'closed_lost' || inquiry.pipeline_stage === 'closed_lost'))
 }
 
 /** The one permanent isolated Test Lead shown in portal shortcuts. */

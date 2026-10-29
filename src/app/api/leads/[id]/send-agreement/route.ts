@@ -37,7 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
     if (inquiry.is_test) return NextResponse.json({ error: 'Agreement workflow is simulated for the permanent test lead.' }, { status: 409 })
     if (inquiry.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This deal is closed lost, so no Event Agreement can be sent.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived, so no Event Agreement can be sent.' }, { status: 409 })
     }
 
     const body = await request.json().catch(() => ({})) as { invoiceId?: unknown; resend?: unknown }

@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     const requestedInquiry = requestedInquiryId ? await getLuxorInquiry(requestedInquiryId) : null
     if (requestedInquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(requestedInquiry.id)
     if (requestedInquiry?.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This lead is marked Deal Lost. Do not add a new payment record.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived. Do not add a new payment record.' }, { status: 409 })
     }
 
     const [created] = await supabaseRest<LuxorPayment[]>('luxor_payments?select=*', {

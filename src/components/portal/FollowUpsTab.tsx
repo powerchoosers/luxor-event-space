@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import { CalendarClock, Check, ChevronRight, CircleAlert, Clock3, Eye, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Pencil, Phone, Plus, Search, Settings2, UserRound, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
+import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
 import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask } from '@/lib/luxorFollowUpTaskPolicy'
@@ -78,8 +79,9 @@ function dateLabel(dueAt: string | null, dueDate: string | null) {
   return dueDate?.slice(0, 10) ?? 'No date'
 }
 function stageLabel(lead: LuxorInquiry) {
+  if (isLuxorInquiryArchived(lead)) return 'Archived'
   if (lead.status === 'booked') return 'Booked'
-  if (lead.status === 'closed_lost') return 'Lost / Closed'
+  if (lead.status === 'closed_lost') return 'Archived'
   if (lead.metadata?.followUpStage === 'nurture') return 'Nurture'
   if (lead.tour_attendance_status === 'attended') return 'Post-Tour'
   if (lead.status === 'tour_confirmed') return 'Tour Scheduled'
@@ -111,6 +113,7 @@ function followUpStageTone(stage: string): PortalStatusTone {
 function isNewLead(lead: LuxorInquiry) { return lead.metadata?.followUpStage !== 'nurture' && (['brochure_lead', 'homepage_brochure'].includes(lead.flow) || lead.source === 'homepage_brochure' || lead.status === 'new') }
 function isPostTour(lead: LuxorInquiry) { return lead.tour_attendance_status === 'attended' }
 function isCurrentNewLead(lead: LuxorInquiry) {
+  if (isLuxorInquiryArchived(lead)) return false
   if (lead.metadata?.followUpStage === 'nurture' || isPostTour(lead)) return false
   if (['booked', 'closed_lost', 'tour_confirmed', 'proposal_sent'].includes(lead.status)) return false
   return isNewLead(lead)
@@ -289,7 +292,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const eventTypes = useMemo(() => [...new Set(leads.map((lead) => lead.event_type).filter((value): value is string => Boolean(value)))].sort(), [leads])
   const pausedEnrollments = useMemo(() => new Set(pausedEnrollmentIds), [pausedEnrollmentIds])
   const followUpTasks = useMemo(() => tasks.filter(isLuxorFollowUpTask), [tasks])
-  const completedTourLeads = useMemo(() => getCompletedTourLeads(leads), [leads])
+  const completedTourLeads = useMemo(() => getCompletedTourLeads(leads.filter((lead) => !isLuxorInquiryArchived(lead))), [leads])
   const rows = useMemo<FollowUpRow[]>(() => {
     const entries: Array<{ inquiryId: string; id: string; channel: Channel; title: string; dueAt: string | null; dueDate: string | null; status: string; assignee: string; task?: LuxorTask }> = [
       ...followUpTasks.filter((task) => task.status === 'pending' && !(task.automation_enrollment_id && pausedEnrollments.has(task.automation_enrollment_id))).map((task) => ({ inquiryId: task.inquiry_id, id: task.id, channel: taskChannel(task), title: task.title, dueAt: task.due_at ?? null, dueDate: task.due_date ?? null, status: stateFor(task.due_at ?? null, task.due_date ?? null, today), assignee: task.assigned_to ?? 'Unassigned', task })),
@@ -300,7 +303,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     for (const entry of entries) grouped.set(entry.inquiryId, [...(grouped.get(entry.inquiryId) ?? []), entry])
     const activityRows = [...grouped.entries()].flatMap(([inquiryId, items]) => {
       const lead = leadById.get(inquiryId)
-      if (!lead) return []
+      if (!lead || isLuxorInquiryArchived(lead)) return []
       const ordered = [...items].sort((a, b) => {
         const aDate = a.dueAt ?? a.dueDate
         const bDate = b.dueAt ?? b.dueDate
@@ -329,7 +332,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const visibleRows = useMemo(() => rows.filter((row) => {
     const lead = leadById.get(row.inquiryId)!
     const search = `${lead.full_name} ${lead.email ?? ''} ${lead.phone ?? ''} ${row.activities.map((item) => item.label).join(' ')}`.toLowerCase()
-    return search.includes(query.toLowerCase()) && (eventType === 'all' || lead.event_type === eventType)
+    return !isLuxorInquiryArchived(lead) && search.includes(query.toLowerCase()) && (eventType === 'all' || lead.event_type === eventType)
       && (filter !== 'new' || isCurrentNewLead(lead)) && (filter !== 'post_tour' || isPostTour(lead))
       && (filter !== 'overdue' || row.next.status === 'Overdue')
   }), [rows, leadById, query, eventType, filter])
@@ -813,7 +816,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     </div>
 
     <PortalModal isOpen={adding} onClose={() => setAdding(false)} title="Add Follow-Up" description="Create a manual reminder on the existing lead. This does not send an email or place a call." maxWidth="max-w-lg" zIndex={100}>
-      <form onSubmit={saveTask} className="space-y-4"><label className="block text-sm">Lead<PortalSelect value={leadId} onChange={setLeadId} options={leads.map((lead) => ({ value: lead.id, label: lead.full_name }))} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Type<PortalSelect value={newChannel} onChange={(value) => setNewChannel(value as Channel)} options={[{ value: 'phone', label: 'Phone call' }, { value: 'email', label: 'Email task' }]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Title<input required value={title} onChange={(event) => setTitle(event.target.value)} placeholder={newChannel === 'phone' ? 'Personal call' : 'Follow-up email'} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Due date<PortalDatePicker value={dueDate} onChange={setDueDate} placeholder="Choose date" minDate={today} className="mt-1 w-full [&>button]:h-10 [&>button]:rounded-lg [&>button]:px-3 [&>button]:py-2 [&>button]:normal-case [&>button]:tracking-normal" /></label><label className="block text-sm">Due time (Central)<input required type="time" value={dueTime} onChange={(event) => setDueTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Assigned to<PortalSelect value={assignee} onChange={setAssignee} options={[{ value: '', label: 'Assign to me' }, ...assignees.map((email) => ({ value: email, label: email }))]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm" /></label><div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={() => setAdding(false)}>Cancel</PortalButton><PortalButton type="submit" disabled={!leadId || !dueDate || !dueTime}>Save Follow-Up</PortalButton></div></form>
+      <form onSubmit={saveTask} className="space-y-4"><label className="block text-sm">Lead<PortalSelect value={leadId} onChange={setLeadId} options={leads.filter((lead) => !isLuxorInquiryArchived(lead)).map((lead) => ({ value: lead.id, label: lead.full_name }))} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Type<PortalSelect value={newChannel} onChange={(value) => setNewChannel(value as Channel)} options={[{ value: 'phone', label: 'Phone call' }, { value: 'email', label: 'Email task' }]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Title<input required value={title} onChange={(event) => setTitle(event.target.value)} placeholder={newChannel === 'phone' ? 'Personal call' : 'Follow-up email'} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Due date<PortalDatePicker value={dueDate} onChange={setDueDate} placeholder="Choose date" minDate={today} className="mt-1 w-full [&>button]:h-10 [&>button]:rounded-lg [&>button]:px-3 [&>button]:py-2 [&>button]:normal-case [&>button]:tracking-normal" /></label><label className="block text-sm">Due time (Central)<input required type="time" value={dueTime} onChange={(event) => setDueTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Assigned to<PortalSelect value={assignee} onChange={setAssignee} options={[{ value: '', label: 'Assign to me' }, ...assignees.map((email) => ({ value: email, label: email }))]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm" /></label><div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={() => setAdding(false)}>Cancel</PortalButton><PortalButton type="submit" disabled={!leadId || !dueDate || !dueTime}>Save Follow-Up</PortalButton></div></form>
     </PortalModal>
 
     <PortalModal isOpen={Boolean(callDraft)} onClose={resetCallDraft} title="Log Call Outcome" description="Record the result and choose a dated manual next step. This form does not place a call." maxWidth="max-w-xl" zIndex={110} footer={callDraft ? <div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={resetCallDraft}>Cancel</PortalButton><PortalButton type="submit" form="follow-up-call-outcome-form" disabled={!callOutcome || callSaving || (nextStep === 'later' && !nextDate)}><Check size={14} /> Save &amp; Schedule</PortalButton></div> : undefined}>

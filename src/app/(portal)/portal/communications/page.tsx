@@ -10,7 +10,7 @@ import {
   Send
 } from 'lucide-react'
 import Link from 'next/link'
-import { LuxorInquiry, LuxorInquiryStatus, LuxorNote } from '@/lib/luxorInquiryTypes'
+import { isLuxorInquiryArchived, LuxorInquiry, LuxorInquiryStatus, LuxorNote } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { PortalPageFrame, PortalPageHeader, PortalSelect, PortalStatusBadge, PortalContactAvatar } from '@/components/portal/PortalUI'
 
@@ -21,7 +21,6 @@ const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
   { value: 'tour_confirmed', label: 'Tour Confirmed' },
   { value: 'proposal_sent', label: 'Proposal Sent' },
   { value: 'booked', label: 'Booked' },
-  { value: 'closed_lost', label: 'Closed Lost' },
 ]
 
 type ZohoInboxMessage = {
@@ -355,7 +354,7 @@ export default function CommunicationsPage() {
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">
                         <span className="font-semibold">{inq.event_type || 'Quinceañera'}</span>
-                        <PortalStatusBadge status={inq.status} />
+                        <PortalStatusBadge status={isLuxorInquiryArchived(inq) ? 'Archived' : inq.status} />
                       </div>
                     </div>
                   )
@@ -386,14 +385,20 @@ export default function CommunicationsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <PortalSelect
-                    value={selectedInquiry.status}
-                    onChange={(value) => handleStatusChange(value as LuxorInquiryStatus)}
-                    options={INQUIRY_STATUS_OPTIONS}
-                    className="min-w-[180px]"
-                    disabled={updatingStatus}
-                  />
-                  <PortalStatusBadge status={selectedInquiry.status} />
+                  {isLuxorInquiryArchived(selectedInquiry) ? (
+                    <PortalStatusBadge status="Archived" tone="neutral" />
+                  ) : (
+                    <>
+                      <PortalSelect
+                        value={selectedInquiry.status}
+                        onChange={(value) => handleStatusChange(value as LuxorInquiryStatus)}
+                        options={INQUIRY_STATUS_OPTIONS}
+                        className="min-w-[180px]"
+                        disabled={updatingStatus}
+                      />
+                      <PortalStatusBadge status={selectedInquiry.status} />
+                    </>
+                  )}
                 </div>
               </div>
 

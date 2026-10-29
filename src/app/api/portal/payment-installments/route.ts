@@ -19,7 +19,7 @@ async function assertPaymentScheduleIsActive(bookingId: string, fallbackInquiryI
   const inquiryId = booking.inquiry_id || fallbackInquiryId || null
   const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
   if (booking.status === 'cancelled' || inquiry?.status === 'closed_lost') {
-    throw new PaymentScheduleUnavailableError(409, 'This deal is closed lost or its booking is cancelled. Payment schedule entries cannot be added or changed.')
+    throw new PaymentScheduleUnavailableError(409, 'This lead is archived or its booking is cancelled. Payment schedule entries cannot be added or changed.')
   }
 }
 

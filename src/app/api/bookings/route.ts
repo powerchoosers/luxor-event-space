@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     const inquiryBeforeBooking = await getLuxorInquiry(proposal.inquiry_id)
     if (inquiryBeforeBooking?.is_test) await assertLuxorProductionSideEffectsAllowed(proposal.inquiry_id)
     if (inquiryBeforeBooking?.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This lead is marked Deal Lost. A new booking cannot be created from a withdrawn proposal.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived. A new booking cannot be created from a withdrawn proposal.' }, { status: 409 })
     }
 
     const existingBooking = (await listLuxorBookingsByInquiry(proposal.inquiry_id)).find((item) => item.invoice_id === proposal.id)
@@ -277,7 +277,7 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'Bookings linked to the permanent test lead can only be changed through run-scoped simulation controls.' }, { status: 409 })
       }
       if (inquiry?.status === 'closed_lost') {
-        return NextResponse.json({ error: 'This lead is marked Deal Lost. Update the close-out record instead of changing this booking.' }, { status: 409 })
+        return NextResponse.json({ error: 'This lead is archived. Update the close-out record instead of changing this booking.' }, { status: 409 })
       }
     }
 

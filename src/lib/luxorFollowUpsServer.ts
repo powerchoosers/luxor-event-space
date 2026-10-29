@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { LuxorInquiry, LuxorTask } from './luxorInquiryTypes'
+import { isLuxorInquiryArchived, type LuxorInquiry, type LuxorTask } from './luxorInquiryTypes'
 import { supabaseRest } from './supabaseRestServer'
 import { createLuxorFollowUpEmailJob } from './luxorEmailJobsServer'
 
@@ -128,6 +128,7 @@ export async function getLuxorBrochureFollowUpSequence() {
 }
 
 export async function enrollLuxorBrochureLead(inquiry: LuxorInquiry, existingBrochureJobId?: string | null) {
+  if (isLuxorInquiryArchived(inquiry)) return null
   if (inquiry.flow !== 'brochure_lead' && inquiry.source !== 'homepage_brochure') return null
   if (!inquiry.marketing_opt_in || !inquiry.email) return null
   if (inquiry.status === 'booked' || inquiry.status === 'tour_confirmed' || inquiry.status === 'closed_lost') return null

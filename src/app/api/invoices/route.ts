@@ -433,7 +433,7 @@ export async function POST(request: NextRequest) {
     if (inquiryId) {
       const inquiry = await getLuxorInquiry(inquiryId)
       if (inquiry?.status === 'closed_lost') {
-        return NextResponse.json({ error: 'This lead is marked Deal Lost. Reopen the opportunity before creating a new proposal or payment record.' }, { status: 409 })
+        return NextResponse.json({ error: 'This lead is archived. Reopen the opportunity before creating a new proposal or payment record.' }, { status: 409 })
       }
     }
     if (leadEventId && (!inquiryId || !await getLuxorLeadEventForInquiry(leadEventId, inquiryId))) {
@@ -633,7 +633,7 @@ export async function PATCH(request: NextRequest) {
     if (existing.inquiry_id) {
       const inquiry = await getLuxorInquiry(existing.inquiry_id)
       if (inquiry?.status === 'closed_lost') {
-        return NextResponse.json({ error: 'This lead is marked Deal Lost. Its proposal and payment records cannot be changed here.' }, { status: 409 })
+        return NextResponse.json({ error: 'This lead is archived. Its proposal and payment records cannot be changed here.' }, { status: 409 })
       }
     }
 

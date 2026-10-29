@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
     if (inquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     if (inquiry?.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This lead is marked Deal Lost. Payment reminders and payment links cannot be sent.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived. Payment reminders and payment links cannot be sent.' }, { status: 409 })
     }
     if (!inquiry?.email) {
       return NextResponse.json({ error: 'Lead email address missing. Add an email to send reminders.' }, { status: 400 })

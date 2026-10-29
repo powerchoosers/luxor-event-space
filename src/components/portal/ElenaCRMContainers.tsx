@@ -126,7 +126,7 @@ export function ElenaLeadUpdateCard({
                 { value: 'final_details', label: '6. Final Details' },
                 { value: 'setup_event_day', label: '7. Event Day' },
                 { value: 'after_event', label: '8. After Event' },
-                { value: 'closed_lost', label: 'Closed / Lost' },
+                { value: 'closed_lost', label: 'Archived' },
               ]}
             />
           </div>
@@ -147,7 +147,7 @@ export function ElenaLeadUpdateCard({
                 { value: 'tour_confirmed', label: 'Tour Confirmed' },
                 { value: 'proposal_sent', label: 'Proposal Sent' },
                 { value: 'booked', label: 'Booked' },
-                { value: 'closed_lost', label: 'Closed Lost' },
+                { value: 'closed_lost', label: 'Archived' },
               ]}
             />
           </div>

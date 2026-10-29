@@ -781,11 +781,14 @@ async function processTextJob(job: LuxorTextJob, options: { customWorkflowDispat
 
 async function getTextJobSkipReason(job: LuxorTextJob) {
   if (job.inquiry_id) {
-    const [inquiry] = await supabaseRest<Array<{ status: string }>>(
-      `luxor_inquiries?select=status&id=eq.${encodeURIComponent(job.inquiry_id)}&limit=1`,
+    const [inquiry] = await supabaseRest<Array<{ status: string; archived_at?: string | null }>>(
+      `luxor_inquiries?select=status,archived_at&id=eq.${encodeURIComponent(job.inquiry_id)}&limit=1`,
     )
     if (!inquiry || inquiry.status === 'closed_lost') {
-      return 'Lead is closed lost; the scheduled text was not sent.'
+      return 'Lead is archived; the scheduled text was not sent.'
+    }
+    if (inquiry.archived_at && job.job_type === 'manual_campaign') {
+      return 'Lead was archived; the scheduled campaign text was not sent.'
     }
   }
   if (job.invoice_id && (job.job_type === 'invoice_due_reminder' || job.job_type === 'invoice_overdue_reminder')) {

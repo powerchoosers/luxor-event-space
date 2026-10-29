@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
     if (inquiry.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     if (inquiry.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This lead is closed lost, so the review email cannot be sent.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived, so the review email cannot be sent.' }, { status: 409 })
     }
 
     const recipientEmail = normalizeEmailAddress(inquiry.email)

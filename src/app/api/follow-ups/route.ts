@@ -82,6 +82,9 @@ export async function POST(request: NextRequest) {
     if (targetInquiry.is_test) {
       return NextResponse.json({ error: 'Follow-up changes for the permanent test lead must use run-scoped test workflow controls.' }, { status: 409 })
     }
+    if (targetInquiry.archived_at || targetInquiry.status === 'closed_lost' || targetInquiry.pipeline_stage === 'closed_lost') {
+      return NextResponse.json({ error: 'Archived leads cannot receive active follow-up changes.' }, { status: 409 })
+    }
 
     if (action === 'response') {
       const result = await recordLuxorFollowUpResponse(inquiryId)

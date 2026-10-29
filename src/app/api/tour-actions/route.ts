@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'This action is not available for the isolated Test Lead. Use its run-scoped test controls.' }, { status: 409 })
     }
     if (inquiry.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This opportunity is closed lost. Reopen it before scheduling or changing a tour.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived. Reopen it before scheduling or changing a tour.' }, { status: 409 })
     }
 
     if (action === 'confirm-email-resend') {

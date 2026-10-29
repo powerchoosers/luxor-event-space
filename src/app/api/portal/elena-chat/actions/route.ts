@@ -100,8 +100,8 @@ export async function POST(request: NextRequest) {
       if (updates.status === 'closed_lost' || updates.pipeline_stage === 'closed_lost') {
         const targetInquiryId = inquiryId || (bookingId ? (await getLuxorBooking(bookingId))?.inquiry_id : null)
         return NextResponse.json({
-          error: 'Use the Deal Lost action so open proposals, agreements, payment links, and reminders are withdrawn safely.',
-          ...(targetInquiryId ? { action: `/api/leads/${encodeURIComponent(targetInquiryId)}/deal-lost` } : {}),
+          error: 'Use Archive Lead from the lead profile to move this record to Archived Leads without changing its business status.',
+          ...(targetInquiryId ? { action: `/api/leads/${encodeURIComponent(targetInquiryId)}/archive` } : {}),
         }, { status: 409 })
       }
 

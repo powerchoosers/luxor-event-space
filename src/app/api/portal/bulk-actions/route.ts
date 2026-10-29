@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     // into a bare `closed_lost` status.
     if (resource === 'inquiries' && action === 'set_status' && body.value === 'closed_lost') {
       return NextResponse.json({
-        error: 'Mark each deal lost from its lead actions menu so open proposals, agreements, payment links, and reminders are safely withdrawn.',
+        error: 'Archive each lead from its profile menu so its history is preserved without changing its business status.',
       }, { status: 409 })
     }
 

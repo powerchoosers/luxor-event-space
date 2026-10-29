@@ -1025,10 +1025,13 @@ export async function processLuxorEmailJobs(
           results.push({ id: job.id, status: 'skipped' })
           continue
         }
-        if (!inquiry || (inquiry.status === 'closed_lost' && job.calendar_method !== 'CANCEL' && job.job_type !== 'inquiry_notification')) {
+        if (!inquiry || (inquiry.status === 'closed_lost' && job.calendar_method !== 'CANCEL' && job.job_type !== 'inquiry_notification')
+          || (inquiry.archived_at && (job.job_type === 'marketing_campaign' || Boolean(job.automation_enrollment_id)))) {
           await updateLuxorEmailJob(job.id, {
             status: 'cancelled',
-            last_error: 'The lead was closed lost before this email could be delivered.',
+            last_error: inquiry?.archived_at && (job.job_type === 'marketing_campaign' || job.automation_enrollment_id)
+              ? 'The lead was archived before this marketing or follow-up email could be delivered.'
+              : 'The lead was archived before this email could be delivered.',
           })
           results.push({ id: job.id, status: 'skipped' })
           continue
@@ -1617,7 +1620,7 @@ async function isLuxorFollowUpJobEligible(job: LuxorEmailJob) {
   )
   if (!template?.active || !job.inquiry_id) return false
   const inquiry = await getLuxorInquiry(job.inquiry_id)
-  return Boolean(inquiry && inquiry.marketing_opt_in && inquiry.status !== 'tour_confirmed' && inquiry.status !== 'booked'
+  return Boolean(inquiry && !inquiry.archived_at && inquiry.marketing_opt_in && inquiry.status !== 'tour_confirmed' && inquiry.status !== 'booked'
     && inquiry.email?.trim().toLowerCase() === job.recipient_email.trim().toLowerCase()
     && inquiry.status !== 'closed_lost' && (!inquiry.follow_up_disposition || inquiry.follow_up_disposition === 'no_response'))
 }

@@ -78,7 +78,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
     if (!inquiry || inquiry.id !== invoice.inquiry_id) return NextResponse.json({ error: 'The proposal lead could not be verified.' }, { status: 404 })
     if (inquiry.is_test) return NextResponse.json({ error: 'Proposal Breakdown delivery is disabled for isolated Test Leads. Use the synthetic preview only.' }, { status: 409 })
-    if (inquiry.status === 'closed_lost') return NextResponse.json({ error: 'This lead is marked Deal Lost. Reopen the opportunity before publishing a proposal.' }, { status: 409 })
+    if (inquiry.status === 'closed_lost') return NextResponse.json({ error: 'This lead is archived. Reopen the opportunity before publishing a proposal.' }, { status: 409 })
 
     const body = await request.json().catch(() => ({})) as { recipientEmail?: unknown }
     const requestedRecipient = typeof body.recipientEmail === 'string' ? body.recipientEmail.trim() : ''

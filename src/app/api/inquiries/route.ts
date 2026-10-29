@@ -441,8 +441,8 @@ export async function PATCH(request: NextRequest) {
 
     if (updates.pipeline_stage === 'closed_lost') {
       return NextResponse.json({
-        error: 'Use the Deal Lost action so open proposals, contracts, payment links, and reminders are safely withdrawn together.',
-        action: `/api/leads/${encodeURIComponent(id)}/deal-lost`,
+        error: 'Use Archive Lead from the lead profile to move this record to Archived Leads without changing its business status.',
+        action: `/api/leads/${encodeURIComponent(id)}/archive`,
       }, { status: 409 })
     }
 
@@ -452,8 +452,8 @@ export async function PATCH(request: NextRequest) {
       }
       if (status === 'closed_lost') {
         return NextResponse.json({
-          error: 'Use the Deal Lost action so open proposals, contracts, payment links, and reminders are safely withdrawn together.',
-          action: `/api/leads/${encodeURIComponent(id)}/deal-lost`,
+          error: 'Use Archive Lead from the lead profile to move this record to Archived Leads without changing its business status.',
+          action: `/api/leads/${encodeURIComponent(id)}/archive`,
         }, { status: 409 })
       }
       updates.status = status

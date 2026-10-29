@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { listTasksByInquiry, listAllTasks, createTask, updateTask } from '@/lib/luxorTasksServer'
 import { getAllowedZohoPortalEmails, getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
+import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,6 +45,10 @@ export async function POST(request: NextRequest) {
     if (!inquiryId || !title) {
       return NextResponse.json({ error: 'inquiryId and title are required.' }, { status: 400 })
     }
+
+    const inquiry = await getLuxorInquiry(String(inquiryId))
+    if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
+    if (isLuxorInquiryArchived(inquiry)) return NextResponse.json({ error: 'Archived leads cannot receive new follow-up tasks.' }, { status: 409 })
 
     if (dueAt && (typeof dueAt !== 'string' || !Number.isFinite(Date.parse(dueAt)))) {
       return NextResponse.json({ error: 'dueAt must be a valid timestamp.' }, { status: 400 })

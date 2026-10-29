@@ -99,7 +99,7 @@ export async function createLuxorPostContractCheckout(input: {
   const sameDay = master?.same_day_booking_status !== 'eligible' ? sameDayBookingPromotion(master) : null
   const fingerprint = sameDay?.coverage_amount && master ? sameDayTermsFingerprint(master, booking) : ''
   if (inquiry.status === 'closed_lost') {
-    throw new Error('This deal is closed lost, so a new Stripe checkout link cannot be created.')
+    throw new Error('This lead is archived, so a new Stripe checkout link cannot be created.')
   }
   if (booking.status === 'cancelled') {
     throw new Error('This booking is cancelled, so a new Stripe checkout link cannot be created.')

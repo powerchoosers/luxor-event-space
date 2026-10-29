@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
+  Archive,
   Calendar,
   CheckCircle,
   Clock,
@@ -57,7 +58,7 @@ import {
   PanelRightOpen,
   X,
 } from 'lucide-react'
-import { isLuxorTestInquiry, LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS, LUXOR_MAX_GUESTS, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
+import { isLuxorInquiryArchived, isLuxorTestInquiry, LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS, LUXOR_MAX_GUESTS, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
@@ -2180,7 +2181,7 @@ export default function LeadDetailPage({
   const handleStatusChange = async (newStatus: LuxorInquiry['status']) => {
     if (!lead) return false
     if (newStatus === 'closed_lost') {
-      setLeadLifecycleAction('deal-lost')
+      setLeadLifecycleAction('archive')
       return false
     }
     const eventScopedStatus = Boolean(selectedLeadEvent && ['proposal_sent', 'booked'].includes(newStatus))
@@ -4870,7 +4871,9 @@ export default function LeadDetailPage({
         <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
           <ArrowLeft size={13} /> Back to Leads & Clients
         </Link>
-        {lead.status === 'tour_confirmed' ? (
+        {isLuxorInquiryArchived(lead) ? (
+          <PortalStatusBadge status="Archived" tone="neutral" />
+        ) : lead.status === 'tour_confirmed' ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
             <Calendar size={12} /> {tourHeaderStatusLabel(lead)}
           </span>
@@ -5199,11 +5202,11 @@ export default function LeadDetailPage({
                           )}
                         </div>
                       ) : null}
-                      {lead.status !== 'closed_lost' && lead.pipeline_stage !== 'closed_lost' ? (
+                      {!lead.is_test && !isLuxorInquiryArchived(lead) ? (
                         <div className="mt-1 border-t border-[color:var(--portal-border)] pt-1.5">
-                          <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setLeadLifecycleAction('deal-lost') }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/25 bg-red-500/[0.06] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-red-600 transition-colors hover:border-red-500/45 hover:bg-red-500/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 dark:text-red-300">
-                            <AlertCircle size={13} />
-                            <span>Mark deal lost</span>
+                          <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setLeadLifecycleAction('archive') }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/[0.07] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[#caa24c]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/35">
+                            <Archive size={13} className="text-[#a8792f] dark:text-[#f1d27a]" />
+                            <span>Archive Lead</span>
                           </button>
                         </div>
                       ) : null}
@@ -8971,9 +8974,9 @@ export default function LeadDetailPage({
           setLead(updatedLead)
           setLeadLifecycleAction(null)
           notify({
-            title: leadLifecycleAction === 'deal-lost' ? 'Deal marked lost' : 'Tour cancelled',
-            description: leadLifecycleAction === 'deal-lost'
-              ? 'The active opportunity has been closed and its open work has been withdrawn.'
+            title: leadLifecycleAction === 'archive' ? 'Lead archived' : 'Tour cancelled',
+            description: leadLifecycleAction === 'archive'
+              ? 'The lead’s history is preserved in Archived Leads.'
               : 'The tour slot and pending reminders have been released.',
             variant: 'success',
           })

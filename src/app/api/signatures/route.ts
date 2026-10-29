@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
     const inquiry = booking.inquiry_id ? await getLuxorInquiry(booking.inquiry_id) : null
     if (!inquiry || booking.status === 'cancelled' || inquiry.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled. A new Event Agreement cannot be created.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived or its booking is cancelled. A new Event Agreement cannot be created.' }, { status: 409 })
     }
     if (inquiry.is_test) return NextResponse.json({ error: 'Agreement workflow is simulated for the permanent test lead.' }, { status: 409 })
     const proposal = booking.invoice_id ? await getInvoice(booking.invoice_id) : null
@@ -133,7 +133,7 @@ export async function PATCH(request: NextRequest) {
     if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
     const inquiry = booking.inquiry_id ? await getLuxorInquiry(booking.inquiry_id) : null
     if (!inquiry || booking.status === 'cancelled' || inquiry.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived or its booking is cancelled.' }, { status: 409 })
     }
     if (inquiry.is_test) return NextResponse.json({ error: 'Agreement workflow is simulated for the permanent test lead.' }, { status: 409 })
     const signature = await getLatestLuxorSignatureRequestByBooking(bookingId)

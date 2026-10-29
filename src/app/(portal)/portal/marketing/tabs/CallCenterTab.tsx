@@ -145,7 +145,7 @@ export function CallCenterTab({
       notify({
         title: 'Outcome Logged',
         description: marksDealLost
-          ? 'Lead marked Deal Lost and any open client work was safely withdrawn.'
+          ? 'Lead was closed and any open client work was withdrawn.'
           : `Lead status updated to ${nextStatus.replace('_', ' ')}.`,
         variant: 'success'
       })

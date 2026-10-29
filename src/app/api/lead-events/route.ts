@@ -99,8 +99,8 @@ export async function PATCH(request: NextRequest) {
     if (body.metadata !== undefined && body.metadata && typeof body.metadata === 'object') updates.metadata = body.metadata
     if (body.status === 'closed_lost' || body.pipeline_stage === 'closed_lost') {
       return NextResponse.json({
-        error: 'Use the lead Deal Lost action so all open proposal, agreement, payment, and reminder work is withdrawn safely.',
-        action: `/api/leads/${encodeURIComponent(existing.inquiry_id)}/deal-lost`,
+        error: 'Use Archive Lead from the lead profile to move this record to Archived Leads without changing its business status.',
+        action: `/api/leads/${encodeURIComponent(existing.inquiry_id)}/archive`,
       }, { status: 409 })
     }
     if (body.status !== undefined && statuses.has(body.status)) updates.status = body.status

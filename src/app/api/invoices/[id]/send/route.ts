@@ -87,7 +87,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const inquiry = invoice.inquiry_id ? await getLuxorInquiry(invoice.inquiry_id) : null
     if (inquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(inquiry.id)
     if (inquiry?.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This lead is marked Deal Lost. The proposal, contract, and payment links have been withdrawn.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived. The proposal, contract, and payment links have been withdrawn.' }, { status: 409 })
     }
     if (!inquiry?.email) return NextResponse.json({ error: 'Add the lead email address before sending.' }, { status: 400 })
     const body = await request.json().catch(() => ({})) as { mode?: 'proposal' | 'proposal_in_person' | 'proposal_contract' | 'payment' | 'date_lock_deposit'; paymentAmount?: number; paymentLabel?: string; resend?: boolean }

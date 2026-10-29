@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
     if (requestedInquiry?.is_test) await assertLuxorProductionSideEffectsAllowed(requestedInquiry.id)
     if (requestedBooking.status === 'completed' && requestedBooking.invoice_id && sameDayBookingPromotion(await getInvoice(requestedBooking.invoice_id))) return NextResponse.json({ error: 'Completed booking records are immutable. Review any additional received funds separately.' }, { status: 409 })
     if (requestedBooking.status === 'cancelled' || requestedInquiry?.status === 'closed_lost') {
-      return NextResponse.json({ error: 'This deal is closed lost or its booking is cancelled. Do not record a new payment; review any historic payment in Stripe or the ledger instead.' }, { status: 409 })
+      return NextResponse.json({ error: 'This lead is archived or its booking is cancelled. Do not record a new payment; review any historic payment in Stripe or the ledger instead.' }, { status: 409 })
     }
 
     const resolved = await resolveManualPaymentInvoice(bookingId, kind)
