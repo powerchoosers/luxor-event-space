@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { annotateTestBookings, getVerifiedTestInquiryIds, listLuxorBookingsWithPayments } from '@/lib/luxorBookingsServer'
-import { listLuxorConfirmedTours } from '@/lib/luxorInquiriesServer'
+import { listLuxorConfirmedTours, listTaskInquiryContexts } from '@/lib/luxorInquiriesServer'
 import { listAllTasks } from '@/lib/luxorTasksServer'
 import { listUpcomingLuxorTourSlots } from '@/lib/luxorTourSlotsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -27,6 +27,20 @@ export async function GET() {
       })),
     ])
 
+    let taskInquiryContexts: Awaited<ReturnType<typeof listTaskInquiryContexts>> = []
+    let taskInquiryContextsUnavailable = false
+    try {
+      taskInquiryContexts = await listTaskInquiryContexts(tasks.map((task) => task.inquiry_id))
+    } catch {
+      taskInquiryContextsUnavailable = true
+    }
+    const taskInquiryContextById = new Map(taskInquiryContexts.map((inquiry) => [inquiry.id, inquiry]))
+    const tasksWithInquiryContext = tasks.map((task) => ({
+      ...task,
+      inquiry_context: taskInquiryContextById.get(task.inquiry_id) ?? null,
+      inquiry_context_status: taskInquiryContextsUnavailable ? 'unavailable' : taskInquiryContextById.has(task.inquiry_id) ? 'linked' : 'unlinked',
+    }))
+
     const familyIds = [...new Set(invoiceResult.invoices.map((invoice) => invoice.proposal_family_id).filter((value): value is string => Boolean(value)))]
     const activityResult = await listLuxorProposalActivitiesForFamilies(familyIds)
       .then((activities) => ({ activities, error: null as string | null }))
@@ -44,7 +58,7 @@ export async function GET() {
       tours: tours.filter((tour) => !testTourIds.has(tour.id)),
       slots,
       bookings: ownerBookings,
-      tasks,
+      tasks: tasksWithInquiryContext,
       availability: buildLuxorAvailabilityCalendar(await annotateLuxorReviewAvailability(ownerBookings)),
       pendingProposals,
       pendingProposalCounts: pendingProposalsError ? {} : countLuxorPendingProposalsByDate(pendingProposals),

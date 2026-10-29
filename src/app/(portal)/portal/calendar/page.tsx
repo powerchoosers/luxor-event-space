@@ -21,11 +21,16 @@ type CalendarPayload = {
   tours: LuxorInquiry[]
   slots: LuxorTourSlot[]
   bookings: (LuxorBooking & { paid_total?: number; balance_due?: number })[]
-  tasks: LuxorTask[]
+  tasks: CalendarTask[]
   availability: LuxorAvailabilityMap
   pendingProposals: PendingProposalSummary[]
   pendingProposalCounts: Record<string, number>
   pendingProposalsError?: string | null
+}
+
+type CalendarTask = LuxorTask & {
+  inquiry_context?: { id: string; full_name: string; event_type: string | null; target_date: string | null } | null
+  inquiry_context_status?: 'linked' | 'unlinked' | 'unavailable'
 }
 
 const TOUR_STATUS_PRESENTATION: Record<LuxorTourSection, { label: string; tone: PortalStatusTone }> = {
@@ -292,6 +297,14 @@ export default function CalendarPage() {
         tone: task.priority === 'urgent' ? 'rose' : task.priority === 'high' ? 'gold' : 'blue',
         href: buildTaskHref(task),
         openLabel: buildTaskOpenLabel(task),
+        taskContext: {
+          leadName: task.inquiry_context?.full_name?.trim() || null,
+          eventType: task.inquiry_context?.event_type?.trim() || null,
+          eventDate: task.inquiry_context?.target_date || null,
+          leadHref: task.inquiry_context?.id ? `/portal/leads/${task.inquiry_context.id}?tab=overview` : undefined,
+          linked: Boolean(task.inquiry_context),
+          unavailable: task.inquiry_context_status === 'unavailable',
+        },
         content: <TaskSummary task={task} />,
         onDismiss: () => dismissTask(task.id),
         onDismissed: () => {
@@ -650,9 +663,7 @@ function buildTaskSubtitle(task: LuxorTask) {
     return [`${task.priority} priority`, bouncedAddress ? `Bounced: ${bouncedAddress}` : 'Bounced email address'].join(' · ')
   }
 
-  const parts = [`${task.priority} priority`]
-  if (task.description) parts.push(task.description)
-  return parts.join(' • ')
+  return `${task.priority} priority${task.description ? ` • ${task.description}` : ''}`
 }
 
 function buildTaskHref(task: LuxorTask) {

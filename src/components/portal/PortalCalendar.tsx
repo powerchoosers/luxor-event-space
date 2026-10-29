@@ -16,6 +16,14 @@ export type PortalCalendarItem = {
   warningLabel?: string
   href?: string
   openLabel?: string
+  taskContext?: {
+    leadName: string | null
+    eventType: string | null
+    eventDate: string | null
+    leadHref?: string
+    linked: boolean
+    unavailable: boolean
+  }
   content?: React.ReactNode
   onDismiss?: () => Promise<void>
   onDismissed?: () => void
@@ -70,6 +78,29 @@ function formatRange(anchor: Date, view: PortalCalendarView) {
 
   const days = getVisibleDays(anchor, 'week')
   return `${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(days[0])} - ${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(days[6])}`
+}
+
+function formatContextDate(value: string) {
+  const dateKey = value.slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return value
+  const date = new Date(`${dateKey}T12:00:00`)
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date)
+}
+
+function TaskContext({ item, compact = false }: { item: PortalCalendarItem; compact?: boolean }) {
+  const context = item.taskContext
+  if (!context) return null
+  const leadName = context.leadName || (context.unavailable ? 'Lead details unavailable' : context.linked ? 'Lead name unavailable' : 'No linked lead')
+  const eventType = context.eventType || 'Event type unavailable'
+  const eventDate = context.eventDate ? formatContextDate(context.eventDate) : 'Date not provided'
+
+  return (
+    <span className={`block min-w-0 ${compact ? 'mt-0.5 text-[10px] leading-4 sm:text-xs sm:leading-5' : 'mt-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs leading-5'}`}>
+      <span className={`block font-semibold text-[color:var(--portal-text)] ${compact ? 'truncate' : 'break-words'}`}>{leadName}</span>
+      <span className="block break-words text-[color:var(--portal-muted)]">{compact ? <>{eventType} <span aria-hidden="true">·</span> Event {eventDate}</> : <>{eventType} <span aria-hidden="true">·</span> Requested event date: {eventDate}</>}</span>
+      {!context.linked ? <span className="sr-only">{context.unavailable ? 'Lead details could not be loaded.' : 'This task has no linked lead record.'}</span> : null}
+    </span>
+  )
 }
 
 const COARSE_POINTER_QUERY = '(hover: none) and (pointer: coarse)'
@@ -346,6 +377,7 @@ export function PortalCalendar({
                             >
                               {item.warningLabel ? <span className={`mb-0.5 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200 ${view === 'month' ? 'hidden sm:inline-flex' : ''}`}><AlertTriangle size={10} aria-hidden="true" />{item.warningLabel}</span> : null}
                               <p className={`text-[9px] font-bold text-[color:var(--portal-text)] line-clamp-1 sm:text-xs ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.title}</p>
+                              <TaskContext item={item} compact />
                               {item.subtitle ? <p className={`mt-0.5 text-[9px] leading-3 text-[color:var(--portal-muted)] line-clamp-1 sm:mt-1 sm:text-[10px] sm:leading-4 ${view === 'month' ? 'hidden sm:block' : ''}`}>{item.subtitle}</p> : null}
                             </button>
                           )
@@ -417,9 +449,11 @@ export function PortalCalendar({
           <div className="space-y-3">
             <div className={`rounded-xl border p-4 ${toneClass(selectedItem.tone)}`}>
               <p className="text-lg font-bold text-[color:var(--portal-text)]">{selectedItem.title}</p>
+              <TaskContext item={selectedItem} />
               {selectedItem.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{selectedItem.warningLabel}</span> : null}
               {selectedItem.subtitle ? <p className="mt-1 text-sm text-[color:var(--portal-muted)]">{selectedItem.subtitle}</p> : null}
             </div>
+            {selectedItem.taskContext?.leadHref ? <a href={selectedItem.taskContext.leadHref} className="inline-flex items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Open linked lead</a> : null}
             {selectedItem.href ? (
               <a
                 href={selectedItem.href}
@@ -495,6 +529,7 @@ function ScheduleView({
                     <button type="button" aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`} onClick={() => onSelectItem(item)} className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
                       <span className="min-w-0 flex-1">
                         <span className="block break-words text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
+                        <TaskContext item={item} compact />
                         {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
                         {item.subtitle ? <span className="mt-1 block break-words text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
                       </span>

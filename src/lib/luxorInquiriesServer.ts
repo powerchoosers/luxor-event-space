@@ -14,6 +14,20 @@ import {
   reserveLuxorTourSlot,
 } from './luxorTourSlotsServer'
 
+export type LuxorTaskInquiryContext = Pick<LuxorInquiry, 'id' | 'full_name' | 'event_type' | 'target_date'>
+
+/** Load the small set of inquiry fields needed to identify task owners in the calendar. */
+export async function listTaskInquiryContexts(inquiryIds: string[]): Promise<LuxorTaskInquiryContext[]> {
+  const ids = [...new Set(inquiryIds)].filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))
+  if (!ids.length) return []
+
+  const chunks = Array.from({ length: Math.ceil(ids.length / 100) }, (_, index) => ids.slice(index * 100, (index + 1) * 100))
+  const results = await Promise.all(chunks.map((chunk) =>
+    supabaseRest<LuxorTaskInquiryContext[]>(`luxor_inquiries?select=id,full_name,event_type,target_date&id=in.(${chunk.join(',')})`),
+  ))
+  return results.flat()
+}
+
 const OPTIONAL_INQUIRY_COLUMNS = [
   'attendee_count',
   'campaign_key',
