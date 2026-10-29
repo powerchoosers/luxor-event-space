@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { PortalSelect } from './PortalUI'
@@ -63,8 +64,32 @@ export function LuxorAvailabilityCalendar({
   const monthYearTriggerRef = useRef<HTMLButtonElement>(null)
   const monthYearDialogRef = useRef<HTMLDivElement>(null)
   const monthYearDialogTitleId = useId()
+  const [monthYearPosition, setMonthYearPosition] = useState<{ top: number; left: number; width: number; maxHeight: number; bottom?: number } | null>(null)
   const activeYear = activeDate.getFullYear()
   const activeMonth = activeDate.getMonth()
+
+  const updateMonthYearPosition = useCallback(() => {
+    const trigger = monthYearTriggerRef.current
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const viewport = window.visualViewport
+    const visibleTop = viewport?.offsetTop ?? 0
+    const visibleBottom = visibleTop + (viewport?.height ?? window.innerHeight)
+
+    if (window.matchMedia('(max-width: 639px)').matches) {
+      const footerTop = document.querySelector<HTMLElement>('[data-proposal-builder-footer]')?.getBoundingClientRect().top
+      const top = visibleTop + 12
+      const panelBottom = Math.max(top + 1, Math.min(visibleBottom - 12, footerTop === undefined ? visibleBottom - 12 : footerTop - 12))
+      const bottom = Math.max(8, window.innerHeight - panelBottom)
+      const maxHeight = Math.max(1, panelBottom - top)
+      setMonthYearPosition({ top, left: 12, width: Math.max(0, window.innerWidth - 24), maxHeight, bottom })
+      return
+    }
+
+    const width = Math.min(352, window.innerWidth - 24)
+    const maxHeight = Math.max(180, visibleBottom - rect.bottom - 16)
+    setMonthYearPosition({ top: Math.min(rect.bottom + 8, visibleBottom - Math.min(360, maxHeight) - 8), left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)), width, maxHeight: Math.min(360, maxHeight) })
+  }, [])
 
   const closeMonthYear = useCallback(() => {
     setMonthYearOpen(false)
@@ -73,6 +98,19 @@ export function LuxorAvailabilityCalendar({
 
   useEffect(() => {
     if (!monthYearOpen) return
+    const originalBodyOverflow = document.body.style.overflow
+    const originalRootOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+    let frame = window.requestAnimationFrame(updateMonthYearPosition)
+    const schedulePosition = () => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(updateMonthYearPosition)
+    }
+    window.addEventListener('resize', schedulePosition)
+    window.addEventListener('scroll', schedulePosition, true)
+    window.visualViewport?.addEventListener('resize', schedulePosition)
+    window.visualViewport?.addEventListener('scroll', schedulePosition)
     const focusFrame = window.requestAnimationFrame(() => {
       const firstFocusable = monthYearDialogRef.current?.querySelector<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -114,9 +152,16 @@ export function LuxorAvailabilityCalendar({
     document.addEventListener('keydown', onKeyDown, true)
     return () => {
       window.cancelAnimationFrame(focusFrame)
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('resize', schedulePosition)
+      window.removeEventListener('scroll', schedulePosition, true)
+      window.visualViewport?.removeEventListener('resize', schedulePosition)
+      window.visualViewport?.removeEventListener('scroll', schedulePosition)
+      document.body.style.overflow = originalBodyOverflow
+      document.documentElement.style.overflow = originalRootOverflow
       document.removeEventListener('keydown', onKeyDown, true)
     }
-  }, [closeMonthYear, monthYearOpen])
+  }, [closeMonthYear, monthYearOpen, updateMonthYearPosition])
 
   const years = useMemo(() => {
     const thisYear = localDate(luxorTodayKey()).getFullYear()
@@ -171,7 +216,7 @@ export function LuxorAvailabilityCalendar({
               <ChevronDown size={15} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
             </button>
             <AnimatePresence>
-              {monthYearOpen && (
+              {monthYearOpen && monthYearPosition && typeof document !== 'undefined' && createPortal((
                 <>
                   <motion.button
                     type="button"
@@ -181,7 +226,8 @@ export function LuxorAvailabilityCalendar({
                     transition={{ duration: 0.15 }}
                     aria-label="Close month and year selector"
                     onClick={closeMonthYear}
-                    className="fixed inset-0 z-40 bg-black/25 sm:bg-transparent"
+                    onTouchMove={(event) => event.preventDefault()}
+                    className="fixed inset-0 z-[9990] bg-black/25 sm:bg-transparent"
                   />
                   <motion.div
                     ref={monthYearDialogRef}
@@ -194,7 +240,8 @@ export function LuxorAvailabilityCalendar({
                     exit={{ opacity: 0, scale: 0.95, y: -6, filter: 'blur(6px)' }}
                     transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                     onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeMonthYear() } }}
-                    className="fixed inset-x-3 bottom-3 z-50 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-12 sm:w-[22rem] sm:rounded-xl sm:p-4 backdrop-blur-md"
+                    className="portal-scrollbar fixed z-[9995] overflow-y-auto overscroll-contain rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-2xl sm:rounded-xl backdrop-blur-md"
+                    style={{ top: monthYearPosition.top, left: monthYearPosition.left, width: monthYearPosition.width, maxHeight: `calc(${monthYearPosition.maxHeight}px - env(safe-area-inset-bottom, 0px))`, ...(monthYearPosition.bottom === undefined ? {} : { bottom: `calc(${monthYearPosition.bottom}px + env(safe-area-inset-bottom, 0px))` }) }}
                   >
                     <div className="mb-3 flex items-center justify-between">
                       <p id={monthYearDialogTitleId} className="text-xs font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">Choose a month and year</p>
@@ -212,7 +259,7 @@ export function LuxorAvailabilityCalendar({
                     </div>
                   </motion.div>
                 </>
-              )}
+              ), document.body)}
             </AnimatePresence>
           </div>
           <button type="button" aria-label="Next month" onClick={() => moveMonth(1)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">

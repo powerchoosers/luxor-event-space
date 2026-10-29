@@ -2764,7 +2764,7 @@ export function ProposalBuilderModal({
           {publicationPending ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{breakdownPublished ? 'Proposal Breakdown was sent and saved. Send the individual proposal here if you want that separate email too.' : 'This proposal has been saved. Retry delivery using these saved terms, or close the builder to review it in Documents.'}</p> : null}
         </div> : null}
 
-        <footer className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <footer data-proposal-builder-footer className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="min-h-10">
             {isCalculating ? <div role="status" aria-live="polite" className="space-y-2 py-1"><span className="block h-2.5 w-28 rounded luxor-skeleton" /><span className="block h-5 w-24 rounded luxor-skeleton" /><span className="sr-only">Updating selected final event price.</span></div> : hasFinalPrice ? <><p className="text-[9px] font-black uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">Selected final event price</p><p className="font-mono text-lg font-black text-[#8c6529] dark:text-[#f1d27a]">{formatMoney(finalEventPrice)}</p></> : <p className="flex min-h-10 items-center text-xs text-[color:var(--portal-muted)]">Complete the event facts to calculate the final price.</p>}
           </div>
