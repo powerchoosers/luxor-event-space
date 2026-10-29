@@ -215,8 +215,9 @@ export function LuxorAvailabilityCalendar({
               <span className="truncate">{MONTHS[activeMonth]} {activeYear}</span>
               <ChevronDown size={15} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
             </button>
-            <AnimatePresence>
-              {monthYearOpen && monthYearPosition && typeof document !== 'undefined' && createPortal((
+            {typeof document !== 'undefined' ? createPortal(
+              <AnimatePresence>
+                {monthYearOpen && monthYearPosition ? (
                 <>
                   <motion.button
                     type="button"
@@ -259,8 +260,10 @@ export function LuxorAvailabilityCalendar({
                     </div>
                   </motion.div>
                 </>
-              ), document.body)}
-            </AnimatePresence>
+                ) : null}
+              </AnimatePresence>,
+              document.body,
+            ) : null}
           </div>
           <button type="button" aria-label="Next month" onClick={() => moveMonth(1)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
             <ChevronRight size={17} aria-hidden="true" />
