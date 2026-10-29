@@ -50,6 +50,11 @@ export function luxorTodayKey(now = new Date()) {
   return luxorDateKey(now)
 }
 
+export function isLuxorDateInUpcomingSchedule(value: string | Date, todayKey: string) {
+  const dateKey = luxorDateKey(value)
+  return Boolean(dateKey) && dateKey >= todayKey
+}
+
 export function formatLuxorTourDate(value: string) {
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
   const date = new Date(dateOnly ? `${value}T12:00:00.000Z` : value)
@@ -143,6 +148,17 @@ export function getLuxorTourSection(tour: LuxorInquiry, todayKey: string): Luxor
   if (dateKey < todayKey) return 'needs_outcome'
   if (dateKey === todayKey) return 'today'
   return 'upcoming'
+}
+
+export function getLuxorScheduleTours<T extends Pick<LuxorInquiry, 'preferred_tour_date' | 'tour_attendance_status'>>(
+  tours: T[],
+  todayKey: string,
+  includePast = false,
+) {
+  return tours.filter((tour) => {
+    if (!tour.preferred_tour_date || tour.tour_attendance_status === 'cancelled') return false
+    return includePast || isLuxorDateInUpcomingSchedule(tour.preferred_tour_date, todayKey)
+  })
 }
 
 function normalizedTourTime(value: string | null | undefined) {

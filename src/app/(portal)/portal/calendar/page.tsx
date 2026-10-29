@@ -14,7 +14,7 @@ import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import type { LuxorAvailabilityCalendar as LuxorAvailabilityMap } from '@/lib/luxorAvailability'
 import type { PendingProposalSummary } from '@/lib/luxorPendingProposals'
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
-import { getLuxorTourSection, luxorDateKey, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
+import { getLuxorScheduleTours, getLuxorTourSection, isLuxorDateInUpcomingSchedule, luxorDateKey, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
 import { useToast } from '@/components/portal/ToastProvider'
 
 type CalendarPayload = {
@@ -230,9 +230,8 @@ export default function CalendarPage() {
   }
 
   const tourItems = useMemo<PortalCalendarItem[]>(() => {
-    const todayKey = luxorTodayKey()
-    const tourCards = data.tours
-      .filter((tour) => tour.preferred_tour_date && tour.tour_attendance_status !== 'cancelled')
+    const todayKey = scheduleToday
+    const tourCards = getLuxorScheduleTours(data.tours, todayKey, view !== 'schedule')
       .map((tour) => {
         const section = getLuxorTourSection(tour, todayKey)
         return ({
@@ -258,7 +257,7 @@ export default function CalendarPage() {
     // Published availability is represented by the day status, not as a placeholder
     // calendar item. Only booked tours with a saved date belong in the calendar.
     return tourCards
-  }, [busyId, data.slots, data.tours])
+  }, [busyId, data.slots, data.tours, scheduleToday, view])
 
   const tourDayStatuses = useMemo<Record<string, PortalCalendarDayStatus>>(() => {
     const statuses: Record<string, PortalCalendarDayStatus> = {}
@@ -289,7 +288,7 @@ export default function CalendarPage() {
     const todayKey = scheduleToday
     return data.bookings
       .filter((booking) => booking.event_date
-        && (view !== 'schedule' || (booking.status === 'confirmed' && luxorDateKey(booking.event_date) >= todayKey)))
+        && (view !== 'schedule' || (booking.status === 'confirmed' && isLuxorDateInUpcomingSchedule(booking.event_date, todayKey))))
       .map((booking) => ({
         id: `booking-${booking.id}`,
         date: booking.event_date!,
@@ -611,7 +610,7 @@ function ActionButton({
 function TaskSummary({ task }: { task: LuxorTask }) {
   return (
     <div className="space-y-3">
-      {task.description ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">{task.description}</p> : null}
+      {task.description ? <p className="min-w-0 max-w-full whitespace-pre-wrap break-all text-xs leading-5 text-[color:var(--portal-muted)]">{task.description}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <PortalStatusBadge status={task.status} />
         <PortalStatusBadge status={task.priority} />
@@ -621,6 +620,11 @@ function TaskSummary({ task }: { task: LuxorTask }) {
 }
 
 function buildTaskSubtitle(task: LuxorTask) {
+  if (/review bounced email address/i.test(task.title)) {
+    const bouncedAddress = task.description?.match(/^Bounced recipient:\s*(.+)$/im)?.[1]?.trim()
+    return [`${task.priority} priority`, bouncedAddress ? `Bounced: ${bouncedAddress}` : 'Bounced email address'].join(' · ')
+  }
+
   const parts = [`${task.priority} priority`]
   if (task.description) parts.push(task.description)
   return parts.join(' • ')

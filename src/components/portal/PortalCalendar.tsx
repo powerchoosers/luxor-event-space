@@ -383,7 +383,7 @@ function ScheduleView({
   const dates = Object.keys(itemsByDate).sort()
 
   if (!dates.length) {
-    return <div className="flex min-h-72 items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-6 text-center"><p className="text-sm text-[color:var(--portal-muted)]">No scheduled items yet.</p></div>
+    return <div className="flex min-h-72 items-center justify-center rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-6 text-center"><p className="text-sm text-[color:var(--portal-muted)]">No upcoming items.</p></div>
   }
 
   return (
@@ -398,12 +398,12 @@ function ScheduleView({
               </div>
               <div className="space-y-2.5">
                 {itemsByDate[date].map((item) => (
-                  <button key={item.id} type="button" aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`} onClick={() => onSelectItem(item)} className={`flex min-h-11 w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ${toneClass(item.tone)}`}>
+                  <button key={item.id} type="button" aria-label={`${item.warningLabel ? `Warning: ${item.warningLabel}. ` : ''}Open ${item.title}`} onClick={() => onSelectItem(item)} className={`flex min-h-11 min-w-0 w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg sm:p-4 ${toneClass(item.tone)}`}>
                     <span className="h-9 w-1 shrink-0 rounded-full bg-current opacity-70" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
+                      <span className="block break-words text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
                       {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
-                      {item.subtitle ? <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
+                      {item.subtitle ? <span className="mt-1 block break-words text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
                     </span>
                     <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{item.openLabel || 'Open'}</span>
                   </button>
