@@ -30,12 +30,6 @@ type CardMenuPosition = { leadId: string; left: number; width: number; above: bo
 
 function taskChannel(task: LuxorTask): Channel { return getLuxorFollowUpTaskChannel(task) }
 function taskNotes(task: LuxorTask) { return (task.description ?? '').replace(/^\[follow-up:(?:email|phone)\]\s*/, '').replace(/^\[post-tour\]\s*/, '') }
-function getLeadTelHref(phone: string | null | undefined) {
-  const value = phone?.trim()
-  if (!value) return null
-  const normalized = value.replace(/[\s().-]/g, '')
-  return /^\+?\d{7,15}$/.test(normalized) ? `tel:${normalized}` : null
-}
 function manualFollowUpDescription(channel: Channel, isPostTour: boolean, notes = '') {
   return `[follow-up:${channel}]${isPostTour ? ' [post-tour]' : ''}${notes.trim() ? ` ${notes.trim()}` : ''}`
 }
@@ -585,7 +579,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   }
 
   function dial(lead: LuxorInquiry) {
-    if (!lead.phone) { notify({ title: 'No phone number on this lead', variant: 'warning' }); return }
+    if (!lead.phone?.trim()) { notify({ title: 'No phone number on this lead', description: 'Add a phone number to the lead before calling.', variant: 'warning' }); return }
     startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })
   }
   function composeEmail(lead: LuxorInquiry) {
@@ -722,11 +716,9 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                   </div>
                   <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0" onClick={(event) => event.stopPropagation()}>
                     {(() => {
-                      const phoneHref = getLeadTelHref(lead.phone)
-                      const unavailableLabel = lead.phone?.trim() ? 'Call unavailable: this lead has an invalid phone number' : 'Call unavailable: no phone number on this lead'
-                      return phoneHref
-                        ? <a href={phoneHref} aria-label={`Call ${lead.full_name}`} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#ead9b8] text-xs font-bold text-[#211d17] transition hover:bg-[#dfc99e]"><Phone size={14} /> Call</a>
-                        : <button type="button" disabled title={unavailableLabel} aria-label={unavailableLabel} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#ead9b8] text-xs font-bold text-[#211d17] opacity-50"><Phone size={14} /> Call</button>
+                      const hasPhone = Boolean(lead.phone?.trim())
+                      const unavailableLabel = 'Call unavailable: no phone number on this lead'
+                      return <button type="button" onClick={() => dial(lead)} disabled={!hasPhone} title={!hasPhone ? unavailableLabel : 'Call through Luxor Twilio'} aria-label={hasPhone ? `Call ${lead.full_name} through Luxor` : unavailableLabel} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#ead9b8] text-xs font-bold text-[#211d17] transition hover:bg-[#dfc99e] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>
                     })()}
                     <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#ead9b8] text-xs font-bold text-[#211d17] transition hover:bg-[#dfc99e] disabled:opacity-50"><Mail size={14} /> Email</button>
                     <button type="button" onClick={() => logCall(lead, row.next.task)} disabled={!lead.phone?.trim()} title={!lead.phone?.trim() ? 'Logging a call is unavailable: no phone number on this lead' : undefined} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#dfd4c2] bg-[#faf8f4] text-xs font-semibold text-[#211d17] disabled:cursor-not-allowed disabled:opacity-50"><Pencil size={14} /> Log</button>
