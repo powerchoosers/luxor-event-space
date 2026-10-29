@@ -17,6 +17,7 @@ export type PortalCalendarItem = {
   href?: string
   openLabel?: string
   content?: React.ReactNode
+  onDismiss?: () => Promise<void>
 }
 
 export type PortalCalendarDayStatus = 'open' | 'closed'
@@ -88,6 +89,7 @@ export function PortalCalendar({
   view,
   onViewChange,
   dayStatuses,
+  supplementalItems = [],
   loading = false,
   animateLoadingTransition = false,
 }: {
@@ -96,12 +98,15 @@ export function PortalCalendar({
   view: PortalCalendarView
   onViewChange: (view: PortalCalendarView) => void
   dayStatuses?: Record<string, PortalCalendarDayStatus>
+  supplementalItems?: PortalCalendarItem[]
   loading?: boolean
   animateLoadingTransition?: boolean
 }) {
   const [anchor, setAnchor] = React.useState(() => new Date())
   const [selectedDay, setSelectedDay] = React.useState<string | null>(null)
   const [selectedItem, setSelectedItem] = React.useState<PortalCalendarItem | null>(null)
+  const [dismissPending, setDismissPending] = React.useState(false)
+  const [dismissError, setDismissError] = React.useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const mobileMenuRef = React.useRef<HTMLDivElement>(null)
   const isCoarsePointer = React.useSyncExternalStore(subscribeToCoarsePointer, getCoarsePointerSnapshot, () => false)
@@ -221,7 +226,25 @@ export function PortalCalendar({
           view={view}
         >
           {view === 'schedule' ? (
-            <ScheduleView items={items} onSelectItem={setSelectedItem} />
+            <>
+              <ScheduleView items={items} onSelectItem={(item) => { setDismissError(null); setSelectedItem(item) }} />
+              {supplementalItems.length ? (
+                <details className="mx-auto mt-2 max-w-4xl rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50">
+                  <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-[color:var(--portal-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c] sm:px-6">
+                    Overdue tasks <span className="ml-1 text-xs font-normal">({supplementalItems.length})</span>
+                  </summary>
+                  <div className="space-y-1 border-t border-[color:var(--portal-border)] p-2 sm:p-3">
+                    {supplementalItems.map((item) => (
+                      <button key={item.id} type="button" onClick={() => { setDismissError(null); setSelectedItem(item) }} className="flex min-h-11 w-full min-w-0 items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-[color:var(--portal-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c] sm:px-3">
+                        <span className="w-24 shrink-0 text-xs text-[color:var(--portal-muted)]">{new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(`${item.date}T12:00:00`))}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[color:var(--portal-text)]">{item.title}</span>
+                        {item.subtitle ? <span className="hidden max-w-[45%] truncate text-xs text-[color:var(--portal-muted)] sm:block">{item.subtitle}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+            </>
           ) : (
         <div className={`grid overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-border)] gap-px ${view === 'day' ? 'grid-cols-1' : view === 'month' ? 'grid-cols-7 min-w-[316px]' : 'grid-cols-1 sm:grid-cols-7'}`}>
           {visibleDays.map((day) => {
@@ -361,6 +384,31 @@ export function PortalCalendar({
               </a>
             ) : null}
             {selectedItem.content ? <div>{selectedItem.content}</div> : null}
+            {dismissError ? <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{dismissError}</p> : null}
+            {selectedItem.onDismiss ? (
+              <div className="flex justify-end border-t border-[color:var(--portal-border)] pt-3">
+                <button
+                  type="button"
+                  disabled={dismissPending}
+                  onClick={async () => {
+                    if (!selectedItem.onDismiss || dismissPending) return
+                    setDismissPending(true)
+                    setDismissError(null)
+                    try {
+                      await selectedItem.onDismiss()
+                      setSelectedItem(null)
+                    } catch (error) {
+                      setDismissError(error instanceof Error ? error.message : 'Task could not be dismissed. Try again.')
+                    } finally {
+                      setDismissPending(false)
+                    }
+                  }}
+                  className="min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 py-2 text-xs font-bold text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:cursor-wait disabled:opacity-60"
+                >
+                  {dismissPending ? 'Dismissing…' : 'Dismiss task'}
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </PortalModal>

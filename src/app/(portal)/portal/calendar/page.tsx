@@ -174,6 +174,20 @@ export default function CalendarPage() {
     }
   }
 
+  const dismissTask = useCallback(async (taskId: string) => {
+    const response = await fetch('/api/tasks', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: taskId, status: 'cancelled' }),
+    })
+    const payload = await response.json() as { status?: string; error?: string }
+    if (!response.ok) throw new Error(payload.error || 'Task could not be dismissed.')
+    if (payload.status !== 'cancelled') throw new Error('The task update could not be confirmed. Refresh and try again.')
+
+    setData((current) => ({ ...current, tasks: current.tasks.filter((task) => task.id !== taskId) }))
+    notify({ title: 'Task dismissed', description: 'It remains in task history.', variant: 'success' })
+  }, [notify])
+
   const queueTourEmail = async (tour: LuxorInquiry, jobType: string) => {
     try {
       setBusyId(`${tour.id}-${jobType}`)
@@ -281,8 +295,16 @@ export default function CalendarPage() {
         href: buildTaskHref(task),
         openLabel: buildTaskOpenLabel(task),
         content: <TaskSummary task={task} />,
+        onDismiss: () => dismissTask(task.id),
       } satisfies PortalCalendarItem))
-  }, [data.tasks])
+  }, [data.tasks, dismissTask])
+
+  const upcomingTaskItems = useMemo(() => view === 'schedule'
+    ? taskItems.filter((item) => item.date >= scheduleToday)
+    : taskItems, [scheduleToday, taskItems, view])
+  const overdueTaskItems = useMemo(() => view === 'schedule'
+    ? taskItems.filter((item) => item.date < scheduleToday)
+    : [], [scheduleToday, taskItems, view])
 
   const eventItems = useMemo<PortalCalendarItem[]>(() => {
     const todayKey = scheduleToday
@@ -397,7 +419,8 @@ export default function CalendarPage() {
             <div className="flex-1 min-h-0 flex flex-col">
               <PortalCalendar
                 title="Tours & tasks"
-                items={[...tourItems, ...taskItems]}
+                items={[...tourItems, ...upcomingTaskItems]}
+                supplementalItems={overdueTaskItems}
                 view={view}
                 onViewChange={setView}
                 dayStatuses={tourDayStatuses}
