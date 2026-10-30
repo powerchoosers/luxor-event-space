@@ -8149,9 +8149,10 @@ export default function LeadDetailPage({
                               <audio id={`luxor-call-audio-${call.id}`} controls preload="none" className="w-full" src={`/api/twilio/recordings/${call.recording_sid}?inquiryId=${encodeURIComponent(id)}`}>Your browser does not support audio playback.</audio>
                             </div>
                           ) : call.status === 'completed' ? (
-                            <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">No caller-consented recording is available for this call.</p>
+                            <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">No recording is available for this call.</p>
                           ) : null}
-                          {call.recording_consent_status === 'consented' ? (
+                          {call.is_voicemail ? <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">Voicemail is available for playback and is not transcribed.</p> : null}
+                          {call.recording_consent_status === 'consented' && !call.is_voicemail ? (
                           <div className="mt-3 overflow-hidden rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--portal-border)] p-3">
                               <div className="inline-flex rounded-lg bg-[color:var(--portal-soft)] p-1" role="tablist" aria-label="Call details">

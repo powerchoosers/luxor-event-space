@@ -35,7 +35,8 @@ export async function POST(request: Request) {
     })
 
     const legDirection = url.searchParams.get('direction')
-    if (params.CallStatus === 'answered' && legDirection !== 'bridge_agent') {
+    // Twilio's "answered" status callback event carries CallStatus="in-progress".
+    if (params.CallStatus === 'in-progress' && legDirection !== 'bridge_agent') {
       const call = await getLuxorCallBySid(recordCallSid)
       // Inbound parent calls carry the caller track; outbound customer legs carry caller track.
       const transcriptionCallSid = legDirection === 'inbound' ? recordCallSid : params.CallSid
