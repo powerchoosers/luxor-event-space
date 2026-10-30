@@ -25,7 +25,7 @@ export default function PrivacyPage() {
       <div className="mx-auto max-w-4xl">
         <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#caa24c]">Website policy</p>
         <h1 className="mt-4 font-serif text-5xl leading-[0.92] sm:text-6xl">Privacy Policy</h1>
-        <p className="mt-5 text-sm text-[#d7c29a]/60">Effective July 23, 2026</p>
+        <p className="mt-5 text-sm text-[#d7c29a]/60">Effective October 30, 2026</p>
         <p className="mt-8 max-w-3xl text-base leading-7 text-[#d7c29a]/76">
           This policy explains how Luxor Event Space handles information collected through this website and related customer communications.
         </p>
