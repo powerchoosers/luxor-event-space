@@ -77,7 +77,9 @@ async function loadDedicatedFlowOptions(inquiryId: string, email: string, jobs: 
       recipientEmail: String(emailSnapshot.recipient_email),
       subject: String(emailSnapshot.subject),
       body: String(emailSnapshot.html),
-      sentAt: invoice.proposal_latest_sent_at || invoice.proposal_sent_at || invoice.created_at,
+      sentAt: context.proposal_record_type === 'proposal_breakdown'
+        ? (typeof emailSnapshot.delivery_sent_at === 'string' ? emailSnapshot.delivery_sent_at : invoice.proposal_sent_at || invoice.created_at)
+        : invoice.proposal_latest_sent_at || invoice.proposal_sent_at || invoice.created_at,
       bounced: deliveryEvidence.bounced,
       bounceAt: deliveryEvidence.bounceAt,
       sourceKind: `Proposal v${invoice.proposal_version || 1} (frozen PDF attached)`,
