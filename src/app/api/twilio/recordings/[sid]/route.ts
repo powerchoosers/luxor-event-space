@@ -16,7 +16,7 @@ export async function GET(request: Request, context: { params: Promise<{ sid: st
 
   const call = await getLuxorCallByRecordingSid(sid)
   const inquiryId = new URL(request.url).searchParams.get('inquiryId')
-  if (!call || !inquiryId || call.inquiry_id !== inquiryId) return NextResponse.json({ error: 'Recording not found for this lead.' }, { status: 404 })
+  if (!call || (call.inquiry_id ? call.inquiry_id !== inquiryId : inquiryId !== null)) return NextResponse.json({ error: 'Recording not found for this lead.' }, { status: 404 })
 
   if (call.recording_storage_path) {
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL

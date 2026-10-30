@@ -36,6 +36,7 @@ export type LuxorCall = {
   recording_url: string | null
   recording_duration_seconds: number | null
   recording_storage_path?: string | null
+  recording_started_at?: string | null
   recording_consent_status?: 'not_requested' | 'consented' | 'declined'
   recording_consent_at?: string | null
   transcription_status?: 'not_requested' | 'pending' | 'processing' | 'completed' | 'failed'

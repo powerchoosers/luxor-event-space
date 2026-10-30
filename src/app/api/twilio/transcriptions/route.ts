@@ -22,7 +22,8 @@ export async function POST(request: Request) {
     }
     await saveLuxorTranscriptEvent({
       callSid, event: event!, sequenceId, transcriptionSid: params.TranscriptionSid!,
-      transcriptionData: params.TranscriptionData, track: String(data.track || params.Track || ''), timestamp: params.Timestamp,
+      transcriptionData: params.TranscriptionData, transcriptionProviderData: params.TranscriptionProviderData,
+      track: String(data.track || params.Track || ''), timestamp: params.Timestamp,
     })
     return NextResponse.json({ ok: true })
   } catch (error) {

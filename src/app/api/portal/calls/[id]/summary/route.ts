@@ -55,7 +55,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const apiKey = process.env.OPEN_ROUTER_API_KEY
     if (!apiKey) throw new Error('OpenRouter is not configured.')
     const transcript = segments
-      .map((segment) => `${segment.track === 'inbound_track' || segment.track === 'caller' || segment.track === 'customer' ? 'Caller' : 'Luxor'}: ${segment.segment_text}`)
+      .map((segment) => {
+        const customerTrack = segment.track === 'caller' || segment.track === 'customer'
+          || (call.direction === 'inbound' ? segment.track === 'outbound_track' : segment.track === 'inbound_track')
+        return `${customerTrack ? 'Caller' : 'Luxor'}: ${segment.segment_text}`
+      })
       .join('\n')
       .slice(0, 60000)
     if (!transcript.trim()) throw new Error('The completed transcript is empty.')

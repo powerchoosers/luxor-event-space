@@ -66,14 +66,38 @@ export async function POST(request: Request) {
     const completeCallback = buildTwilioCallbackUrl('/api/twilio/incoming/complete', {
       recordCallSid: params.CallSid,
     })
-    const consent = response.gather({
-      action: buildTwilioCallbackUrl('/api/twilio/incoming/consent', { recordCallSid: params.CallSid }),
-      actionOnEmptyResult: true,
+    const settings = await getLuxorPhoneRoutingSettings()
+    const dial = response.dial({
+      action: completeCallback,
+      answerOnBridge: true,
+      callerId: callerNumber,
       method: 'POST',
-      numDigits: 1,
-      timeout: 8,
+      timeout: 30,
+      record: 'record-from-answer-dual',
+      recordingStatusCallback: buildTwilioCallbackUrl('/api/twilio/recording-status', { recordCallSid: params.CallSid }),
+      recordingStatusCallbackEvent: ['completed'],
+      recordingStatusCallbackMethod: 'POST',
     })
-    consent.say({ voice: 'Polly.Joanna' }, 'For quality and follow-up, Luxor can record and transcribe this call. Press 1 to consent. Press 2 to continue without recording. If you do not choose, the call will continue without recording.')
+    if (settings.ring_browser) {
+      const client = dial.client({
+        statusCallback,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
+      }, config.clientIdentity)
+      client.parameter({ name: 'CallerName', value: callerName })
+      client.parameter({ name: 'CallerNumber', value: callerNumber })
+      client.parameter({ name: 'InquiryId', value: inquiry?.id || '' })
+      client.parameter({ name: 'ParentCallSid', value: params.CallSid })
+      client.parameter({ name: 'Direction', value: 'inbound' })
+    }
+    const ringTo = settings.ring_phone ? settings.ring_to_number : null
+    if (ringTo && ringTo !== (params.To || config.phoneNumber)) {
+      dial.number({
+        statusCallback,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
+      }, ringTo)
+    }
   } catch (error) {
     console.error('Luxor inbound TwiML failed:', error)
     response.say('We are unable to connect your call right now. Please try again shortly.')

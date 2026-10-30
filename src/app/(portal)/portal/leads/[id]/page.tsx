@@ -8162,12 +8162,15 @@ export default function LeadDetailPage({
                             </div>
                             {(callViewModes[call.id] || 'transcript') === 'transcript' ? (
                               <div role="tabpanel" className="max-h-80 space-y-3 overflow-y-auto p-3 sm:p-4">
-                                {(call.transcript_segments || []).length ? call.transcript_segments?.map((segment) => (
-                                  <button type="button" key={segment.id} onClick={() => seekCallRecording(call.id, segment.startSeconds)} disabled={typeof segment.startSeconds !== 'number' || !call.recording_sid} className="grid w-full grid-cols-[4.25rem_minmax(0,1fr)] gap-2 rounded-md text-left text-sm leading-6 hover:bg-[color:var(--portal-soft)] disabled:cursor-default disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] sm:grid-cols-[5rem_minmax(0,1fr)]">
-                                    <span className="pt-0.5 text-[10px] font-semibold text-[color:var(--portal-muted)]">{segment.track === 'inbound_track' || segment.track === 'caller' || segment.track === 'customer' ? 'Caller' : 'Luxor'}</span>
-                                    <span className="break-words text-[color:var(--portal-text)]">{segment.text}</span>
-                                  </button>
-                                )) : <p className="text-sm text-[color:var(--portal-muted)]">{call.transcription_status === 'failed' ? 'The call transcript could not be processed.' : 'Transcript will appear here when Twilio finishes processing.'}</p>}
+                                {(call.transcript_segments || []).length ? call.transcript_segments?.map((segment) => {
+                                  const seekSeconds = typeof segment.startSeconds === 'number' ? segment.startSeconds : null
+                                  return (
+                                    <button type="button" key={segment.id} onClick={() => seekCallRecording(call.id, seekSeconds)} disabled={typeof seekSeconds !== 'number' || !call.recording_sid} className="grid w-full grid-cols-[4.25rem_minmax(0,1fr)] gap-2 rounded-md text-left text-sm leading-6 hover:bg-[color:var(--portal-soft)] disabled:cursor-default disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] sm:grid-cols-[5rem_minmax(0,1fr)]">
+                                      <span className="pt-0.5 text-[10px] font-semibold text-[color:var(--portal-muted)]">{segment.track === 'caller' || segment.track === 'customer' || (call.direction === 'inbound' ? segment.track === 'outbound_track' : segment.track === 'inbound_track') ? 'Caller' : 'Luxor'}</span>
+                                      <span className="break-words text-[color:var(--portal-text)]">{segment.text}</span>
+                                    </button>
+                                  )
+                                }) : <p className="text-sm text-[color:var(--portal-muted)]">{call.transcription_status === 'failed' ? 'The call transcript could not be processed.' : 'Transcript will appear here when Twilio finishes processing.'}</p>}
                               </div>
                             ) : (
                               <div role="tabpanel" className="min-h-24 p-4">

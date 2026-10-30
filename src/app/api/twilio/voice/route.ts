@@ -60,10 +60,12 @@ export async function POST(request: Request) {
       callerId: activePhoneNumber,
       method: 'POST',
       timeout: 30,
+      record: 'record-from-answer-dual',
+      recordingStatusCallback: buildTwilioCallbackUrl('/api/twilio/recording-status', { recordCallSid: params.CallSid }),
+      recordingStatusCallbackEvent: ['completed'],
+      recordingStatusCallbackMethod: 'POST',
     })
     dial.number({
-      url: buildTwilioCallbackUrl('/api/twilio/outbound/consent', { recordCallSid: params.CallSid }),
-      method: 'POST',
       statusCallback,
       statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
       statusCallbackMethod: 'POST',

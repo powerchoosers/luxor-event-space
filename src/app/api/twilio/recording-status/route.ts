@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       recordingSid: params.RecordingSid,
       recordingUrl: params.RecordingUrl,
       durationSeconds: parseTwilioInteger(params.RecordingDuration),
+      recordingStartedAt: params.RecordingStartTime,
       voicemail: new URL(request.url).searchParams.get('voicemail') === 'true',
     })
     return NextResponse.json({ ok: true })

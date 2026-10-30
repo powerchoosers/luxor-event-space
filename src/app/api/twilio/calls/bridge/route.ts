@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       from: activePhoneNumber,
       url: buildTwilioCallbackUrl('/api/twilio/bridge', { destination }),
       method: 'POST',
-      statusCallback: buildTwilioCallbackUrl('/api/twilio/status'),
+      statusCallback: buildTwilioCallbackUrl('/api/twilio/status', { direction: 'bridge_agent' }),
       statusCallbackMethod: 'POST',
       statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
     })

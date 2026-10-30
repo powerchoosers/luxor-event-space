@@ -23,10 +23,13 @@ export async function POST(request: Request) {
     const statusCallback = buildTwilioCallbackUrl('/api/twilio/status', { recordCallSid: params.CallSid, direction: 'outbound' })
 
     response.say('Connecting your Luxor call.')
-    const dial = response.dial({ action: completeCallback, answerOnBridge: true, callerId: activePhoneNumber, method: 'POST', timeout: 30 })
+    const dial = response.dial({
+      action: completeCallback, answerOnBridge: true, callerId: activePhoneNumber, method: 'POST', timeout: 30,
+      record: 'record-from-answer-dual',
+      recordingStatusCallback: buildTwilioCallbackUrl('/api/twilio/recording-status', { recordCallSid: params.CallSid }),
+      recordingStatusCallbackEvent: ['completed'], recordingStatusCallbackMethod: 'POST',
+    })
     dial.number({
-      url: buildTwilioCallbackUrl('/api/twilio/outbound/consent', { recordCallSid: params.CallSid }),
-      method: 'POST',
       statusCallback,
       statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
       statusCallbackMethod: 'POST',

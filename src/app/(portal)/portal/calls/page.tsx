@@ -398,7 +398,7 @@ export default function CallsPage() {
                       controls
                       preload="metadata"
                       className="w-full h-10 rounded-lg"
-                      src={`/api/twilio/recordings/${selectedCall.recording_sid}`}
+                      src={`/api/twilio/recordings/${selectedCall.recording_sid}${selectedCall.inquiry_id ? `?inquiryId=${encodeURIComponent(selectedCall.inquiry_id)}` : ''}`}
                     >
                       Your browser does not support audio playback.
                     </audio>
