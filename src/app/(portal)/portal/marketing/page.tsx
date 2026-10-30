@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState, Suspense } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Mail,
@@ -761,16 +762,13 @@ function MarketingPageContent() {
     )
   } else if (activeTab === 'automations') {
     headerActions = (
-      <div className="flex flex-col items-start gap-1.5 sm:items-end">
-        <button
-          type="button"
-          disabled
-          aria-describedby="automation-create-note"
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#caa24c] px-4 text-xs font-bold text-white opacity-60 shadow-sm disabled:cursor-not-allowed"
+      <div className="flex items-center gap-2">
+        <Link
+          href="/portal/marketing/custom-workflows/new"
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] shadow-sm transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
         >
-          <Plus size={14} /> Create Automation
-        </button>
-        <span id="automation-create-note" className="max-w-52 text-[10px] leading-4 text-[color:var(--portal-muted)]">The workflow builder is planned for a later phase.</span>
+          <Plus size={14} /> Create Workflow
+        </Link>
       </div>
     )
   }

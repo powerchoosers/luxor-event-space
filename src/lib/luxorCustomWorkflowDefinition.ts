@@ -1,8 +1,50 @@
 export const CUSTOM_WORKFLOW_TRIGGER = 'contact_form_inquiry_created' as const
 
-export type CustomWorkflowTrigger = typeof CUSTOM_WORKFLOW_TRIGGER
+export const CUSTOM_WORKFLOW_TRIGGERS = [
+  'contact_form_inquiry_created',
+  'sms_opt_in',
+  'tour_upcoming',
+  'tour_scheduled',
+  'tour_attended',
+  'tour_no_show',
+  'manual',
+] as const
+
+export type CustomWorkflowTrigger = (typeof CUSTOM_WORKFLOW_TRIGGERS)[number]
+
+export const CUSTOM_WORKFLOW_TRIGGER_LABELS: Record<CustomWorkflowTrigger, { label: string; description: string }> = {
+  contact_form_inquiry_created: {
+    label: 'Contact form inquiry',
+    description: 'Triggers when a prospect submits an inquiry via the website contact form.',
+  },
+  sms_opt_in: {
+    label: 'SMS opt-in confirmed',
+    description: 'Triggers when a client opts in to receive text messages from Luxor.',
+  },
+  tour_upcoming: {
+    label: 'Tour upcoming (24h reminder)',
+    description: 'Triggers 24 hours prior to a scheduled venue tour visit.',
+  },
+  tour_scheduled: {
+    label: 'Tour scheduled',
+    description: 'Triggers immediately when a prospect books a tour date and time.',
+  },
+  tour_attended: {
+    label: 'Tour attended / completed',
+    description: 'Triggers when Arianna or staff marks a tour visit completed.',
+  },
+  tour_no_show: {
+    label: 'Tour no-show',
+    description: 'Triggers when a client misses their scheduled tour appointment.',
+  },
+  manual: {
+    label: 'Manual enrollment',
+    description: 'Enrolled manually via the lead dossier 3-dot menu or bulk table action.',
+  },
+}
+
 export type CustomWorkflowStatus = 'draft' | 'active' | 'paused' | 'archived'
-export type CustomWorkflowChannel = 'email' | 'text' | 'wait' | 'condition' | 'end'
+export type CustomWorkflowChannel = 'email' | 'text' | 'call_task' | 'wait' | 'condition' | 'end'
 
 export type CustomWorkflowEmailStep = {
   id: string
@@ -14,6 +56,9 @@ export type CustomWorkflowEmailStep = {
   body: string
   ctaText: string
   ctaUrl: string
+  generationMode?: 'manual' | 'ai'
+  aiPrompt?: string
+  templateId?: string
 }
 
 export type CustomWorkflowTextStep = {
@@ -22,6 +67,18 @@ export type CustomWorkflowTextStep = {
   name: string
   body: string
   requiredConsentScope: 'marketing'
+  generationMode?: 'manual' | 'ai'
+  aiPrompt?: string
+}
+
+export type CustomWorkflowCallTaskStep = {
+  id: string
+  type: 'call_task'
+  name: string
+  scriptNotes: string
+  dueWithinHours: number
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  assignee?: string
 }
 
 export type CustomWorkflowWaitStep = {
@@ -36,7 +93,7 @@ export type CustomWorkflowConditionStep = {
   id: string
   type: 'condition'
   name: string
-  condition: 'follow_up_eligible' | 'marketing_email_consent' | 'marketing_sms_consent'
+  condition: 'follow_up_eligible' | 'marketing_email_consent' | 'marketing_sms_consent' | 'tour_scheduled' | 'tour_attended' | 'unresponsive'
   whenFalse: 'stop'
 }
 
@@ -46,7 +103,13 @@ export type CustomWorkflowEndStep = {
   name: string
 }
 
-export type CustomWorkflowStep = CustomWorkflowEmailStep | CustomWorkflowTextStep | CustomWorkflowWaitStep | CustomWorkflowConditionStep | CustomWorkflowEndStep
+export type CustomWorkflowStep =
+  | CustomWorkflowEmailStep
+  | CustomWorkflowTextStep
+  | CustomWorkflowCallTaskStep
+  | CustomWorkflowWaitStep
+  | CustomWorkflowConditionStep
+  | CustomWorkflowEndStep
 
 export type CustomWorkflowDefinition = {
   schemaVersion: 1
@@ -65,9 +128,32 @@ export const CUSTOM_WORKFLOW_ALLOWED_MERGE_FIELDS = [
   'event_type',
   'guest_count',
   'target_date',
+  'tour_date',
+  'tour_time',
+  'venue_phone',
+  'venue_email',
 ] as const
 
-const MAX_STEPS = 20
+export type CustomWorkflowMergeField = (typeof CUSTOM_WORKFLOW_ALLOWED_MERGE_FIELDS)[number]
+
+export const DYNAMIC_VARIABLE_CHIPS: Array<{
+  label: string
+  token: string
+  preview: string
+  category: 'lead' | 'event' | 'tour' | 'venue'
+}> = [
+  { label: 'First Name', token: '{{first_name}}', preview: 'Sarah', category: 'lead' },
+  { label: 'Full Name', token: '{{full_name}}', preview: 'Sarah Jenkins', category: 'lead' },
+  { label: 'Event Type', token: '{{event_type}}', preview: 'Wedding Reception', category: 'event' },
+  { label: 'Event Date', token: '{{target_date}}', preview: 'October 24, 2026', category: 'event' },
+  { label: 'Guest Count', token: '{{guest_count}}', preview: '150 guests', category: 'event' },
+  { label: 'Tour Date', token: '{{tour_date}}', preview: 'Saturday, Nov 7', category: 'tour' },
+  { label: 'Tour Time', token: '{{tour_time}}', preview: '2:00 PM', category: 'tour' },
+  { label: 'Venue Phone', token: '{{venue_phone}}', preview: '(956) 555-0199', category: 'venue' },
+  { label: 'Venue Email', token: '{{venue_email}}', preview: 'hello@luxoratlaspalmas.com', category: 'venue' },
+]
+
+const MAX_STEPS = 25
 const MAX_BODY_LENGTH = 12_000
 export const CUSTOM_WORKFLOW_TEXT_MAX_LENGTH = 480
 const MAX_WAIT_AMOUNT = 365
@@ -141,9 +227,10 @@ export function createNewContactFollowUpDefinition(): CustomWorkflowDefinition {
         ctaText: '',
         ctaUrl: '',
       },
-      { id: 'follow-up-wait', type: 'wait', name: 'Wait before follow-up', amount: null, unit: 'days' },
+      { id: 'follow-up-wait', type: 'wait', name: 'Wait before follow-up', amount: 2, unit: 'hours' },
+      { id: 'operator-call-task', type: 'call_task', name: 'Speed to lead phone call', scriptNotes: 'Call {{first_name}} to confirm date availability for their {{event_type}} with {{guest_count}}.', dueWithinHours: 3, priority: 'high', assignee: 'Arianna Patterson' },
       { id: 'eligibility-check', type: 'condition', name: 'Check that follow-up is still appropriate', condition: 'follow_up_eligible', whenFalse: 'stop' },
-      { id: 'marketing-text', type: 'text', name: 'Marketing text', body: '', requiredConsentScope: 'marketing' },
+      { id: 'marketing-text', type: 'text', name: 'Personalized follow-up text', body: 'Luxor Events: Hi {{first_name}}, Arianna here from Luxor! We would love to show you the venue for your {{event_type}}. Do you have time this week for a quick tour? Reply STOP to opt out.', requiredConsentScope: 'marketing', generationMode: 'manual' },
       { id: 'finished', type: 'end', name: 'End follow-up' },
     ],
   }
@@ -164,10 +251,10 @@ export function validateCustomWorkflowDefinition(
 
   const definition = input as Partial<CustomWorkflowDefinition>
   const errors: CustomWorkflowDefinitionError[] = []
-  rejectUnexpectedKeys(definition, ['schemaVersion', 'trigger', 'steps'], 'definition', errors)
+  rejectUnexpectedKeys(definition, ['schemaVersion', 'trigger', 'steps', 'metadata'], 'definition', errors)
   if (definition.schemaVersion !== 1) errors.push({ path: 'schemaVersion', message: 'This workflow version is not supported.' })
-  if (definition.trigger !== CUSTOM_WORKFLOW_TRIGGER) {
-    errors.push({ path: 'trigger', message: 'Only new inquiries from the verified website contact form are supported.' })
+  if (!definition.trigger || !CUSTOM_WORKFLOW_TRIGGERS.includes(definition.trigger)) {
+    errors.push({ path: 'trigger', message: 'Choose a supported workflow trigger.' })
   }
   if (!Array.isArray(definition.steps) || definition.steps.length < 2 || definition.steps.length > MAX_STEPS) {
     errors.push({ path: 'steps', message: `Add between 2 and ${MAX_STEPS} steps.` })
@@ -182,16 +269,18 @@ export function validateCustomWorkflowDefinition(
       continue
     }
     const allowedStepKeys = step.type === 'email'
-      ? ['id', 'type', 'mode', 'name', 'subject', 'previewText', 'body', 'ctaText', 'ctaUrl']
+      ? ['id', 'type', 'mode', 'name', 'subject', 'previewText', 'body', 'ctaText', 'ctaUrl', 'generationMode', 'aiPrompt', 'templateId']
       : step.type === 'text'
-        ? ['id', 'type', 'name', 'body', 'requiredConsentScope']
-        : step.type === 'wait'
-          ? ['id', 'type', 'name', 'amount', 'unit']
-          : step.type === 'condition'
-            ? ['id', 'type', 'name', 'condition', 'whenFalse']
-            : step.type === 'end'
-              ? ['id', 'type', 'name']
-              : ['id', 'type', 'name']
+        ? ['id', 'type', 'name', 'body', 'requiredConsentScope', 'generationMode', 'aiPrompt']
+        : step.type === 'call_task'
+          ? ['id', 'type', 'name', 'scriptNotes', 'dueWithinHours', 'priority', 'assignee']
+          : step.type === 'wait'
+            ? ['id', 'type', 'name', 'amount', 'unit']
+            : step.type === 'condition'
+              ? ['id', 'type', 'name', 'condition', 'whenFalse']
+              : step.type === 'end'
+                ? ['id', 'type', 'name']
+                : ['id', 'type', 'name']
     rejectUnexpectedKeys(step, allowedStepKeys, path, errors)
     if (typeof step.id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(step.id)) errors.push({ path: `${path}.id`, message: 'Step identifiers may use letters, numbers, underscores, and hyphens.' })
     if (typeof step.name !== 'string') {
@@ -203,7 +292,7 @@ export function validateCustomWorkflowDefinition(
     if (!step.name.trim() || step.name.length > 120) errors.push({ path: `${path}.name`, message: 'Enter a step name of 1 to 120 characters.' })
 
     if (step.type === 'email') {
-      if (step.mode !== 'existing_inquiry_acknowledgment' && step.mode !== 'marketing') {
+      if (step.mode && step.mode !== 'existing_inquiry_acknowledgment' && step.mode !== 'marketing') {
         errors.push({ path: `${path}.mode`, message: 'This email delivery type is unsupported.' })
       }
       if (typeof step.subject !== 'string' || typeof step.previewText !== 'string' || typeof step.body !== 'string' || typeof step.ctaText !== 'string' || typeof step.ctaUrl !== 'string') {
@@ -220,7 +309,12 @@ export function validateCustomWorkflowDefinition(
           || step.body !== '' || step.ctaText !== '' || step.ctaUrl !== '')) {
         errors.push({ path, message: 'The existing contact acknowledgment is a read-only marker; its content remains managed by the existing inquiry path.' })
       }
-      if (step.mode === 'marketing') {
+      const isAi = step.generationMode === 'ai'
+      if (isAi) {
+        if (!allowIncompleteDraft && (!step.aiPrompt || !step.aiPrompt.trim())) {
+          errors.push({ path: `${path}.aiPrompt`, message: 'Describe the email instructions for Elena AI.' })
+        }
+      } else if (step.mode !== 'existing_inquiry_acknowledgment') {
         if (step.subject.length > 500 || (!allowIncompleteDraft && !step.subject.trim()) || /[\r\n]/.test(step.subject)) errors.push({ path: `${path}.subject`, message: 'Enter a one-line subject of 1 to 500 characters.' })
         if (step.previewText.length > 500) errors.push({ path: `${path}.previewText`, message: 'Preview text is too long.' })
         if (step.body.length > MAX_BODY_LENGTH || (!allowIncompleteDraft && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Email body must be 1 to ${MAX_BODY_LENGTH} characters.` })
@@ -233,13 +327,29 @@ export function validateCustomWorkflowDefinition(
       }
     } else if (step.type === 'text') {
       if (step.requiredConsentScope !== 'marketing') errors.push({ path: `${path}.requiredConsentScope`, message: 'Automated workflow texts require marketing consent.' })
-      if (typeof step.body !== 'string') errors.push({ path: `${path}.body`, message: 'Text content must be text.' })
-      else {
-        if (step.body.length > CUSTOM_WORKFLOW_TEXT_MAX_LENGTH || (!allowIncompleteDraft && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Text body must be 1 to ${CUSTOM_WORKFLOW_TEXT_MAX_LENGTH} characters.` })
-        if (step.body.trim() && !/^(?:Luxor Event Space|Luxor Events|Luxor at Las Palmas Events|Luxor at Las Palmas)\b/i.test(step.body.trim())) errors.push({ path: `${path}.body`, message: 'Start the message with an approved Luxor brand name so the sender is identified.' })
-        if (step.body.trim() && !/\bstop\b/i.test(step.body)) errors.push({ path: `${path}.body`, message: 'Include clear STOP instructions in the text.' })
-        validateMergeFields(step.body, `${path}.body`, errors)
+      const isAi = step.generationMode === 'ai'
+      if (isAi) {
+        if (!allowIncompleteDraft && (!step.aiPrompt || !step.aiPrompt.trim())) {
+          errors.push({ path: `${path}.aiPrompt`, message: 'Describe the SMS prompt for Elena AI.' })
+        }
+      } else {
+        if (typeof step.body !== 'string') errors.push({ path: `${path}.body`, message: 'Text content must be text.' })
+        else {
+          if (step.body.length > CUSTOM_WORKFLOW_TEXT_MAX_LENGTH || (!allowIncompleteDraft && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Text body must be 1 to ${CUSTOM_WORKFLOW_TEXT_MAX_LENGTH} characters.` })
+          if (step.body.trim() && !/^(?:Luxor Event Space|Luxor Events|Luxor at Las Palmas Events|Luxor at Las Palmas)\b/i.test(step.body.trim())) errors.push({ path: `${path}.body`, message: 'Start the message with an approved Luxor brand name so the sender is identified.' })
+          if (step.body.trim() && !/\bstop\b/i.test(step.body)) errors.push({ path: `${path}.body`, message: 'Include clear STOP instructions in the text.' })
+          validateMergeFields(step.body, `${path}.body`, errors)
+        }
       }
+    } else if (step.type === 'call_task') {
+      if (!step.name.trim()) errors.push({ path: `${path}.name`, message: 'Enter a task title for this call.' })
+      if (typeof step.dueWithinHours !== 'number' || step.dueWithinHours < 1 || step.dueWithinHours > 168) {
+        errors.push({ path: `${path}.dueWithinHours`, message: 'Set a due timeframe between 1 and 168 hours.' })
+      }
+      if (!['low', 'medium', 'high', 'urgent'].includes(step.priority)) {
+        errors.push({ path: `${path}.priority`, message: 'Choose a priority (low, medium, high, urgent).' })
+      }
+      if (step.scriptNotes) validateMergeFields(step.scriptNotes, `${path}.scriptNotes`, errors)
     } else if (step.type === 'wait') {
       if (!['minutes', 'hours', 'days'].includes(step.unit)) errors.push({ path: `${path}.unit`, message: 'Choose a supported wait unit.' })
       if (step.amount !== null && (!Number.isInteger(step.amount) || step.amount < 0 || step.amount > MAX_WAIT_AMOUNT)) {
@@ -247,7 +357,7 @@ export function validateCustomWorkflowDefinition(
       }
       if (step.amount === null && !allowIncompleteDraft) errors.push({ path: `${path}.amount`, message: 'Choose a delay before this workflow can be activated.' })
     } else if (step.type === 'condition') {
-      if (!['follow_up_eligible', 'marketing_email_consent', 'marketing_sms_consent'].includes(step.condition)) {
+      if (!['follow_up_eligible', 'marketing_email_consent', 'marketing_sms_consent', 'tour_scheduled', 'tour_attended', 'unresponsive'].includes(step.condition)) {
         errors.push({ path: `${path}.condition`, message: 'This condition is not supported.' })
       }
       if (step.whenFalse !== 'stop') errors.push({ path: `${path}.whenFalse`, message: 'Conditions can only stop or continue a workflow.' })
@@ -257,9 +367,6 @@ export function validateCustomWorkflowDefinition(
   }
 
   const endSteps = definition.steps.filter((step) => Boolean(step && typeof step === 'object' && step.type === 'end'))
-  if (definition.steps[0]?.type !== 'email' || definition.steps[0].mode !== 'existing_inquiry_acknowledgment') {
-    errors.push({ path: 'steps.0', message: 'The existing contact acknowledgment must remain first so the workflow cannot send a duplicate receipt.' })
-  }
   if (endSteps.length !== 1 || definition.steps.at(-1)?.type !== 'end') {
     errors.push({ path: 'steps', message: 'A workflow must have exactly one end step, at the end.' })
   }
@@ -304,12 +411,14 @@ export function removeCustomWorkflowStep(definition: CustomWorkflowDefinition, s
 export function addCustomWorkflowStep(definition: CustomWorkflowDefinition, type: Exclude<CustomWorkflowChannel, 'end'>, id: string) {
   if (definition.steps.length >= MAX_STEPS || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(id) || definition.steps.some((step) => step.id === id)) return definition
   const step: CustomWorkflowStep = type === 'email'
-    ? { id, type, mode: 'marketing', name: 'Email follow-up', subject: '', previewText: '', body: '', ctaText: '', ctaUrl: '' }
+    ? { id, type, mode: 'marketing', name: 'Email follow-up', subject: '', previewText: '', body: '', ctaText: '', ctaUrl: '', generationMode: 'manual' }
     : type === 'text'
-      ? { id, type, name: 'Marketing text', body: '', requiredConsentScope: 'marketing' }
-      : type === 'wait'
-        ? { id, type, name: 'Wait', amount: null, unit: 'days' }
-        : { id, type, name: 'Check eligibility', condition: 'follow_up_eligible', whenFalse: 'stop' }
+      ? { id, type, name: 'Marketing text', body: '', requiredConsentScope: 'marketing', generationMode: 'manual' }
+      : type === 'call_task'
+        ? { id, type, name: 'Phone Call Task', scriptNotes: 'Call {{first_name}} regarding their {{event_type}} inquiry.', dueWithinHours: 4, priority: 'high', assignee: 'Arianna Patterson' }
+        : type === 'wait'
+          ? { id, type, name: 'Wait', amount: 1, unit: 'days' }
+          : { id, type, name: 'Check eligibility', condition: 'follow_up_eligible', whenFalse: 'stop' }
   const steps = [...definition.steps]
   steps.splice(steps.length - 1, 0, step)
   return { ...definition, steps }

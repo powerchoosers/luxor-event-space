@@ -36,6 +36,7 @@ import {
   DollarSign,
   CalendarCheck2,
   Archive,
+  Workflow,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -47,6 +48,7 @@ import { compareLuxorScheduledTours, formatLuxorTourDate, getLuxorTourSection, l
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
 import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
+import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
@@ -189,6 +191,7 @@ export default function LeadsPage() {
   const [bulkBusy, setBulkBusy] = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
+  const [bulkEnrollWorkflowOpen, setBulkEnrollWorkflowOpen] = useState(false)
   const [bulkStatus, setBulkStatus] = useState<LuxorInquiryStatus>('contacted')
   const [bulkListMode, setBulkListMode] = useState<'add' | 'remove' | null>(null)
   const [marketingListNames, setMarketingListNames] = useState<string[]>([])
@@ -1051,16 +1054,27 @@ export default function LeadsPage() {
         onClear={bulkSelection.clear}
         onAction={(action) => {
           if (action === 'status') setBulkStatusOpen(true)
+          if (action === 'enroll-workflow') setBulkEnrollWorkflowOpen(true)
           if (action === 'add-list') void openBulkList('add')
           if (action === 'remove-list') void openBulkList('remove')
           if (action === 'delete') setConfirmBulkDelete(true)
         }}
         actions={[
           { id: 'status', label: 'Change status', icon: <ArrowRightLeft size={13} /> },
+          { id: 'enroll-workflow', label: 'Enroll in workflow', icon: <Workflow size={13} /> },
           { id: 'add-list', label: 'Add to list', icon: <ListPlus size={13} /> },
           { id: 'remove-list', label: 'Remove from list', icon: <ListMinus size={13} /> },
           { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
         ]}
+      />
+      <EnrollInWorkflowModal
+        isOpen={bulkEnrollWorkflowOpen}
+        onClose={() => setBulkEnrollWorkflowOpen(false)}
+        inquiryIds={bulkSelection.resolveIds(matchingLeadIds)}
+        onSuccess={() => {
+          bulkSelection.clear()
+          void fetchLeads()
+        }}
       />
       <PortalBulkChoiceDialog
         open={bulkStatusOpen}

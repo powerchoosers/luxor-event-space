@@ -2,17 +2,40 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowDown, ArrowUp, Copy, Eye, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
-import { PortalPageFrame, PortalSelect } from '@/components/portal/PortalUI'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  Bot,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Compass,
+  Copy,
+  Eye,
+  Mail,
+  MessageSquare,
+  Phone,
+  Play,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+  Workflow,
+  Zap,
+} from 'lucide-react'
+import { PortalPageFrame, PortalSelect, PortalButton } from '@/components/portal/PortalUI'
 import {
   addCustomWorkflowStep,
   canEditCustomWorkflowStep,
   cloneCustomWorkflowDefinition,
   composeCustomWorkflowText,
+  createNewContactFollowUpDefinition,
   CUSTOM_WORKFLOW_TEXT_MAX_LENGTH,
   CUSTOM_WORKFLOW_TEXT_OPT_OUT_FOOTER,
-  createNewContactFollowUpDefinition,
+  CUSTOM_WORKFLOW_TRIGGERS,
+  CUSTOM_WORKFLOW_TRIGGER_LABELS,
   getCustomWorkflowTextBrand,
   getCustomWorkflowTextEditorContent,
   getCustomWorkflowTextEditorMaxLength,
@@ -22,7 +45,11 @@ import {
   type CustomWorkflowChannel,
   type CustomWorkflowDefinition,
   type CustomWorkflowStep,
+  type CustomWorkflowTrigger,
 } from '@/lib/luxorCustomWorkflowDefinition'
+import { PREBUILT_WORKFLOWS } from '@/lib/luxorPrebuiltWorkflows'
+import { ElenaWorkflowArchitectModal } from '@/components/portal/ElenaWorkflowArchitectModal'
+import { WorkflowVariableChipsBar } from '@/components/portal/WorkflowVariableChipsBar'
 
 type WorkflowRow = {
   id: string
@@ -36,73 +63,134 @@ type WorkflowRow = {
   archived_at: string | null
 }
 
-type ActivityRow = { id: string; event_type: string; actor_email: string | null; created_at: string; details: Record<string, unknown> }
-type WorkflowCapabilities = { canPause: boolean; canResume: boolean; canArchive: boolean; canActivate: boolean; activationMessage: string }
-type WorkflowPayload = { workflow: WorkflowRow; definition?: CustomWorkflowDefinition; activity: ActivityRow[]; capabilities?: WorkflowCapabilities; error?: string }
+type ActivityRow = {
+  id: string
+  event_type: string
+  actor_email: string | null
+  created_at: string
+  details: Record<string, unknown>
+}
 
-const ADDABLE_STEPS: Array<{ type: Exclude<CustomWorkflowChannel, 'end'>; label: string }> = [
-  { type: 'email', label: 'Email' },
-  { type: 'text', label: 'Text' },
-  { type: 'wait', label: 'Wait' },
-  { type: 'condition', label: 'Condition' },
+type WorkflowCapabilities = {
+  canPause: boolean
+  canResume: boolean
+  canArchive: boolean
+  canActivate: boolean
+  activationMessage: string
+}
+
+type WorkflowPayload = {
+  workflow: WorkflowRow
+  definition?: CustomWorkflowDefinition
+  activity: ActivityRow[]
+  capabilities?: WorkflowCapabilities
+  error?: string
+}
+
+const ADDABLE_STEPS: Array<{ type: Exclude<CustomWorkflowChannel, 'end'>; label: string; icon: React.ReactNode }> = [
+  { type: 'call_task', label: 'Call Task', icon: <Phone size={14} className="text-emerald-500" /> },
+  { type: 'email', label: 'Email', icon: <Mail size={14} className="text-[#a8792f]" /> },
+  { type: 'text', label: 'Text (SMS)', icon: <MessageSquare size={14} className="text-sky-500" /> },
+  { type: 'wait', label: 'Wait / Delay', icon: <Clock size={14} className="text-amber-500" /> },
+  { type: 'condition', label: 'Condition', icon: <Workflow size={14} className="text-purple-500" /> },
 ]
 
 export default function CustomWorkflowEditorPage() {
   const params = useParams<{ workflowId: string }>()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const workflowId = String(params.workflowId || '')
   const isNew = workflowId === 'new'
+  const prebuiltTemplateId = searchParams.get('from')
+
   const [enabled, setEnabled] = React.useState<boolean | null>(null)
-  const [unavailableReason, setUnavailableReason] = React.useState('')
   const [workflow, setWorkflow] = React.useState<WorkflowRow | null>(null)
-  const [activity, setActivity] = React.useState<ActivityRow[]>([])
   const [capabilities, setCapabilities] = React.useState<WorkflowCapabilities | null>(null)
-  const [nameDraft, setNameDraft] = React.useState('New contact follow-up')
-  const [definitionDraft, setDefinitionDraft] = React.useState<CustomWorkflowDefinition>(createNewContactFollowUpDefinition())
-  const [selectedStepId, setSelectedStepId] = React.useState('inquiry-acknowledgment')
+
+  // Initialize definition draft
+  const [nameDraft, setNameDraft] = React.useState(() => {
+    if (prebuiltTemplateId) {
+      const match = PREBUILT_WORKFLOWS.find((p) => p.id === prebuiltTemplateId)
+      if (match) return `${match.name} (Customized)`
+    }
+    return 'New Custom Workflow'
+  })
+
+  const [definitionDraft, setDefinitionDraft] = React.useState<CustomWorkflowDefinition>(() => {
+    if (prebuiltTemplateId) {
+      const match = PREBUILT_WORKFLOWS.find((p) => p.id === prebuiltTemplateId)
+      if (match) return cloneCustomWorkflowDefinition(match.definition)
+    }
+    return createNewContactFollowUpDefinition()
+  })
+
+  const [selectedStepId, setSelectedStepId] = React.useState<string>(() => {
+    return definitionDraft.steps[0]?.id || ''
+  })
+
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
-  const [previewing, setPreviewing] = React.useState(false)
-  const [previewHtml, setPreviewHtml] = React.useState<string | null>(null)
+  const [activating, setActivating] = React.useState(false)
+  const [generatingAiCopy, setGeneratingAiCopy] = React.useState(false)
+  const [isArchitectOpen, setIsArchitectOpen] = React.useState(false)
+  const [inspectorTab, setInspectorTab] = React.useState<'edit' | 'preview'>('edit')
   const [feedback, setFeedback] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [refreshKey, setRefreshKey] = React.useState(0)
+  const [mobileInspectorOpen, setMobileInspectorOpen] = React.useState(false)
 
   const dirty = isNew
-    ? Boolean(nameDraft.trim() !== 'New contact follow-up' || JSON.stringify(definitionDraft) !== JSON.stringify(createNewContactFollowUpDefinition()))
-    : Boolean(workflow && workflow.status === 'draft' && (nameDraft !== workflow.name || JSON.stringify(definitionDraft) !== JSON.stringify(workflow.draft_definition)))
-  const selectedStep = definitionDraft.steps.find((step) => step.id === selectedStepId) || null
+    ? Boolean(nameDraft.trim() !== 'New Custom Workflow' || definitionDraft.steps.length > 0)
+    : Boolean(
+        workflow &&
+          workflow.status === 'draft' &&
+          (nameDraft !== workflow.name ||
+            JSON.stringify(definitionDraft) !== JSON.stringify(workflow.draft_definition)),
+      )
+
+  const selectedStep = definitionDraft.steps.find((s) => s.id === selectedStepId) || null
   const validationErrors = React.useMemo(() => validateCustomWorkflowDefinition(definitionDraft), [definitionDraft])
 
+  // Check authoring status
   React.useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
     setError(null)
     fetch('/api/marketing/custom-workflows', { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
-        const payload = await response.json().catch(() => ({})) as { enabled?: boolean; unavailableReason?: string; error?: string }
+        const payload = (await response.json().catch(() => ({}))) as {
+          enabled?: boolean
+          error?: string
+        }
         if (!response.ok) throw new Error(payload.error || 'Custom workflow storage could not be checked.')
         setEnabled(payload.enabled === true)
-        setUnavailableReason(payload.unavailableReason || '')
       })
       .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) setError(requestError instanceof Error ? requestError.message : 'Custom workflow storage could not be checked.')
+        if (!controller.signal.aborted) {
+          setError(requestError instanceof Error ? requestError.message : 'Could not check workflow authorization.')
+        }
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
     return () => controller.abort()
   }, [])
 
+  // Load existing workflow if not new
   React.useEffect(() => {
     if (isNew || enabled === null) return
     const controller = new AbortController()
     setLoading(true)
     setError(null)
-    fetch(`/api/marketing/custom-workflows/${encodeURIComponent(workflowId)}`, { cache: 'no-store', signal: controller.signal })
+
+    fetch(`/api/marketing/custom-workflows/${encodeURIComponent(workflowId)}`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
       .then(async (response) => {
-        const payload = await response.json().catch(() => ({})) as WorkflowPayload
-        if (!response.ok || !payload.workflow) throw new Error(payload.error || 'The custom workflow could not load.')
+        const payload = (await response.json().catch(() => ({}))) as WorkflowPayload
+        if (!response.ok || !payload.workflow) throw new Error(payload.error || 'Workflow could not load.')
         setWorkflow(payload.workflow)
-        setActivity(Array.isArray(payload.activity) ? payload.activity : [])
         setCapabilities(payload.capabilities || null)
         setNameDraft(payload.workflow.name)
         const displayedDefinition = payload.definition || payload.workflow.draft_definition
@@ -110,310 +198,1004 @@ export default function CustomWorkflowEditorPage() {
         setSelectedStepId(displayedDefinition.steps[0]?.id || '')
       })
       .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) setError(requestError instanceof Error ? requestError.message : 'The custom workflow could not load.')
+        if (!controller.signal.aborted) {
+          setError(requestError instanceof Error ? requestError.message : 'Workflow could not load.')
+        }
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
     return () => controller.abort()
   }, [enabled, isNew, refreshKey, workflowId])
 
-  React.useEffect(() => {
-    if (!dirty) return
-    const warnBeforeLeaving = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
-    window.addEventListener('beforeunload', warnBeforeLeaving)
-    const guardInternalNavigation = (event: MouseEvent) => {
-      if (!(event.target instanceof Element)) return
-      const anchor = event.target.closest('a[href]') as HTMLAnchorElement | null
-      if (!anchor || anchor.target === '_blank' || event.defaultPrevented) return
-      const destination = new URL(anchor.href, window.location.href)
-      if (destination.origin !== window.location.origin || destination.pathname === window.location.pathname) return
-      if (!window.confirm('Discard unsaved workflow changes and leave this editor?')) {
-        event.preventDefault()
-        event.stopImmediatePropagation()
-      }
-    }
-    document.addEventListener('click', guardInternalNavigation, true)
-    return () => {
-      window.removeEventListener('beforeunload', warnBeforeLeaving)
-      document.removeEventListener('click', guardInternalNavigation, true)
-    }
-  }, [dirty])
-
+  // Step operations
   function changeStep(stepId: string, update: (step: CustomWorkflowStep) => CustomWorkflowStep) {
-    setDefinitionDraft((current) => ({ ...current, steps: current.steps.map((step) => step.id === stepId ? update(step) : step) }))
-    setPreviewHtml(null)
+    setDefinitionDraft((current) => ({
+      ...current,
+      steps: current.steps.map((step) => (step.id === stepId ? update(step) : step)),
+    }))
     setFeedback(null)
   }
 
-  function updateStepField<K extends keyof CustomWorkflowStep>(stepId: string, key: K, value: CustomWorkflowStep[K]) {
+  function updateStepField(stepId: string, key: string, value: unknown) {
     changeStep(stepId, (step) => ({ ...step, [key]: value }) as CustomWorkflowStep)
   }
 
   function selectStep(stepId: string) {
-    if (stepId === selectedStepId) return
     setSelectedStepId(stepId)
-    setPreviewHtml(null)
+    setMobileInspectorOpen(true)
   }
 
   function addStep(type: Exclude<CustomWorkflowChannel, 'end'>) {
-    const id = `${type}-${crypto.randomUUID()}`
+    const id = `${type}-${crypto.randomUUID().slice(0, 8)}`
     const next = addCustomWorkflowStep(definitionDraft, type, id)
     setDefinitionDraft(next)
     setSelectedStepId(id)
-    setPreviewHtml(null)
+    setMobileInspectorOpen(true)
   }
 
   function moveStep(stepId: string, direction: -1 | 1) {
     setDefinitionDraft((current) => moveCustomWorkflowStep(current, stepId, direction))
-    setPreviewHtml(null)
   }
 
   function removeStep(stepId: string) {
-    const step = definitionDraft.steps.find((candidate) => candidate.id === stepId)
+    const step = definitionDraft.steps.find((c) => c.id === stepId)
     if (!step || !canEditCustomWorkflowStep(step)) return
-    if (!window.confirm(`Remove “${step.name}” from this unsaved draft?`)) return
+    if (!window.confirm(`Remove “${step.name}” from this workflow?`)) return
     const next = removeCustomWorkflowStep(definitionDraft, stepId)
     setDefinitionDraft(next)
-    setSelectedStepId(next.steps.find((candidate) => candidate.id !== stepId)?.id || '')
-    setPreviewHtml(null)
+    setSelectedStepId(next.steps.find((c) => c.id !== stepId)?.id || '')
   }
 
-  async function createDraft() {
-    setSaving(true); setError(null); setFeedback(null)
+  function handleInsertChip(token: string) {
+    if (!selectedStep) return
+    if (selectedStep.type === 'email') {
+      const current = selectedStep.body || ''
+      updateStepField(selectedStep.id, 'body', `${current} ${token}`.trim())
+    } else if (selectedStep.type === 'text') {
+      const current = selectedStep.body || ''
+      updateStepField(selectedStep.id, 'body', `${current} ${token}`.trim())
+    } else if (selectedStep.type === 'call_task') {
+      const current = selectedStep.scriptNotes || ''
+      updateStepField(selectedStep.id, 'scriptNotes', `${current} ${token}`.trim())
+    }
+  }
+
+  // AI Message Copilot
+  async function handleGenerateAiCopy(channel: 'email' | 'text') {
+    if (!selectedStep) return
+    setGeneratingAiCopy(true)
+    setError(null)
+
     try {
-      const response = await fetch('/api/marketing/custom-workflows', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nameDraft, definition: definitionDraft }) })
-      const payload = await response.json().catch(() => ({})) as { workflow?: WorkflowRow; error?: string }
-      if (!response.ok || !payload.workflow) throw new Error(payload.error || 'The workflow draft could not be created.')
-      setWorkflow(payload.workflow)
-      router.replace(`/portal/marketing/custom-workflows/${encodeURIComponent(payload.workflow.id)}`)
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'The workflow draft could not be created.')
-    } finally { setSaving(false) }
+      const prompt =
+        channel === 'email'
+          ? (selectedStep?.type === 'email' ? selectedStep.aiPrompt : null) || 'Warm invitation email for a Luxor tour regarding their event.'
+          : (selectedStep?.type === 'text' ? selectedStep.aiPrompt : null) || 'Friendly check-in text from Arianna asking if they want to schedule a tour.'
+
+      const response = await fetch('/api/marketing/custom-workflows/ai-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel,
+          prompt,
+          leadContext: {
+            eventType: '{{event_type}}',
+            firstName: '{{first_name}}',
+          },
+        }),
+      })
+
+      const data = (await response.json().catch(() => ({}))) as {
+        subject?: string
+        previewText?: string
+        body?: string
+        ctaText?: string
+        error?: string
+      }
+
+      if (!response.ok || !data.body) {
+        throw new Error(data.error || 'Elena could not generate copy.')
+      }
+
+      if (channel === 'email') {
+        changeStep(selectedStep.id, (step) => {
+          if (step.type !== 'email') return step
+          return {
+            ...step,
+            subject: data.subject || step.subject,
+            previewText: data.previewText || step.previewText,
+            body: data.body || step.body,
+            ctaText: data.ctaText || step.ctaText,
+          }
+        })
+      } else {
+        changeStep(selectedStep.id, (step) => {
+          if (step.type !== 'text') return step
+          return {
+            ...step,
+            body: data.body || step.body,
+          }
+        })
+      }
+      setFeedback('Generated with Elena AI.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI generation failed.')
+    } finally {
+      setGeneratingAiCopy(false)
+    }
   }
 
+  // Save draft
   async function saveDraft() {
-    if (!workflow || !dirty || workflow.status !== 'draft') return
-    setSaving(true); setError(null); setFeedback(null)
-    try {
-      const response = await fetch(`/api/marketing/custom-workflows/${encodeURIComponent(workflow.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nameDraft, definition: definitionDraft, expectedRevision: workflow.draft_revision }) })
-      const payload = await response.json().catch(() => ({})) as { workflow?: WorkflowRow; error?: string }
-      if (!response.ok || !payload.workflow) throw new Error(payload.error || 'The workflow draft could not be saved.')
-      setWorkflow(payload.workflow)
-      setDefinitionDraft(cloneCustomWorkflowDefinition(payload.workflow.draft_definition))
-      setNameDraft(payload.workflow.name)
-      setFeedback('Saved and reloaded from the current draft revision.')
-      setRefreshKey((value) => value + 1)
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'The workflow draft could not be saved.')
-    } finally { setSaving(false) }
-  }
+    setSaving(true)
+    setError(null)
+    setFeedback(null)
 
-  async function previewEmail() {
-    if (!selectedStep || selectedStep.type !== 'email' || selectedStep.mode !== 'marketing') return
-    setPreviewing(true); setError(null); setPreviewHtml(null)
     try {
-      const response = await fetch('/api/marketing/custom-workflows/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ step: selectedStep }) })
-      const payload = await response.json().catch(() => ({})) as { html?: string; error?: string; sent?: boolean }
-      if (!response.ok || !payload.html || payload.sent !== false) throw new Error(payload.error || 'The no-send preview could not be rendered.')
-      setPreviewHtml(payload.html)
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'The preview could not be rendered.')
-    } finally { setPreviewing(false) }
-  }
-
-  function cancelDraft() {
-    if (workflow) {
-      setNameDraft(workflow.name)
-      setDefinitionDraft(cloneCustomWorkflowDefinition(workflow.draft_definition))
-      setSelectedStepId(workflow.draft_definition.steps[0]?.id || '')
-    } else {
-      setNameDraft('New contact follow-up')
-      setDefinitionDraft(createNewContactFollowUpDefinition())
-      setSelectedStepId('inquiry-acknowledgment')
+      if (isNew) {
+        const response = await fetch('/api/marketing/custom-workflows', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: nameDraft, definition: definitionDraft }),
+        })
+        const payload = (await response.json().catch(() => ({}))) as {
+          workflow?: WorkflowRow
+          error?: string
+        }
+        if (!response.ok || !payload.workflow) throw new Error(payload.error || 'Could not save workflow draft.')
+        router.replace(`/portal/marketing/custom-workflows/${encodeURIComponent(payload.workflow.id)}`)
+      } else {
+        if (!workflow) return
+        const response = await fetch(`/api/marketing/custom-workflows/${encodeURIComponent(workflow.id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: nameDraft,
+            definition: definitionDraft,
+            expectedRevision: workflow.draft_revision,
+          }),
+        })
+        const payload = (await response.json().catch(() => ({}))) as {
+          workflow?: WorkflowRow
+          error?: string
+        }
+        if (!response.ok || !payload.workflow) throw new Error(payload.error || 'Could not save workflow draft.')
+        setWorkflow(payload.workflow)
+        setDefinitionDraft(cloneCustomWorkflowDefinition(payload.workflow.draft_definition))
+        setNameDraft(payload.workflow.name)
+        setFeedback('Saved successfully.')
+        setRefreshKey((v) => v + 1)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save draft.')
+    } finally {
+      setSaving(false)
     }
-    setPreviewHtml(null); setFeedback('Unsaved workflow changes were discarded.'); setError(null)
   }
 
-  async function duplicateDraft() {
-    if (!workflow || (dirty && !window.confirm('Discard unsaved changes and duplicate the last saved revision?'))) return
-    setSaving(true); setError(null)
-    try {
-      const response = await fetch(`/api/marketing/custom-workflows/${encodeURIComponent(workflow.id)}/duplicate`, { method: 'POST' })
-      const payload = await response.json().catch(() => ({})) as { workflow?: WorkflowRow; error?: string }
-      if (!response.ok || !payload.workflow) throw new Error(payload.error || 'The workflow could not be duplicated.')
-      router.push(`/portal/marketing/custom-workflows/${encodeURIComponent(payload.workflow.id)}`)
-    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'The workflow could not be duplicated.') }
-    finally { setSaving(false) }
-  }
-
-  async function changeLifecycle(action: 'activate' | 'pause' | 'resume' | 'archive') {
+  // Activate workflow
+  async function handleToggleActivate() {
     if (!workflow) return
-    if (action === 'activate' && (dirty || validationErrors.length > 0)) return
-    const confirmations = {
-      activate: `Activate "${workflow.name}" for new eligible contact-form inquiries? Only inquiries created after activation may enroll; existing contacts will not be backfilled. The saved version will be pinned for those enrollments.`,
-      pause: 'Pause this workflow? New inquiries will not enroll, and queued custom messages will wait until it is resumed.',
-      resume: 'Resume this workflow? Unsent steps will be rechecked for current eligibility and consent before dispatch.',
-      archive: dirty
-        ? 'Discard unsaved changes and archive the last saved workflow? History stays available; only its unsent custom work is cancelled.'
-        : 'Archive this workflow? History stays available; only its unsent custom work is cancelled.',
-    }
-    const confirmation = dirty && action !== 'archive'
-      ? 'Discard unsaved draft changes and continue?'
-      : confirmations[action]
-    if (!window.confirm(confirmation)) return
-    setSaving(true); setError(null)
+    const nextAction = workflow.status === 'active' ? 'pause' : 'activate'
+    setActivating(true)
+    setError(null)
+
     try {
-      const response = await fetch(`/api/marketing/custom-workflows/${encodeURIComponent(workflow.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) })
-      const payload = await response.json().catch(() => ({})) as WorkflowPayload
-      if (!response.ok || !payload.workflow) throw new Error(payload.error || `The workflow could not be ${action}d.`)
-      setWorkflow(payload.workflow); setActivity(payload.activity || []); setCapabilities(payload.capabilities || null)
-      setNameDraft(payload.workflow.name); setDefinitionDraft(cloneCustomWorkflowDefinition(payload.definition || payload.workflow.draft_definition))
-      setFeedback(`Workflow ${action}d. Its history is preserved.`); setRefreshKey((value) => value + 1)
-    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : `The workflow could not be ${action}d.`) }
-    finally { setSaving(false) }
+      const response = await fetch(`/api/marketing/custom-workflows/${encodeURIComponent(workflow.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: nextAction }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as WorkflowPayload
+      if (!response.ok || !payload.workflow) throw new Error(payload.error || 'Lifecycle update failed.')
+      setWorkflow(payload.workflow)
+      setFeedback(`Workflow is now ${payload.workflow.status}.`)
+      setRefreshKey((v) => v + 1)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Lifecycle change failed.')
+    } finally {
+      setActivating(false)
+    }
   }
 
-  if (loading || enabled === null) return <PortalPageFrame><LoadingState /></PortalPageFrame>
+  if (loading && !workflow && !isNew) {
+    return (
+      <PortalPageFrame>
+        <div className="flex h-96 items-center justify-center">
+          <RefreshCw className="animate-spin text-[#caa24c]" size={28} />
+        </div>
+      </PortalPageFrame>
+    )
+  }
 
   return (
-    <PortalPageFrame className="pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-6">
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto portal-scrollbar pb-4">
-        <header className="border-b border-[color:var(--portal-border)] pb-5">
-          <Link href="/portal/marketing?tab=automations" className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><ArrowLeft size={15} aria-hidden="true" />Back to automation library</Link>
-          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="min-w-0 flex-1">
-              <label htmlFor="workflow-name" className="text-[10px] font-black uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">Workflow name</label>
-              <input id="workflow-name" value={nameDraft} onChange={(event) => { setNameDraft(event.target.value); setFeedback(null) }} disabled={!enabled || (workflow !== null && workflow.status !== 'draft')} maxLength={120} className="mt-2 min-h-12 w-full max-w-2xl border-b border-[color:var(--portal-border)] bg-transparent px-1 py-2 font-serif text-2xl font-semibold text-[color:var(--portal-text)] outline-none focus:border-[#caa24c] disabled:opacity-70 sm:text-3xl" />
+    <PortalPageFrame className="flex min-h-0 flex-1 flex-col overflow-clip">
+      {/* Elena Architect Modal */}
+      <ElenaWorkflowArchitectModal
+        isOpen={isArchitectOpen}
+        onClose={() => setIsArchitectOpen(false)}
+        onApplyWorkflow={({ name, definition }) => {
+          setNameDraft(name)
+          setDefinitionDraft(definition)
+          setSelectedStepId(definition.steps[0]?.id || '')
+          setFeedback('Elena architected workflow applied.')
+        }}
+      />
+
+      {/* Top Navigation & Status Bar */}
+      <div className="flex shrink-0 flex-col gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            href="/portal/marketing?tab=automations"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition hover:text-[color:var(--portal-text)]"
+          >
+            <ArrowLeft size={16} />
+          </Link>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                placeholder="Workflow name"
+                className="min-w-0 truncate font-serif text-lg font-semibold text-[color:var(--portal-text)] bg-transparent outline-none focus:ring-1 focus:ring-[#caa24c]/50 rounded px-1 -mx-1"
+              />
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                  workflow?.status === 'active'
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                }`}
+              >
+                {workflow?.status || 'Draft'}
+              </span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {!isNew && workflow?.status === 'draft' && capabilities?.canActivate ? <button type="button" disabled={!enabled || saving || dirty || validationErrors.length > 0} onClick={() => changeLifecycle('activate')} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#caa24c] px-3 text-xs font-bold text-[#17130b] disabled:cursor-not-allowed disabled:opacity-50">Activate for new inquiries</button> : null}
-              {!isNew && workflow ? <button type="button" disabled={!enabled || saving} onClick={duplicateDraft} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"><Copy size={14} />Duplicate</button> : null}
-              {!isNew && workflow?.status === 'active' && capabilities?.canPause ? <button type="button" disabled={!enabled || saving || dirty} onClick={() => changeLifecycle('pause')} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Pause</button> : null}
-              {!isNew && workflow?.status === 'paused' && capabilities?.canResume ? <button type="button" disabled={!enabled || saving || dirty} onClick={() => changeLifecycle('resume')} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Resume</button> : null}
-              {!isNew && workflow && capabilities?.canArchive && (workflow.status === 'draft' || workflow.status === 'paused') ? <button type="button" disabled={!enabled || saving} onClick={() => changeLifecycle('archive')} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"><Trash2 size={14} />Archive</button> : null}
-              <button type="button" disabled={!enabled || saving || (!isNew && !dirty)} onClick={isNew ? createDraft : saveDraft} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] disabled:cursor-not-allowed disabled:opacity-50"><Save size={14} />{saving ? 'Saving…' : isNew ? 'Create draft' : 'Save draft'}</button>
-            </div>
-          </div>
-          <p className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[color:var(--portal-muted)]"><span><strong className="text-[color:var(--portal-text)]">Status:</strong> {workflow ? statusLabel(workflow.status) : 'Draft setup'}</span><span><strong className="text-[color:var(--portal-text)]">Trigger:</strong> New eligible website contact form inquiry</span><span><strong className="text-[color:var(--portal-text)]">Updated:</strong> {workflow ? formatDate(workflow.updated_at) : 'Not saved'}</span><span><strong className="text-[color:var(--portal-text)]">Draft revision:</strong> {workflow?.draft_revision ?? 'Not saved'}</span></p>
-          <p className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Saving a draft never activates it. Custom workflow versions remain separate from the existing brochure sequence, queued messages, and inquiry acknowledgments.</p>
-          {workflow?.status === 'draft' ? <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{capabilities?.activationMessage || 'Activation is disabled by the workflow controls.'}</p> : null}
-        </header>
-
-        {!enabled ? <Notice title="Draft storage is unavailable." body={unavailableReason || 'The custom workflow schema has not been validated in its disposable PostgreSQL environment yet.'} /> : null}
-        {error ? <Notice title="Action could not be completed." body={error} tone="error" /> : null}
-        {feedback ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">{feedback}</p> : null}
-        {validationErrors.length ? <Notice title="Draft needs review before it can run." body={`${validationErrors.length} workflow setup ${validationErrors.length === 1 ? 'item needs' : 'items need'} attention. ${validationErrors[0].message}`} /> : null}
-
-        <div className="grid gap-5 xl:grid-cols-[minmax(17rem,.8fr)_minmax(0,1.2fr)]">
-          <section aria-label="Ordered workflow steps" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
-            <div className="flex items-center justify-between gap-3"><h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Sequence</h2><span className="text-[10px] font-semibold text-[color:var(--portal-muted)]">{definitionDraft.steps.length} steps</span></div>
-            <ol className="mt-4 space-y-2">
-              {definitionDraft.steps.map((step, index) => <li key={step.id}><button type="button" onClick={() => selectStep(step.id)} className={`flex min-h-14 w-full items-center gap-3 rounded-xl border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${step.id === selectedStepId ? 'border-[#caa24c]/50 bg-[#caa24c]/10' : 'border-[color:var(--portal-border)] hover:bg-[color:var(--portal-soft)]'}`}><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[color:var(--portal-border)] text-[10px] font-bold tabular-nums text-[color:var(--portal-muted)]">{index + 1}</span><span className="min-w-0 flex-1"><span className="block break-words text-xs font-bold text-[color:var(--portal-text)]">{step.name}</span><span className="mt-1 block text-[10px] text-[color:var(--portal-muted)]">{step.type === 'email' ? step.mode === 'existing_inquiry_acknowledgment' ? 'Existing acknowledgment · no additional send' : 'Email' : step.type === 'text' ? 'SMS · marketing consent required' : step.type === 'wait' ? waitDescription(step) : step.type === 'condition' ? conditionDescription(step) : 'End'}</span></span></button></li>)}
-            </ol>
-            {workflow?.status === 'draft' || isNew ? <div className="mt-4 border-t border-[color:var(--portal-border)] pt-4"><p className="text-[10px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-muted)]">Add step</p><div className="mt-2 grid grid-cols-2 gap-2">{ADDABLE_STEPS.map((item) => <button key={item.type} type="button" disabled={!enabled || definitionDraft.steps.length >= 20} onClick={() => addStep(item.type)} className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-[color:var(--portal-border)] px-2 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"><Plus size={13} />{item.label}</button>)}</div></div> : null}
-          </section>
-
-          <div className="space-y-5">
-            <section aria-label="Selected step details" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-              {selectedStep ? <StepEditor step={selectedStep} editable={Boolean(enabled && (isNew || workflow?.status === 'draft'))} index={definitionDraft.steps.findIndex((step) => step.id === selectedStep.id)} total={definitionDraft.steps.length} onChange={(key, value) => updateStepField(selectedStep.id, key as never, value as never)} onMove={(direction) => moveStep(selectedStep.id, direction)} onRemove={() => removeStep(selectedStep.id)} onPreview={previewEmail} previewing={previewing} /> : <p className="text-sm text-[color:var(--portal-muted)]">Select a step to inspect its configuration.</p>}
-              {previewHtml ? <div className="mt-5 overflow-hidden rounded-xl border border-[color:var(--portal-border)]"><div className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3"><p className="text-xs font-bold text-[color:var(--portal-text)]">Email preview</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Sample personalization only. No message was queued or sent.</p></div><iframe title="Custom workflow email preview" srcDoc={previewHtml} sandbox="" className="h-[32rem] w-full bg-white" /></div> : null}
-            </section>
-
-            <section aria-labelledby="workflow-activity-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5"><div className="flex items-center justify-between gap-3"><div><h2 id="workflow-activity-heading" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Activity</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Workflow changes, eligible enrollments, step progress, and delivery outcomes are recorded here.</p></div><button type="button" onClick={() => setRefreshKey((value) => value + 1)} disabled={!workflow || !enabled} aria-label="Refresh workflow and activity" className="grid min-h-10 min-w-10 place-items-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] disabled:opacity-50"><RefreshCw size={14} /></button></div>{activity.length ? <ol className="mt-3 divide-y divide-[color:var(--portal-border)]">{activity.map((item) => <li key={item.id} className="py-3"><p className="text-xs font-semibold text-[color:var(--portal-text)]">{activityLabel(item.event_type)}</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{formatDate(item.created_at)}{item.actor_email ? ` · ${item.actor_email}` : ''}</p></li>)}</ol> : <p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)]">{workflow ? 'No saved activity is available.' : 'Activity appears after a draft is saved.'}</p>}</section>
+            <p className="text-[11px] text-[color:var(--portal-muted)]">
+              {definitionDraft.steps.length} steps configured · {dirty ? 'Unsaved changes' : 'All changes saved'}
+            </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--portal-border)] pt-4"><p className="text-[11px] leading-5 text-[color:var(--portal-muted)]">The existing contact acknowledgment is reused as the first step. Message content and delay need owner review before activating this workflow.</p><div className="flex gap-2"><button type="button" onClick={cancelDraft} disabled={!dirty || saving || !enabled} className="min-h-11 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Cancel changes</button><button type="button" onClick={() => setRefreshKey((value) => value + 1)} disabled={!workflow || dirty || saving || !enabled} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"><RefreshCw size={13} />Reload</button></div></div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Elena Architect Button */}
+          <button
+            type="button"
+            onClick={() => setIsArchitectOpen(true)}
+            className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-[#caa24c]/60 bg-[#caa24c]/10 px-3 text-xs font-bold text-[#8c6424] dark:text-[#f1d27a] transition hover:bg-[#caa24c]/20"
+          >
+            <Compass size={14} />
+            <span>Elena Architect</span>
+          </button>
+
+          {/* Save Draft Button */}
+          <PortalButton
+            variant="primary"
+            onClick={saveDraft}
+            disabled={saving || (!dirty && !isNew)}
+            className="min-h-9 px-4 text-xs"
+          >
+            {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+            <span>{isNew ? 'Create Workflow' : 'Save Draft'}</span>
+          </PortalButton>
+
+          {/* Activate / Pause Toggle (for saved workflows) */}
+          {!isNew && workflow ? (
+            <PortalButton
+              variant="secondary"
+              onClick={handleToggleActivate}
+              disabled={activating || validationErrors.length > 0}
+              className="min-h-9 text-xs"
+            >
+              {activating ? (
+                <RefreshCw size={13} className="animate-spin" />
+              ) : workflow.status === 'active' ? (
+                'Pause Workflow'
+              ) : (
+                'Activate Workflow'
+              )}
+            </PortalButton>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Banner / Feedback Alerts */}
+      {feedback ? (
+        <div className="flex items-center justify-between border-b border-emerald-500/25 bg-emerald-500/10 px-6 py-2 text-xs text-emerald-600 dark:text-emerald-400">
+          <span>{feedback}</span>
+          <button type="button" onClick={() => setFeedback(null)}>
+            ✕
+          </button>
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="flex items-center justify-between border-b border-rose-500/25 bg-rose-500/10 px-6 py-2 text-xs text-rose-500">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)}>
+            ✕
+          </button>
+        </div>
+      ) : null}
+
+      {/* Main Workspace Frame: Two Columns (Canvas + Inspector) */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
+        {/* Left Column: Visual Sequencer Canvas */}
+        <div className="flex-1 overflow-y-auto portal-scrollbar p-4 sm:p-6 lg:p-8 space-y-4">
+          {/* Trigger Header Card */}
+          <div className="rounded-2xl border-2 border-[#caa24c]/60 bg-[color:var(--portal-card)] p-4 sm:p-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-[#17130b]">
+                  <Workflow size={20} />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">
+                    Workflow Trigger
+                  </span>
+                  <h3 className="font-serif text-base font-semibold text-[color:var(--portal-text)]">
+                    {CUSTOM_WORKFLOW_TRIGGER_LABELS[definitionDraft.trigger]?.label || 'Trigger Event'}
+                  </h3>
+                </div>
+              </div>
+
+              {/* Trigger Dropdown */}
+              <div className="w-full sm:w-64">
+                <PortalSelect
+                  value={definitionDraft.trigger}
+                  onChange={(val) => {
+                    setDefinitionDraft((curr) => ({
+                      ...curr,
+                      trigger: val as CustomWorkflowTrigger,
+                    }))
+                  }}
+                  options={CUSTOM_WORKFLOW_TRIGGERS.map((t) => ({
+                    value: t,
+                    label: CUSTOM_WORKFLOW_TRIGGER_LABELS[t]?.label || t,
+                  }))}
+                />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-[color:var(--portal-muted)]">
+              {CUSTOM_WORKFLOW_TRIGGER_LABELS[definitionDraft.trigger]?.description}
+            </p>
+          </div>
+
+          {/* Step Timeline Nodes */}
+          <div className="space-y-3 relative pl-3 sm:pl-4 border-l-2 border-[#caa24c]/30 ml-5 sm:ml-6 my-4">
+            {definitionDraft.steps.map((step, idx) => {
+              const isSelected = selectedStepId === step.id
+              const isEnd = step.type === 'end'
+              const canEdit = canEditCustomWorkflowStep(step)
+
+              return (
+                <div key={step.id || idx} className="relative group">
+                  {/* Step Card */}
+                  <div
+                    onClick={() => selectStep(step.id)}
+                    className={`relative cursor-pointer rounded-2xl border p-4 transition ${
+                      isSelected
+                        ? 'border-[#caa24c] bg-[#caa24c]/10 shadow-sm ring-2 ring-[#caa24c]/30'
+                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        {/* Step Type Icon */}
+                        <div
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white ${
+                            step.type === 'call_task'
+                              ? 'bg-emerald-500'
+                              : step.type === 'email'
+                              ? 'bg-[#a8792f]'
+                              : step.type === 'text'
+                              ? 'bg-sky-500'
+                              : step.type === 'wait'
+                              ? 'bg-amber-500'
+                              : step.type === 'condition'
+                              ? 'bg-purple-500'
+                              : 'bg-stone-500'
+                          }`}
+                        >
+                          {step.type === 'call_task' ? (
+                            <Phone size={16} />
+                          ) : step.type === 'email' ? (
+                            <Mail size={16} />
+                          ) : step.type === 'text' ? (
+                            <MessageSquare size={16} />
+                          ) : step.type === 'wait' ? (
+                            <Clock size={16} />
+                          ) : (
+                            <CheckCircle2 size={16} />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-serif text-sm font-semibold text-[color:var(--portal-text)] truncate">
+                              {step.name}
+                            </span>
+                            <span className="rounded bg-[color:var(--portal-soft)] px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-[color:var(--portal-muted)]">
+                              {step.type === 'call_task'
+                                ? `Call (${step.priority})`
+                                : step.type}
+                            </span>
+                            {((step.type === 'email' || step.type === 'text') && step.generationMode === 'ai') ? (
+                              <span className="rounded-full bg-[#caa24c]/20 px-2 py-0.5 text-[10px] font-bold text-[#8c6424] dark:text-[#f1d27a]">
+                                AI Powered
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {/* Snippet preview */}
+                          <div className="mt-1 text-xs text-[color:var(--portal-muted)] line-clamp-2">
+                            {step.type === 'call_task' && step.scriptNotes ? (
+                              <span>Script: {step.scriptNotes}</span>
+                            ) : step.type === 'email' && step.subject ? (
+                              <span>Subject: {step.subject}</span>
+                            ) : step.type === 'text' && step.body ? (
+                              <span>{step.body}</span>
+                            ) : step.type === 'wait' ? (
+                              <span>Wait {step.amount} {step.unit}</span>
+                            ) : step.type === 'condition' ? (
+                              <span>Condition: {step.condition}</span>
+                            ) : isEnd ? (
+                              <span>Sequence ends cleanly.</span>
+                            ) : (
+                              <span className="italic">Click to configure step details...</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Step Action Buttons (move, delete) */}
+                      {canEdit && !isEnd ? (
+                        <div
+                          className="flex items-center gap-1 opacity-80 group-hover:opacity-100"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => moveStep(step.id, -1)}
+                            disabled={idx <= (definitionDraft.steps[0]?.type === 'email' && definitionDraft.steps[0].mode === 'existing_inquiry_acknowledgment' ? 1 : 0)}
+                            className="rounded p-1 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-30"
+                          >
+                            <ArrowUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveStep(step.id, 1)}
+                            disabled={idx >= definitionDraft.steps.length - 2}
+                            className="rounded p-1 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-30"
+                          >
+                            <ArrowDown size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeStep(step.id)}
+                            className="rounded p-1 text-rose-500 hover:bg-rose-500/10"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Add Step Connector between nodes */}
+                  {!isEnd ? (
+                    <div className="my-2 flex items-center justify-center">
+                      <div className="h-4 w-0.5 bg-[#caa24c]/40" />
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Add Step Button Bar */}
+          <div className="rounded-2xl border border-dashed border-[#caa24c]/50 bg-[color:var(--portal-card)] p-4">
+            <p className="text-center text-xs font-bold text-[color:var(--portal-text)] mb-3">
+              + Insert Step Into Sequence
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {ADDABLE_STEPS.map((addable) => (
+                <button
+                  key={addable.type}
+                  type="button"
+                  onClick={() => addStep(addable.type)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c] hover:bg-[#caa24c]/10"
+                >
+                  {addable.icon}
+                  <span>{addable.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Step Inspector & Live Preview */}
+        <div
+          className={`lg:w-[460px] xl:w-[500px] border-t lg:border-t-0 lg:border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col shrink-0 ${
+            mobileInspectorOpen ? 'fixed inset-0 z-40 bg-[color:var(--portal-card)] lg:static' : 'hidden lg:flex'
+          }`}
+        >
+          {/* Inspector Header */}
+          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-3.5">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setInspectorTab('edit')}
+                className={`pb-1 text-xs font-bold transition border-b-2 ${
+                  inspectorTab === 'edit'
+                    ? 'border-[#caa24c] text-[#8c6424] dark:text-[#f1d27a]'
+                    : 'border-transparent text-[color:var(--portal-muted)]'
+                }`}
+              >
+                Step Configuration
+              </button>
+              <button
+                type="button"
+                onClick={() => setInspectorTab('preview')}
+                className={`pb-1 text-xs font-bold transition border-b-2 ${
+                  inspectorTab === 'preview'
+                    ? 'border-[#caa24c] text-[#8c6424] dark:text-[#f1d27a]'
+                    : 'border-transparent text-[color:var(--portal-muted)]'
+                }`}
+              >
+                Live Preview
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileInspectorOpen(false)}
+              className="lg:hidden rounded-lg p-1.5 text-[color:var(--portal-muted)]"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Inspector Body */}
+          <div className="flex-1 overflow-y-auto portal-scrollbar p-5 space-y-5">
+            {!selectedStep ? (
+              <div className="py-12 text-center text-xs text-[color:var(--portal-muted)]">
+                Select a step on the canvas to configure its properties.
+              </div>
+            ) : inspectorTab === 'preview' ? (
+              /* Live Preview with Real Lead Mock Context */
+              <div className="space-y-4">
+                <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-muted)]">
+                  Previewing with sample lead: <span className="font-semibold text-[color:var(--portal-text)]">Sarah Jenkins · Wedding Reception (150 guests)</span>
+                </div>
+
+                {selectedStep.type === 'call_task' ? (
+                  <div className="rounded-2xl border-2 border-emerald-500/50 bg-[color:var(--portal-card)] p-5 space-y-3">
+                    <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+                      <Phone size={15} /> Arianna Call Task Card
+                    </div>
+                    <h4 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">
+                      {selectedStep.name}
+                    </h4>
+                    <div className="space-y-1.5 text-xs text-[color:var(--portal-muted)]">
+                      <p>Priority: <span className="font-bold uppercase text-[color:var(--portal-text)]">{selectedStep.type === 'call_task' ? selectedStep.priority : ''}</span></p>
+                      <p>Due Timeframe: <span className="font-bold text-[color:var(--portal-text)]">Within {selectedStep.type === 'call_task' ? selectedStep.dueWithinHours : ''}h</span></p>
+                    </div>
+                    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3.5 text-xs text-[color:var(--portal-text)] whitespace-pre-wrap">
+                      {selectedStep.type === 'call_task'
+                        ? (selectedStep.scriptNotes
+                            ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
+                            ?.replace(/\{\{\s*full_name\s*\}\}/g, 'Sarah Jenkins')
+                            ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception')
+                            ?.replace(/\{\{\s*guest_count\s*\}\}/g, '150 guests')
+                            ?.replace(/\{\{\s*target_date\s*\}\}/g, 'October 24, 2026') || 'No script notes entered.')
+                        : 'No script notes entered.'}
+                    </div>
+                  </div>
+                ) : selectedStep.type === 'email' ? (
+                  <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-4 shadow-sm">
+                    <div className="border-b border-[color:var(--portal-border)] pb-3">
+                      <p className="text-[10px] font-bold text-[color:var(--portal-muted)] uppercase">Subject</p>
+                      <h4 className="font-serif text-base font-semibold text-[color:var(--portal-text)]">
+                        {selectedStep.type === 'email' ? (selectedStep.subject?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah') || 'No subject') : 'No subject'}
+                      </h4>
+                      <p className="text-xs text-[color:var(--portal-muted)] mt-1">
+                        {selectedStep.type === 'email' ? selectedStep.previewText?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah') : ''}
+                      </p>
+                    </div>
+                    <div className="text-xs text-[color:var(--portal-text)] whitespace-pre-wrap leading-5">
+                      {selectedStep.type === 'email'
+                        ? (selectedStep.body
+                            ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
+                            ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception')
+                            ?.replace(/\{\{\s*guest_count\s*\}\}/g, '150 guests') || 'Email body content goes here.')
+                        : 'Email body content goes here.'}
+                    </div>
+                    {selectedStep.type === 'email' && selectedStep.ctaText ? (
+                      <div className="pt-2">
+                        <button type="button" disabled className="rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-bold text-[#17130b]">
+                          {selectedStep.ctaText}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : selectedStep.type === 'text' ? (
+                  <div className="rounded-2xl border border-sky-500/40 bg-[color:var(--portal-card)] p-5 space-y-3">
+                    <div className="flex items-center gap-2 text-sky-500 font-bold text-xs">
+                      <MessageSquare size={14} /> SMS Text Preview
+                    </div>
+                    <div className="rounded-2xl rounded-bl-sm bg-sky-500/10 border border-sky-500/20 p-4 text-xs text-[color:var(--portal-text)] leading-5">
+                      {selectedStep.type === 'text'
+                        ? (selectedStep.body
+                            ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
+                            ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception') || 'SMS message text.')
+                        : 'SMS message text.'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-[color:var(--portal-muted)]">
+                    Control step: {selectedStep.name}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Step Configuration Form */
+              <div className="space-y-4">
+                {/* Step Name */}
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                    Step Name / Title
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedStep.name}
+                    onChange={(e) => updateStepField(selectedStep.id, 'name', e.target.value)}
+                    className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                  />
+                </div>
+
+                {/* CALL TASK SPECIFIC CONFIGURATION */}
+                {selectedStep.type === 'call_task' ? (
+                  <div className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                          Priority
+                        </label>
+                        <PortalSelect
+                          value={selectedStep.type === 'call_task' ? selectedStep.priority : 'medium'}
+                          onChange={(val) => updateStepField(selectedStep.id, 'priority', val)}
+                          options={[
+                            { value: 'low', label: 'Low' },
+                            { value: 'medium', label: 'Medium' },
+                            { value: 'high', label: 'High' },
+                            { value: 'urgent', label: 'Urgent (Immediate)' },
+                          ]}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                          Due Timeframe
+                        </label>
+                        <PortalSelect
+                          value={String(selectedStep.type === 'call_task' ? selectedStep.dueWithinHours : 2)}
+                          onChange={(val) => updateStepField(selectedStep.id, 'dueWithinHours', Number(val))}
+                          options={[
+                            { value: '1', label: 'Within 1 hour' },
+                            { value: '2', label: 'Within 2 hours' },
+                            { value: '4', label: 'Within 4 hours' },
+                            { value: '24', label: 'Within 24 hours' },
+                            { value: '48', label: 'Within 48 hours' },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                        Assigned Operator
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedStep.type === 'call_task' ? (selectedStep.assignee || 'Arianna Patterson') : 'Arianna Patterson'}
+                        onChange={(e) => updateStepField(selectedStep.id, 'assignee', e.target.value)}
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                      />
+                    </div>
+
+                    {/* Dynamic Variable Chips */}
+                    <WorkflowVariableChipsBar onInsert={handleInsertChip} />
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                        Talking Points & Script Notes
+                      </label>
+                      <textarea
+                        value={selectedStep.type === 'call_task' ? (selectedStep.scriptNotes || '') : ''}
+                        onChange={(e) => updateStepField(selectedStep.id, 'scriptNotes', e.target.value)}
+                        rows={4}
+                        placeholder="e.g. Call {{first_name}} to discuss date availability for {{target_date}} with {{guest_count}}..."
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* EMAIL SPECIFIC CONFIGURATION */}
+                {selectedStep.type === 'email' ? (
+                  <div className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
+                    {/* Mode toggle */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
+                        Authoring Mode
+                      </span>
+                      <div className="flex gap-1 rounded-lg border border-[color:var(--portal-border)] p-0.5 bg-[color:var(--portal-soft)]">
+                        <button
+                          type="button"
+                          onClick={() => updateStepField(selectedStep.id, 'generationMode', 'manual')}
+                          className={`rounded px-2 py-1 text-[10px] font-bold transition ${
+                            selectedStep.type === 'email' && selectedStep.generationMode !== 'ai'
+                              ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs'
+                              : 'text-[color:var(--portal-muted)]'
+                          }`}
+                        >
+                          Manual Draft
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateStepField(selectedStep.id, 'generationMode', 'ai')}
+                          className={`rounded px-2 py-1 text-[10px] font-bold transition ${
+                            selectedStep.type === 'email' && selectedStep.generationMode === 'ai'
+                              ? 'bg-[#caa24c] text-[#17130b] shadow-xs'
+                              : 'text-[color:var(--portal-muted)]'
+                          }`}
+                        >
+                          Elena AI
+                        </button>
+                      </div>
+                    </div>
+
+                    {selectedStep.type === 'email' && selectedStep.generationMode === 'ai' ? (
+                      <div className="rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/5 p-3.5 space-y-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#8c6424] dark:text-[#f1d27a]">
+                          Elena Prompt Instructions
+                        </span>
+                        <textarea
+                          value={selectedStep.aiPrompt || ''}
+                          onChange={(e) => updateStepField(selectedStep.id, 'aiPrompt', e.target.value)}
+                          rows={3}
+                          placeholder="Instructions for Elena AI: e.g. Write a warm congratulations referencing their event type and guest count..."
+                          className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-xs text-[color:var(--portal-text)] outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateAiCopy('email')}
+                          disabled={generatingAiCopy}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#caa24c] px-3 py-1.5 text-xs font-bold text-[#17130b]"
+                        >
+                          {generatingAiCopy ? <RefreshCw size={12} className="animate-spin" /> : <Bot size={12} />}
+                          <span>Generate Copy with Elena</span>
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {/* Dynamic Variable Chips */}
+                    <WorkflowVariableChipsBar onInsert={handleInsertChip} />
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                        Subject Line
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedStep.type === 'email' ? (selectedStep.subject || '') : ''}
+                        onChange={(e) => updateStepField(selectedStep.id, 'subject', e.target.value)}
+                        placeholder="e.g. Planning your {{event_type}} at Luxor"
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                        Preview Snippet
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedStep.type === 'email' ? (selectedStep.previewText || '') : ''}
+                        onChange={(e) => updateStepField(selectedStep.id, 'previewText', e.target.value)}
+                        placeholder="Short preview text for client inboxes..."
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                        Email Body
+                      </label>
+                      <textarea
+                        value={selectedStep.type === 'email' ? (selectedStep.body || '') : ''}
+                        onChange={(e) => updateStepField(selectedStep.id, 'body', e.target.value)}
+                        rows={6}
+                        placeholder="Dear {{first_name}}..."
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                          CTA Button Label
+                        </label>
+                        <input
+                          type="text"
+                          value={selectedStep.type === 'email' ? (selectedStep.ctaText || '') : ''}
+                          onChange={(e) => updateStepField(selectedStep.id, 'ctaText', e.target.value)}
+                          placeholder="e.g. Schedule a Tour"
+                          className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                          Destination URL
+                        </label>
+                        <input
+                          type="text"
+                          value={selectedStep.type === 'email' ? (selectedStep.ctaUrl || '') : ''}
+                          onChange={(e) => updateStepField(selectedStep.id, 'ctaUrl', e.target.value)}
+                          placeholder="https://www.luxoratlaspalmas.com/tour"
+                          className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* TEXT (SMS) SPECIFIC CONFIGURATION */}
+                {selectedStep.type === 'text' ? (
+                  <div className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
+                        Authoring Mode
+                      </span>
+                      <div className="flex gap-1 rounded-lg border border-[color:var(--portal-border)] p-0.5 bg-[color:var(--portal-soft)]">
+                        <button
+                          type="button"
+                          onClick={() => updateStepField(selectedStep.id, 'generationMode', 'manual')}
+                          className={`rounded px-2 py-1 text-[10px] font-bold transition ${
+                            selectedStep.type === 'text' && selectedStep.generationMode !== 'ai'
+                              ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs'
+                              : 'text-[color:var(--portal-muted)]'
+                          }`}
+                        >
+                          Manual Draft
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateStepField(selectedStep.id, 'generationMode', 'ai')}
+                          className={`rounded px-2 py-1 text-[10px] font-bold transition ${
+                            selectedStep.type === 'text' && selectedStep.generationMode === 'ai'
+                              ? 'bg-[#caa24c] text-[#17130b] shadow-xs'
+                              : 'text-[color:var(--portal-muted)]'
+                          }`}
+                        >
+                          Elena AI
+                        </button>
+                      </div>
+                    </div>
+
+                    {selectedStep.type === 'text' && selectedStep.generationMode === 'ai' ? (
+                      <div className="rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/5 p-3.5 space-y-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#8c6424] dark:text-[#f1d27a]">
+                          SMS Instructions for Elena
+                        </span>
+                        <textarea
+                          value={selectedStep.aiPrompt || ''}
+                          onChange={(e) => updateStepField(selectedStep.id, 'aiPrompt', e.target.value)}
+                          rows={2}
+                          placeholder="e.g. Ask {{first_name}} if they need special setup for their {{event_type}}..."
+                          className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-xs text-[color:var(--portal-text)] outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateAiCopy('text')}
+                          disabled={generatingAiCopy}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#caa24c] px-3 py-1.5 text-xs font-bold text-[#17130b]"
+                        >
+                          {generatingAiCopy ? <RefreshCw size={12} className="animate-spin" /> : <Bot size={12} />}
+                          <span>Generate SMS with Elena</span>
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {/* Dynamic Variable Chips */}
+                    <WorkflowVariableChipsBar onInsert={handleInsertChip} />
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
+                          Message Body
+                        </label>
+                        <span className="text-[10px] font-mono text-[color:var(--portal-muted)]">
+                          {(selectedStep.type === 'text' ? selectedStep.body : '').length}/{CUSTOM_WORKFLOW_TEXT_MAX_LENGTH}
+                        </span>
+                      </div>
+                      <textarea
+                        value={selectedStep.type === 'text' ? (selectedStep.body || '') : ''}
+                        onChange={(e) => updateStepField(selectedStep.id, 'body', e.target.value)}
+                        rows={4}
+                        placeholder="Luxor Events: Hi {{first_name}}... Reply STOP to opt out."
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                      />
+                      <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">
+                        Must start with &ldquo;Luxor Events:&rdquo; and end with &ldquo;Reply STOP to opt out.&rdquo;
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* WAIT DELAY SPECIFIC CONFIGURATION */}
+                {selectedStep.type === 'wait' ? (
+                  <div className="grid grid-cols-2 gap-3 border-t border-[color:var(--portal-border)] pt-4">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                        Delay Amount
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={selectedStep.type === 'wait' ? (selectedStep.amount || 1) : 1}
+                        onChange={(e) => updateStepField(selectedStep.id, 'amount', Number(e.target.value))}
+                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                        Unit
+                      </label>
+                      <PortalSelect
+                        value={selectedStep.type === 'wait' ? selectedStep.unit : 'days'}
+                        onChange={(val) => updateStepField(selectedStep.id, 'unit', val)}
+                        options={[
+                          { value: 'minutes', label: 'Minutes' },
+                          { value: 'hours', label: 'Hours' },
+                          { value: 'days', label: 'Days' },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* CONDITION SPECIFIC CONFIGURATION */}
+                {selectedStep.type === 'condition' ? (
+                  <div className="space-y-3 border-t border-[color:var(--portal-border)] pt-4">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                        Condition Rule
+                      </label>
+                      <PortalSelect
+                        value={selectedStep.type === 'condition' ? selectedStep.condition : 'follow_up_eligible'}
+                        onChange={(val) => updateStepField(selectedStep.id, 'condition', val)}
+                        options={[
+                          { value: 'follow_up_eligible', label: 'Lead remains eligible for follow-up' },
+                          { value: 'marketing_sms_consent', label: 'SMS marketing consent confirmed' },
+                          { value: 'marketing_email_consent', label: 'Email marketing consent confirmed' },
+                          { value: 'tour_scheduled', label: 'Tour has been scheduled' },
+                          { value: 'tour_attended', label: 'Tour was completed' },
+                          { value: 'unresponsive', label: 'Lead has not yet scheduled a visit' },
+                        ]}
+                      />
+                    </div>
+                    <p className="text-[11px] text-[color:var(--portal-muted)]">
+                      If condition is not met, the workflow automatically halts execution cleanly.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </PortalPageFrame>
   )
 }
-
-function StepEditor({ step, editable, index, total, onChange, onMove, onRemove, onPreview, previewing }: {
-  step: CustomWorkflowStep
-  editable: boolean
-  index: number
-  total: number
-  onChange: (key: string, value: string | number | null) => void
-  onMove: (direction: -1 | 1) => void
-  onRemove: () => void
-  onPreview: () => void
-  previewing: boolean
-}) {
-  const readOnly = !editable || (step.type === 'email' && step.mode === 'existing_inquiry_acknowledgment')
-  return <div>
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f]">Step {index + 1} · {step.type}</p><h2 className="mt-1 font-serif text-xl font-semibold text-[color:var(--portal-text)]">{step.type === 'email' && step.mode === 'existing_inquiry_acknowledgment' ? 'Existing contact acknowledgment' : step.name}</h2><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{step.type === 'email' && step.mode === 'existing_inquiry_acknowledgment' ? 'The current transactional acknowledgment already sends through the existing queue. This marker prevents a duplicate email.' : step.type === 'text' ? 'Text is available only for an inquiry with explicit marketing SMS consent; consent is checked again before queue and send.' : step.type === 'wait' ? 'Waits are relative to the prior completed step. A concrete duration is required before the workflow can run.' : step.type === 'condition' ? 'Only allowlisted contact, booking, marketing consent, and opt-out checks are supported.' : 'The workflow exits after this step.'}</p></div><div className="flex shrink-0 gap-1"><button type="button" onClick={() => onMove(-1)} disabled={readOnly || index <= (step.type === 'email' && step.mode === 'existing_inquiry_acknowledgment' ? 0 : 1)} aria-label="Move step up" className="grid min-h-10 min-w-10 place-items-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] disabled:opacity-40"><ArrowUp size={14} /></button><button type="button" onClick={() => onMove(1)} disabled={readOnly || index >= total - 2} aria-label="Move step down" className="grid min-h-10 min-w-10 place-items-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] disabled:opacity-40"><ArrowDown size={14} /></button><button type="button" onClick={onRemove} disabled={readOnly || step.type === 'end'} aria-label="Remove step" className="grid min-h-10 min-w-10 place-items-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] disabled:opacity-40"><Trash2 size={14} /></button></div></div>
-    {readOnly && step.type === 'email' && step.mode === 'existing_inquiry_acknowledgment' ? <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4"><p className="text-xs font-semibold text-[color:var(--portal-text)]">Existing contact acknowledgment</p><p className="mt-2 text-sm text-[color:var(--portal-muted)]">Subject: {step.subject}</p><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{step.previewText}</p><p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">This saved marker observes the existing inquiry acknowledgment. Its branded body, personal details, visit link, and delivery remain controlled by the current inquiry path.</p></div> : null}
-    <label className="mt-4 block"><span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Step name</span><input value={step.name} disabled={readOnly || step.type === 'end'} onChange={(event) => onChange('name' as keyof CustomWorkflowStep, event.target.value as never)} maxLength={120} className="mt-1 min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-transparent px-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c] disabled:opacity-70" /></label>
-    {step.type === 'email' && step.mode === 'marketing' ? <div className="mt-4 space-y-3"><Field label="Subject" value={step.subject} disabled={readOnly} maxLength={500} onChange={(value) => onChange('subject', value)} /><Field label="Preview text" value={step.previewText} disabled={readOnly} maxLength={500} onChange={(value) => onChange('previewText', value)} /><TextArea label="Email body" value={step.body} disabled={readOnly} maxLength={12000} rows={8} help="Use only supported fields: {{first_name}}, {{full_name}}, {{event_type}}, {{guest_count}}, and {{target_date}}." onChange={(value) => onChange('body', value)} /><div className="grid gap-3 sm:grid-cols-2"><Field label="Button label (optional)" value={step.ctaText} disabled={readOnly} maxLength={100} onChange={(value) => onChange('ctaText', value)} /><Field label="Luxor page or URL (optional)" value={step.ctaUrl} disabled={readOnly} maxLength={500} onChange={(value) => onChange('ctaUrl', value)} /></div><button type="button" onClick={onPreview} disabled={previewing || !step.body.trim() || !step.subject.trim()} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50"><Eye size={14} />{previewing ? 'Rendering…' : 'Preview email'}</button></div> : null}
-    {step.type === 'text' ? readOnly
-      ? <TextArea label="Saved text" value={step.body} disabled maxLength={CUSTOM_WORKFLOW_TEXT_MAX_LENGTH} rows={5} help="This saved workflow version is shown exactly as approved and cannot be edited." onChange={() => undefined} />
-      : <CustomWorkflowTextEditor key={step.id} value={step.body} onChange={(value) => onChange('body', value)} />
-      : null}
-    {step.type === 'wait' ? <div className="mt-4 grid gap-3 sm:grid-cols-2"><Field label="Wait amount" type="number" value={step.amount === null ? '' : String(step.amount)} disabled={readOnly} min={0} max={365} onChange={(value) => onChange('amount', value === '' ? null : Number(value))} /><div><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Unit</p><PortalSelect disabled={readOnly} value={step.unit} onChange={(value) => onChange('unit', value as typeof step.unit)} options={[{ value: 'minutes', label: 'Minutes' }, { value: 'hours', label: 'Hours' }, { value: 'days', label: 'Days' }]} className="mt-1 w-full" buttonClassName="min-h-10" /></div></div> : null}
-    {step.type === 'condition' ? <div className="mt-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Supported condition</p><PortalSelect disabled={readOnly} value={step.condition} onChange={(value) => onChange('condition', value as typeof step.condition)} options={[{ value: 'follow_up_eligible', label: 'Contact remains eligible; stop after booking, close, or opt-out' }, { value: 'marketing_email_consent', label: 'Marketing email consent is present' }, { value: 'marketing_sms_consent', label: 'Marketing SMS consent is present' }]} className="mt-1 w-full" buttonClassName="min-h-10" /></div> : null}
-    {!readOnly && step.type !== 'end' ? <p className="mt-3 text-[10px] leading-4 text-[color:var(--portal-muted)]">This is a saved draft only. The editor cannot activate or dispatch it.</p> : null}
-  </div>
-}
-
-function CustomWorkflowTextEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const [fallbackBrand, setFallbackBrand] = React.useState(() => getCustomWorkflowTextBrand(value))
-  const brand = value ? getCustomWorkflowTextBrand(value) : fallbackBrand
-  const content = getCustomWorkflowTextEditorContent(value)
-  const preview = value
-    ? value.replace(/\s+/g, ' ').trim()
-    : `${brand}: [Your message] ${CUSTOM_WORKFLOW_TEXT_OPT_OUT_FOOTER}`
-  const hasContent = content.trim().length > 0
-
-  function updateMessageContent(nextContent: string) {
-    const nextValue = composeCustomWorkflowText(nextContent, brand)
-    setFallbackBrand(nextValue ? getCustomWorkflowTextBrand(nextValue) : brand)
-    onChange(nextValue)
-  }
-
-  return <div className="mt-4 space-y-3">
-    <label className="block">
-      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Message content</span>
-      <textarea
-        rows={5}
-        value={content}
-        maxLength={getCustomWorkflowTextEditorMaxLength(brand)}
-        onChange={(event) => updateMessageContent(event.target.value)}
-        className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-transparent px-3 py-2 text-sm leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
-      />
-      <span className="mt-1 block text-[10px] leading-4 text-[color:var(--portal-muted)]">The Luxor brand prefix and STOP footer are added automatically. Use only supported fields: {'{{first_name}}'}, {'{{full_name}}'}, {'{{event_type}}'}, {'{{guest_count}}'}, and {'{{target_date}}'}.</span>
-    </label>
-    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[color:var(--portal-muted)]">
-      <span>Complete message</span>
-      <span aria-live="polite">{value.length} / {CUSTOM_WORKFLOW_TEXT_MAX_LENGTH} characters, including prefix and footer</span>
-    </div>
-    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">SMS preview</p>
-      <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-[color:var(--portal-text)]">{preview}</p>
-    </div>
-    {value.length > CUSTOM_WORKFLOW_TEXT_MAX_LENGTH
-      ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">Shorten the message so the complete SMS fits within the {CUSTOM_WORKFLOW_TEXT_MAX_LENGTH}-character limit.</p>
-      : !hasContent ? <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Enter message content to save a sendable text. The preview placeholder is not saved.</p> : null}
-  </div>
-}
-
-function Field({ label, value, disabled, maxLength, onChange, type = 'text', min, max }: { label: string; value: string; disabled: boolean; maxLength?: number; onChange: (value: string) => void; type?: string; min?: number; max?: number }) {
-  return <label className="block"><span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">{label}</span><input type={type} min={min} max={max} value={value} disabled={disabled} maxLength={maxLength} onChange={(event) => onChange(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-transparent px-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c] disabled:opacity-70" /></label>
-}
-
-function TextArea({ label, value, disabled, maxLength, rows, help, onChange }: { label: string; value: string; disabled: boolean; maxLength: number; rows: number; help: string; onChange: (value: string) => void }) {
-  return <label className="block"><span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">{label}</span><textarea rows={rows} value={value} disabled={disabled} maxLength={maxLength} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-transparent px-3 py-2 text-sm leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c] disabled:opacity-70" /><span className="mt-1 block text-[10px] leading-4 text-[color:var(--portal-muted)]">{help}</span></label>
-}
-
-function Notice({ title, body, tone = 'info' }: { title: string; body: string; tone?: 'info' | 'error' }) {
-  return <div role={tone === 'error' ? 'alert' : 'status'} className={`rounded-xl border p-4 ${tone === 'error' ? 'border-rose-500/25 bg-rose-500/5' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]'}`}><p className="text-sm font-bold text-[color:var(--portal-text)]">{title}</p><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{body}</p></div>
-}
-
-function LoadingState() {
-  return <div role="status" className="space-y-3"><div className="h-6 w-48 rounded luxor-skeleton" /><div className="h-32 rounded-xl luxor-skeleton" /><p className="sr-only">Loading custom workflow editor.</p></div>
-}
-
-function waitDescription(step: Extract<CustomWorkflowStep, { type: 'wait' }>) { return step.amount === null ? 'Wait duration not set' : `Wait ${step.amount} ${step.unit}` }
-function conditionDescription(step: Extract<CustomWorkflowStep, { type: 'condition' }>) { return step.condition.replaceAll('_', ' ') }
-function activityLabel(event: string) { return event.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) }
-function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Unavailable' : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date) }
-function statusLabel(status: WorkflowRow['status']) { return `${status[0].toUpperCase()}${status.slice(1)}` }

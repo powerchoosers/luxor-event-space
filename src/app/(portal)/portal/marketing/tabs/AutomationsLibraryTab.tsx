@@ -2,7 +2,11 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { CalendarClock, ChevronDown, ChevronRight, Clock3, Mail, Phone, Search, Workflow } from 'lucide-react'
+import { CalendarClock, ChevronDown, ChevronRight, Clock3, Compass, Mail, Phone, Search, Workflow, Zap, ArrowRight, Check } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { PREBUILT_WORKFLOWS, type PrebuiltWorkflow } from '@/lib/luxorPrebuiltWorkflows'
+import { ElenaWorkflowArchitectModal } from '@/components/portal/ElenaWorkflowArchitectModal'
+import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
 import {
   filterAutomationLibrary,
   type AutomationLibraryEntry,
@@ -49,6 +53,9 @@ export function AutomationsLibraryTab() {
   const [customActivationEnabled, setCustomActivationEnabled] = React.useState(false)
   const [customLoadError, setCustomLoadError] = React.useState<string | null>(null)
   const [customRetryVersion, setCustomRetryVersion] = React.useState(0)
+  const [isArchitectOpen, setIsArchitectOpen] = React.useState(false)
+  const [enrollingWorkflowId, setEnrollingWorkflowId] = React.useState<string | null>(null)
+  const router = useRouter()
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -122,17 +129,110 @@ export function AutomationsLibraryTab() {
 
       {loading && data ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing saved workflow data…</p> : null}
 
+      {/* Pre-built Workflows / Templates Library */}
+      <section aria-labelledby="prebuilt-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6 space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">
+                Ready-to-Use Sequences
+              </span>
+              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                5 Default Templates
+              </span>
+            </div>
+            <h2 id="prebuilt-workflows-heading" className="mt-1 font-serif text-lg font-semibold text-[color:var(--portal-text)]">
+              Pre-built Workflows
+            </h2>
+            <p className="mt-0.5 text-xs text-[color:var(--portal-muted)] max-w-2xl">
+              Use standard unedited flows immediately or customize any workflow in the builder to tailor talking points and timing.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-2">
+          {PREBUILT_WORKFLOWS.map((pb) => (
+            <div
+              key={pb.id}
+              className="flex flex-col justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-4 transition hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)]"
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="rounded bg-[color:var(--portal-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-text)]">
+                    {pb.triggerBadge}
+                  </span>
+                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <Check size={11} strokeWidth={3} /> Ready
+                  </span>
+                </div>
+                <h3 className="font-serif text-sm font-semibold text-[color:var(--portal-text)]">
+                  {pb.name}
+                </h3>
+                <p className="text-xs leading-5 text-[color:var(--portal-muted)]">
+                  {pb.description}
+                </p>
+                <div className="pt-1 text-[11px] font-medium text-[#8c6424] dark:text-[#f1d27a]">
+                  {pb.stepsSummary}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[color:var(--portal-border)] pt-3">
+                <button
+                  type="button"
+                  onClick={() => setEnrollingWorkflowId(pb.id)}
+                  className="rounded-lg bg-[#caa24c] px-3 py-1.5 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f]"
+                >
+                  Use Default (Enroll)
+                </button>
+                <Link
+                  href={`/portal/marketing/custom-workflows/new?from=${encodeURIComponent(pb.id)}`}
+                  className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-xs font-bold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/60"
+                >
+                  Customize & Edit
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Elena Workflow Architect Modal */}
+      <ElenaWorkflowArchitectModal
+        isOpen={isArchitectOpen}
+        onClose={() => setIsArchitectOpen(false)}
+        onApplyWorkflow={({ name, definition }) => {
+          sessionStorage.setItem('luxor_architect_draft', JSON.stringify({ name, definition }));
+          router.push('/portal/marketing/custom-workflows/new');
+        }}
+      />
+
+      {/* Enroll In Workflow Modal */}
+      <EnrollInWorkflowModal
+        isOpen={Boolean(enrollingWorkflowId)}
+        onClose={() => setEnrollingWorkflowId(null)}
+        inquiryIds={[]}
+      />
+
       <section aria-labelledby="custom-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 id="custom-workflows-heading" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Custom workflows</h2>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Versioned workflows stay separate from the brochure sequence and calendar-managed tour notices. {customExecutionEnabled ? 'Runtime dispatch is enabled for workflows an authorized operator activates.' : 'Custom message dispatch is off; no custom workflow messages will be sent.'} {customExecutionEnabled && !customActivationEnabled ? 'Activation is currently disabled.' : ''}</p>
           </div>
-          {customAuthoringEnabled ? (
-            <Link href="/portal/marketing/custom-workflows/new" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Create workflow</Link>
-          ) : (
-            <button type="button" disabled title="Draft creation and editing are disabled by the workflow controls." className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-bold text-[color:var(--portal-muted)] opacity-70">Create workflow</button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsArchitectOpen(true)}
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-[#caa24c]/60 bg-[#caa24c]/10 px-4 text-xs font-bold text-[#8c6424] dark:text-[#f1d27a] transition hover:bg-[#caa24c]/20"
+            >
+              <Compass size={14} /> Elena Architect
+            </button>
+            {customAuthoringEnabled ? (
+              <Link href="/portal/marketing/custom-workflows/new" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Create workflow</Link>
+            ) : (
+              <button type="button" disabled title="Draft creation and editing are disabled by the workflow controls." className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-bold text-[color:var(--portal-muted)] opacity-70">Create workflow</button>
+            )}
+          </div>
         </div>
         {!customAuthoringEnabled ? <p className="mt-3 text-[11px] leading-5 text-[color:var(--portal-muted)]">Draft creation and editing are disabled by the workflow controls. Existing saved workflows remain available to inspect.</p> : null}
         {customLoadError ? <div role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3"><p className="text-xs text-[color:var(--portal-muted)]">{customLoadError}</p><button type="button" onClick={() => setCustomRetryVersion((value) => value + 1)} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)]">Retry</button></div> : null}

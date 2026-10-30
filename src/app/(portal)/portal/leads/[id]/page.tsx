@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
+import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
@@ -38,6 +39,7 @@ import {
   ChevronDown,
   ChevronRight,
   MoreVertical,
+  Workflow,
   ShieldCheck,
   Eye,
   MousePointerClick,
@@ -644,6 +646,7 @@ export default function LeadDetailPage({
   const [showTaskTools, setShowTaskTools] = useState(false)
   const [textPopupOpen, setTextPopupOpen] = useState(false)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [showEnrollWorkflowModal, setShowEnrollWorkflowModal] = useState(false)
   const [showLeadTabOverflow, setShowLeadTabOverflow] = useState(false)
   const [leadLifecycleAction, setLeadLifecycleAction] = useState<LeadLifecycleAction | null>(null)
   const [showEventPicker, setShowEventPicker] = useState(false)
@@ -5161,6 +5164,10 @@ export default function LeadDetailPage({
                       data-portal-dropdown="true"
                       className="portal-dropdown absolute right-0 top-full mt-2 z-[71] w-64 max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-8rem)] overflow-y-auto portal-scrollbar rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 pb-2.5 shadow-2xl backdrop-blur-xl"
                     >
+                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setShowEnrollWorkflowModal(true) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                        <Workflow size={13} className="text-[#caa24c]" />
+                        <span>Enroll in workflow</span>
+                      </button>
                       <button type="button" role="menuitem" onClick={openAddEventModal} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <Plus size={13} className="text-[#caa24c]" />
                         <span>Add event</span>

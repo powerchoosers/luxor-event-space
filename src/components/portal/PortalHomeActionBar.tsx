@@ -4,8 +4,8 @@ import { motion, useReducedMotion, useSpring, useTransform } from 'framer-motion
 import {
   ChevronDown,
   Plus,
-  Calendar,
-  DollarSign,
+  Workflow,
+  MessageCircleMore,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -121,23 +121,29 @@ export function PortalHomeActionBar() {
             </span>
           </button>
           <Link
-            href="/portal/calendar"
+            href="/portal/marketing?tab=automations"
             onClick={() => setExpanded(false)}
             className={actionButton}
+            title="Automations & workflows"
           >
             <span className={actionSurface}>
-              <Calendar size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Tour
+              <Workflow size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Flow
             </span>
           </Link>
-          <Link
-            href="/portal/invoices"
-            onClick={() => setExpanded(false)}
+          <button
+            type="button"
+            onClick={() => {
+              setExpanded(false)
+              window.dispatchEvent(new CustomEvent('luxor-open-elena'))
+            }}
             className={actionButton}
+            aria-label="Open Elena AI Assistant"
+            title="Elena AI Assistant"
           >
             <span className={actionSurface}>
-              <DollarSign size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Invoice
+              <MessageCircleMore size={16} className="shrink-0 text-[#a8792f] dark:text-[#dfbd68]" /> Elena
             </span>
-          </Link>
+          </button>
         </div>
       </motion.div>
 
