@@ -3134,8 +3134,11 @@ export default function LeadDetailPage({
           await handleSendProposalBreakdown(savedPublicationInvoice.current, String(details?.recipientEmail || lead.email || ''))
           return
         }
-        if (action === 'in_person') await prepareClientProposalHandoff(savedPublicationInvoice.current, handoffWindow)
-        else await handleSendFinalProposal(savedPublicationInvoice.current, true)
+        const publicationInvoice = savedPublicationInvoice.current.proposal_context?.proposal_record_type === 'proposal_breakdown'
+          ? await resolveLinkedFinalProposal(savedPublicationInvoice.current)
+          : savedPublicationInvoice.current
+        if (action === 'in_person') await prepareClientProposalHandoff(publicationInvoice, handoffWindow)
+        else await handleSendFinalProposal(publicationInvoice, true)
         setIsInvoiceModalOpen(false)
         setEditingInvoiceId(null)
         return
@@ -3866,6 +3869,38 @@ export default function LeadDetailPage({
       notify({ title: 'Final proposal not sent', description: error instanceof Error ? error.message : 'Please try again.', variant: 'error' })
     } finally {
       setSendingInvoiceId(null)
+    }
+  }
+
+  const resolveLinkedFinalProposal = async (breakdown: LuxorInvoice) => {
+    const relatedId = String(breakdown.proposal_context?.related_proposal_invoice_id || '').trim()
+    if (!relatedId || !breakdown.inquiry_id) {
+      throw new Error('The linked final proposal could not be identified. Open the final proposal and send it from its own record.')
+    }
+    const response = await fetch(`/api/invoices?inquiryId=${encodeURIComponent(breakdown.inquiry_id)}`, { cache: 'no-store' })
+    const rows = await response.json().catch(() => null)
+    if (!response.ok || !Array.isArray(rows)) {
+      throw new Error((rows && typeof rows.error === 'string' && rows.error) || 'The linked final proposal could not be loaded. Please refresh and try again.')
+    }
+    const finalProposal = (rows as LuxorInvoice[]).find((invoice) => invoice.id === relatedId
+      && invoice.invoice_kind === 'event'
+      && invoice.inquiry_id === breakdown.inquiry_id
+      && invoice.lead_event_id === breakdown.lead_event_id
+      && invoice.proposal_family_id === breakdown.proposal_family_id
+      && invoice.proposal_context?.proposal_record_type !== 'proposal_breakdown')
+    if (!finalProposal) throw new Error('The linked final proposal is no longer available. No new proposal was created.')
+    setInvoices((current) => [finalProposal, ...current.filter((invoice) => invoice.id !== finalProposal.id)])
+    return finalProposal
+  }
+
+  const handleSendProposalRecord = async (invoice: LuxorInvoice, resend: boolean) => {
+    try {
+      const target = invoice.proposal_context?.proposal_record_type === 'proposal_breakdown'
+        ? await resolveLinkedFinalProposal(invoice)
+        : invoice
+      await handleSendFinalProposal(target, false, resend)
+    } catch (error) {
+      notify({ title: 'Final proposal not sent', description: error instanceof Error ? error.message : 'Please refresh and try again.', variant: 'error' })
     }
   }
 
@@ -8651,10 +8686,18 @@ export default function LeadDetailPage({
                     ? `Custom time${rentalStart && rentalEnd ? ` · ${formatProposalClock(rentalStart)}-${formatProposalClock(rentalEnd)}${nextDayEnd ? ' (next day)' : ''}` : ''}`
                     : `${period.replaceAll('_', ' ')} rental${fixedWindow ? ` · ${fixedWindow}` : ''}`
                   const proposalContextRecord = asProposalRecord(proposal.proposal_context) || {}
+                  const isBreakdownRecord = proposalContextRecord.proposal_record_type === 'proposal_breakdown'
                   const proposalDeliverySnapshot = asProposalRecord(proposalContextRecord.delivery_snapshot) || {}
                   const breakdownDelivery = asProposalRecord(proposalDeliverySnapshot.proposal_breakdown_email)
-                  const individualProposalDelivery = asProposalRecord(proposalDeliverySnapshot.proposal_email)
-                  const individualProposalSent = individualProposalDelivery?.delivery_state === 'delivered'
+                  const relatedFinalProposal = isBreakdownRecord
+                    ? invoices.find((invoice) => invoice.id === proposalContextRecord.related_proposal_invoice_id
+                      && invoice.proposal_context?.proposal_record_type !== 'proposal_breakdown') || null
+                    : null
+                  const relatedFinalDeliverySnapshot = asProposalRecord(relatedFinalProposal?.proposal_context?.delivery_snapshot)
+                  const individualProposalDelivery = asProposalRecord((relatedFinalDeliverySnapshot || proposalDeliverySnapshot).proposal_email)
+                  const individualProposalSent = relatedFinalProposal
+                    ? Boolean(relatedFinalProposal.proposal_sent_at || relatedFinalProposal.status === 'sent' || individualProposalDelivery?.delivery_state === 'delivered')
+                    : individualProposalDelivery?.delivery_state === 'delivered'
                   const breakdownAttemptId = typeof breakdownDelivery?.proposal_send_attempt_id === 'string' ? breakdownDelivery.proposal_send_attempt_id : null
                     const proposalAttempts = (proposalHistory[proposal.id]?.sendAttempts || []).filter((attempt) => attempt.invoice_id === proposal.id)
                     const breakdownAttempt = breakdownAttemptId
@@ -8677,7 +8720,9 @@ export default function LeadDetailPage({
                     || signatureRequests.some((signature) => signature.booking_id === proposalBooking.id && (signature.status === 'signed' || Boolean(signature.signed_at)))
                   ))
                   const latestView = proposal.proposal_latest_viewed_at || proposal.proposal_viewed_at || null
-                  const latestSentAt = proposal.proposal_latest_sent_at || proposal.proposal_sent_at || (proposal.status === 'sent' ? proposal.updated_at : null)
+                  const latestSentAt = isBreakdownRecord
+                    ? (typeof breakdownDelivery?.delivery_sent_at === 'string' ? breakdownDelivery.delivery_sent_at : null)
+                    : proposal.proposal_latest_sent_at || proposal.proposal_sent_at || (proposal.status === 'sent' ? proposal.updated_at : null)
                   const savedArtifacts = proposalActivities.flatMap((activity) => {
                     const details = asProposalRecord(activity.details)
                     const artifact = asProposalRecord(details?.artifact)
@@ -8711,7 +8756,9 @@ export default function LeadDetailPage({
                         : lifecycleStatus === 'Sending'
                           ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
                           : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
-                  const proposalIdentifier = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
+                  const proposalIdentifier = isBreakdownRecord
+                    ? `BD-${proposal.id.slice(0, 8)}`
+                    : Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
                     ? `#${proposal.proposal_number}`
                     : proposal.id
                   const savedPricing = getSavedProposalPricingSummary(proposal)
@@ -8814,10 +8861,7 @@ export default function LeadDetailPage({
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button type="button" onClick={() => openProposalDeliveryPreview(proposal)} disabled={isProposalBreakdown && typeof breakdownDelivery?.html !== 'string'} title={isProposalBreakdown && typeof breakdownDelivery?.html !== 'string' ? 'Send the breakdown email before it can be reviewed here.' : undefined} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-45"><Eye size={12} /> {isProposalBreakdown ? 'View breakdown email' : 'View proposal'}</button>
-                      {proposalCardState.canResend ? <button type="button" onClick={() => {
-                        if (isProposalBreakdown && !individualProposalSent) void handleSendFinalProposal(proposal, false, false)
-                        else void handleSendFinalProposal(proposal, false, true)
-                      }} disabled={!lead.email || sendingInvoiceId === proposal.id} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === proposal.id ? 'Sending…' : isProposalBreakdown ? individualProposalSent ? 'Resend individual proposal' : 'Send individual proposal' : 'Resend proposal'}</button> : null}
+                      {proposalCardState.canResend ? <button type="button" onClick={() => void handleSendProposalRecord(proposal, !isProposalBreakdown || individualProposalSent)} disabled={!lead.email || sendingInvoiceId === (relatedFinalProposal?.id || proposal.id)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === (relatedFinalProposal?.id || proposal.id) ? 'Sending…' : isProposalBreakdown ? individualProposalSent ? 'Resend individual proposal' : 'Send individual proposal' : 'Resend proposal'}</button> : null}
                       {proposalCardState.canDuplicate ? <button type="button" onClick={() => duplicateProposalDraft(proposal)} aria-label={`Duplicate ${proposalLabel} to a new draft`} title="Starts a new draft from these saved event selections. Review the current price and discount before saving." className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Copy size={12} /> Duplicate</button> : null}
                       {proposalCardState.canEditDraft || proposalCardState.canRevise ? <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> {proposalCardState.canRevise ? 'Revise proposal' : 'Edit draft'}</button> : null}
                       <div className="relative">

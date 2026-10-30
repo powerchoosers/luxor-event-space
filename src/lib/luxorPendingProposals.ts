@@ -34,6 +34,7 @@ function eventDate(invoice: LuxorInvoice) {
 }
 
 function sentAt(invoice: LuxorInvoice) {
+  if (proposalContext(invoice).proposal_record_type === 'proposal_breakdown') return null
   return invoice.proposal_latest_sent_at || invoice.proposal_sent_at || invoice.proposal_first_sent_at || null
 }
 
