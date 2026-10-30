@@ -58,8 +58,11 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
     const stickyTop = document.getElementById('shared-header')?.getBoundingClientRect().bottom ?? 0
     const safeTop = Math.max(viewportTop + 8, stickyTop + 8)
     const availableHeight = Math.max(1, viewportBottom - safeTop)
-    const naturalHeight = Math.min(dialog.current?.scrollHeight ?? 300, 340)
-    const fittedHeight = Math.min(naturalHeight, availableHeight)
+    // Keep the wheel size tied to the available viewport, not the rendered
+    // dialog's scrollHeight. On mobile Safari, measuring a scrollable dialog
+    // during an inner wheel scroll can report the temporarily clipped height;
+    // feeding that value back into wheelHeight makes the columns collapse.
+    const fittedHeight = Math.min(304, availableHeight)
     const below = Math.max(0, viewportBottom - rect.bottom - 6)
     const above = Math.max(0, rect.top - safeTop - 6)
     const triggerAboveViewport = rect.bottom < safeTop
@@ -80,7 +83,9 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
     const left = isMobileViewport
       ? viewportLeft + Math.max(margin, (viewportWidth - width) / 2)
       : Math.max(viewportLeft + margin, Math.min(rect.left, viewportLeft + viewportWidth - width - margin))
-    setPosition({ top, left, width, maxHeight: fittedHeight, wheelHeight })
+    setPosition((current) => current.top === top && current.left === left && current.width === width && current.maxHeight === fittedHeight && current.wheelHeight === wheelHeight
+      ? current
+      : { top, left, width, maxHeight: fittedHeight, wheelHeight })
   }, [])
   const show = () => {
     const rect = trigger.current?.getBoundingClientRect()
@@ -97,8 +102,12 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
     if (!open) return
     const positionFrame = requestAnimationFrame(updatePosition)
     const schedule = () => requestAnimationFrame(updatePosition)
+    const scheduleForPageScroll = (event: Event) => {
+      if (event.target instanceof Node && dialog.current?.contains(event.target)) return
+      schedule()
+    }
     window.addEventListener('resize', schedule)
-    window.addEventListener('scroll', schedule, true)
+    window.addEventListener('scroll', scheduleForPageScroll, true)
     window.visualViewport?.addEventListener('resize', schedule)
     window.visualViewport?.addEventListener('scroll', schedule)
     const frame = requestAnimationFrame(() => dialog.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus())
@@ -110,7 +119,7 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
       cancelAnimationFrame(frame)
       cancelAnimationFrame(positionFrame)
       window.removeEventListener('resize', schedule)
-      window.removeEventListener('scroll', schedule, true)
+      window.removeEventListener('scroll', scheduleForPageScroll, true)
       window.visualViewport?.removeEventListener('resize', schedule)
       window.visualViewport?.removeEventListener('scroll', schedule)
       window.removeEventListener('keydown', onKeyDown)
@@ -158,7 +167,7 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
       {open ? <>
         <motion.button type="button" aria-label="Close time picker" tabIndex={-1} onClick={close} className="fixed inset-0 z-[9980] bg-transparent" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0 : 0.16 }}/>
         <motion.div ref={dialog} role="dialog" aria-modal="false" aria-label={label} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.99 }} transition={{ duration: reduced ? 0 : 0.18 }} style={{ position: 'fixed', top: position.top, left: position.left, width: position.width, colorScheme: 'light' }} className="public-calendar-scroll luxor-public-time-scroll z-[9981] overflow-visible overscroll-contain rounded-2xl border border-[#d8c4a4] bg-[#fffdfa] p-3 text-[#3b2b1d] shadow-[0_18px_48px_-24px_rgba(55,37,19,0.48)] sm:p-4">
-          <div className="grid grid-cols-2 gap-2">{columns.map((column, columnIndex) => <div key={column.name} role="listbox" aria-label={column.name} onKeyDown={(event) => handleColumnKeyDown(event, columnIndex)} className="public-calendar-scroll luxor-public-time-scroll overflow-y-auto overscroll-contain rounded-xl border border-[#eadfce] p-1" style={{ maxHeight: position.wheelHeight }}>{column.options.map((option) => <button key={String(option)} type="button" role="option" aria-selected={column.selected === option} tabIndex={column.selected === option ? 0 : -1} onClick={() => column.set(option)} className={'w-full rounded-lg px-2 py-2 text-center text-sm tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ' + (column.selected === option ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]')}>{column.format(option)}</button>)}</div>)}</div>
+          <div className="grid grid-cols-2 gap-2">{columns.map((column, columnIndex) => <div key={column.name} role="listbox" aria-label={column.name} onKeyDown={(event) => handleColumnKeyDown(event, columnIndex)} className="public-calendar-scroll luxor-public-time-scroll overflow-y-auto overscroll-contain rounded-xl border border-[#eadfce] p-1" style={{ height: position.wheelHeight }}>{column.options.map((option) => <button key={String(option)} type="button" role="option" aria-selected={column.selected === option} tabIndex={column.selected === option ? 0 : -1} onClick={() => column.set(option)} className={'w-full rounded-lg px-2 py-2 text-center text-sm tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ' + (column.selected === option ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]')}>{column.format(option)}</button>)}</div>)}</div>
           <div role="group" aria-label="AM or PM" className="mt-2 grid grid-cols-2 gap-2">
             {(['AM', 'PM'] as const).map((option, index) => <button key={option} ref={(node) => { periodButtons.current[index] = node }} type="button" aria-pressed={period === option} onClick={() => setPeriod(option)} className={'min-h-9 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ' + (period === option ? 'border-[#caa24c] bg-[#f0e7d9] text-[#33291f]' : 'border-[#eadfce] text-[#6f5f4f] hover:bg-[#f7efe3]')}>{option}</button>)}
           </div>
