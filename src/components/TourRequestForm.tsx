@@ -141,6 +141,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
   const [error, setError] = useState<string | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
+  const customRequestPanelRef = useRef<HTMLDivElement>(null)
   const isInitialStep = useRef(true)
 
   const scrollToFormTop = () => {
@@ -164,6 +165,17 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     }
     scrollToFormTop()
   }, [step])
+
+  useEffect(() => {
+    if (!customMode) return
+    const frame = requestAnimationFrame(() => {
+      customRequestPanelRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [customMode])
 
   // Date computations
   const availableDates = useMemo(() => new Set(slots.map((slot) => slot.date)), [slots])
@@ -593,7 +605,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
             </div>
           ) : (
             /* Custom Time Request Panel */
-            <div className="mt-6 rounded-xl border border-[#b98a3d]/25 bg-[#faf6ef] p-4 sm:p-5">
+            <div ref={customRequestPanelRef} className="mt-6 scroll-mt-28 rounded-xl border border-[#b98a3d]/25 bg-[#faf6ef] p-4 sm:scroll-mt-32 sm:p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-[#241d17]">
                   {spanish ? 'Solicita un horario de visita personalizado' : 'Request a custom visit time'}
