@@ -292,6 +292,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (body.mode === 'proposal' || body.mode === 'proposal_in_person') {
       const inPersonHandoff = body.mode === 'proposal_in_person'
       if (invoice.invoice_kind !== 'event') return NextResponse.json({ error: 'Only a final event proposal can be published from this action.' }, { status: 409 })
+      if (invoice.proposal_context?.proposal_record_type === 'proposal_breakdown') {
+        return NextResponse.json({ error: 'A Proposal Breakdown is an independent record. Open its linked final proposal to publish the individual proposal.' }, { status: 409 })
+      }
       const proposalContext = invoice.proposal_context && typeof invoice.proposal_context === 'object' ? invoice.proposal_context : null
       const calculationErrors = Array.isArray(proposalContext?.calculation_errors) ? proposalContext.calculation_errors.filter(Boolean) : []
       const publicationErrors = Array.isArray(proposalContext?.publication_errors) ? proposalContext.publication_errors.filter((error): error is string => typeof error === 'string' && Boolean(error.trim())) : []

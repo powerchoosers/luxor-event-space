@@ -129,6 +129,7 @@ export async function createInvoice(data: {
   proposal_accepted_user_agent?: string | null
   price_locked_at?: string | null
   supersedes_invoice_id?: string | null
+  proposal_family_id?: string | null
   proposal_version?: number | null
   original_proposal_created_at?: string | null
   same_day_booking_status?: LuxorInvoice['same_day_booking_status']
@@ -175,6 +176,7 @@ export async function createInvoice(data: {
       proposal_accepted_user_agent: data.proposal_accepted_user_agent ?? null,
       price_locked_at: data.price_locked_at ?? null,
       supersedes_invoice_id: data.supersedes_invoice_id ?? null,
+      proposal_family_id: data.proposal_family_id ?? null,
       proposal_version: data.proposal_version ?? 1,
     }),
   })

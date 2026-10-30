@@ -556,6 +556,8 @@ export type LuxorProposalContext = {
   publication_errors?: string[]
   /** Server-owned list label and delivery variant for a package comparison email. */
   proposal_record_type?: 'proposal_breakdown'
+  /** Final proposal invoice this independently saved breakdown belongs to. */
+  related_proposal_invoice_id?: string
   [key: string]: unknown
 }
 

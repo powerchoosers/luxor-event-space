@@ -438,7 +438,7 @@ type PlanningEditSection = 'event' | 'preferences' | 'layout' | 'decor' | null
 type ProposalHistoryPayload = {
   enabled: boolean
   activities: Array<{ id: number; invoice_id?: string; event_type: string; actor_email?: string | null; recipient_email?: string | null; occurred_at: string; details?: Record<string, unknown> }>
-  sendAttempts: Array<{ id: string; channel: string; state: string; recipient_email?: string | null; provider?: string | null; started_at: string; sent_at?: string | null; delivery_confirmed_at?: string | null; failed_at?: string | null; failure_reason?: string | null }>
+  sendAttempts: Array<{ id: string; invoice_id?: string; channel: string; state: string; recipient_email?: string | null; provider?: string | null; started_at: string; sent_at?: string | null; delivery_confirmed_at?: string | null; failed_at?: string | null; failure_reason?: string | null }>
   hasMoreActivities?: boolean
   hasMoreSendAttempts?: boolean
 }
@@ -3149,15 +3149,25 @@ export default function LeadDetailPage({
         ? new Date(invoiceDueDate + 'T' + (invoiceOfferExpiryTime || DEFAULT_OFFER_EXPIRY_TIME) + ':00').toISOString()
         : null
       const editingInvoice = editingInvoiceId ? invoices.find((invoice) => invoice.id === editingInvoiceId) || null : null
-      const createRevision = Boolean(editingInvoice && (
+      const editingInvoiceIsBreakdown = editingInvoice?.proposal_context?.proposal_record_type === 'proposal_breakdown'
+      const createRevision = Boolean(action !== 'breakdown' && editingInvoice && (
         editingInvoice.price_locked_at
         || editingInvoice.proposal_sent_at
         || editingInvoice.status === 'sent'
       ))
-      if (action === 'breakdown' && createRevision) {
-        throw new Error('Use the final proposal action to publish revised pricing through the existing revision flow.')
+      const updateExistingDraft = Boolean(editingInvoice && !createRevision && (
+        action !== 'breakdown' || (editingInvoiceIsBreakdown && editingInvoice?.status !== 'sent' && !editingInvoice?.price_locked_at && !editingInvoice?.proposal_sent_at)
+      ))
+      const relatedProposalInvoiceId = editingInvoiceIsBreakdown
+        ? String(editingInvoice?.proposal_context?.related_proposal_invoice_id || '')
+        : editingInvoice?.id || ''
+      const proposalParentInvoice = action === 'breakdown'
+        ? invoices.find((invoice) => invoice.id === relatedProposalInvoiceId
+          && invoice.proposal_context?.proposal_record_type !== 'proposal_breakdown') || null
+        : null
+      if (action === 'breakdown' && !proposalParentInvoice) {
+        throw new Error('Open the final proposal first so this breakdown can be saved under the right proposal history.')
       }
-      const updateExistingDraft = Boolean(editingInvoice && !createRevision)
       const proposalSelection = buildProposalSelection()
       const syncEventPlanningTimes = Boolean(
         action === 'save'
@@ -3214,6 +3224,7 @@ export default function LeadDetailPage({
               ? { creation_request_id: breakdownCreationRequest.current ||= crypto.randomUUID() }
               : { creation_request_id: invoiceCreationRequest.current ||= crypto.randomUUID() }),
           ...(createRevision && editingInvoice ? { supersedes_invoice_id: editingInvoice.id } : {}),
+          ...(action === 'breakdown' && proposalParentInvoice ? { proposal_parent_invoice_id: proposalParentInvoice.id } : {}),
           client_name: lead.full_name,
           event_type: proposalContext?.event_type || currentEventType || 'Event Booking',
           description: invoiceDesc || (editingInvoice ? editingInvoice.description || null : defaultProposalTitle(lead.full_name, currentEventType || 'Event')),
@@ -3233,6 +3244,7 @@ export default function LeadDetailPage({
       if (!res.ok) throw new Error(responseBody.error || ('Failed to ' + (updateExistingDraft ? 'update' : 'create') + ' final proposal.'))
       if (!responseBody.id || !responseBody.proposal_context) throw new Error('The save response was interrupted. Retry to recover the same proposal.')
       const invoice = responseBody as LuxorInvoice
+      if (action === 'breakdown' && !updateExistingDraft) breakdownCreationRequest.current = null
       setInvoices((prev) => [invoice, ...prev.filter(item => item.id !== invoice.id)])
       setActiveLeadTab('proposals')
       if (action !== 'save') {
@@ -8644,8 +8656,9 @@ export default function LeadDetailPage({
                   const individualProposalDelivery = asProposalRecord(proposalDeliverySnapshot.proposal_email)
                   const individualProposalSent = individualProposalDelivery?.delivery_state === 'delivered'
                   const breakdownAttemptId = typeof breakdownDelivery?.proposal_send_attempt_id === 'string' ? breakdownDelivery.proposal_send_attempt_id : null
-                  const breakdownAttempt = breakdownAttemptId
-                    ? (proposalHistory[proposal.id]?.sendAttempts || []).find((attempt) => attempt.id === breakdownAttemptId) || null
+                    const proposalAttempts = (proposalHistory[proposal.id]?.sendAttempts || []).filter((attempt) => attempt.invoice_id === proposal.id)
+                    const breakdownAttempt = breakdownAttemptId
+                      ? proposalAttempts.find((attempt) => attempt.id === breakdownAttemptId) || null
                     : null
                   const publicationAttempt = asProposalRecord(proposalContextRecord.publication_attempt)
                   const breakdownDeliveryStatus = breakdownDelivery?.delivery_state === 'delivered'
@@ -8665,7 +8678,16 @@ export default function LeadDetailPage({
                   ))
                   const latestView = proposal.proposal_latest_viewed_at || proposal.proposal_viewed_at || null
                   const latestSentAt = proposal.proposal_latest_sent_at || proposal.proposal_sent_at || (proposal.status === 'sent' ? proposal.updated_at : null)
-                  const hasActiveSend = (proposalHistory[proposal.id]?.sendAttempts || []).some((attempt) => ['preparing', 'sending', 'delivery_unconfirmed'].includes(attempt.state))
+                  const savedArtifacts = proposalActivities.flatMap((activity) => {
+                    const details = asProposalRecord(activity.details)
+                    const artifact = asProposalRecord(details?.artifact)
+                    const sendAttemptId = typeof artifact?.send_attempt_id === 'string' ? artifact.send_attempt_id : null
+                    const artifactAttempt = sendAttemptId ? proposalAttempts.find((attempt) => attempt.id === sendAttemptId) : null
+                    return artifact && typeof artifact.id === 'string' && typeof artifact.type === 'string'
+                      ? [{ id: `${artifact.id}:${activity.id}`, type: artifact.type, status: artifactAttempt?.state || String(artifact.status || 'status unavailable'), sentAt: typeof artifact.sent_at === 'string' ? artifact.sent_at : activity.occurred_at, content: asProposalRecord(artifact.content) || {} }]
+                      : []
+                  })
+                  const hasActiveSend = proposalAttempts.some((attempt) => ['preparing', 'sending', 'delivery_unconfirmed'].includes(attempt.state))
                   const proposalCardState = getProposalCardState({
                     invoice: proposal,
                     activities: proposalActivities,
@@ -8822,7 +8844,16 @@ export default function LeadDetailPage({
                     {proposalHistory[proposal.id]?.enabled ? <details id={`proposal-history-${proposal.id}`} className="mt-4 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
                       <summary className="min-h-11 cursor-pointer px-3 py-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Proposal activity and send history</summary>
                       <div className="space-y-3 border-t border-[color:var(--portal-border)] px-3 py-3">
-                        {proposalHistory[proposal.id].sendAttempts.map((attempt) => <div key={attempt.id} className="rounded-md bg-[color:var(--portal-soft)] px-3 py-2 text-[10px]">
+                        {savedArtifacts.map((artifact) => {
+                            const content = artifact.content
+                            const html = typeof content.html === 'string' ? content.html : ''
+                            const subject = typeof content.subject === 'string' ? content.subject : artifact.type === 'in_person' ? 'In-person handoff snapshot' : 'Saved proposal email'
+                            return <details key={artifact.id} className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3">
+                              <summary className="cursor-pointer text-[10px] font-semibold text-[color:var(--portal-text)]">{subject} · {artifact.status.replaceAll('_', ' ')} · {formatVenueDateTime(artifact.sentAt)}</summary>
+                              {html ? <iframe title={subject} sandbox="" srcDoc={html} className="mt-3 h-72 w-full rounded border border-[color:var(--portal-border)] bg-white" /> : <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-[10px] text-[color:var(--portal-muted)]">{JSON.stringify(content, null, 2)}</pre>}
+                            </details>
+                        })}
+                        {proposalAttempts.map((attempt) => <div key={attempt.id} className="rounded-md bg-[color:var(--portal-soft)] px-3 py-2 text-[10px]">
                           <p className="font-semibold capitalize text-[color:var(--portal-text)]">{attempt.id === breakdownAttemptId ? 'Proposal Breakdown email' : attempt.channel === 'email' ? 'Email' : 'In-person handoff'} {attempt.state.replaceAll('_', ' ')}{attempt.recipient_email ? ` · ${attempt.recipient_email}` : ''}</p>
                           <p className="mt-1 text-[color:var(--portal-muted)]">Started {formatVenueDateTime(attempt.started_at)}{attempt.sent_at ? ` · Sent ${formatVenueDateTime(attempt.sent_at)}` : ''}{attempt.delivery_confirmed_at ? ` · Delivered ${formatVenueDateTime(attempt.delivery_confirmed_at)}` : ''}</p>
                           {attempt.failure_reason ? <p className="mt-1 text-red-700 dark:text-red-300">{attempt.failure_reason}</p> : null}

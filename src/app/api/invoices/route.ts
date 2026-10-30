@@ -352,7 +352,9 @@ async function revisedProposalVersion(params: {
   if (!params.inquiryId) return null
 
   const prior = await getInvoice(params.supersedesInvoiceId)
-  if (!prior || prior.invoice_kind !== 'event' || prior.inquiry_id !== params.inquiryId || prior.status === 'paid' || prior.same_day_booking_status === 'eligible') return null
+  if (!prior || prior.invoice_kind !== 'event' || prior.inquiry_id !== params.inquiryId
+    || prior.proposal_context?.proposal_record_type === 'proposal_breakdown'
+    || prior.status === 'paid' || prior.same_day_booking_status === 'eligible') return null
   if (sameDayBookingRequiresRevision(prior)) {
     await assertLuxorSameDayRevisionSafe(prior)
     return { supersedesInvoiceId: prior.id, proposalVersion: Math.max(1, Number(prior.proposal_version || 1) + 1), prior }
@@ -414,6 +416,7 @@ export async function POST(request: NextRequest) {
     const proposalRecordType = body.proposal_record_type === undefined
       ? null
       : body.proposal_record_type === 'proposal_breakdown' ? 'proposal_breakdown' : 'invalid'
+    const proposalParentInvoiceId = stringValue(body.proposal_parent_invoice_id)
     const explicitlyRequestsFinalProposal = body.invoice_kind === 'event' ||
       body.final_proposal === true ||
       body.is_final_proposal === true ||
@@ -429,6 +432,18 @@ export async function POST(request: NextRequest) {
     }
     if (proposalRecordType === 'invalid' || (proposalRecordType && (!selection || requestedInvoiceKind !== 'event'))) {
       return NextResponse.json({ error: 'A Proposal Breakdown must be saved as a selected event proposal.' }, { status: 400 })
+    }
+    let breakdownParent: LuxorInvoice | null = null
+    if (proposalRecordType === 'proposal_breakdown') {
+      if (!proposalParentInvoiceId || !inquiryId) {
+        return NextResponse.json({ error: 'Choose the final proposal this breakdown belongs to.' }, { status: 400 })
+      }
+      breakdownParent = await getInvoice(proposalParentInvoiceId)
+      if (!breakdownParent || breakdownParent.invoice_kind !== 'event' || breakdownParent.inquiry_id !== inquiryId
+        || breakdownParent.lead_event_id !== (leadEventId || null)
+        || breakdownParent.proposal_context?.proposal_record_type === 'proposal_breakdown') {
+        return NextResponse.json({ error: 'The selected final proposal does not match this lead and event.' }, { status: 409 })
+      }
     }
     if (inquiryId) {
       const inquiry = await getLuxorInquiry(inquiryId)
@@ -459,6 +474,7 @@ export async function POST(request: NextRequest) {
       const requestFingerprint = createHash('sha256').update(JSON.stringify({
         selection, inquiryId, leadEventId, description: stringValue(body.description),
         notes: stringValue(body.notes), supersedes: stringValue(body.supersedes_invoice_id), proposalRecordType,
+        proposalParentInvoiceId,
       })).digest('hex')
       if (requestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {
         return NextResponse.json({ error: 'Invalid proposal save request.' }, { status: 400 })
@@ -475,10 +491,9 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(saved)
         }
       }
-      const revision = await revisedProposalVersion({
-        supersedesInvoiceId: stringValue(body.supersedes_invoice_id),
-        inquiryId,
-      })
+      const revision = proposalRecordType === 'proposal_breakdown'
+        ? { supersedesInvoiceId: null, proposalVersion: Math.max(1, Number(breakdownParent?.proposal_version || 1)), prior: breakdownParent || undefined }
+        : await revisedProposalVersion({ supersedesInvoiceId: stringValue(body.supersedes_invoice_id), inquiryId })
       if (!revision) {
         return NextResponse.json({ error: 'A revised final proposal can only supersede an unsigned, unpaid proposal for this same lead.' }, { status: 409 })
       }
@@ -511,9 +526,11 @@ export async function POST(request: NextRequest) {
         proposal_context: {
           ...calculated.proposalContext,
           ...(proposalRecordType ? { proposal_record_type: proposalRecordType } : {}),
+          ...(breakdownParent ? { related_proposal_invoice_id: breakdownParent.id } : {}),
           ...(requestId ? { creation_request_fingerprint: requestFingerprint } : {}),
         },
         supersedes_invoice_id: revision.supersedesInvoiceId,
+        ...(breakdownParent?.proposal_family_id ? { proposal_family_id: breakdownParent.proposal_family_id } : {}),
         proposal_version: revision.proposalVersion,
       })
 
@@ -642,6 +659,9 @@ export async function PATCH(request: NextRequest) {
     if (body.proposal_record_type !== undefined && !requestedBreakdownRecord) {
       return NextResponse.json({ error: 'Unsupported proposal record type.' }, { status: 400 })
     }
+    if (requestedBreakdownRecord && existing.proposal_context?.proposal_record_type !== 'proposal_breakdown') {
+      return NextResponse.json({ error: 'A final proposal cannot be changed into a Proposal Breakdown. Save a separate breakdown record.' }, { status: 409 })
+    }
     if (isEventInvoice && (existing.status === 'sent' || Boolean(existing.price_locked_at) || Boolean(existing.proposal_accepted_at) || Boolean(existing.proposal_sent_at))) {
       return NextResponse.json({ error: 'This final proposal is already published. Create a revised proposal instead of changing this version.' }, { status: 409 })
     }
@@ -698,7 +718,12 @@ export async function PATCH(request: NextRequest) {
       updates.proposal_context = {
         ...calculated.proposalContext,
         ...(requestedBreakdownRecord || existing.proposal_context?.proposal_record_type === 'proposal_breakdown'
-          ? { proposal_record_type: 'proposal_breakdown' as const }
+          ? {
+              proposal_record_type: 'proposal_breakdown' as const,
+              ...(existing.proposal_context?.related_proposal_invoice_id
+                ? { related_proposal_invoice_id: existing.proposal_context.related_proposal_invoice_id }
+                : {}),
+            }
           : {}),
       }
       updates.due_date = String(calculated.proposalContext.valid_through)
