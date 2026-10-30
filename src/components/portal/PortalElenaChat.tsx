@@ -9,6 +9,7 @@ import {
   RefreshCw,
   History,
   Plus,
+  SquarePen,
   Trash2,
   Edit2,
   Check,
@@ -727,20 +728,11 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             <h3 className="font-serif text-base font-medium leading-none text-[color:var(--portal-text)]">Elena AI</h3>
             <span className="mt-1 flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-green-500">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-              CRM Intelligence Connected
+              Connected
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button 
-            type="button"
-            onClick={handleCreateSession}
-            className="rounded-lg p-1.5 text-zinc-500 opacity-80 transition-all hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 cursor-pointer"
-            title="Start New Chat Session"
-            aria-label="Start New Chat Session"
-          >
-            <Plus size={16} />
-          </button>
           <button 
             type="button"
             onClick={() => setShowSessionsList(curr => !curr)}
@@ -754,6 +746,16 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           >
             <History size={16} />
           </button>
+          <button 
+            type="button"
+            onClick={handleCreateSession}
+            className="rounded-lg p-1.5 text-zinc-500 opacity-80 transition-all hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 cursor-pointer"
+            title="Start New Chat Session"
+            aria-label="Start New Chat Session"
+          >
+            <SquarePen size={16} />
+          </button>
+          <div className="h-4 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
           <PortalCloseButton onClick={onClose} aria-label="Close Elena Chat" />
         </div>
       </div>
@@ -866,7 +868,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         </AnimatePresence>
 
         {/* Messages Window */}
-        <div className={`portal-scrollbar min-h-0 flex-1 p-4 ${isSessionHydrating || messages.length === 0 ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'}`}>
+        <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSessionId || 'empty-session'}
@@ -874,7 +876,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -12, scale: 0.98 }}
               transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-              className={messages.length === 0 ? 'h-full flex flex-col justify-center' : 'min-h-full flex flex-col justify-between space-y-4'}
+              className={messages.length === 0 ? 'min-h-full flex flex-col justify-center [justify-content:safe_center]' : 'min-h-full flex flex-col justify-between space-y-4'}
             >
               {isSessionHydrating ? (
                 <div className="flex flex-col items-center justify-center gap-3 text-center text-zinc-500" role="status" aria-live="polite">
@@ -882,24 +884,24 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                   <p className="text-xs">Opening Elena’s conversation…</p>
                 </div>
               ) : messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center px-2 py-2 space-y-4 my-auto">
-                  <div className="relative">
-                    <div className="relative h-14 w-14 overflow-hidden rounded-full border-2 border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-2xl">
+                <div className="portal-elena-welcome flex flex-col items-center justify-center text-center px-1 sm:px-2 py-2 space-y-3 sm:space-y-4 my-auto">
+                  <div className="portal-elena-avatar-wrap relative shrink-0">
+                    <div className="portal-elena-avatar relative h-14 w-14 overflow-hidden rounded-full border-2 border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-2xl transition-all">
                       <Image src="/luxor-concierge.png" alt="Elena AI" fill sizes="56px" className="object-cover" />
                     </div>
-                    <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#050505] bg-green-500" />
+                    <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[color:var(--portal-bg)] bg-green-500 transition-colors" />
                   </div>
 
                   <div className="max-w-xs space-y-1">
-                    <h3 className="font-serif text-lg font-medium text-zinc-300">Elena Concierge</h3>
-                    <p className="text-xs text-zinc-500 leading-relaxed">
+                    <h3 className="portal-elena-title font-serif text-lg font-medium text-[color:var(--portal-text)] transition-all">Elena Concierge</h3>
+                    <p className="portal-elena-subtitle text-xs text-[color:var(--portal-muted)] leading-relaxed transition-all">
                       Connected to your live Luxor database & CRM intelligence.
                     </p>
                   </div>
 
                   <div className="w-full space-y-2 pt-1">
                     <div className="flex items-center justify-between px-1">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Current priorities</p>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Current priorities</p>
                       <div className="flex items-center gap-2">
                         {isLoadingSuggestions ? (
                           <span className="flex items-center gap-1 text-[9px] text-[#caa24c]">
@@ -918,7 +920,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                         )}
                       </div>
                     </div>
-                    <div className="grid gap-2">
+                    <div className="portal-elena-cards-grid grid gap-2">
                       <AnimatePresence mode="wait">
                         {isLoadingSuggestions && smartSuggestions.length === 0 ? (
                           <motion.div
@@ -927,12 +929,12 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             animate={{ opacity: 1, filter: 'blur(0px)' }}
                             exit={{ opacity: 0, filter: 'blur(6px)' }}
                             transition={{ duration: 0.25 }}
-                            className="grid gap-2"
+                            className="portal-elena-cards-grid grid gap-2"
                           >
                             {[1, 2, 3, 4].map((i) => (
                               <div
                                 key={i}
-                                className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 shadow-sm animate-pulse"
+                                className="portal-elena-card portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 shadow-sm animate-pulse"
                               >
                                 <div className="h-3.5 w-3/4 rounded bg-zinc-800/60 luxor-skeleton" />
                                 <Radar size={13} className="shrink-0 text-zinc-700/50" />
@@ -945,7 +947,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             initial={{ opacity: 0, filter: 'blur(6px)', y: 6 }}
                             animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
                             transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
-                            className="grid gap-2"
+                            className="portal-elena-cards-grid grid gap-2"
                           >
                             <AnimatePresence mode="popLayout">
                               {(smartSuggestions.length > 0 ? smartSuggestions : pathSuggestions).map((suggestion, idx) => (
@@ -961,13 +963,13 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                   }}
                                   type="button"
                                   onClick={() => handleSend(suggestion.prompt)}
-                                  className="portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
+                                  className="portal-elena-card portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
                                 >
                                   <span className="min-w-0">
-                                    <span className="block text-[9px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#e3bc65]">{suggestion.label}</span>
-                                    <span className="mt-0.5 block line-clamp-2 leading-snug">{suggestion.detail}</span>
+                                    <span className="portal-elena-card-label block text-[9px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#e3bc65]">{suggestion.label}</span>
+                                    <span className="portal-elena-card-detail mt-0.5 block line-clamp-2 leading-snug">{suggestion.detail}</span>
                                   </span>
-                                  <SuggestionIcon kind={suggestion.kind} className="ml-3 shrink-0 text-zinc-600 transition-colors group-hover:text-[#caa24c]" />
+                                  <SuggestionIcon kind={suggestion.kind} className="portal-elena-card-icon ml-3 shrink-0 text-zinc-600 transition-colors group-hover:text-[#caa24c]" />
                                 </motion.button>
                               ))}
                             </AnimatePresence>

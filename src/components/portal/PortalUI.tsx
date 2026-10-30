@@ -296,32 +296,16 @@ export function PortalTabTransition({
   className?: string
 }) {
   const shouldReduceMotion = useReducedMotion()
-  const ref = useRef<HTMLDivElement>(null)
-
-  if (shouldReduceMotion) {
-    return (
-      <div key={activeKey} className={className}>
-        {children}
-      </div>
-    )
-  }
 
   return (
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
-        ref={ref}
         key={activeKey}
-        initial={{ opacity: 0.65, y: 6, scale: 0.998, filter: 'blur(10px)' }}
-        animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-        exit={{ opacity: 0, y: -4, scale: 0.996, filter: 'blur(10px)' }}
-        transition={{ duration: 0.22, ease: LUXOR_PORTAL_EASE }}
-        className={`transform-gpu ${className}`}
-        onAnimationComplete={(definition) => {
-          if (definition === 'animate' && ref.current) {
-            ref.current.style.filter = 'none'
-            ref.current.style.transform = 'none'
-          }
-        }}
+        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0.75 }}
+        animate={{ opacity: 1 }}
+        exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
+        transition={{ duration: 0.15, ease: LUXOR_PORTAL_EASE }}
+        className={className}
       >
         {children}
       </motion.div>
@@ -334,33 +318,54 @@ export function PortalTableCard({
   children,
   footer,
   className = '',
+  footerClassName = '',
   mobilePageScroll = false,
   mobilePageScrollUntil = 'md',
+  stickyMobileControls = true,
 }: {
   controls?: React.ReactNode
   children: React.ReactNode
   footer?: React.ReactNode
   className?: string
+  footerClassName?: string
   /**
    * Lets a card's rows join the page scroll on phones instead of trapping
    * them in a very short nested table area.
    */
   mobilePageScroll?: boolean
   mobilePageScrollUntil?: 'md' | 'lg'
+  stickyMobileControls?: boolean
 }) {
+  const isStickyMobile = mobilePageScroll && stickyMobileControls
   const mobilePageScrollContainerClass = mobilePageScroll
     ? mobilePageScrollUntil === 'lg' ? 'max-lg:flex-none' : 'max-md:flex-none'
     : ''
   const mobilePageScrollContentClass = mobilePageScroll
     ? mobilePageScrollUntil === 'lg' ? 'max-lg:flex-none max-lg:overflow-visible' : 'max-md:flex-none max-md:overflow-visible'
     : ''
+  const mobileOverflowClass = mobilePageScroll
+    ? mobilePageScrollUntil === 'lg' ? 'max-lg:overflow-visible lg:overflow-hidden' : 'max-md:overflow-visible md:overflow-hidden'
+    : 'overflow-hidden'
+  const mobileStickyControlsClass = isStickyMobile
+    ? mobilePageScrollUntil === 'lg'
+      ? 'max-lg:sticky max-lg:top-0 max-lg:z-30 max-lg:bg-[#fffdf9]/85 max-lg:dark:bg-[#080706]/80 max-lg:backdrop-blur-2xl max-lg:shadow-sm'
+      : 'max-md:sticky max-md:top-0 max-md:z-30 max-md:bg-[#fffdf9]/85 max-md:dark:bg-[#080706]/80 max-md:backdrop-blur-2xl max-md:shadow-sm'
+    : ''
+
   return (
-    <section className={`nodal-void-card portal-render-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-none sm:rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 backdrop-blur-xl ${mobilePageScrollContainerClass} ${className}`}>
-      {controls ? <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 px-4 sm:px-6">{controls}</div> : null}
+    <section className={`nodal-void-card flex min-h-0 flex-1 flex-col ${mobileOverflowClass} rounded-none sm:rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 ${mobilePageScroll ? 'md:backdrop-blur-xl md:portal-render-surface' : 'backdrop-blur-xl portal-render-surface'} ${mobilePageScrollContainerClass} ${className}`}>
+      {controls ? (
+        <div
+          style={{ WebkitBackdropFilter: isStickyMobile ? 'blur(24px)' : undefined }}
+          className={`shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 px-4 sm:px-6 transition-shadow ${mobileStickyControlsClass}`}
+        >
+          {controls}
+        </div>
+      ) : null}
       <div className={`portal-scrollbar flex-1 overflow-auto ${mobilePageScrollContentClass}`} data-portal-table-scroller>
         {children}
       </div>
-      {footer ? <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-4 px-4 sm:px-6 flex items-center">{footer}</div> : null}
+      {footer ? <div className={`shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-4 px-4 sm:px-6 flex items-center ${footerClassName}`}>{footer}</div> : null}
     </section>
   )
 }
@@ -524,12 +529,29 @@ export function PortalPagination({
   currentPage,
   totalPages,
   onPageChange,
+  scrollToTop = true,
 }: {
   currentPage: number
   totalPages: number
   onPageChange: (page: number) => void
+  scrollToTop?: boolean
 }) {
   if (totalPages <= 1) return null
+
+  const handlePageSelect = (page: number) => {
+    onPageChange(page)
+    if (scrollToTop && typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      const portalContentScroller = document.querySelector('main .portal-scrollbar') as HTMLElement | null
+      if (portalContentScroller) {
+        portalContentScroller.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+      const tableScroller = document.querySelector('[data-portal-table-scroller]') as HTMLElement | null
+      if (tableScroller) {
+        tableScroller.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+  }
 
   const buttonClass = 'flex h-11 w-11 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-35 sm:h-8 sm:w-8'
   const pageOptions = Array.from({ length: totalPages }, (_, index) => {
@@ -539,17 +561,17 @@ export function PortalPagination({
 
   return (
     <nav className="flex shrink-0 items-center gap-1 sm:gap-2" aria-label="Pagination">
-      <button type="button" aria-label="Previous page" title="Previous page" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)} className={buttonClass}>
+      <button type="button" aria-label="Previous page" title="Previous page" disabled={currentPage === 1} onClick={() => handlePageSelect(currentPage - 1)} className={buttonClass}>
         <ChevronLeft size={15} strokeWidth={2.25} aria-hidden="true" />
       </button>
       <PortalSelect
         value={String(currentPage)}
-        onChange={(value) => onPageChange(Number(value))}
+        onChange={(value) => handlePageSelect(Number(value))}
         options={pageOptions}
         className="!min-w-0 w-28 sm:w-[124px]"
         buttonClassName="h-11 rounded-md bg-[color:var(--portal-card)] px-2 tabular-nums text-[10px] font-semibold sm:h-8"
       />
-      <button type="button" aria-label="Next page" title="Next page" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} className={buttonClass}>
+      <button type="button" aria-label="Next page" title="Next page" disabled={currentPage === totalPages} onClick={() => handlePageSelect(currentPage + 1)} className={buttonClass}>
         <ChevronRight size={15} strokeWidth={2.25} aria-hidden="true" />
       </button>
     </nav>

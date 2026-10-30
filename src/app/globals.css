@@ -1663,6 +1663,88 @@ body[data-portal-theme='light'] .portal-suggestion-card:hover {
   background-color: #ede6d9 !important;
 }
 
+/* Elena Concierge visual height responsiveness for chat cards and welcome view */
+.portal-elena-card {
+  transition: padding 0.2s ease, transform 0.2s ease;
+}
+
+@media (max-height: 860px) {
+  .portal-elena-card:nth-child(n+4) {
+    display: none !important;
+  }
+  .portal-elena-avatar {
+    width: 3.25rem !important;
+    height: 3.25rem !important;
+  }
+}
+
+@media (max-height: 740px) {
+  .portal-elena-card:nth-child(n+3) {
+    display: none !important;
+  }
+  .portal-elena-card {
+    padding: 0.55rem 0.75rem !important;
+  }
+  .portal-elena-card-detail {
+    -webkit-line-clamp: 1 !important;
+    line-clamp: 1 !important;
+  }
+  .portal-elena-avatar {
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+  }
+  .portal-elena-welcome {
+    gap: 0.65rem !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+  .portal-elena-title {
+    font-size: 1rem !important;
+  }
+  .portal-elena-subtitle {
+    font-size: 0.72rem !important;
+    line-height: 1.25 !important;
+  }
+  .portal-elena-cards-grid {
+    gap: 0.375rem !important;
+  }
+}
+
+@media (max-height: 620px) {
+  .portal-elena-card:nth-child(n+3) {
+    display: none !important;
+  }
+  .portal-elena-card {
+    padding: 0.45rem 0.65rem !important;
+  }
+  .portal-elena-avatar {
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+  }
+  .portal-elena-welcome {
+    gap: 0.35rem !important;
+  }
+  .portal-elena-subtitle {
+    display: none !important;
+  }
+  .portal-elena-cards-grid {
+    gap: 0.25rem !important;
+  }
+}
+
+@media (max-height: 480px) {
+  .portal-elena-card:nth-child(n+2) {
+    display: none !important;
+  }
+  .portal-elena-avatar {
+    width: 2rem !important;
+    height: 2rem !important;
+  }
+  .portal-elena-welcome {
+    gap: 0.25rem !important;
+  }
+}
+
 /* Global Search Dropdown Overrides for solid opacity and high contrast */
 .portal-search-dropdown {
   background-color: #080808 !important;

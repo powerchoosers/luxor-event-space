@@ -542,6 +542,18 @@ export default function LeadsPage() {
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page)
     localStorage.setItem('luxor_leads_current_page', String(page))
+
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      const portalContentScroller = document.querySelector('main .portal-scrollbar') as HTMLElement | null
+      if (portalContentScroller) {
+        portalContentScroller.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+      const tableScroller = document.querySelector('[data-portal-table-scroller]') as HTMLElement | null
+      if (tableScroller) {
+        tableScroller.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
   }, [])
 
   const grandOpeningCount = useMemo(() => leads.filter(isGrandOpeningRsvp).length, [leads])
@@ -574,7 +586,7 @@ export default function LeadsPage() {
   ]
 
   return (
-    <PortalPageFrame className="flex-1 min-h-0 overflow-hidden">
+    <PortalPageFrame className="flex-1 min-h-0 overflow-hidden max-md:pt-4">
       <PortalPageHeader
         icon={<Users size={18} />}
         title="Leads & Clients"
@@ -677,7 +689,7 @@ export default function LeadsPage() {
         />
       </div>
 
-      {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 flex flex-col overflow-visible mt-0 ${activeTab === 'dashboard' ? '' : '-mx-4 sm:mx-0'}`}>
+      {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 flex flex-col overflow-visible mt-0 max-md:![transform:none] max-md:![filter:none] ${activeTab === 'dashboard' ? '' : '-mx-4 sm:mx-0'}`}>
         {activeTab === 'dashboard' && (
           <LeadsDashboard
             leads={activeLeads}
@@ -698,8 +710,11 @@ export default function LeadsPage() {
 
         {activeTab === 'pipeline' && (
           viewMode === 'list' || isMobileViewport ? (
+        <>
         <PortalTableCard
           mobilePageScroll
+          footerClassName="max-md:hidden"
+          className="max-md:border-b-0"
           controls={
             <PortalFilterBar
               searchValue={searchTerm}
@@ -743,23 +758,12 @@ export default function LeadsPage() {
             </PortalFilterBar>
           }
           footer={
-            <>
-              {/* Reserve room in the scrolling page for the fixed mobile bar. */}
-              <div aria-hidden="true" className="h-11 md:hidden" />
-              <div className="hidden w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none md:flex">
-                {loading ? <PortalSkeleton className="h-4 w-44 rounded" /> : <>
-                <div>Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}</span> - <span className="tabular-nums text-[color:var(--portal-text)]">{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</div>
-                <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
-                </>}
-              </div>
-              {typeof document !== 'undefined' && createPortal(
-                <div className="fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex min-h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] md:hidden">
-                  {loading ? <><PortalSkeleton className="h-3 w-32 rounded" /><PortalSkeleton className="h-11 w-40 rounded-lg" /></> : <><span className="min-w-0">Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}–{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</span>
-                  <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
-                  </>}
-                </div>, document.body
-              )}
-            </>
+            <div className="hidden w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none md:flex">
+              {loading ? <PortalSkeleton className="h-4 w-44 rounded" /> : <>
+              <div>Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}</span> - <span className="tabular-nums text-[color:var(--portal-text)]">{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</div>
+              <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+              </>}
+            </div>
           }
         >
           <div className="hidden overflow-x-auto md:block">
@@ -947,6 +951,18 @@ export default function LeadsPage() {
           />}
           </PortalSkeletonTransition>
         </PortalTableCard>
+        {typeof document !== 'undefined' && createPortal(
+          <div
+            data-portal-fixed-pagination
+            className="fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[#fffdf9]/85 dark:bg-[#080706]/80 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] backdrop-blur-2xl md:hidden"
+            style={{ WebkitBackdropFilter: 'blur(24px)' }}
+          >
+            {loading ? <><PortalSkeleton className="h-3 w-32 rounded" /><PortalSkeleton className="h-11 w-40 rounded-lg" /></> : <><span className="min-w-0">Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}–{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</span>
+            <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+            </>}
+          </div>, document.body
+        )}
+        </>
       ) : (
         <PortalSkeletonTransition
           loading={loading}
