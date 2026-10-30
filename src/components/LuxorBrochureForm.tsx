@@ -3,12 +3,13 @@
 import { FormEvent, useEffect, useId, useRef, useState } from 'react'
 import { Check, ChevronDown, Download, FileText, Loader2, Mail, Megaphone } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PortalDatePicker } from '@/components/portal/PortalUI'
+import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Link from 'next/link'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { LUXOR_INQUIRY_SMS_DISCLOSURE, LUXOR_MARKETING_EMAIL_DISCLOSURE, LUXOR_MARKETING_SMS_DISCLOSURE } from '@/lib/luxorInquiryTypes'
 import { focusPublicConfirmation } from '@/lib/focusPublicConfirmation'
+import { formatLocalDateKey, isLuxorDateSelectable } from '@/lib/publicEventDate'
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -58,6 +59,11 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
     e.preventDefault()
     setError(null)
 
+    if (eventDate && !isLuxorDateSelectable(eventDate, formatLocalDateKey(new Date()))) {
+      setError('Please choose today or a future event date.')
+      return
+    }
+
     if (!fullName.trim()) {
       setError('Please enter your full name.')
       return
@@ -97,6 +103,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
         pagePath: typeof window === 'undefined' ? '/' : window.location.pathname,
         metadata: {
           leadSource: 'Homepage Brochure Form',
+          browserTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           emailMarketingConsentAgreed: emailMarketingConsent,
           brochureRequestedAt: new Date().toISOString(),
         },
@@ -307,11 +314,9 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
                   <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-[#caa24c]">
                     Estimated Event Date <span className="text-[#a0907e] font-normal lowercase">(optional)</span>
                   </span>
-                  <PortalDatePicker
-                    theme="light"
+                  <PublicEventDatePicker
                     value={eventDate}
                     onChange={setEventDate}
-                    minDate={new Date().toISOString().slice(0, 10)}
                     placeholder="Select date (if known)"
                     className="w-full [&>button]:min-h-12 [&>button]:rounded-xl [&>button]:border-[#d8c4a4] [&>button]:bg-white [&>button]:px-4 [&>button]:text-sm [&>button]:normal-case [&>button]:tracking-normal [&>button]:text-[#241d17] hover:[&>button]:border-[#b98a3d]"
                   />

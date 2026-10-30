@@ -18,10 +18,13 @@ import {
   normalizeLuxorEventType,
   type LuxorInquiryInput,
 } from '@/lib/luxorInquiryTypes'
-import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalSelect } from '@/components/portal/PortalUI'
+import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
+import { LuxorTimePicker } from '@/components/LuxorTimePicker'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
+import { formatLocalDateKey, isLuxorDateSelectable } from '@/lib/publicEventDate'
 
 type Locale = 'en' | 'es'
 
@@ -219,6 +222,10 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
         setError(spanish ? 'Por favor indica la fecha y hora que prefieres.' : 'Please choose your preferred date and time.')
         return
       }
+      if (!isLuxorDateSelectable(targetDate, formatLocalDateKey(new Date()))) {
+        setError(spanish ? 'Selecciona hoy o una fecha futura para tu visita.' : 'Please choose today or a future visit date.')
+        return
+      }
     }
     setStep(2)
   }
@@ -253,6 +260,15 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     }
     if (!cleanEventType) {
       setError(spanish ? 'Indica el tipo de evento.' : 'Please enter an event type.')
+      return
+    }
+
+    if (eventDate && !isLuxorDateSelectable(eventDate, formatLocalDateKey(new Date()))) {
+      setError(spanish ? 'Selecciona hoy o una fecha futura para tu evento.' : 'Please choose today or a future event date.')
+      return
+    }
+    if (alternateDate && !isLuxorDateSelectable(alternateDate, formatLocalDateKey(new Date()))) {
+      setError(spanish ? 'Selecciona hoy o una fecha futura para la fecha alternativa.' : 'Please choose today or a future alternate date.')
       return
     }
 
@@ -292,6 +308,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
       pagePath: typeof window === 'undefined' ? '/visit' : window.location.pathname,
       metadata: {
         selectedTourSlotId: slotId || null,
+        browserTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         preferredTourWindow: null,
         customTourTime: customTourTime || null,
         websiteLocale: locale,
@@ -522,13 +539,13 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
                       <p className="mb-2 text-xs font-semibold text-[#241d17]">
                         {spanish ? 'Selecciona una fecha del calendario:' : 'Select any date on the calendar:'}
                       </p>
-                      <PortalDatePicker
-                        theme="light"
+                      <PublicEventDatePicker
                         value={targetDate}
                         onChange={handleDatePicked}
-                        minDate={new Date().toISOString().slice(0, 10)}
                         availableDates={availableDates}
+                        label={spanish ? 'Fecha de visita' : 'Visit date'}
                         placeholder={spanish ? 'Elige una fecha' : 'Choose a date'}
+                        locale={spanish ? 'es-US' : 'en-US'}
                         className={publicDatePickerClass}
                       />
                       <span className="mt-2 block text-[11px] text-[#827567]">
@@ -600,33 +617,28 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <Field label={spanish ? 'Fecha de visita preferida' : 'Preferred visit date'}>
-                  <PortalDatePicker
-                    theme="light"
+                  <PublicEventDatePicker
                     value={targetDate}
-                    onChange={(val) => setTargetDate(val)}
-                    minDate={new Date().toISOString().slice(0, 10)}
+                    onChange={handleDatePicked}
+                    label={spanish ? 'Fecha de visita preferida' : 'Preferred visit date'}
                     placeholder={spanish ? 'Elige una fecha' : 'Choose a date'}
+                    locale={spanish ? 'es-US' : 'en-US'}
                     className={publicDatePickerClass}
                   />
                 </Field>
                 <Field label={spanish ? 'Hora preferida' : 'Preferred time'}>
-                  <input
-                    type="time"
-                    value={customTourTime}
-                    onChange={(e) => setCustomTourTime(e.target.value)}
-                    className={inputClass}
-                  />
+                  <LuxorTimePicker value={customTourTime} onChange={setCustomTourTime} label={spanish ? 'Hora preferida' : 'Preferred time'} placeholder={spanish ? 'Elige una hora' : 'Choose a time'} />
                 </Field>
               </div>
 
               <div className="mt-3">
                 <Field label={spanish ? 'Fecha alternativa (opcional)' : 'Optional alternate date'}>
-                  <PortalDatePicker
-                    theme="light"
+                  <PublicEventDatePicker
                     value={alternateDate}
                     onChange={setAlternateDate}
-                    minDate={new Date().toISOString().slice(0, 10)}
+                    label={spanish ? 'Fecha alternativa' : 'Alternate date'}
                     placeholder={spanish ? 'Elige otra fecha' : 'Choose another date'}
+                    locale={spanish ? 'es-US' : 'en-US'}
                     className={publicDatePickerClass}
                   />
                 </Field>
@@ -852,11 +864,11 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
             </Field>
 
             <Field label={spanish ? 'Fecha del evento (si la conoces)' : 'Event Date (if known)'}>
-              <PortalDatePicker
-                theme="light"
+              <PublicEventDatePicker
                 value={eventDate}
                 onChange={setEventDate}
                 placeholder={spanish ? 'Selecciona una fecha' : 'Select a date'}
+                locale={spanish ? 'es-US' : 'en-US'}
                 className={publicDatePickerClass}
               />
             </Field>

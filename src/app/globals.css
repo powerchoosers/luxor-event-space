@@ -982,6 +982,27 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(180deg, #f1d27a, #9f742b);
   }
 
+  .public-calendar-scroll {
+    scrollbar-color: #c8a85f transparent;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .public-calendar-scroll::-webkit-scrollbar {
+    width: 0.35rem;
+    height: 0.35rem;
+  }
+
+  .public-calendar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .public-calendar-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #c8a85f;
+  }
+
   .portal-scrollbar {
     scrollbar-color: rgba(59, 130, 246, 0.7) rgba(9, 9, 11, 0.9);
     scrollbar-width: thin;
@@ -1139,6 +1160,30 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
     box-shadow: 0 26px 56px -28px rgba(202, 162, 76, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     transform: translateY(-4px);
   }
+}
+
+/* Public date and time popovers stay light even when global scrollbars are dark. */
+body[data-luxor-site] .public-calendar-scroll {
+  color-scheme: light;
+  scrollbar-color: #c8a85f transparent;
+  scrollbar-width: thin;
+}
+
+body[data-luxor-site] .public-calendar-scroll::-webkit-scrollbar {
+  width: 0.35rem;
+  height: 0.35rem;
+}
+
+body[data-luxor-site] .public-calendar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border: 0;
+}
+
+body[data-luxor-site] .public-calendar-scroll::-webkit-scrollbar-thumb {
+  border: 0;
+  border-radius: 999px;
+  background: #c8a85f;
+  box-shadow: none;
 }
 
 @keyframes luxor-ambient {

@@ -11,10 +11,10 @@ import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import { PortalSelect } from '@/components/portal/PortalUI'
+import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
 import {
   Check,
   ChevronLeft,
-  ChevronRight,
   Mail,
   MessageCircle,
   Phone,
@@ -29,6 +29,11 @@ type Message = {
   role: 'assistant' | 'user'
   content: string
   ui?: 'booking'
+}
+
+function toCalendarDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, (month || 1) - 1, day || 1)
 }
 
 type TourSelection = PublicLuxorTourSlot
@@ -128,33 +133,6 @@ function inferGuestCount(messages: Message[], notes: string) {
   return guestMatch?.[1] ?? ''
 }
 
-function toCalendarDate(value: string) {
-  const [year, month, day] = value.split('-').map(Number)
-  return new Date(year, (month || 1) - 1, day || 1)
-}
-
-function toIsoDate(value: Date) {
-  return [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-')
-}
-
-function getCalendarDays(monthValue: string) {
-  const [year, month] = monthValue.split('-').map(Number)
-  const firstDay = new Date(year, (month || 1) - 1, 1)
-  const start = new Date(year, firstDay.getMonth(), 1 - firstDay.getDay())
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(start)
-    date.setDate(start.getDate() + index)
-    return date
-  })
-}
-
-function shiftCalendarMonth(monthValue: string, amount: number) {
-  const [year, month] = monthValue.split('-').map(Number)
-  const shifted = new Date(year, (month || 1) - 1 + amount, 1)
-  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, '0')}`
-}
-
 function getVisitorGreeting() {
   const attribution = getLuxorPublicAttribution()
   const source = `${attribution.utmSource ?? ''} ${attribution.initialReferrer ?? ''}`.toLowerCase()
@@ -186,7 +164,6 @@ export function LuxorConciergeChat() {
   const { slots: tourSlots, loading: tourSlotsLoading, error: tourSlotsError } = useLuxorTourSlots({ enabled: open })
   const [bookingStep, setBookingStep] = useState<1 | 2>(1)
   const [selectedTourDate, setSelectedTourDate] = useState('')
-  const [calendarMonth, setCalendarMonth] = useState('')
   const [preferredTourWindow, setPreferredTourWindow] = useState('')
   const [marketingOptIn, setMarketingOptIn] = useState(false)
   const [showOptionalContactDetails, setShowOptionalContactDetails] = useState(false)
@@ -232,14 +209,6 @@ export function LuxorConciergeChat() {
     () => tourSlots.filter((slot) => slot.date === selectedTourDate),
     [selectedTourDate, tourSlots],
   )
-  const calendarDays = useMemo(() => (calendarMonth ? getCalendarDays(calendarMonth) : []), [calendarMonth])
-
-  useEffect(() => {
-    if (tourSlots.length && !calendarMonth) {
-      setCalendarMonth(tourSlots[0].date.slice(0, 7))
-    }
-  }, [calendarMonth, tourSlots])
-
   useEffect(() => {
     if (!open) return
     trackLuxorPublicEvent('concierge_opened')
@@ -392,6 +361,7 @@ export function LuxorConciergeChat() {
       metadata: {
         selectedEvent: selectedEvent?.label ?? null,
         selectedTourSlotId: tourSelection?.id ?? null,
+        browserTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         selectedTourLabel: tourSelection?.label ?? null,
         autoScheduleTour: Boolean(tourSelection),
         tourBookingType: tourSelection ? 'confirmed_slot' : 'pending_custom_request',
@@ -481,31 +451,19 @@ export function LuxorConciergeChat() {
         <AnimatePresence mode="wait" initial={false}>
           {bookingStep === 1 ? (
             <motion.div key="tour-day" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22 }}>
-              <div className="mb-2 flex items-center justify-between">
-                <button type="button" onClick={() => setCalendarMonth((current) => shiftCalendarMonth(current, -1))} className="flex h-8 w-8 items-center justify-center rounded-md border border-[#caa24c]/18 text-[#d7c29a]/70 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]" aria-label="Previous month">
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <p className="font-serif text-lg text-[#f7efe3]">{calendarMonth ? toCalendarDate(`${calendarMonth}-01`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Available dates'}</p>
-                <button type="button" onClick={() => setCalendarMonth((current) => shiftCalendarMonth(current, 1))} className="flex h-8 w-8 items-center justify-center rounded-md border border-[#caa24c]/18 text-[#d7c29a]/70 transition hover:border-[#f1d27a]/45 hover:text-[#f1d27a]" aria-label="Next month">
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="grid grid-cols-7 gap-1 text-center font-mono text-[9px] uppercase tracking-wider text-[#d7c29a]/45">
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <span key={`${day}-${index}`} className="py-1">{day}</span>)}
-                {calendarDays.map((day) => {
-                  const isoDate = toIsoDate(day)
-                  const available = availableTourDates.has(isoDate)
-                  const inMonth = day.getMonth() === toCalendarDate(`${calendarMonth}-01`).getMonth()
-                  const active = selectedTourDate === isoDate
-
-                  return (
-                    <button key={isoDate} type="button" disabled={!available} onClick={() => { setSelectedTourDate(isoDate); setTourSelection(null); setBookingStep(2) }} className={`rounded-md py-2 text-xs transition ${active ? 'bg-[#caa24c] font-bold text-white' : available ? 'border border-[#caa24c]/25 text-[#eadcc8] hover:border-[#f1d27a]/60 hover:text-[#f1d27a]' : `text-[#d7c29a]/20 ${inMonth ? '' : 'opacity-40'}`}`} aria-label={available ? `Choose ${day.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : undefined}>
-                      {day.getDate()}
-                    </button>
-                  )
-                })}
-              </div>
-              <p className="mt-3 text-[10px] leading-4 text-[#d7c29a]/55">Available days are highlighted. Tours are 30 minutes.</p>
+              <PublicEventDatePicker
+                value={selectedTourDate}
+                availableDates={availableTourDates}
+                label="Visit date"
+                placeholder="Choose a tour day"
+                className="w-full"
+                onChange={(date) => {
+                  setSelectedTourDate(date)
+                  setTourSelection(null)
+                  setBookingStep(2)
+                }}
+              />
+              <p className="mt-3 text-[10px] leading-4 text-[#d7c29a]/55">Open dates show a green dot. Tours are 30 minutes.</p>
             </motion.div>
           ) : (
             <motion.div key="tour-time" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22 }}>

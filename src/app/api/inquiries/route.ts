@@ -16,6 +16,7 @@ import { releaseLuxorTourSlot } from '@/lib/luxorTourSlotsServer'
 import { cancelQueuedTourTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { isConfiguredTestSubmission, startLuxorTestRun } from '@/lib/luxorTestLeadServer'
+import { isPublicEventDateSelectable } from '@/lib/publicEventDate'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -103,6 +104,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Consent choices must be submitted as separate true or false values.' }, { status: 400 })
     }
     const payload = rawPayload as LuxorInquiryInput
+    const targetDate = payload.targetDate
+    if (targetDate !== undefined && targetDate !== null && targetDate !== '' && !isPublicEventDateSelectable(targetDate, payload.metadata?.browserTimeZone)) {
+      return NextResponse.json({ error: 'Choose a valid event date that is today or later.' }, { status: 400 })
+    }
+    const preferredTourDate = payload.preferredTourDate
+    if (preferredTourDate && !isPublicEventDateSelectable(preferredTourDate, payload.metadata?.browserTimeZone)) {
+      return NextResponse.json({ error: 'Choose a valid visit date that is today or later.' }, { status: 400 })
+    }
+    const alternateTourDate = payload.metadata?.alternateTourDate
+    if (typeof alternateTourDate === 'string' && alternateTourDate && !isPublicEventDateSelectable(alternateTourDate, payload.metadata?.browserTimeZone)) {
+      return NextResponse.json({ error: 'Choose a valid alternate visit date that is today or later.' }, { status: 400 })
+    }
     if (isLuxorEventTypeRequiredFlow(payload.flow)) {
       try {
         payload.eventType = normalizeLuxorEventType(payload.eventType)
