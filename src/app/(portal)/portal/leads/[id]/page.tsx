@@ -8652,7 +8652,8 @@ export default function LeadDetailPage({
                     : breakdownAttempt?.state
                       || (publicationAttempt?.id === breakdownAttemptId ? String(publicationAttempt.state || 'preparing') : null)
                       || (breakdownDelivery ? 'status unavailable' : null)
-                  const isProposalBreakdown = proposalContextRecord.proposal_record_type === 'proposal_breakdown'
+                  const isProposalBreakdown = proposalContextRecord.proposal_record_type === 'proposal_breakdown' && !individualProposalSent
+                  const hasProposalBreakdownEmail = Boolean(breakdownDelivery)
                   const proposalActivities = (proposalHistory[proposal.id]?.activities || []).filter((activity) => activity.invoice_id === proposal.id)
                   const proposalActivityTypes = new Set(proposalActivities.map((activity) => activity.event_type))
                   const proposalBooking = bookings.find((booking) => booking.invoice_id === proposal.id || booking.id === proposal.booking_id) || null
@@ -8778,7 +8779,7 @@ export default function LeadDetailPage({
                       </section>
                       <section id={`proposal-activity-${proposal.id}`} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 scroll-mt-24" aria-label="Proposal activity">
                         <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Delivery & activity</h4><div className="flex items-center gap-2"><span className="text-[9px] text-[color:var(--portal-muted)]">{proposalActivityTypes.size} events</span><button type="button" onClick={showProposalHistory} className="min-h-9 rounded-md border border-[color:var(--portal-border)] px-2.5 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/50">View activity</button></div></div>
-                        {isProposalBreakdown ? <div className="mt-3 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[10px]">
+                        {hasProposalBreakdownEmail ? <div className="mt-3 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[10px]">
                           <p className="font-semibold capitalize text-[color:var(--portal-text)]">Proposal Breakdown email · {(breakdownDeliveryStatus || 'not sent').replaceAll('_', ' ')}</p>
                           <p className="mt-1 text-[color:var(--portal-muted)]">
                             {typeof breakdownDelivery?.recipient_email === 'string' ? `${breakdownDelivery.recipient_email} · ` : ''}
