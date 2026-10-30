@@ -15,6 +15,7 @@ function record(value: unknown): Record<string, unknown> | null {
  * Do not use generic invoice status or proposal_sent_at here: breakdown sends
  * write both. A bare view is also ambiguous because the breakdown shares the
  * public proposal URL, so it counts only alongside individual-send evidence.
+ * A prepared snapshot alone does not mean its send succeeded.
  */
 export function getProposalDisplayLabel(invoice: LuxorInvoice, evidence: ProposalDisplayEvidence = {}) {
   const context = record(invoice.proposal_context)
@@ -26,9 +27,10 @@ export function getProposalDisplayLabel(invoice: LuxorInvoice, evidence: Proposa
     const inPerson = record(deliverySnapshot?.in_person)
     const publicationAttempt = record(context.publication_attempt)
     const hasIndividualProposalEvidence = Boolean(
-      individualEmail
+      individualEmail?.delivery_state === 'delivered'
       || inPerson?.handoff_state === 'ready'
-      || publicationAttempt?.variant === 'proposal_email'
+      || (publicationAttempt?.variant === 'proposal_email'
+        && ['preparing', 'sending', 'delivery_unconfirmed', 'completed'].includes(String(publicationAttempt.state || '')))
       || invoice.proposal_accepted_at
       || evidence.hasAcceptedProposal
       || evidence.hasSignedAgreement,
