@@ -33,12 +33,40 @@
   }
 }
 
-.portal-overlay-surface {
-  background-color: rgba(255, 253, 249, 0.95);
+/* Elevated portal surfaces: sheets, modals, drawers, inspectors, popovers, and floating overlays */
+.portal-overlay-surface,
+.portal-sheet,
+.portal-drawer,
+.portal-drawer-surface,
+.portal-inspector-surface,
+.portal-elevated-surface,
+.portal-popover-surface {
+  background-color: rgba(255, 253, 249, 0.94);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 }
 
-body[data-portal-theme='dark'] .portal-overlay-surface {
-  background-color: rgba(18, 17, 15, 0.95);
+body[data-portal-theme='dark'] .portal-overlay-surface,
+body[data-portal-theme='dark'] .portal-sheet,
+body[data-portal-theme='dark'] .portal-drawer,
+body[data-portal-theme='dark'] .portal-drawer-surface,
+body[data-portal-theme='dark'] .portal-inspector-surface,
+body[data-portal-theme='dark'] .portal-elevated-surface,
+body[data-portal-theme='dark'] .portal-popover-surface {
+  background-color: rgba(14, 13, 11, 0.90);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+/* Inside elevated surfaces in dark mode, adjust nested card tokens so nested elements aren't see-through */
+body[data-portal-theme='dark'] .portal-overlay-surface,
+body[data-portal-theme='dark'] .portal-sheet,
+body[data-portal-theme='dark'] .portal-drawer,
+body[data-portal-theme='dark'] .portal-drawer-surface,
+body[data-portal-theme='dark'] .portal-inspector-surface,
+body[data-portal-theme='dark'] .portal-elevated-surface {
+  --portal-card: rgba(24, 22, 19, 0.78);
+  --portal-soft: rgba(30, 27, 24, 0.70);
 }
 
 .portal-close-button::before {
@@ -152,6 +180,8 @@ body[data-portal-theme='dark'] {
   --portal-frame: #050505;
   --portal-card: rgba(0, 0, 0, 0.36);
   --portal-soft: rgba(9, 9, 11, 0.7);
+  --portal-surface-elevated: rgba(14, 13, 11, 0.90);
+  --portal-overlay-bg: rgba(14, 13, 11, 0.90);
   --portal-text: rgba(255, 255, 255, 0.9);
   --portal-muted: #9696a1;
   --portal-faint: #50505c;
@@ -163,6 +193,8 @@ body[data-portal-theme='light'] {
   --portal-frame: #ffffff;
   --portal-card: #ffffff;
   --portal-soft: #f4efe7;
+  --portal-surface-elevated: rgba(255, 253, 249, 0.94);
+  --portal-overlay-bg: rgba(255, 253, 249, 0.94);
   --portal-text: #18130d;
   --portal-muted: #6c6156;
   --portal-faint: #a99d8e;

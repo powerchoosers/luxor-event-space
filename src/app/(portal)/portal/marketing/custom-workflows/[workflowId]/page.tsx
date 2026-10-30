@@ -23,6 +23,7 @@ import {
   Save,
   Trash2,
   Workflow,
+  X,
   Zap,
 } from 'lucide-react'
 import { PortalPageFrame, PortalSelect, PortalButton } from '@/components/portal/PortalUI'
@@ -714,14 +715,26 @@ export default function CustomWorkflowEditorPage() {
           </div>
         </div>
 
+        {/* Mobile Backdrop Overlay (matches mobile settings expansion) */}
+        {mobileInspectorOpen ? (
+          <div
+            role="presentation"
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+            onClick={() => setMobileInspectorOpen(false)}
+            aria-hidden="true"
+          />
+        ) : null}
+
         {/* Right Column: Step Inspector & Live Preview */}
         <div
-          className={`lg:w-[460px] xl:w-[500px] border-t lg:border-t-0 lg:border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] flex flex-col shrink-0 ${
-            mobileInspectorOpen ? 'fixed inset-0 z-40 bg-[color:var(--portal-card)] lg:static' : 'hidden lg:flex'
+          className={`portal-inspector-surface flex flex-col shrink-0 ${
+            mobileInspectorOpen
+              ? 'portal-sheet fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] top-14 z-50 max-h-[calc(100dvh-4.5rem-env(safe-area-inset-bottom))] rounded-2xl border border-[color:var(--portal-border)] shadow-2xl overflow-hidden lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:max-h-none lg:w-[460px] xl:w-[500px] lg:rounded-none lg:border-t-0 lg:border-l lg:shadow-none'
+              : 'hidden lg:flex lg:w-[460px] xl:w-[500px] border-t lg:border-t-0 lg:border-l border-[color:var(--portal-border)]'
           }`}
         >
           {/* Inspector Header */}
-          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-3.5">
+          <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-3.5 portal-inspector-surface">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -750,14 +763,15 @@ export default function CustomWorkflowEditorPage() {
             <button
               type="button"
               onClick={() => setMobileInspectorOpen(false)}
-              className="lg:hidden rounded-lg p-1.5 text-[color:var(--portal-muted)]"
+              className="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
+              aria-label="Close configuration panel"
             >
-              ✕
+              <X size={18} />
             </button>
           </div>
 
           {/* Inspector Body */}
-          <div className="flex-1 overflow-y-auto portal-scrollbar p-5 space-y-5">
+          <div className="flex-1 overflow-y-auto overscroll-contain portal-scrollbar p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-5">
             {!selectedStep ? (
               <div className="py-12 text-center text-xs text-[color:var(--portal-muted)]">
                 Select a step on the canvas to configure its properties.

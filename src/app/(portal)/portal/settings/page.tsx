@@ -1009,7 +1009,7 @@ export default function SettingsPage() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="settings-menu-title"
-                className="flex max-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] w-full flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+                className="portal-sheet portal-drawer-surface flex max-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] w-full flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] shadow-2xl"
                 initial={{ opacity: 0, y: 56, scale: 0.985 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.985 }}
