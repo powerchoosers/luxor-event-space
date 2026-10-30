@@ -123,6 +123,7 @@ import { LeadMobileActionBar } from '@/components/portal/LeadMobileActionBar'
 import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { getDuplicatedProposalSelection, getDuplicatedProposalTimingContext, isPreferredVendorEstimateLine } from '@/lib/luxorProposalDuplicateContext'
 import { findProposalLeadEvent, getLeadClientProposals, getProposalCardState, getProposalWorkflowDisplayState, getSavedProposalPricingSummary } from '@/lib/luxorProposalCard'
+import { getProposalDisplayLabel } from '@/lib/luxorProposalDisplay'
 import { getLuxorPaymentReminderDueDate } from '@/lib/luxorPaymentReminderDueDate'
 import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
 import { buildLuxorEventPlanningTimePatch, createLuxorEventPlanningTimeBaseline, hasActiveLuxorEventBooking, hasLuxorEventPlanningTimeConflict, persistLuxorEventDetailsDraft, resolveLuxorEventPlanningTimes } from '@/lib/luxorEventPlanningTimes'
@@ -8652,7 +8653,6 @@ export default function LeadDetailPage({
                     : breakdownAttempt?.state
                       || (publicationAttempt?.id === breakdownAttemptId ? String(publicationAttempt.state || 'preparing') : null)
                       || (breakdownDelivery ? 'status unavailable' : null)
-                  const isProposalBreakdown = proposalContextRecord.proposal_record_type === 'proposal_breakdown' && !individualProposalSent
                   const hasProposalBreakdownEmail = Boolean(breakdownDelivery)
                   const proposalActivities = (proposalHistory[proposal.id]?.activities || []).filter((activity) => activity.invoice_id === proposal.id)
                   const proposalActivityTypes = new Set(proposalActivities.map((activity) => activity.event_type))
@@ -8665,7 +8665,6 @@ export default function LeadDetailPage({
                   ))
                   const latestView = proposal.proposal_latest_viewed_at || proposal.proposal_viewed_at || null
                   const latestSentAt = proposal.proposal_latest_sent_at || proposal.proposal_sent_at || (proposal.status === 'sent' ? proposal.updated_at : null)
-                  const proposalHasBeenPublished = Boolean(proposal.proposal_sent_at || proposal.status === 'sent' || proposal.price_locked_at)
                   const hasActiveSend = (proposalHistory[proposal.id]?.sendAttempts || []).some((attempt) => ['preparing', 'sending', 'delivery_unconfirmed'].includes(attempt.state))
                   const proposalCardState = getProposalCardState({
                     invoice: proposal,
@@ -8677,6 +8676,8 @@ export default function LeadDetailPage({
                   })
                   const hasAcceptanceEvidence = proposalCardState.isAccepted
                   const lifecycleStatus = proposalCardState.label
+                  const proposalLabel = getProposalDisplayLabel(proposal, { hasAcceptedProposal: hasAcceptanceEvidence, hasSignedAgreement })
+                  const isProposalBreakdown = proposalLabel === 'Proposal Breakdown'
                   const statusClass = lifecycleStatus === 'Accepted'
                     ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                     : lifecycleStatus === 'Declined' || lifecycleStatus === 'Cancelled'
@@ -8688,11 +8689,6 @@ export default function LeadDetailPage({
                         : lifecycleStatus === 'Sending'
                           ? 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
                           : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
-                  const proposalLabel = isProposalBreakdown
-                    ? 'Proposal Breakdown'
-                    : Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
-                      ? `Proposal${proposal.proposal_number === 1 ? '' : ` #${proposal.proposal_number}`}${proposal.supersedes_invoice_id ? ' · Revision' : ''}`
-                      : proposalHasBeenPublished ? 'Existing proposal' : 'Draft proposal'
                   const proposalIdentifier = Number.isInteger(proposal.proposal_number) && Number(proposal.proposal_number) > 0
                     ? `#${proposal.proposal_number}`
                     : proposal.id
