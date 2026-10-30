@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -63,6 +63,7 @@ export function LuxorDatePicker({
   const monthYearDialogRef = useRef<HTMLElement>(null)
   const returnFocusToMonthYearRef = useRef(false)
   const returnFocusAfterCloseRef = useRef(false)
+  const safeAreaInsetsRef = useRef<{ top: number; right: number; bottom: number; left: number } | null>(null)
   const prefersReducedMotion = useReducedMotion()
   const isPortal = theme === 'portal'
   const motionDuration = prefersReducedMotion ? 0 : 0.18
@@ -128,15 +129,47 @@ export function LuxorDatePicker({
     const trigger = triggerRef.current
     if (!trigger) return
     const rect = trigger.getBoundingClientRect()
+    if (!safeAreaInsetsRef.current) {
+      const probe = document.createElement('div')
+      probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)'
+      document.body.appendChild(probe)
+      const styles = window.getComputedStyle(probe)
+      safeAreaInsetsRef.current = {
+        top: Number.parseFloat(styles.paddingTop) || 0,
+        right: Number.parseFloat(styles.paddingRight) || 0,
+        bottom: Number.parseFloat(styles.paddingBottom) || 0,
+        left: Number.parseFloat(styles.paddingLeft) || 0,
+      }
+      probe.remove()
+    }
+    const safeArea = safeAreaInsetsRef.current
+    const viewport = window.visualViewport
+    const viewportLeft = viewport?.offsetLeft ?? 0
+    const viewportTop = viewport?.offsetTop ?? 0
+    const viewportWidth = viewport?.width ?? window.innerWidth
+    const viewportHeight = viewport?.height ?? window.innerHeight
+    const viewportRight = viewportLeft + viewportWidth
+    const viewportBottomEdge = viewportTop + viewportHeight
+    const isMobileViewport = window.matchMedia('(max-width: 767px)').matches
     const margin = 12
-    const width = Math.min(360, window.innerWidth - margin * 2)
-    const stickyBottom = !isPortal && window.matchMedia('(max-width: 767px)').matches ? 76 : 12
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-    const viewportTop = window.visualViewport?.offsetTop ?? 0
-    const viewportBottom = viewportTop + viewportHeight - stickyBottom - 8
+    const horizontalMargin = Math.max(margin, safeArea.left)
+    const rightMargin = Math.max(margin, safeArea.right)
+    const width = Math.max(1, Math.min(360, viewportWidth - horizontalMargin - rightMargin))
+    let stickyBottom = !isPortal && isMobileViewport ? Math.max(76, safeArea.bottom + 8) : Math.max(12, safeArea.bottom + 8)
+    if (!isPortal && isMobileViewport) {
+      const bottomActions = Array.from(document.querySelectorAll<HTMLElement>('.site-floating-action'))
+      for (const action of bottomActions) {
+        const actionRect = action.getBoundingClientRect()
+        if (actionRect.width < viewportWidth * 0.7 || actionRect.height < 32) continue
+        if (actionRect.bottom >= viewportBottomEdge - 4 && actionRect.top < viewportBottomEdge) {
+          stickyBottom = Math.max(stickyBottom, viewportBottomEdge - actionRect.top + 8)
+        }
+      }
+    }
+    const viewportBottom = viewportBottomEdge - stickyBottom
     const stickyTop = !isPortal ? document.getElementById('shared-header')?.getBoundingClientRect().bottom ?? 0 : 0
-    const safeTop = Math.max(viewportTop + 8, stickyTop + 8)
-    const availableHeight = Math.max(80, viewportBottom - safeTop)
+    const safeTop = Math.max(viewportTop + Math.max(8, safeArea.top + 8), stickyTop + 8)
+    const availableHeight = Math.max(1, viewportBottom - safeTop)
     const contentHeight = panelRef.current?.scrollHeight ?? 360
     const naturalHeight = Math.min(contentHeight, 440, availableHeight)
     const below = Math.max(0, viewportBottom - rect.bottom - 6)
@@ -156,7 +189,9 @@ export function LuxorDatePicker({
     const top = Math.max(safeTop, Math.min(desiredTop, viewportBottom - maxHeight))
     setCoords({
       top,
-      left: Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin)),
+      left: isMobileViewport
+        ? viewportLeft + horizontalMargin + Math.max(0, (viewportWidth - horizontalMargin - rightMargin - width) / 2)
+        : Math.max(viewportLeft + horizontalMargin, Math.min(rect.left, viewportRight - width - rightMargin)),
       width,
       maxHeight,
     })
@@ -168,12 +203,18 @@ export function LuxorDatePicker({
     setMonthYearOpen(false)
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return
     updatePosition()
     const schedule = () => requestAnimationFrame(updatePosition)
-    window.addEventListener('resize', schedule)
+    const resize = () => {
+      safeAreaInsetsRef.current = null
+      requestAnimationFrame(updatePosition)
+    }
+    window.addEventListener('resize', resize)
     window.addEventListener('scroll', schedule, true)
+    window.visualViewport?.addEventListener('resize', resize)
+    window.visualViewport?.addEventListener('scroll', schedule)
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation()
@@ -204,8 +245,10 @@ export function LuxorDatePicker({
     }
     const refreshInterval = window.setInterval(refreshToday, 60_000)
     return () => {
-      window.removeEventListener('resize', schedule)
+      window.removeEventListener('resize', resize)
       window.removeEventListener('scroll', schedule, true)
+      window.visualViewport?.removeEventListener('resize', resize)
+      window.visualViewport?.removeEventListener('scroll', schedule)
       window.removeEventListener('keydown', keydown)
       window.clearInterval(refreshInterval)
     }
@@ -425,7 +468,7 @@ export function LuxorDatePicker({
         <AnimatePresence initial={false} onExitComplete={() => { if (returnFocusAfterCloseRef.current) { returnFocusAfterCloseRef.current = false; triggerRef.current?.focus() } }}>
         {open ? <>
           <motion.button key="calendar-backdrop" type="button" tabIndex={-1} aria-label="Close calendar" onClick={closeAndReturnFocus} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: motionDuration }} className="fixed inset-0 z-[9980] cursor-default bg-transparent" />
-          <motion.div key="calendar-panel" initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.99 }} transition={{ duration: motionDuration }} style={{ position: 'fixed', top: coords.top, left: coords.left, width: coords.width, maxHeight: coords.maxHeight, WebkitOverflowScrolling: 'touch' }}>
+          <motion.div key="calendar-panel" initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.99 }} transition={{ duration: motionDuration }} style={{ position: 'fixed', zIndex: 9981, top: coords.top, left: coords.left, width: coords.width, maxHeight: coords.maxHeight, WebkitOverflowScrolling: 'touch' }}>
           <div
             ref={panelRef}
             role="dialog"
