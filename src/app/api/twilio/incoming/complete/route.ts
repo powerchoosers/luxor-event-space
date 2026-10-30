@@ -54,13 +54,20 @@ export async function POST(request: Request) {
     return twimlResponse(response)
   }
 
-  response.say({ voice: 'Polly.Joanna' }, 'Thank you for calling Luxor Event Space. We cannot answer right now. Please leave your name, number, event date, and a short message after the tone.')
+  const call = await getLuxorCallBySid(recordCallSid)
+  if (call?.recording_consent_status !== 'consented') {
+    response.say({ voice: 'Polly.Joanna' }, 'We cannot answer right now. This call will not be recorded. Please call us again soon or visit luxor atlas palmas dot com.')
+    response.hangup()
+    return twimlResponse(response)
+  }
+
+  response.say({ voice: 'Polly.Joanna' }, 'Thank you for calling Luxor Event Space. We cannot answer right now. You may leave a recorded message after the tone with your name, number, event date, and a short note, or hang up to leave no message.')
   response.record({
     action: buildTwilioCallbackUrl('/api/twilio/incoming/voicemail-complete', { recordCallSid }),
     maxLength: 120,
     method: 'POST',
     playBeep: true,
-    recordingStatusCallback: buildTwilioCallbackUrl('/api/twilio/recording-status', { recordCallSid }),
+    recordingStatusCallback: buildTwilioCallbackUrl('/api/twilio/recording-status', { recordCallSid, voicemail: 'true' }),
     recordingStatusCallbackEvent: ['completed'],
     recordingStatusCallbackMethod: 'POST',
     timeout: 6,

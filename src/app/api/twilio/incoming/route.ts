@@ -66,35 +66,14 @@ export async function POST(request: Request) {
     const completeCallback = buildTwilioCallbackUrl('/api/twilio/incoming/complete', {
       recordCallSid: params.CallSid,
     })
-    const dial = response.dial({
-      action: completeCallback,
-      answerOnBridge: true,
-      callerId: callerNumber,
+    const consent = response.gather({
+      action: buildTwilioCallbackUrl('/api/twilio/incoming/consent', { recordCallSid: params.CallSid }),
+      actionOnEmptyResult: true,
       method: 'POST',
-      timeout: 30,
+      numDigits: 1,
+      timeout: 8,
     })
-    const routing = await getLuxorPhoneRoutingSettings()
-    if (routing.ring_browser) {
-      const client = dial.client({
-        statusCallback,
-        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-        statusCallbackMethod: 'POST',
-      }, config.clientIdentity)
-      client.parameter({ name: 'CallerName', value: callerName })
-      client.parameter({ name: 'CallerNumber', value: callerNumber })
-      client.parameter({ name: 'InquiryId', value: inquiry?.id || '' })
-      client.parameter({ name: 'ParentCallSid', value: params.CallSid })
-      client.parameter({ name: 'Direction', value: 'inbound' })
-    }
-
-    const ringToNumber = normalizePhoneNumber(routing.ring_to_number)
-    if (routing.ring_phone && ringToNumber && ringToNumber !== normalizePhoneNumber(params.To || config.phoneNumber)) {
-      dial.number({
-        statusCallback,
-        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-        statusCallbackMethod: 'POST',
-      }, ringToNumber)
-    }
+    consent.say({ voice: 'Polly.Joanna' }, 'For quality and follow-up, Luxor can record and transcribe this call. Press 1 to consent. Press 2 to continue without recording. If you do not choose, the call will continue without recording.')
   } catch (error) {
     console.error('Luxor inbound TwiML failed:', error)
     response.say('We are unable to connect your call right now. Please try again shortly.')

@@ -62,6 +62,8 @@ export async function POST(request: Request) {
       timeout: 30,
     })
     dial.number({
+      url: buildTwilioCallbackUrl('/api/twilio/outbound/consent', { recordCallSid: params.CallSid }),
+      method: 'POST',
       statusCallback,
       statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
       statusCallbackMethod: 'POST',

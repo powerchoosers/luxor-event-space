@@ -35,6 +35,15 @@ export type LuxorCall = {
   recording_sid: string | null
   recording_url: string | null
   recording_duration_seconds: number | null
+  recording_storage_path?: string | null
+  recording_consent_status?: 'not_requested' | 'consented' | 'declined'
+  recording_consent_at?: string | null
+  transcription_status?: 'not_requested' | 'pending' | 'processing' | 'completed' | 'failed'
+  transcript_segments?: Array<{ id: string; text: string; track: string; timestamp: string; final: boolean; startSeconds?: number | null }>
+  summary_status?: 'not_generated' | 'generating' | 'completed' | 'failed'
+  summary_text?: string | null
+  summary_generated_at?: string | null
+  summary_model?: string | null
   is_voicemail: boolean
   is_read: boolean
   last_sequence_number: number

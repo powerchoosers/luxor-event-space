@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       unreadOnly,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : 200,
     })
-    return NextResponse.json(calls, { headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json(calls.map((call) => ({ ...call, recording_url: null })), { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load call history.'
     return NextResponse.json({ error: message }, { status: 500 })

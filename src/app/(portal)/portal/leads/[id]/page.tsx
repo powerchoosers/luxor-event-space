@@ -475,6 +475,11 @@ export default function LeadDetailPage({
   const activeTestRunRequestRef = useRef<string | null>(null)
   const [notes, setNotes] = useState<LuxorNote[]>([])
   const [callRecords, setCallRecords] = useState<LuxorCall[]>([])
+  const [editingCallSummaryId, setEditingCallSummaryId] = useState<string | null>(null)
+  const [callSummaryDraft, setCallSummaryDraft] = useState('')
+  const [savingCallSummaryId, setSavingCallSummaryId] = useState<string | null>(null)
+  const [callViewModes, setCallViewModes] = useState<Record<string, 'transcript' | 'summary'>>({})
+  const [generatingCallSummaryId, setGeneratingCallSummaryId] = useState<string | null>(null)
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [proposalHistory, setProposalHistory] = useState<Record<string, ProposalHistoryPayload>>({})
@@ -2083,6 +2088,63 @@ export default function LeadDetailPage({
     window.addEventListener('luxor-call-history-refresh', refreshCalls)
     return () => window.removeEventListener('luxor-call-history-refresh', refreshCalls)
   }, [id])
+
+  const saveCallSummary = async (callId: string) => {
+    setSavingCallSummaryId(callId)
+    try {
+      const response = await fetch('/api/twilio/calls', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: callId, notes: callSummaryDraft.trim() || null }),
+      })
+      const payload = await response.json().catch(() => ({})) as LuxorCall & { error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to save the call summary.')
+      setCallRecords((current) => current.map((call) => call.id === callId ? payload : call))
+      setEditingCallSummaryId(null)
+      setCallSummaryDraft('')
+      window.dispatchEvent(new Event('luxor-call-history-refresh'))
+      notify({ title: 'Call summary saved', description: 'The summary is saved with this lead’s call history.', variant: 'success' })
+    } catch (error) {
+      notify({ title: 'Could not save summary', description: error instanceof Error ? error.message : 'Unable to save the call summary.', variant: 'error' })
+    } finally {
+      setSavingCallSummaryId(null)
+    }
+  }
+
+  const showCallSummary = async (call: LuxorCall) => {
+    setCallViewModes((current) => ({ ...current, [call.id]: 'summary' }))
+    if (call.summary_text || call.transcription_status !== 'completed') return
+    setGeneratingCallSummaryId(call.id)
+    try {
+      const endpoint = `/api/portal/calls/${encodeURIComponent(call.id)}/summary?inquiryId=${encodeURIComponent(id)}`
+      const response = await fetch(endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: id }),
+      })
+      let payload = await response.json() as { status?: LuxorCall['summary_status']; summary?: string | null; error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Unable to summarize this call.')
+      for (let attempt = 0; attempt < 8 && payload.status === 'generating'; attempt += 1) {
+        setCallRecords((current) => current.map((item) => item.id === call.id ? { ...item, summary_status: payload.status } : item))
+        await new Promise((resolve) => window.setTimeout(resolve, 1500))
+        const statusResponse = await fetch(endpoint, { cache: 'no-store' })
+        payload = await statusResponse.json() as { status?: LuxorCall['summary_status']; summary?: string | null; error?: string }
+        if (!statusResponse.ok) throw new Error(payload.error || 'Unable to load the call summary.')
+      }
+      if (payload.status === 'failed') throw new Error('Summary generation failed. Select Summary to retry.')
+      setCallRecords((current) => current.map((item) => item.id === call.id ? { ...item, summary_status: payload.status, summary_text: payload.summary || item.summary_text } : item))
+    } catch (error) {
+      notify({ title: 'Summary unavailable', description: error instanceof Error ? error.message : 'Unable to summarize this call.', variant: 'error' })
+    } finally {
+      setGeneratingCallSummaryId(null)
+    }
+  }
+
+  const seekCallRecording = (callId: string, seconds: number | null | undefined) => {
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return
+    const audio = document.getElementById(`luxor-call-audio-${callId}`) as HTMLAudioElement | null
+    if (!audio) return
+    audio.currentTime = Math.max(0, seconds)
+    void audio.play().catch(() => undefined)
+  }
 
   const fetchClientEmailThread = async (email: string) => {
     const requestId = ++emailThreadRequestRef.current
@@ -8073,7 +8135,7 @@ export default function LeadDetailPage({
                         <div key={entry.id} className="relative group">
                           <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
                           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Luxor Browser Phone</span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Luxor call</span>
                             <div className="flex items-center gap-3">
                               <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${call.direction === 'inbound' ? 'border-blue-500/20 bg-blue-500/10 text-blue-300' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'}`}>{call.direction}</span>
                               <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
@@ -8081,9 +8143,79 @@ export default function LeadDetailPage({
                           </div>
                           <p className="text-xs font-bold text-zinc-200">{describeActivityEntry(entry)}</p>
                           <p className="mt-1 font-mono text-[10px] text-zinc-600">{otherNumber} · {call.duration_seconds === null ? call.status : formatCallDuration(call.duration_seconds)}</p>
-                          {call.is_voicemail && call.recording_sid ? (
-                            <audio controls preload="none" className="mt-3 w-full" src={`/api/twilio/recordings/${call.recording_sid}`}>Your browser does not support audio playback.</audio>
+                          {call.recording_sid ? (
+                            <div className="mt-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
+                              <p className="mb-2 text-[10px] font-semibold text-[color:var(--portal-muted)]">{call.is_voicemail ? 'Voicemail recording' : 'Call recording'}</p>
+                              <audio id={`luxor-call-audio-${call.id}`} controls preload="none" className="w-full" src={`/api/twilio/recordings/${call.recording_sid}?inquiryId=${encodeURIComponent(id)}`}>Your browser does not support audio playback.</audio>
+                            </div>
+                          ) : call.status === 'completed' ? (
+                            <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">No caller-consented recording is available for this call.</p>
                           ) : null}
+                          {call.recording_consent_status === 'consented' ? (
+                          <div className="mt-3 overflow-hidden rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--portal-border)] p-3">
+                              <div className="inline-flex rounded-lg bg-[color:var(--portal-soft)] p-1" role="tablist" aria-label="Call details">
+                                <button type="button" role="tab" aria-selected={(callViewModes[call.id] || 'transcript') === 'transcript'} onClick={() => setCallViewModes((current) => ({ ...current, [call.id]: 'transcript' }))} className={`min-h-9 rounded-md px-3 text-xs font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${(callViewModes[call.id] || 'transcript') === 'transcript' ? 'bg-[color:var(--portal-card)] shadow-sm' : ''}`}>Transcript</button>
+                                <button type="button" role="tab" aria-selected={(callViewModes[call.id] || 'transcript') === 'summary'} onClick={() => void showCallSummary(call)} disabled={call.transcription_status !== 'completed'} className={`min-h-9 rounded-md px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${(callViewModes[call.id] || 'transcript') === 'summary' ? 'bg-[color:var(--portal-card)] shadow-sm' : ''}`}>Summary</button>
+                              </div>
+                              <span className="text-[10px] text-[color:var(--portal-muted)]">{call.transcription_status === 'completed' ? 'Transcript ready' : call.transcription_status === 'failed' ? 'Transcript unavailable' : 'Transcript processing'}</span>
+                            </div>
+                            {(callViewModes[call.id] || 'transcript') === 'transcript' ? (
+                              <div role="tabpanel" className="max-h-80 space-y-3 overflow-y-auto p-3 sm:p-4">
+                                {(call.transcript_segments || []).length ? call.transcript_segments?.map((segment) => (
+                                  <button type="button" key={segment.id} onClick={() => seekCallRecording(call.id, segment.startSeconds)} disabled={typeof segment.startSeconds !== 'number' || !call.recording_sid} className="grid w-full grid-cols-[4.25rem_minmax(0,1fr)] gap-2 rounded-md text-left text-sm leading-6 hover:bg-[color:var(--portal-soft)] disabled:cursor-default disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] sm:grid-cols-[5rem_minmax(0,1fr)]">
+                                    <span className="pt-0.5 text-[10px] font-semibold text-[color:var(--portal-muted)]">{segment.track === 'inbound_track' || segment.track === 'caller' || segment.track === 'customer' ? 'Caller' : 'Luxor'}</span>
+                                    <span className="break-words text-[color:var(--portal-text)]">{segment.text}</span>
+                                  </button>
+                                )) : <p className="text-sm text-[color:var(--portal-muted)]">{call.transcription_status === 'failed' ? 'The call transcript could not be processed.' : 'Transcript will appear here when Twilio finishes processing.'}</p>}
+                              </div>
+                            ) : (
+                              <div role="tabpanel" className="min-h-24 p-4">
+                                {generatingCallSummaryId === call.id || call.summary_status === 'generating' ? <p className="text-sm text-[color:var(--portal-muted)]">Preparing call summary…</p>
+                                  : call.summary_text ? <p className="whitespace-pre-wrap text-sm leading-6 text-[color:var(--portal-text)]">{call.summary_text}</p>
+                                    : call.summary_status === 'failed' ? <p className="text-sm text-[color:var(--portal-muted)]">Summary could not be generated. Select Summary to retry.</p>
+                                      : <p className="text-sm text-[color:var(--portal-muted)]">Select Summary to create a concise summary from this transcript.</p>}
+                              </div>
+                            )}
+                          </div>
+                          ) : null}
+                          <div className="mt-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--portal-muted)]">Call notes</p>
+                              {editingCallSummaryId !== call.id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => { setCallSummaryDraft(call.notes || ''); setEditingCallSummaryId(call.id) }}
+                                  className="rounded-md px-2 py-1 text-[10px] font-semibold text-[#8c6529] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] dark:text-[#f1d27a]"
+                                >
+                                  {call.notes ? 'Edit summary' : 'Add summary'}
+                                </button>
+                              ) : null}
+                            </div>
+                            {editingCallSummaryId === call.id ? (
+                              <div className="mt-2 space-y-2">
+                                <textarea
+                                  aria-label="Call summary"
+                                  value={callSummaryDraft}
+                                  onChange={(event) => setCallSummaryDraft(event.target.value)}
+                                  maxLength={2000}
+                                  rows={3}
+                                  placeholder="Note what the caller needs and the next follow-up step."
+                                  className="w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]"
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <button type="button" onClick={() => { setEditingCallSummaryId(null); setCallSummaryDraft('') }} className="rounded-md px-3 py-1.5 text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">Cancel</button>
+                                  <button type="button" disabled={savingCallSummaryId === call.id} onClick={() => void saveCallSummary(call.id)} className="rounded-md bg-[#caa24c] px-3 py-1.5 text-xs font-semibold text-[#211a13] disabled:cursor-not-allowed disabled:opacity-60">
+                                    {savingCallSummaryId === call.id ? 'Saving…' : 'Save summary'}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : call.notes ? (
+                              <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-[color:var(--portal-text)]">{call.notes}</p>
+                            ) : (
+                              <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Add the key details and next step after the call.</p>
+                            )}
+                          </div>
                           <Link href="/portal/calls" className="mt-2 inline-block text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:text-[#f1d27a]">Open call record →</Link>
                         </div>
                       )

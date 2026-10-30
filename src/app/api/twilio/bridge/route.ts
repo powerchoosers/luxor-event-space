@@ -25,6 +25,8 @@ export async function POST(request: Request) {
     response.say('Connecting your Luxor call.')
     const dial = response.dial({ action: completeCallback, answerOnBridge: true, callerId: activePhoneNumber, method: 'POST', timeout: 30 })
     dial.number({
+      url: buildTwilioCallbackUrl('/api/twilio/outbound/consent', { recordCallSid: params.CallSid }),
+      method: 'POST',
       statusCallback,
       statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
       statusCallbackMethod: 'POST',
