@@ -348,7 +348,7 @@ export function LuxorInquiryForm({
                   inputClassName={PUBLIC_SELECT_BUTTON_CLASS}
                 />
                 <FieldLabel label="Target event date">
-                  <PortalDatePicker theme="light" value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" allowPastDates={false} maxMonths={36} />
+                  <PortalDatePicker theme="light" value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" allowPastDates={false} maxMonths={36} timeZone={null} />
                 </FieldLabel>
                 <div>
                   <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Expected guests" placeholder="For example, 120" type="number" inputMode="numeric" min={1} max={LUXOR_MAX_GUESTS} step={1} />

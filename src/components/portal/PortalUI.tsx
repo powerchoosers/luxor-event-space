@@ -1131,7 +1131,7 @@ export function PortalSelect({
 }
 
 export function PortalDatePicker({
-  value, onChange, className = '', placeholder = 'Select Date...', theme = 'portal', minDate, maxMonths, availableDates, allowPastDates = true,
+  value, onChange, className = '', placeholder = 'Select Date...', theme = 'portal', minDate, maxMonths, availableDates, allowPastDates = true, timeZone,
 }: {
   value: string
   onChange: (val: string) => void
@@ -1142,8 +1142,13 @@ export function PortalDatePicker({
   maxMonths?: number
   availableDates?: Set<string>
   allowPastDates?: boolean
+  /** Set to null to use the visitor's browser-local calendar day. */
+  timeZone?: string | null
 }) {
-  return <LuxorDatePicker value={value} onChange={onChange} className={className} placeholder={placeholder} theme={theme} minDate={minDate} maxMonths={maxMonths} availableDates={availableDates} timeZone={maxMonths === undefined ? undefined : 'America/Chicago'} allowPastDates={allowPastDates} openToValue label="Date" />
+  const effectiveTimeZone = timeZone === undefined
+    ? (maxMonths === undefined ? undefined : 'America/Chicago')
+    : timeZone ?? undefined
+  return <LuxorDatePicker value={value} onChange={onChange} className={className} placeholder={placeholder} theme={theme} minDate={minDate} maxMonths={maxMonths} availableDates={availableDates} timeZone={effectiveTimeZone} allowPastDates={allowPastDates} openToValue label="Date" />
 }
 
 export function PortalContactAvatar({

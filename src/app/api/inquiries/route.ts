@@ -106,15 +106,15 @@ export async function POST(request: NextRequest) {
     const payload = rawPayload as LuxorInquiryInput
     const targetDate = payload.targetDate
     if (targetDate !== undefined && targetDate !== null && targetDate !== '' && !isPublicEventDateSelectable(targetDate, payload.metadata?.browserTimeZone)) {
-      return NextResponse.json({ error: 'Choose a valid event date that is today or later.' }, { status: 400 })
+      return NextResponse.json({ error: 'Choose a valid event date from today through 36 months from today.' }, { status: 400 })
     }
     const preferredTourDate = payload.preferredTourDate
     if (preferredTourDate && !isPublicEventDateSelectable(preferredTourDate, payload.metadata?.browserTimeZone)) {
-      return NextResponse.json({ error: 'Choose a valid visit date that is today or later.' }, { status: 400 })
+      return NextResponse.json({ error: 'Choose a valid visit date from today through 36 months from today.' }, { status: 400 })
     }
     const alternateTourDate = payload.metadata?.alternateTourDate
     if (typeof alternateTourDate === 'string' && alternateTourDate && !isPublicEventDateSelectable(alternateTourDate, payload.metadata?.browserTimeZone)) {
-      return NextResponse.json({ error: 'Choose a valid alternate visit date that is today or later.' }, { status: 400 })
+      return NextResponse.json({ error: 'Choose a valid alternate visit date from today through 36 months from today.' }, { status: 400 })
     }
     if (isLuxorEventTypeRequiredFlow(payload.flow)) {
       try {
