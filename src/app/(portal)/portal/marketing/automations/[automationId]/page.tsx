@@ -220,6 +220,7 @@ export default function AutomationDetailPage() {
   }, [fetchPageData, reloadVersion])
 
   const savedDetail = detail?.kind === 'saved' ? detail : null
+  const productionSettingIsOn = entry?.id === 'brochure_lead' && entry.enabled && entry.status === 'unknown' && entry.canToggle === false
   const orderedTemplates = React.useMemo(
     () => savedDetail ? [...savedDetail.templates].sort((left, right) => left.sort_order - right.sort_order) : [],
     [savedDetail],
@@ -450,7 +451,7 @@ export default function AutomationDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#caa24c]/10 text-[#8c6424] dark:text-[#f1d27a]">{entry?.kind === 'system' ? <CalendarClock size={17} aria-hidden="true" /> : <Workflow size={17} aria-hidden="true" />}</span>
                 <h1 className="font-serif text-2xl font-semibold text-[color:var(--portal-text)] sm:text-3xl">{entry?.name || 'Automation details'}</h1>
-                {entry ? <StatusBadge status={entry.status} /> : null}
+                {entry ? <StatusBadge status={productionSettingIsOn ? 'active' : entry.status} label={productionSettingIsOn ? 'Live in prod' : undefined} title={productionSettingIsOn ? 'The saved production setting is on. This local preview is read-only and does not send follow-ups.' : undefined} /> : null}
                 {entry ? <div className="ml-1 flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-1.5"><span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{entry.enabled ? 'On' : 'Off'}</span><button type="button" role="switch" aria-checked={entry.enabled} aria-label={`${entry.name} automation`} disabled={automationSaving || entry.canToggle === false || (entry.canEnable === false && !entry.enabled)} onClick={() => void handleAutomationToggle()} title={entry.canToggle === false ? entry.controlReason || 'Use the deployed portal to change live automation.' : entry.canEnable === false && !entry.enabled ? entry.controlReason || 'This automation is not ready to enable.' : undefined} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-50 ${entry.enabled ? 'bg-[#a8792f]' : 'bg-[color:var(--portal-border)]'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} /></button></div> : null}
               </div>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--portal-muted)]">{entry?.description || 'Inspect the saved automation configuration.'}</p>
@@ -466,7 +467,7 @@ export default function AutomationDetailPage() {
         {loading && entry ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing saved automation data.</p> : null}
         {detailError ? <Notice tone="info" title="Runtime details are unavailable." body={detailError} /> : null}
         {automationError ? <Notice tone="error" title="Automation setting could not be saved." body={automationError} /> : null}
-        {entry?.canToggle === false ? <Notice tone="info" title="Live controls are unavailable in this local preview." body="Use the deployed portal to change production automation settings." /> : null}
+        {entry?.canToggle === false ? <Notice tone="info" title={productionSettingIsOn ? 'Production automation is live.' : 'Live controls are unavailable in this local preview.'} body={productionSettingIsOn ? 'This local preview shows the saved production setting but does not send follow-ups. Use the deployed portal to change it.' : 'Use the deployed portal to change production automation settings.'} /> : null}
 
         {savedDetail ? (
           <SavedWorkflowDetail
@@ -647,15 +648,16 @@ function TourNotificationDetail({ detail }: { detail: TourDetail }) {
 }
 
 function UnknownWorkflowDetail({ entry }: { entry: AutomationLibraryEntry }) {
+  const productionSettingIsOn = entry.id === 'brochure_lead' && entry.enabled && entry.status === 'unknown' && entry.canToggle === false
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,.65fr)]">
       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5"><h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Saved steps</h2>{entry.steps.length ? <ol className="mt-4 space-y-3">{entry.steps.map((step, index) => <li key={step.key} className="flex gap-3 border-b border-[color:var(--portal-border)] pb-3 last:border-0"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[color:var(--portal-border)] text-[10px] font-bold text-[color:var(--portal-muted)]">{index + 1}</span><span><span className="text-sm font-semibold text-[color:var(--portal-text)]">{step.name}</span><span className="mt-1 block text-[11px] text-[color:var(--portal-muted)]">{step.channel} · {step.delayDays === null ? 'Timing unavailable' : step.delayDays === 0 ? 'At enrollment' : `${step.delayDays} days after enrollment`}</span></span></li>)}</ol> : <p className="mt-3 text-sm text-[color:var(--portal-muted)]">No saved step definitions are available.</p>}</section>
-      <Notice tone="info" title="Runtime behavior is unverified." body="The current application has no verified execution path for this saved definition. This page shows the library’s saved metadata only; triggers, content, timing, and controls remain unavailable." />
+      <Notice tone="info" title={productionSettingIsOn ? 'Production automation is live.' : 'Runtime behavior is unverified.'} body={productionSettingIsOn ? 'This local preview shows the saved production setting but does not send follow-ups. Production runtime controls are available in the deployed portal.' : 'The current application has no verified execution path for this saved definition. This page shows the library’s saved metadata only; triggers, content, timing, and controls remain unavailable.'} />
     </div>
   )
 }
 
-function StatusBadge({ status }: { status: AutomationStatus }) {
+function StatusBadge({ status, label, title }: { status: AutomationStatus; label?: string; title?: string }) {
   const styles: Record<AutomationStatus, string> = {
     active: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
     draft: 'bg-amber-500/10 text-amber-800 dark:text-amber-200',
@@ -663,7 +665,7 @@ function StatusBadge({ status }: { status: AutomationStatus }) {
     unknown: 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]',
     'system-managed': 'bg-[#caa24c]/15 text-[#8c6424] dark:text-[#f1d27a]',
   }
-  return <span className={`inline-flex min-h-6 items-center rounded-full px-2.5 text-[9px] font-black uppercase tracking-[0.1em] ${styles[status]}`}>{statusLabel(status)}</span>
+  return <span title={title} className={`inline-flex min-h-6 items-center rounded-full px-2.5 text-[9px] font-black uppercase tracking-[0.1em] ${styles[status]}`}>{label ?? statusLabel(status)}</span>
 }
 
 function ChannelLabel({ channel }: { channel: string }) {
