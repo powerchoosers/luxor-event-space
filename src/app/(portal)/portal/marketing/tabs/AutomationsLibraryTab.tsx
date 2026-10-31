@@ -3,6 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { CalendarClock, ChevronDown, ChevronRight, Clock3, Compass, Mail, Phone, Search, Workflow, Zap, ArrowRight } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { PREBUILT_WORKFLOWS, type PrebuiltWorkflow } from '@/lib/luxorPrebuiltWorkflows'
 import { ElenaWorkflowArchitectModal } from '@/components/portal/ElenaWorkflowArchitectModal'
@@ -369,6 +370,7 @@ function SummaryMetric({ label, value, detail }: { label: string; value: number 
 
 function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }: { entry: AutomationLibraryEntry; expanded: boolean; onToggle: () => void; onSetEnabled: () => void; saving: boolean }) {
   const detailsId = `automation-summary-${entry.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+  const reduceMotion = useReducedMotion() ?? false
   const icon = entry.kind === 'system'
     ? <CalendarClock size={18} aria-hidden="true" />
     : <Workflow size={18} aria-hidden="true" />
@@ -431,13 +433,30 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-bold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/60 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
           >
             {expanded ? 'Close summary' : 'Open summary'}
-            {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+            <motion.span
+              aria-hidden="true"
+              animate={{ rotate: expanded ? 0 : -90 }}
+              transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="inline-flex"
+            >
+              <ChevronDown size={15} />
+            </motion.span>
           </button>
         </div>
       </div>
 
-      {expanded ? (
-        <div id={detailsId} className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-5 sm:px-6">
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            id={detailsId}
+            role="region"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+          <div className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-5 sm:px-6">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,.7fr)]">
             <div>
               <h3 className="text-[10px] font-black uppercase tracking-[0.18em] text-[#a8792f]">Read-only workflow summary</h3>
@@ -468,8 +487,10 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
               {entry.statusNote ? <p className="mt-3 border-t border-[color:var(--portal-border)] pt-3 text-xs leading-5 text-[color:var(--portal-muted)]">{entry.statusNote}</p> : null}
             </aside>
           </div>
-        </div>
-      ) : null}
+          </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </article>
   )
 }
