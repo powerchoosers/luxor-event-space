@@ -414,9 +414,11 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
               disabled={saving || entry.canToggle === false || (entry.canEnable === false && !entry.enabled)}
               onClick={onSetEnabled}
               title={entry.canEnable === false && !entry.enabled ? entry.controlReason || 'This automation is not ready to enable.' : undefined}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-50 ${entry.enabled ? 'bg-[#a8792f]' : 'bg-[color:var(--portal-border)]'}`}
+              className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+              <span aria-hidden="true" className={`inline-flex h-6 w-11 items-center rounded-full transition-colors ${entry.enabled ? 'bg-[#a8792f]' : 'bg-[color:var(--portal-border)]'}`}>
+                <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+              </span>
             </button>
           </div>
           <Link
