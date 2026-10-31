@@ -16,11 +16,24 @@ type SmartSuggestion = {
 interface InquiryRecord {
   id: string
   full_name: string | null
+  email: string | null
   event_type: string | null
   status: string | null
   pipeline_stage: string | null
+  campaign_key?: string | null
   created_at: string
   updated_at: string
+}
+
+interface MailMessageRecord {
+  id: string
+  direction: string | null
+  from_address: string | null
+  to_addresses: string[] | null
+  subject: string | null
+  text_body: string | null
+  occurred_at: string
+  read_at: string | null
 }
 
 interface BookingRecord {
@@ -178,19 +191,54 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const cycle = Math.max(0, Number.parseInt(searchParams.get('cycle') || '0', 10) || 0)
 
-    const [inquiries, bookings, invoices, vendorBills, tasks, signatures, unreadMessages] = await Promise.all([
-      withFallbackTimeout(supabaseRest<InquiryRecord[]>('luxor_inquiries?select=id,full_name,event_type,status,pipeline_stage,created_at,updated_at&order=created_at.desc&limit=24'), []),
+    const [inquiries, bookings, invoices, vendorBills, tasks, signatures, unreadMessages, recentEmails] = await Promise.all([
+      withFallbackTimeout(supabaseRest<InquiryRecord[]>('luxor_inquiries?select=id,full_name,email,event_type,status,pipeline_stage,campaign_key,created_at,updated_at&archived_at=is.null&is_test=is.false&order=created_at.desc&limit=40'), []),
       withFallbackTimeout(supabaseRest<BookingRecord[]>('luxor_bookings?select=id,client_name,event_type,event_date,contract_status,final_payment_due_date&order=event_date.asc&limit=30'), []),
       withFallbackTimeout(supabaseRest<InvoiceRecord[]>('luxor_invoices?select=id,client_name,total,status,due_date&status=neq.paid&order=due_date.asc&limit=30'), []),
       withFallbackTimeout(supabaseRest<VendorBillRecord[]>('luxor_bills?select=id,provider,service,amount,status,due_date,source_type,extraction_status,extraction_confidence,arithmetic_status&status=neq.paid&order=due_date.asc,created_at.desc&limit=30'), []),
       withFallbackTimeout(supabaseRest<TaskRecord[]>('luxor_tasks?select=id,title,priority,status,due_date&status=neq.completed&order=due_date.asc&limit=30'), []),
       withFallbackTimeout(supabaseRest<SignatureRequestRecord[]>('luxor_signature_requests?select=id,client_name,status,expires_at,updated_at&status=neq.signed&order=updated_at.desc&limit=20'), []),
       withFallbackTimeout(supabaseRest<MessageRecord[]>('luxor_messages?select=id,contact_name,body,created_at&direction=eq.inbound&is_read=eq.false&order=created_at.desc&limit=12'), []),
+      withFallbackTimeout(supabaseRest<MailMessageRecord[]>('luxor_mail_messages?select=id,direction,from_address,to_addresses,subject,text_body,occurred_at,read_at&direction=eq.incoming&order=occurred_at.desc&limit=15'), []),
     ])
 
     const candidates: SmartSuggestion[] = []
 
-    const distinctInquiries = inquiries.filter((inquiry, index, all) => {
+    const activeLeadInquiries = inquiries.filter((inquiry) => inquiry.campaign_key !== 'grand_opening_2026_07_25')
+    const leadsByEmail = new Map<string, InquiryRecord>()
+    for (const inquiry of activeLeadInquiries) {
+      const emailKey = (inquiry.email || '').trim().toLowerCase()
+      if (emailKey && !leadsByEmail.has(emailKey)) {
+        leadsByEmail.set(emailKey, inquiry)
+      }
+    }
+
+    const seenEmailSenders = new Set<string>()
+    for (const emailMsg of recentEmails) {
+      const sender = (emailMsg.from_address || '').trim().toLowerCase()
+      if (!sender || seenEmailSenders.has(sender)) continue
+      const matchedLead = leadsByEmail.get(sender)
+      if (!matchedLead) continue
+      seenEmailSenders.add(sender)
+      const name = matchedLead.full_name || sender
+      const event = matchedLead.event_type ? ` (${matchedLead.event_type})` : ''
+      const isUnread = !emailMsg.read_at
+      candidates.push({
+        id: `client-email-${emailMsg.id}`,
+        kind: 'message',
+        label: isUnread ? 'Unread client email' : 'Recent client email reply',
+        detail: `${name}${event} emailed regarding "${emailMsg.subject || 'their event inquiry'}".`,
+        prompt: `Show me what ${name} said in their latest email and help me draft the best reply.`,
+        urgency: 'urgent',
+      })
+      if (seenEmailSenders.size >= 3) break
+    }
+
+    const distinctInquiries = activeLeadInquiries.filter((inquiry, index, all) => {
+      const emailKey = (inquiry.email || '').trim().toLowerCase()
+      if (emailKey) {
+        return all.findIndex((candidate) => (candidate.email || '').trim().toLowerCase() === emailKey) === index
+      }
       const identity = `${(inquiry.full_name || '').trim().toLowerCase()}|${(inquiry.event_type || '').trim().toLowerCase()}`
       if (identity === '|') return true
       return all.findIndex((candidate) => `${(candidate.full_name || '').trim().toLowerCase()}|${(candidate.event_type || '').trim().toLowerCase()}` === identity) === index

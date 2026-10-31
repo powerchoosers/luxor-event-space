@@ -105,14 +105,14 @@ type ElenaChatResponse = {
 }
 
 function isVoiceChoiceReply(message: Message) {
-  if (message.role !== 'assistant' || !message.content.includes('?')) return false
-  const options = message.content.split('\n').filter(line => /^\s*(?:[-*•]|\d+[.)])\s+\S/.test(line))
-  return options.length >= 2
+  if (message.role !== 'assistant') return false
+  return Boolean(message.content.trim())
 }
 
 function hasVoiceActionOutput(message: Message) {
   return message.role === 'assistant' && Boolean(
-    message.confirmation
+    message.content.trim()
+    || message.confirmation
     || message.emailDraft
     || message.crmUpdateCard
     || message.contractCard
@@ -124,8 +124,19 @@ function hasVoiceActionOutput(message: Message) {
     || message.workflowDraft
     || message.textCampaignDraft
     || message.toolActivityFailed
-    || isVoiceChoiceReply(message)
   )
+}
+
+function formatForVoiceCommentary(text: string) {
+  return text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\s*[-*•]\s+/gm, '• ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 async function readElenaChatResponse(response: Response, onActivity: (step: string) => void): Promise<ElenaChatResponse> {
@@ -176,25 +187,33 @@ async function readElenaChatResponse(response: Response, onActivity: (step: stri
 
 function isVoiceEmailSendConfirmation(text: string) {
   const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, '').replace(/\s+/g, ' ')
-  if (/\b(don't|do not|not|never|wait|stop|cancel)\b/.test(normalized)) return false
-  return /^(yes|yeah|yep|sure|okay|ok|go ahead|please|send it|send that|send the email|that's good|that looks good|looks good|sounds good|do it)( please)?( and send( it| that| the email)?)?$/.test(normalized)
-    || /^(yes|yeah|yep|okay|ok|go ahead),?\s+(send|send it|send that|send the email)$/.test(normalized)
+  if (/\b(don't|do not|not|never|wait|stop|cancel|hold on|change|edit|rewrite|instead)\b/.test(normalized)) return false
+  if (/^(yes|yeah|yep|sure|okay|ok|go ahead|please|send it|send that|send this|send the email|that's good|that looks good|looks good|sounds good|do it|perfect)( please)?( and send( it| that| this| the email)?)?$/.test(normalized)) {
+    return true
+  }
+  if (/^(yes|yeah|yep|okay|ok|go ahead|so|well|um|uh|like),?\s*(like,?\s*)?(can you|could you|will you|please|go ahead and)?\s*(just\s*)?(send|send it|send that|send this|send the email)(\s+for me|\s+out|\s+now|\s+please)*$/.test(normalized)) {
+    return true
+  }
+  if (/\b(can you|could you|please|go ahead and)\s+(just\s+)?send\s+(it|that|this|the email|her the email|him the email|them the email)(\s+for me|\s+out|\s+now|\s+please)*$/.test(normalized)) {
+    return true
+  }
+  return false
 }
 
 function isVoiceEmailReadRequest(text: string) {
-  return /\b(read (it|the email|that email)( to me)?|read (it|the email) aloud|what does (it|the email) say|let me hear the email)\b/i.test(text)
+  return /\b(read (it|the email|that email|this email)( to me)?|read (it|the email) aloud|what does (it|the email) say|let me hear (it|the email))\b/i.test(text)
 }
 
 function isVoiceEmailSendCancellation(text: string) {
-  return /^(no|no thanks|no thank you|don't send it|do not send it|not yet|cancel|leave it as a draft)[.! ]*$/i.test(text.trim())
+  return /^(no|no thanks|no thank you|don't send it|do not send it|not yet|cancel|leave it as a draft|keep it as a draft)[.! ]*$/i.test(text.trim())
 }
 
 function voiceEmailReadback(draft: EmailDraftPayload) {
   const recipient = draft.recipientName?.trim() || draft.recipientEmail
   const purpose = draft.subject.toLowerCase().includes('brochure')
-    ? 'It follows up on the brochure request.'
-    : 'It is a personal follow-up.'
-  return `I drafted a follow-up for ${recipient} at ${draft.recipientEmail}. The subject is “${draft.subject}.” ${purpose} Should I send it?`
+    ? 'It follows up on their brochure request.'
+    : 'I put the draft card on screen for you.'
+  return `I drafted an email for ${recipient} at ${draft.recipientEmail} with the subject “${draft.subject}.” ${purpose} Would you like me to send it?`
 }
 
 function ToolActivityDisclosure({ steps, active = false, failed = false }: { steps: string[]; active?: boolean; failed?: boolean }) {
@@ -526,11 +545,17 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           }
         }
         if (event.type === 'session.output_transcript.delta' && typeof event.delta === 'string') {
+          if (pendingDelegations.size === 0) {
+            consumedLength = transcript.length
+          }
           const fragment = event.delta
           recordVoiceFragment('assistant', fragment)
           setVoiceCaption(previous => previous?.role === 'assistant'
             ? { role: 'assistant', text: previous.text + fragment }
             : { role: 'assistant', text: fragment })
+        }
+        if (event.type === 'session.output_audio_buffer.stopped' && pendingDelegations.size === 0) {
+          consumedLength = transcript.length
         }
         if (event.type !== 'session.delegation.created') return
 
@@ -540,7 +565,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           : null
         if (typeof delegationId !== 'string' || handledVoiceDelegationsRef.current.has(delegationId)) return
         handledVoiceDelegationsRef.current.add(delegationId)
-        client.sendThinking('I’m checking that with our existing Luxor tools now.', delegationId)
+        client.sendThinking('Checking your Luxor records and inbox now.', delegationId)
         pendingDelegations.set(delegationId, { timer: 0, startedAt: Date.now() })
         scheduleDelegation(delegationId, 1200)
       },
@@ -593,7 +618,15 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             const result = await response.json() as { success?: boolean; error?: string }
             if (!response.ok || !result.success) throw new Error(result.error || 'The email could not be sent.')
             pendingVoiceEmailDraftRef.current = null
-            const sentReply = `The email to ${pendingEmail.draft.recipientName || pendingEmail.draft.recipientEmail} was accepted by the email provider.`
+            const recipientLabel = pendingEmail.draft.recipientName || pendingEmail.draft.recipientEmail
+            const sentReply = `The email to ${recipientLabel} was sent.`
+            setMessages(prev => [
+              ...prev,
+              {
+                role: 'assistant',
+                content: `Done! I sent the email to **${recipientLabel}** with subject *"${pendingEmail.draft.subject}"*.`,
+              },
+            ])
             client.sendCommentary(sentReply, delegationId)
           } catch (error) {
             const failedReply = error instanceof Error ? error.message : 'The email could not be sent.'
@@ -602,7 +635,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           return
         }
         const result = await voiceSendRef.current?.(request, (reply) => {
-          if (voiceClientRef.current === client) client.sendCommentary(reply, delegationId)
+          if (voiceClientRef.current === client) client.sendCommentary(formatForVoiceCommentary(reply), delegationId)
         })
         if (result == null && voiceClientRef.current === client) {
           client.sendCommentary('I could not finish that request. Please try again.', delegationId)
@@ -1446,15 +1479,15 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                           className={`flex items-start gap-2 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
                         >
                           {msg.role === 'assistant' && (
-                            <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
+                            <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-[color:var(--portal-border)] mt-1">
                               <Image src="/luxor-concierge.png" alt="Elena" fill sizes="24px" className="object-cover" />
                             </div>
                           )}
                           <div 
                             className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm border ${
                               msg.role === 'user'
-                                ? 'rounded-tr-none bg-[#caa24c]/10 border-[#caa24c]/20 text-zinc-300'
-                                : 'rounded-tl-none bg-zinc-900/60 border-zinc-800/30 text-zinc-300'
+                                ? 'rounded-tr-none bg-[#caa24c]/12 border-[#caa24c]/25 text-[color:var(--portal-text)]'
+                                : 'rounded-tl-none bg-[color:var(--portal-card)] border-[color:var(--portal-border)] text-[color:var(--portal-text)]'
                             }`}
                           >
                             {msg.voiceTranscript ? (
@@ -1600,11 +1633,12 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             <ElenaEmailDraftCard
                               draft={msg.emailDraft}
                               onSendSuccess={(recipient, subj) => {
+                                pendingVoiceEmailDraftRef.current = null
                                 setMessages((prev) => [
                                   ...prev,
                                   {
                                     role: 'assistant',
-                                    content: `Done bestie! I successfully sent the email to **${recipient}** with subject *"${subj}"*! 💌✨`
+                                    content: `Done! I sent the email to **${recipient}** with subject *"${subj}"*.`
                                   }
                                 ])
                               }}
@@ -2187,6 +2221,54 @@ const TOUR_DURATION_OPTIONS = [
 ]
 
 /* Local formatting helper function */
+function renderFormattedLine(line: string, key: React.Key) {
+  const trimmed = line.trim()
+  if (!trimmed) return <div key={key} className="h-2" />
+
+  const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/)
+  if (headingMatch) {
+    return (
+      <h4 key={key} className="mt-2.5 mb-1.5 font-serif text-sm font-semibold text-[color:var(--portal-text)]">
+        {renderBoldAndLinks(headingMatch[2])}
+      </h4>
+    )
+  }
+
+  const bulletMatch = trimmed.match(/^(?:[-*•])\s+(.+)$/)
+  if (bulletMatch) {
+    return (
+      <div key={key} className="mb-1.5 flex items-start gap-2 pl-1 text-sm leading-relaxed">
+        <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#caa24c]" />
+        <span className="min-w-0 flex-1">{renderBoldAndLinks(bulletMatch[1])}</span>
+      </div>
+    )
+  }
+
+  const orderedMatch = trimmed.match(/^(\d+[.)])\s+(.+)$/)
+  if (orderedMatch) {
+    return (
+      <div key={key} className="mb-1.5 flex items-start gap-2 pl-1 text-sm leading-relaxed">
+        <span className="shrink-0 font-semibold text-[#a8792f] dark:text-[#e3bc65]">{orderedMatch[1]}</span>
+        <span className="min-w-0 flex-1">{renderBoldAndLinks(orderedMatch[2])}</span>
+      </div>
+    )
+  }
+
+  const quoteMatch = trimmed.match(/^>\s*(.+)$/)
+  if (quoteMatch) {
+    return (
+      <blockquote
+        key={key}
+        className="my-2 border-l-2 border-[#caa24c]/50 bg-[color:var(--portal-soft)] px-3 py-1.5 text-xs italic leading-relaxed text-[color:var(--portal-muted)] rounded-r-lg"
+      >
+        {renderBoldAndLinks(quoteMatch[1])}
+      </blockquote>
+    )
+  }
+
+  return <p key={key} className="mb-2 text-sm leading-relaxed">{renderBoldAndLinks(trimmed)}</p>
+}
+
 function renderFormattedContent(content: string) {
   if (content.includes('|') && content.includes('\n|')) {
     const lines = content.split('\n')
@@ -2212,7 +2294,7 @@ function renderFormattedContent(content: string) {
           inTable = false
         }
         if (line) {
-          tableHtml.push(<p key={i} className="mb-2 text-sm leading-relaxed">{renderBoldAndLinks(line)}</p>)
+          tableHtml.push(renderFormattedLine(line, i))
         }
       }
     }
@@ -2222,10 +2304,7 @@ function renderFormattedContent(content: string) {
     return <div>{tableHtml}</div>
   }
 
-  return content.split('\n').map((line, idx) => {
-    if (!line.trim()) return <div key={idx} className="h-2" />
-    return <p key={idx} className="mb-2 text-sm leading-relaxed">{renderBoldAndLinks(line)}</p>
-  })
+  return content.split('\n').map((line, idx) => renderFormattedLine(line, idx))
 }
 
 function renderTable(rows: string[][], keyIndex: number) {
@@ -2233,18 +2312,18 @@ function renderTable(rows: string[][], keyIndex: number) {
   const headers = rows[0]
   const bodyRows = rows.slice(1)
   return (
-    <div key={keyIndex} className="my-3 overflow-x-auto rounded-lg border border-[#caa24c]/10 bg-[#050505] portal-scrollbar">
+    <div key={keyIndex} className="my-3 overflow-x-auto rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] portal-scrollbar">
       <table className="w-full text-left border-collapse text-xs">
         <thead>
-          <tr className="border-b border-[#caa24c]/10 bg-[#caa24c]/5 font-serif text-[#f1d27a]">
+          <tr className="border-b border-[color:var(--portal-border)] bg-[#caa24c]/10 font-serif text-[#a8792f] dark:text-[#f1d27a]">
             {headers.map((h, i) => (
               <th key={i} className="px-3 py-2 font-semibold">{h}</th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-900">
+        <tbody className="divide-y divide-[color:var(--portal-border)]">
           {bodyRows.map((row, rIdx) => (
-            <tr key={rIdx} className="hover:bg-[#caa24c]/2 text-zinc-350">
+            <tr key={rIdx} className="hover:bg-[#caa24c]/5 text-[color:var(--portal-text)]">
               {row.map((col, cIdx) => (
                 <td key={cIdx} className="px-3 py-2 whitespace-nowrap">{col}</td>
               ))}
@@ -2257,10 +2336,16 @@ function renderTable(rows: string[][], keyIndex: number) {
 }
 
 function renderBoldAndLinks(text: string) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g)
   return parts.map((part, idx) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={idx} className="font-bold text-[#caa24c]">{part.slice(2, -2)}</strong>
+      return <strong key={idx} className="font-semibold text-[#a8792f] dark:text-[#e3bc65]">{part.slice(2, -2)}</strong>
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+      return <em key={idx} className="italic">{part.slice(1, -1)}</em>
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return <code key={idx} className="rounded bg-[color:var(--portal-soft)] px-1 py-0.5 font-mono text-xs">{part.slice(1, -1)}</code>
     }
     return part
   })
