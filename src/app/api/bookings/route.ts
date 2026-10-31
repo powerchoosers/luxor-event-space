@@ -19,6 +19,7 @@ import { proposalBookingTiming, LuxorProposalBookingTimingError } from '@/lib/lu
 import { claimLuxorWeekdayProposalAcceptance, LuxorWeekdayRentalError, weekdayRentalDatabaseError } from '@/lib/luxorWeekdayRentalServer'
 import { isWeekdayCustomRentalContext } from '@/lib/luxorWeekdayRental'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { isLuxorBookingDateWithinLimit } from '@/lib/publicEventDate'
 
 function isFinalProposalLocked(proposal: Awaited<ReturnType<typeof getInvoice>> | null) {
   return Boolean(
@@ -118,7 +119,10 @@ export async function POST(request: NextRequest) {
       : null
     const bookingPaymentPercent = Number(paymentPlan?.booking_payment_percent)
     const finalPaymentDays = Number(paymentPlan?.final_payment_due_days_before_event)
-    if (!context || !eventDate || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || !paymentMode || !Number.isFinite(bookingPaymentPercent) || bookingPaymentPercent < 0 || bookingPaymentPercent > 100 || !Number.isInteger(finalPaymentDays) || finalPaymentDays < 0) {
+    if (!context || !eventDate || !isLuxorBookingDateWithinLimit(eventDate) || !paymentMode || !Number.isFinite(bookingPaymentPercent) || bookingPaymentPercent < 0 || bookingPaymentPercent > 100 || !Number.isInteger(finalPaymentDays) || finalPaymentDays < 0) {
+      if (eventDate && !isLuxorBookingDateWithinLimit(eventDate)) {
+        return NextResponse.json({ error: 'Bookings must be scheduled no more than 36 months from today.' }, { status: 400 })
+      }
       return NextResponse.json({ error: 'Pricing configuration required — administrator review.' }, { status: 409 })
     }
 
@@ -307,6 +311,9 @@ export async function PATCH(request: NextRequest) {
 
     const nextDate = updates.event_date === undefined ? existing.event_date : updates.event_date
     const nextStatus = updates.status === undefined ? existing.status : updates.status
+    if (updates.event_date !== undefined && updates.event_date !== null && updates.event_date !== '' && !isLuxorBookingDateWithinLimit(updates.event_date)) {
+      return NextResponse.json({ error: 'Bookings must be scheduled no more than 36 months from today.' }, { status: 400 })
+    }
     if (nextDate && (nextStatus === 'tentative' || nextStatus === 'confirmed')) {
       const nextStartTime = updates.start_time === undefined ? existing.start_time : updates.start_time
       const nextEndTime = updates.end_time === undefined ? existing.end_time : updates.end_time

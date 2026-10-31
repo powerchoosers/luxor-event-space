@@ -7,6 +7,7 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-rea
 import { PortalSelect } from './PortalUI'
 import { luxorAvailabilityStatusLabel, type LuxorAvailabilityCalendar, type LuxorAvailabilityDay } from '@/lib/luxorAvailability'
 import { luxorTodayKey } from '@/lib/luxorTourMetrics'
+import { addCalendarMonthsDateKey, LUXOR_BOOKING_DATE_MAX_MONTHS } from '@/lib/publicEventDate'
 
 type LuxorAvailabilityCalendarProps = {
   availability: LuxorAvailabilityCalendar
@@ -67,6 +68,20 @@ export function LuxorAvailabilityCalendar({
   const [monthYearPosition, setMonthYearPosition] = useState<{ top: number; left: number; width: number; maxHeight: number; bottom?: number } | null>(null)
   const activeYear = activeDate.getFullYear()
   const activeMonth = activeDate.getMonth()
+  const [todayKey, setTodayKey] = useState(() => luxorTodayKey())
+  const maxDateKey = addCalendarMonthsDateKey(todayKey, LUXOR_BOOKING_DATE_MAX_MONTHS) || todayKey
+  const maxDate = localDate(maxDateKey)
+  const canMoveNext = activeYear < maxDate.getFullYear() || (activeYear === maxDate.getFullYear() && activeMonth < maxDate.getMonth())
+
+  useEffect(() => {
+    const refreshToday = () => setTodayKey(luxorTodayKey())
+    const interval = window.setInterval(refreshToday, 60_000)
+    window.addEventListener('focus', refreshToday)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshToday)
+    }
+  }, [])
 
   const updateMonthYearPosition = useCallback(() => {
     const trigger = monthYearTriggerRef.current
@@ -164,11 +179,12 @@ export function LuxorAvailabilityCalendar({
   }, [closeMonthYear, monthYearOpen, updateMonthYearPosition])
 
   const years = useMemo(() => {
-    const thisYear = localDate(luxorTodayKey()).getFullYear()
+    const thisYear = localDate(todayKey).getFullYear()
     const first = Math.min(thisYear - 2, activeYear)
-    const last = Math.max(thisYear + 8, activeYear)
+    const lastDate = addCalendarMonthsDateKey(todayKey, LUXOR_BOOKING_DATE_MAX_MONTHS) || todayKey
+    const last = Math.max(localDate(lastDate).getFullYear(), activeYear)
     return Array.from({ length: last - first + 1 }, (_, index) => String(first + index))
-  }, [activeYear])
+  }, [activeYear, todayKey])
 
   const days = useMemo(() => {
     const first = new Date(activeYear, activeMonth, 1)
@@ -182,7 +198,9 @@ export function LuxorAvailabilityCalendar({
 
   const moveMonth = (amount: number) => {
     const current = activeDate
-    setViewDate(new Date(current.getFullYear(), current.getMonth() + amount, 1))
+    const next = new Date(current.getFullYear(), current.getMonth() + amount, 1)
+    if (amount > 0 && (next.getFullYear() > maxDate.getFullYear() || (next.getFullYear() === maxDate.getFullYear() && next.getMonth() > maxDate.getMonth()))) return
+    setViewDate(next)
   }
   const selectToday = () => {
     const date = luxorTodayKey()
@@ -192,6 +210,7 @@ export function LuxorAvailabilityCalendar({
     if (monthYearOpen) closeMonthYear()
   }
   const selectDay = (value: string) => {
+    if (value > maxDateKey) return
     const date = localDate(value)
     if (date.getMonth() !== activeMonth || date.getFullYear() !== activeYear) {
       setViewDate(new Date(date.getFullYear(), date.getMonth(), 1))
@@ -265,7 +284,7 @@ export function LuxorAvailabilityCalendar({
               document.body,
             ) : null}
           </div>
-          <button type="button" aria-label="Next month" onClick={() => moveMonth(1)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+          <button type="button" aria-label="Next month" disabled={!canMoveNext} onClick={() => moveMonth(1)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:cursor-not-allowed disabled:opacity-40">
             <ChevronRight size={17} aria-hidden="true" />
           </button>
         </div>
@@ -283,10 +302,11 @@ export function LuxorAvailabilityCalendar({
             <button
               key={key}
               type="button"
+              disabled={key > maxDateKey}
               aria-pressed={selectedDay}
               aria-label={`${dateLabel}, ${status}${pending ? `, ${pending} pending proposals` : ''}`}
               onClick={() => selectDay(key)}
-              className={`relative mx-auto flex h-11 w-full min-w-0 items-center justify-center rounded-md text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)] transition focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60 sm:text-xs ${inMonth ? '' : 'opacity-45'}`}
+              className={`relative mx-auto flex h-11 w-full min-w-0 items-center justify-center rounded-md text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)] transition focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60 disabled:cursor-not-allowed disabled:opacity-30 sm:text-xs ${inMonth ? '' : 'opacity-45'}`}
             >
               <span className={`relative flex aspect-square w-full max-w-10 items-center justify-center rounded-full border border-[color:var(--portal-border)] text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)] transition sm:text-xs ${selectedDay ? 'ring-2 ring-[#b77d27] ring-offset-2 ring-offset-[color:var(--portal-card)]' : 'hover:border-[#caa24c]/50 hover:shadow-sm'}`} style={cellBackground(availabilityReady ? state : undefined)}>
                 {date.getDate()}

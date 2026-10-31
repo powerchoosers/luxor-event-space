@@ -11,6 +11,7 @@ import { isGuestCountOverCapacity, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_LEGACY_IN
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import { LUXOR_LEGACY_PACKAGE_NAMES, LUXOR_PACKAGE_INTEREST_OPTIONS } from '@/lib/luxorServiceCatalog'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
+import { formatLocalDateKey, isLuxorDateSelectable } from '@/lib/publicEventDate'
 
 type LuxorInquiryFormProps = {
   source: string
@@ -210,6 +211,18 @@ export function LuxorInquiryForm({
       return
     }
 
+    const today = formatLocalDateKey(new Date())
+    if (targetDate && !isLuxorDateSelectable(targetDate, today)) {
+      setStep(1)
+      setError('Please choose an event date from today through 36 months from today.')
+      return
+    }
+    if (preferredTourDate && !isLuxorDateSelectable(preferredTourDate, today)) {
+      setStep(1)
+      setError('Please choose a visit date from today through 36 months from today.')
+      return
+    }
+
     if (!fullName.trim()) {
       setError('Please add your full name.')
       return
@@ -256,6 +269,7 @@ export function LuxorInquiryForm({
       sessionId: getLuxorPublicSessionId(),
       attribution: getLuxorPublicAttribution(),
       metadata: {
+        browserTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         selectedTourSlotId: preferredTourSlotId || null,
         autoScheduleTour: Boolean(preferredTourSlotId),
         tourBookingType: preferredTourSlotId ? 'confirmed_slot' : 'pending_custom_request',
@@ -279,8 +293,10 @@ export function LuxorInquiryForm({
   }
 
   const reservedTour = Boolean(preferredTourSlotId)
-  const tourDates = Array.from(new Map(tourSlots.map((slot) => [slot.date, slot.dateLabel])).entries())
-  const selectedDateSlots = tourSlots.filter((slot) => slot.date === preferredTourDate)
+  const todayDateKey = formatLocalDateKey(new Date())
+  const selectableTourSlots = tourSlots.filter((slot) => isLuxorDateSelectable(slot.date, todayDateKey))
+  const tourDates = Array.from(new Map(selectableTourSlots.map((slot) => [slot.date, slot.dateLabel])).entries())
+  const selectedDateSlots = selectableTourSlots.filter((slot) => slot.date === preferredTourDate)
 
   return (
     <form
@@ -332,7 +348,7 @@ export function LuxorInquiryForm({
                   inputClassName={PUBLIC_SELECT_BUTTON_CLASS}
                 />
                 <FieldLabel label="Target event date">
-                  <PortalDatePicker theme="light" value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" />
+                  <PortalDatePicker theme="light" value={targetDate} onChange={setTargetDate} className={PUBLIC_DATE_PICKER_CLASS} placeholder="Select date" allowPastDates={false} maxMonths={36} />
                 </FieldLabel>
                 <div>
                   <TextField value={guestCount} onChange={setGuestCount} name="guestCount" label="Expected guests" placeholder="For example, 120" type="number" inputMode="numeric" min={1} max={LUXOR_MAX_GUESTS} step={1} />

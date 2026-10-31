@@ -19,6 +19,7 @@ import type { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorPropo
 import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
 import { assertLuxorSameDayRevisionSafe } from '@/lib/luxorSameDayBookingServer'
 import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
+import { isLuxorBookingDateWithinLimit } from '@/lib/publicEventDate'
 
 const PRICING_CONFIGURATION_REQUIRED = 'Pricing configuration required — administrator review.'
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
@@ -491,6 +492,9 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(saved)
         }
       }
+      if (!isLuxorBookingDateWithinLimit(selection.eventDate)) {
+        return NextResponse.json({ error: 'Event dates must be no more than 36 months from today.' }, { status: 400 })
+      }
       const revision = proposalRecordType === 'proposal_breakdown'
         ? { supersedesInvoiceId: null, proposalVersion: Math.max(1, Number(breakdownParent?.proposal_version || 1)), prior: breakdownParent || undefined }
         : await revisedProposalVersion({ supersedesInvoiceId: stringValue(body.supersedes_invoice_id), inquiryId })
@@ -672,6 +676,10 @@ export async function PATCH(request: NextRequest) {
     }
     if (selection && isEventInvoice) {
       selection = preserveLegacyDraftAdjustment(selection, existing)
+    }
+    if (selection && selection.eventDate !== existing.proposal_context?.event_date
+      && !isLuxorBookingDateWithinLimit(selection.eventDate)) {
+      return NextResponse.json({ error: 'Event dates must be no more than 36 months from today.' }, { status: 400 })
     }
     const attemptsManualEventPricing = body.line_items !== undefined ||
       body.tax_rate !== undefined ||

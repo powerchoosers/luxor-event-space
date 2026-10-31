@@ -60,7 +60,7 @@ export function LuxorBrochureForm({ className = '' }: { className?: string }) {
     setError(null)
 
     if (eventDate && !isLuxorDateSelectable(eventDate, formatLocalDateKey(new Date()))) {
-      setError('Please choose today or a future event date.')
+      setError('Please choose an event date from today through 36 months from today.')
       return
     }
 

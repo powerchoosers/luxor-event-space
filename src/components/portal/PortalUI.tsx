@@ -1131,7 +1131,7 @@ export function PortalSelect({
 }
 
 export function PortalDatePicker({
-  value, onChange, className = '', placeholder = 'Select Date...', theme = 'portal', minDate, availableDates,
+  value, onChange, className = '', placeholder = 'Select Date...', theme = 'portal', minDate, maxMonths, availableDates, allowPastDates = true,
 }: {
   value: string
   onChange: (val: string) => void
@@ -1139,9 +1139,11 @@ export function PortalDatePicker({
   placeholder?: string
   theme?: 'portal' | 'light'
   minDate?: string
+  maxMonths?: number
   availableDates?: Set<string>
+  allowPastDates?: boolean
 }) {
-  return <LuxorDatePicker value={value} onChange={onChange} className={className} placeholder={placeholder} theme={theme} minDate={minDate} availableDates={availableDates} allowPastDates openToValue label="Date" />
+  return <LuxorDatePicker value={value} onChange={onChange} className={className} placeholder={placeholder} theme={theme} minDate={minDate} maxMonths={maxMonths} availableDates={availableDates} timeZone={maxMonths === undefined ? undefined : 'America/Chicago'} allowPastDates={allowPastDates} openToValue label="Date" />
 }
 
 export function PortalContactAvatar({

@@ -16,7 +16,7 @@ import { releaseLuxorTourSlot } from '@/lib/luxorTourSlotsServer'
 import { cancelQueuedTourTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { isConfiguredTestSubmission, startLuxorTestRun } from '@/lib/luxorTestLeadServer'
-import { isPublicEventDateSelectable } from '@/lib/publicEventDate'
+import { isLuxorBookingDateWithinLimit, isPublicEventDateSelectable } from '@/lib/publicEventDate'
 
 const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'new',
@@ -436,6 +436,23 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: eventTypeError instanceof Error ? eventTypeError.message : 'Please shorten the event type.' }, { status: 400 })
       }
       if (!updates.event_type) return NextResponse.json({ error: 'Please enter an event type.' }, { status: 400 })
+    }
+
+    for (const [field, label] of [['target_date', 'event'], ['preferred_tour_date', 'visit']] as const) {
+      const value = updates[field]
+      if (value !== undefined && value !== null && value !== '' && !isLuxorBookingDateWithinLimit(value)) {
+        return NextResponse.json({ error: `Choose a valid ${label} date no more than 36 months from today.` }, { status: 400 })
+      }
+    }
+    const alternateTourDate = updates.metadata && typeof updates.metadata === 'object'
+      ? (updates.metadata as Record<string, unknown>).alternateTourDate
+      : undefined
+    const existingAlternateTourDate = existing.metadata && typeof existing.metadata === 'object'
+      ? existing.metadata.alternateTourDate
+      : undefined
+    if (alternateTourDate !== undefined && alternateTourDate !== existingAlternateTourDate
+      && alternateTourDate !== null && alternateTourDate !== '' && !isLuxorBookingDateWithinLimit(alternateTourDate)) {
+      return NextResponse.json({ error: 'Choose a valid alternate visit date no more than 36 months from today.' }, { status: 400 })
     }
 
     if (typeof updates.email === 'string') {

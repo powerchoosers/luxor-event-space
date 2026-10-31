@@ -22,6 +22,7 @@ import { cancelLuxorTourForInquiry } from '@/lib/luxorTourCancellationServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorCalendarEvent, getLuxorCalendarStatus } from '@/lib/luxorCalendarServer'
 import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
+import { isLuxorBookingDateWithinLimit } from '@/lib/publicEventDate'
 import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 import { cancelLuxorTestTour, ensureActiveLuxorTestRun, LuxorTestTourConflictError, recordLuxorTestTourOutcome, scheduleLuxorTestTour } from '@/lib/luxorTestLeadServer'
 
@@ -246,6 +247,9 @@ export async function POST(request: NextRequest) {
 
       const tourDate = String(body.tourDate || '').trim()
       const tourTime = String(body.tourTime || '').trim()
+      if (tourDate && !isLuxorBookingDateWithinLimit(tourDate)) {
+        return NextResponse.json({ error: 'Tours must be scheduled no more than 36 months from today.' }, { status: 400 })
+      }
       const meetingType = String(body.meetingType || 'Private Venue Tour').trim().slice(0, 120)
       const clientFacingNotes = String(body.clientFacingNotes || '').trim().slice(0, 2_000)
       const tourAssignees = Array.isArray(body.tourAssignees)

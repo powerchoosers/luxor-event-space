@@ -9280,7 +9280,7 @@ export default function LeadDetailPage({
             <div className="grid auto-rows-fr gap-4 sm:grid-cols-2">
               <div className="flex min-h-[66px] flex-col">
                 <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Tour date</label>
-                <PortalDatePicker value={tourScheduleDate} onChange={setTourScheduleDate} className="w-full [&>button]:min-h-10" placeholder="Choose tour date" />
+                <PortalDatePicker value={tourScheduleDate} onChange={setTourScheduleDate} className="w-full [&>button]:min-h-10" placeholder="Choose tour date" maxMonths={36} />
               </div>
               <div className="flex min-h-[66px] flex-col">
                 <label className="mb-1.5 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Start time</label>
@@ -9710,7 +9710,7 @@ export default function LeadDetailPage({
             </div>
             <div>
               <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Date</label>
-              <input value={newEventDate} onChange={(event) => setNewEventDate(event.target.value)} placeholder="Date TBD or 2027-08-11" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50" />
+              <PortalDatePicker value={newEventDate} onChange={setNewEventDate} placeholder="Date TBD" className="w-full" maxMonths={36} />
             </div>
             <div>
               <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Guest count</label>
@@ -10911,6 +10911,7 @@ function DetailItem({
           <div className={`${compact ? '' : 'mt-2'} w-full`} onClick={(event) => event.stopPropagation()}>
             <PortalDatePicker
               value={currentDraft}
+              maxMonths={inputType === 'date' ? 36 : undefined}
               onChange={async (val) => {
                 changeDraft(val)
                 if (sectionEditing) return

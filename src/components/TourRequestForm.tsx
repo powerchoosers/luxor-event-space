@@ -235,7 +235,7 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
         return
       }
       if (!isLuxorDateSelectable(targetDate, formatLocalDateKey(new Date()))) {
-        setError(spanish ? 'Selecciona hoy o una fecha futura para tu visita.' : 'Please choose today or a future visit date.')
+        setError(spanish ? 'Selecciona una fecha de visita desde hoy hasta dentro de 36 meses.' : 'Please choose a visit date from today through 36 months from today.')
         return
       }
     }
@@ -276,11 +276,11 @@ export function TourRequestForm({ locale = 'en' }: { locale?: Locale }) {
     }
 
     if (eventDate && !isLuxorDateSelectable(eventDate, formatLocalDateKey(new Date()))) {
-      setError(spanish ? 'Selecciona hoy o una fecha futura para tu evento.' : 'Please choose today or a future event date.')
+      setError(spanish ? 'Selecciona una fecha de evento desde hoy hasta dentro de 36 meses.' : 'Please choose an event date from today through 36 months from today.')
       return
     }
     if (alternateDate && !isLuxorDateSelectable(alternateDate, formatLocalDateKey(new Date()))) {
-      setError(spanish ? 'Selecciona hoy o una fecha futura para la fecha alternativa.' : 'Please choose today or a future alternate date.')
+      setError(spanish ? 'Selecciona una fecha alternativa desde hoy hasta dentro de 36 meses.' : 'Please choose an alternate date from today through 36 months from today.')
       return
     }
 

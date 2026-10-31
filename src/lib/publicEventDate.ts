@@ -18,6 +18,26 @@ export function getLuxorTodayDateKey(now = new Date()) {
   return getDateKeyInTimeZone(now, 'America/Chicago')
 }
 
+export const LUXOR_BOOKING_DATE_MAX_MONTHS = 36
+
+/** Add calendar months to a date-only key, clamping at the target month's end. */
+export function addCalendarMonthsDateKey(value: string, months: number) {
+  if (!isValidCalendarDateKey(value) || !Number.isInteger(months)) return null
+  const [year, month, day] = value.split('-').map(Number)
+  const absoluteMonth = year * 12 + month - 1 + months
+  const targetYear = Math.floor(absoluteMonth / 12)
+  const targetMonth = absoluteMonth - targetYear * 12
+  const lastDay = new Date(0)
+  lastDay.setUTCHours(0, 0, 0, 0)
+  lastDay.setUTCFullYear(targetYear, targetMonth + 1, 0)
+  const targetDay = Math.min(day, lastDay.getUTCDate())
+  return `${String(targetYear).padStart(4, '0')}-${String(targetMonth + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`
+}
+
+export function getLuxorBookingDateMaxKey(today = getLuxorTodayDateKey()) {
+  return addCalendarMonthsDateKey(today, LUXOR_BOOKING_DATE_MAX_MONTHS)
+}
+
 export function getDateKeyInTimeZone(now = new Date(), timeZone = 'America/Chicago') {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -30,7 +50,14 @@ export function getDateKeyInTimeZone(now = new Date(), timeZone = 'America/Chica
 }
 
 export function isLuxorDateSelectable(value: unknown, today = getLuxorTodayDateKey()) {
-  return isValidCalendarDateKey(value) && value >= today
+  const maxDate = getLuxorBookingDateMaxKey(today)
+  return isValidCalendarDateKey(value) && Boolean(maxDate) && value >= today && value <= maxDate!
+}
+
+/** Portal date edits retain historical access while blocking new bookings beyond 36 months. */
+export function isLuxorBookingDateWithinLimit(value: unknown, today = getLuxorTodayDateKey()) {
+  const maxDate = getLuxorBookingDateMaxKey(today)
+  return isValidCalendarDateKey(value) && Boolean(maxDate) && value <= maxDate!
 }
 
 /** Recompute the current day on the server for a validated browser IANA timezone. */

@@ -8,6 +8,7 @@ import {
   updateLuxorLeadEvent,
 } from '@/lib/luxorLeadEventsServer'
 import { LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS, normalizeLuxorEventType, type LuxorInquiryStatus, type LuxorPipelineStage } from '@/lib/luxorInquiryTypes'
+import { isLuxorBookingDateWithinLimit } from '@/lib/publicEventDate'
 
 const statuses = new Set<LuxorInquiryStatus>(['new', 'contacted', 'tour_requested', 'tour_confirmed', 'proposal_sent', 'booked', 'closed_lost'])
 const pipelineStages = new Set<LuxorPipelineStage>(['newsletter', 'inquiry', 'tour', 'proposal', 'contract', 'deposit', 'planning', 'final_payment', 'event', 'closing', 'closed_lost'])
@@ -43,6 +44,10 @@ export async function POST(request: NextRequest) {
     }
     if (!inquiryId || !eventType) return NextResponse.json({ error: 'inquiry_id and event_type are required.' }, { status: 400 })
     if (!await getLuxorInquiry(inquiryId)) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
+    const targetDate = body.target_date ?? body.targetDate ?? null
+    if (targetDate !== null && targetDate !== '' && !isLuxorBookingDateWithinLimit(targetDate)) {
+      return NextResponse.json({ error: 'Choose a valid event date no more than 36 months from today.' }, { status: 400 })
+    }
 
     const submittedGuestCount = body.guest_count ?? body.guestCount
     const guestCount = normalizeGuestCount(submittedGuestCount)
@@ -53,7 +58,7 @@ export async function POST(request: NextRequest) {
     const event = await createLuxorLeadEvent({
       inquiry_id: inquiryId,
       event_type: eventType,
-      target_date: body.target_date || body.targetDate || null,
+      target_date: targetDate || null,
       guest_count: guestCount,
       package_interest: body.package_interest || body.packageInterest || null,
       notes: body.notes || null,
@@ -85,7 +90,12 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: eventTypeError instanceof Error ? eventTypeError.message : 'Please shorten the event type.' }, { status: 400 })
       }
     }
-    if (body.target_date !== undefined) updates.target_date = body.target_date || null
+    if (body.target_date !== undefined) {
+      if (body.target_date !== null && body.target_date !== '' && !isLuxorBookingDateWithinLimit(body.target_date)) {
+        return NextResponse.json({ error: 'Choose a valid event date no more than 36 months from today.' }, { status: 400 })
+      }
+      updates.target_date = body.target_date || null
+    }
     if (body.guest_count !== undefined) {
       const nextGuestCount = normalizeGuestCount(body.guest_count)
       if (Number.isNaN(nextGuestCount)) return NextResponse.json({ error: 'Enter a whole guest count.' }, { status: 400 })

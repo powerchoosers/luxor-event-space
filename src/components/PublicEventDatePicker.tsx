@@ -1,6 +1,7 @@
 'use client'
 
 import { LuxorDatePicker } from '@/components/LuxorDatePicker'
+import { LUXOR_BOOKING_DATE_MAX_MONTHS } from '@/lib/publicEventDate'
 
 type PublicEventDatePickerProps = {
   value: string
@@ -14,5 +15,5 @@ type PublicEventDatePickerProps = {
 }
 
 export function PublicEventDatePicker({ value, onChange, placeholder = 'Select a date', locale = 'en-US', className = '', availableDates, timeZone, label = 'Event date' }: PublicEventDatePickerProps) {
-  return <LuxorDatePicker value={value} onChange={onChange} placeholder={placeholder} locale={locale} className={className} availableDates={availableDates} timeZone={timeZone} label={label} theme="light" />
+  return <LuxorDatePicker value={value} onChange={onChange} placeholder={placeholder} locale={locale} className={className} availableDates={availableDates} timeZone={timeZone} label={label} theme="light" maxMonths={LUXOR_BOOKING_DATE_MAX_MONTHS} />
 }

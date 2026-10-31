@@ -1644,7 +1644,7 @@ function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPa
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Date</label>
-            <PortalDatePicker value={tourDate} onChange={setTourDate} className="!min-w-0 w-full [&>button]:min-h-9 [&>button]:px-2.5 [&>button]:py-1.5 [&>button]:text-[10px]" placeholder="Choose date" />
+            <PortalDatePicker value={tourDate} onChange={setTourDate} className="!min-w-0 w-full [&>button]:min-h-9 [&>button]:px-2.5 [&>button]:py-1.5 [&>button]:text-[10px]" placeholder="Choose date" maxMonths={36} />
           </div>
           <div>
             <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Time</label>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import { formatLocalDateKey, getDateKeyInTimeZone } from '@/lib/publicEventDate'
+import { addCalendarMonthsDateKey, formatLocalDateKey, getDateKeyInTimeZone } from '@/lib/publicEventDate'
 
 function parseDateKey(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
@@ -41,6 +41,7 @@ export function LuxorDatePicker({
   label = 'Date',
   theme = 'light',
   minDate,
+  maxMonths,
   allowPastDates = false,
   openToValue = false,
 }: {
@@ -54,6 +55,7 @@ export function LuxorDatePicker({
   label?: string
   theme?: 'light' | 'portal'
   minDate?: string
+  maxMonths?: number
   allowPastDates?: boolean
   openToValue?: boolean
 }) {
@@ -82,10 +84,12 @@ export function LuxorDatePicker({
   const [focusDate, setFocusDate] = useState(() => formatLocalDateKey(new Date()))
 
   const isSelectableDate = useCallback((date: string, today = todayKey) => {
+    const maxDate = maxMonths === undefined ? null : addCalendarMonthsDateKey(today, maxMonths)
     return (!minDate || date >= minDate)
       && (allowPastDates || date >= today)
+      && (!maxDate || date <= maxDate)
       && (!availableDates || availableDates.has(date))
-  }, [allowPastDates, availableDates, minDate, todayKey])
+  }, [allowPastDates, availableDates, maxMonths, minDate, todayKey])
 
   const hasSelectableDateInMonth = useCallback((monthYear: Date, today = todayKey) => {
     const year = monthYear.getFullYear()
@@ -115,7 +119,10 @@ export function LuxorDatePicker({
     const selectedYear = parseDateKey(value)?.getFullYear() ?? todayYear
     const availableYears = availableDates ? [...availableDates].map((date) => Number(date.slice(0, 4))).filter(Number.isFinite) : []
     const lowerYear = minDate ? Number(minDate.slice(0, 4)) : allowPastDates ? Math.min(1900, selectedYear, ...availableYears) : todayYear
-    const upperYear = allowPastDates ? Math.max(todayYear + 30, selectedYear, ...availableYears) : todayYear + 30
+    const maxDate = maxMonths === undefined ? null : addCalendarMonthsDateKey(today, maxMonths)
+    const upperYear = maxDate
+      ? Math.max(Number(maxDate.slice(0, 4)), todayYear)
+      : allowPastDates ? Math.max(todayYear + 30, selectedYear, ...availableYears) : todayYear + 30
     const firstAllowedMonth = new Date(lowerYear, 0, 1)
     const lastAllowedMonth = new Date(upperYear, 11, 1)
     while (candidate >= firstAllowedMonth && candidate <= lastAllowedMonth) {
@@ -123,7 +130,7 @@ export function LuxorDatePicker({
       candidate = new Date(candidate.getFullYear(), candidate.getMonth() + direction, 1)
     }
     return null
-  }, [allowPastDates, availableDates, hasSelectableDateInMonth, minDate, todayKey, value])
+  }, [allowPastDates, availableDates, hasSelectableDateInMonth, maxMonths, minDate, todayKey, value])
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current
@@ -310,7 +317,10 @@ export function LuxorDatePicker({
   const selectedYear = parseDateKey(value)?.getFullYear() ?? todayYear
   const availableYears = availableDates ? [...availableDates].map((date) => Number(date.slice(0, 4))).filter(Number.isFinite) : []
   const firstYear = minDate ? Number(minDate.slice(0, 4)) : allowPastDates ? Math.min(1900, selectedYear, ...availableYears) : todayYear
-  const lastYear = allowPastDates ? Math.max(todayYear + 30, selectedYear, ...availableYears) : todayYear + 30
+  const maxDate = maxMonths === undefined ? null : addCalendarMonthsDateKey(today, maxMonths)
+  const lastYear = maxDate
+    ? Math.max(Number(maxDate.slice(0, 4)), todayYear)
+    : allowPastDates ? Math.max(todayYear + 30, selectedYear, ...availableYears) : todayYear + 30
   const localizedMonths = useMemo(() => Array.from({ length: 12 }, (_, index) => new Intl.DateTimeFormat(locale, { month: 'long' }).format(new Date(2024, index, 1))), [locale])
   const weekdays = useMemo(() => Array.from({ length: 7 }, (_, index) => new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(new Date(2023, 0, index + 1))), [locale])
   const days = useMemo(() => {
@@ -456,9 +466,11 @@ export function LuxorDatePicker({
             setTodayKey(currentToday)
             const todayDate = parseDateKey(currentToday) ?? now
             const selected = openToValue ? parseDateKey(value) : null
-            const currentMonth = selected ? new Date(selected.getFullYear(), selected.getMonth(), 1) : new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)
+            const currentMax = maxMonths === undefined ? null : addCalendarMonthsDateKey(currentToday, maxMonths)
+            const selectedInRange = Boolean(selected && (!currentMax || value <= currentMax))
+            const currentMonth = selected && selectedInRange ? new Date(selected.getFullYear(), selected.getMonth(), 1) : new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)
             setView(currentMonth)
-            setFocusDate(selected && isSelectableDate(value, currentToday) ? value : firstSelectableDateInMonth(currentMonth, currentToday))
+            setFocusDate(selected && selectedInRange && isSelectableDate(value, currentToday) ? value : firstSelectableDateInMonth(currentMonth, currentToday))
             setOpen(true)
           } else closeAndReturnFocus()
         }}
