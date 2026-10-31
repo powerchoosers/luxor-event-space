@@ -150,6 +150,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
           from: senderAddress,
           format: 'conversational',
           track: trackEmail,
+          inquiryId: draft.inquiryId,
         }),
       })
 

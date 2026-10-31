@@ -417,6 +417,7 @@ Use the live CRM context supplied by the portal when it already contains the exa
 - Lead budget is a planning range captured from the inquiry or tour form. Treat it as a qualification signal, clearly label it as customer-provided, and never present it as an approved quote, contract total, or payment amount.
 - When asked to review an inquiry, recommend a follow-up, or move a lead forward, call "lookup_luxor_lead" first. Use the returned inquiry plus communication and task history to identify what has already happened and what is still missing. Do not call "navigate_to_lead" unless the owner explicitly asks to open or show the dossier.
 - For a follow-up recommendation, distinguish a delivered automated acknowledgment or brochure from a human response. Do not recommend repeating an email that was already delivered. Give one specific next action and ask exactly one easy customer question. Do not combine event type, guest count, budget, and tour availability into one question; prioritize the most useful missing detail and ask others later.
+- Email evidence: luxor_inquiries has a saved email address and may have provider bounce/complaint evidence in metadata; it has no separate email-verification flag. Do not call an address unverified unless a concrete record supports that claim. A matching saved address can be used for a draft. A sent job means the provider accepted it; only a provider delivery event confirms delivery, and no bounce evidence means no bounce is recorded. Never infer a bounce from missing verification data.
 - If "navigate_to_lead" rejects an ID or cannot verify a record, do not stop or claim the inquiry is unavailable. Call "lookup_luxor_lead" with the known human details and continue from its result. Never invent a UUID.
 - Keep event date and tour appointment date separate: target_date is the client's event date/range, while preferred_tour_date and preferred_tour_time are the Luxor tour appointment.
 - The proposal builder is the source of truth for package pricing and inclusions. Read the ACTIVE PROPOSAL CATALOG CONTEXT appended to this prompt before answering pricing questions. Never invent or estimate a package total outside the builder calculation. When the owner asks for a quote, use the proposal builder or ask for the missing event date, guest count, and rental period.
@@ -430,7 +431,7 @@ Use the live CRM context supplied by the portal when it already contains the exa
 - Limit output results when necessary (e.g. "LIMIT 10" or "LIMIT 5") to avoid blowing up context, unless requested.
 - When the owner asks you to create or draft a text campaign, call "create_text_campaign_draft". This prepares the Text Campaigns builder but never sends anything. Include "Luxor Event Space" and end the body with "Reply STOP to opt out." Never invent balances, dates, availability, or payment status.
 - When the owner asks you to create, build, or design a custom automation workflow, call "prepare_custom_workflow_draft". Return its reviewable workflow card in Elena Chat and keep it unsaved until the owner clicks Save draft. Explain that Save draft only stores an inactive draft; it does not activate the workflow, enroll leads, or send messages. Never say or imply that saving a draft activates it. Activation remains a separate owner action in the workflow library.
-- Marketing email, newsletter, broadcast, promotion, nurture sequence, or email campaign requests are NOT one-to-one email drafts. Call "open_marketing_email_builder" immediately, even when the owner says only "write a campaign" or "make a marketing email." That tool opens the existing block-based Email Builder and asks its generator to produce an editable template with hero/content/CTA/footer blocks. Do not satisfy these requests with prose alone and do not call "prepare_email_draft" for them. A direct email to one verified lead remains "prepare_email_draft".
+- Marketing email, newsletter, broadcast, promotion, nurture sequence, or email campaign requests are NOT one-to-one email drafts. Call "open_marketing_email_builder" immediately, even when the owner says only "write a campaign" or "make a marketing email." That tool opens the existing block-based Email Builder and asks its generator to produce an editable template with hero/content/CTA/footer blocks. Do not satisfy these requests with prose alone and do not call "prepare_email_draft" for them. A direct email to one lead whose saved address matches the record remains "prepare_email_draft".
 - When the owner asks to add, create, or save a new person, contact, or lead, call "prepare_new_contact_card". Put all known details into the editable card. The owner must review and click Add contact; do not use raw SQL. Creating a CRM contact does not grant marketing or SMS consent.
 - When the owner asks you to text one specific client, first query the lead so you have the correct inquiry ID, name, phone, status, and relevant event/tour context. Then call "request_text_message_confirmation". The owner must confirm before the message is sent. Never use this tool for bulk sends.
 - When the owner asks you to draft, write, compose, or send an email to a client or lead, call "prepare_email_draft". This presents an interactive mini email composer card inside Elena Chat where the owner can edit the subject and body inline, preview the rendered HTML email with the signed-in user's saved signature, choose the appropriate Luxor sender address (booking, hello, or Arianna), and send with one click. Use the sender identity provided in the system context for the signature; the owner chooses the delivery address. Never output placeholders such as [Your Name].
@@ -660,7 +661,7 @@ const TOOLS_DEFINITION = [
     type: 'function',
     function: {
       name: 'prepare_email_draft',
-      description: 'Prepare an interactive mini email draft for the owner inside Elena Chat. Call this tool whenever the owner asks to draft, compose, write, or send an email to a lead or client.',
+      description: 'Prepare an editable email draft for the owner inside Elena Chat. Call this tool whenever the owner asks to draft, compose, write, or send a one-to-one email to a lead or client. Use the saved matching email address; never invent an email verification status.',
       parameters: {
         type: 'object',
         properties: {
@@ -1882,10 +1883,10 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
               )
               const record = records?.[0]
               const canonicalEmail = record?.email?.trim().toLowerCase() || ''
-              if (!record || !canonicalEmail) throw new Error('That lead does not have a verified email address.')
+              if (!record || !canonicalEmail) throw new Error('That lead does not have an email address saved in the CRM.')
               const suppliedEmail = String(args.recipientEmail || '').trim().toLowerCase()
               if (suppliedEmail && suppliedEmail !== canonicalEmail) {
-                throw new Error('The recipient email did not match the verified lead record. I refreshed the lead details instead of preparing the draft.')
+                throw new Error('The recipient email did not match the address saved on this lead. I refreshed the lead details instead of preparing the draft.')
               }
               const subject = String(args.subject || '').trim()
               const body = String(args.body || '').replace(/\[(?:your\s+)?name\]/gi, senderProfile.displayName).trim()

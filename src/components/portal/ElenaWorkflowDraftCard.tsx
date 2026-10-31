@@ -141,35 +141,47 @@ export function ElenaWorkflowDraftCard({ draft, onSaved }: ElenaWorkflowDraftCar
               key="workflow-sequence-details"
               aria-hidden={!isSequenceOpen}
               inert={!isSequenceOpen}
-              initial={reduceMotion ? false : { height: 0 }}
-              animate={{ height: 'auto' }}
+              initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
               exit={{
                 height: 0,
+                opacity: 0,
                 transition: {
-                  duration: reduceMotion ? 0 : 0.5,
-                  ease: [0.4, 0, 0.2, 1],
+                  height: { duration: reduceMotion ? 0 : 0.56, ease: [0.4, 0, 0.2, 1] },
+                  opacity: { duration: reduceMotion ? 0 : 0.2, delay: reduceMotion ? 0 : 0.04 },
                 },
               }}
               transition={{
-                duration: reduceMotion ? 0 : 0.5,
-                ease: [0.4, 0, 0.2, 1],
+                height: { duration: reduceMotion ? 0 : 0.56, ease: [0.22, 1, 0.36, 1] },
+                opacity: { duration: reduceMotion ? 0 : 0.26, ease: [0.22, 1, 0.36, 1] },
               }}
               className="overflow-hidden"
             >
-              <ol className="mt-1 space-y-2">
-                {draft.definition.steps.map((step, index) => (
-                  <li key={`${step.id}-${index}`} className="min-w-0 rounded-lg bg-[color:var(--portal-soft)] p-2.5">
-                    <div className="flex min-w-0 items-start gap-2">
-                      <span className="mt-0.5 shrink-0 text-[10px] font-semibold tabular-nums text-[color:var(--portal-muted)]">{index + 1}</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="break-words text-xs font-semibold">{step.name}</p>
-                        <p className="mt-0.5 break-words text-[11px] leading-4 text-[color:var(--portal-muted)]">{stepKind(step)} · <WorkflowVariableText value={stepDescription(step)} /></p>
-                        <StepDetails step={step} />
+              <motion.div
+                initial={reduceMotion ? false : { y: -6, opacity: 0, filter: 'blur(4px)' }}
+                animate={isSequenceOpen
+                  ? { y: 0, opacity: 1, filter: 'blur(0px)' }
+                  : { y: -4, opacity: 0, filter: 'blur(4px)' }}
+                transition={{
+                  duration: reduceMotion ? 0 : 0.28,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+              >
+                <ol className="mt-1 space-y-2">
+                  {draft.definition.steps.map((step, index) => (
+                    <li key={`${step.id}-${index}`} className="min-w-0 rounded-lg bg-[color:var(--portal-soft)] p-2.5">
+                      <div className="flex min-w-0 items-start gap-2">
+                        <span className="mt-0.5 shrink-0 text-[10px] font-semibold tabular-nums text-[color:var(--portal-muted)]">{index + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-xs font-semibold">{step.name}</p>
+                          <p className="mt-0.5 break-words text-[11px] leading-4 text-[color:var(--portal-muted)]">{stepKind(step)} · <WorkflowVariableText value={stepDescription(step)} /></p>
+                          <StepDetails step={step} />
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+                    </li>
+                  ))}
+                </ol>
+              </motion.div>
             </motion.div>
           ) : null}
         </AnimatePresence>

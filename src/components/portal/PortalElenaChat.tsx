@@ -66,6 +66,7 @@ type Message = {
   content: string
   executedQueries?: ExecutedQuery[]
   toolActivity?: string[]
+  toolActivityFailed?: boolean
   confirmation?: {
     query: string
     summary: string
@@ -81,6 +82,7 @@ type Message = {
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
+  textCampaignDraft?: { name: string; bodyTemplate: string; campaignType: string }
   voiceTranscript?: Array<{ role: 'user' | 'assistant'; text: string }>
 }
 
@@ -100,6 +102,30 @@ type ElenaChatResponse = {
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
   navigation?: { href: string }
+}
+
+function isVoiceChoiceReply(message: Message) {
+  if (message.role !== 'assistant' || !message.content.includes('?')) return false
+  const options = message.content.split('\n').filter(line => /^\s*(?:[-*•]|\d+[.)])\s+\S/.test(line))
+  return options.length >= 2
+}
+
+function hasVoiceActionOutput(message: Message) {
+  return message.role === 'assistant' && Boolean(
+    message.confirmation
+    || message.emailDraft
+    || message.crmUpdateCard
+    || message.contractCard
+    || message.invoiceCard
+    || message.taskCard
+    || message.contactCard
+    || message.newContactCard
+    || message.tourInviteCard
+    || message.workflowDraft
+    || message.textCampaignDraft
+    || message.toolActivityFailed
+    || isVoiceChoiceReply(message)
+  )
 }
 
 async function readElenaChatResponse(response: Response, onActivity: (step: string) => void): Promise<ElenaChatResponse> {
@@ -148,7 +174,30 @@ async function readElenaChatResponse(response: Response, onActivity: (step: stri
   return result.data
 }
 
-function ToolActivityDisclosure({ steps, active = false }: { steps: string[]; active?: boolean }) {
+function isVoiceEmailSendConfirmation(text: string) {
+  const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, '').replace(/\s+/g, ' ')
+  if (/\b(don't|do not|not|never|wait|stop|cancel)\b/.test(normalized)) return false
+  return /^(yes|yeah|yep|sure|okay|ok|go ahead|please|send it|send that|send the email|that's good|that looks good|looks good|sounds good|do it)( please)?( and send( it| that| the email)?)?$/.test(normalized)
+    || /^(yes|yeah|yep|okay|ok|go ahead),?\s+(send|send it|send that|send the email)$/.test(normalized)
+}
+
+function isVoiceEmailReadRequest(text: string) {
+  return /\b(read (it|the email|that email)( to me)?|read (it|the email) aloud|what does (it|the email) say|let me hear the email)\b/i.test(text)
+}
+
+function isVoiceEmailSendCancellation(text: string) {
+  return /^(no|no thanks|no thank you|don't send it|do not send it|not yet|cancel|leave it as a draft)[.! ]*$/i.test(text.trim())
+}
+
+function voiceEmailReadback(draft: EmailDraftPayload) {
+  const recipient = draft.recipientName?.trim() || draft.recipientEmail
+  const purpose = draft.subject.toLowerCase().includes('brochure')
+    ? 'It follows up on the brochure request.'
+    : 'It is a personal follow-up.'
+  return `I drafted a follow-up for ${recipient} at ${draft.recipientEmail}. The subject is “${draft.subject}.” ${purpose} Should I send it?`
+}
+
+function ToolActivityDisclosure({ steps, active = false, failed = false }: { steps: string[]; active?: boolean; failed?: boolean }) {
   const [open, setOpen] = useState(false)
   const contentId = useId()
   const reduceMotion = useReducedMotion()
@@ -170,7 +219,28 @@ function ToolActivityDisclosure({ steps, active = false }: { steps: string[]; ac
             transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
             className="elena-tool-activity-reveal"
           >
-            <ol>{steps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ol>
+            <ol role="list" aria-label="Workflow activity">
+              {steps.map((step, index) => {
+                const current = active && index === steps.length - 1
+                const hasFailed = /could not|failed|unavailable|error/i.test(step) || (failed && index === steps.length - 1)
+                return (
+                  <motion.li
+                    key={`${index}-${step}`}
+                    role="listitem"
+                    aria-current={current ? 'step' : undefined}
+                    initial={reduceMotion ? false : { opacity: 0, y: 5, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, filter: 'blur(4px)' }}
+                    transition={{ duration: reduceMotion ? 0 : 0.22, delay: reduceMotion ? 0 : Math.min(index, 5) * 0.035, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <span className={hasFailed ? 'is-failed' : current ? 'is-current' : 'is-complete'} aria-hidden="true">
+                      {hasFailed ? <Info size={13} /> : current ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                    </span>
+                    <span>{step}</span>
+                  </motion.li>
+                )
+              })}
+            </ol>
           </motion.div>
         )}
       </AnimatePresence>
@@ -350,6 +420,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const fileInputRef = useRef<HTMLInputElement>(null)
   const voiceClientRef = useRef<ElenaLiveVoiceClient | null>(null)
   const handledVoiceDelegationsRef = useRef(new Set<string>())
+  const pendingVoiceEmailDraftRef = useRef<{ draft: EmailDraftPayload; idempotencyKey: string } | null>(null)
   const voiceSendRef = useRef<((text: string, onReply: (reply: string) => void) => Promise<string | null>) | null>(null)
   const [voiceState, setVoiceState] = useState<ElenaVoiceState>('ended')
   const [voiceLevel, setVoiceLevel] = useState(0)
@@ -411,6 +482,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         if (state === 'ended') {
           for (const pending of pendingDelegations.values()) window.clearTimeout(pending.timer)
           pendingDelegations.clear()
+          pendingVoiceEmailDraftRef.current = null
           if (voiceClientRef.current === client) {
             voiceClientRef.current = null
             if (voiceTurns.some(turn => turn.role === 'user' && turn.text.trim())) {
@@ -488,6 +560,45 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         if (voiceClientRef.current !== client) return
         if (!request) {
           client.sendCommentary('I did not catch that clearly. Please say it again.', delegationId)
+          return
+        }
+        const pendingEmail = pendingVoiceEmailDraftRef.current
+        if (pendingEmail && isVoiceEmailReadRequest(request)) {
+          const readback = `Here is the email: ${pendingEmail.draft.body}`
+          client.sendCommentary(readback, delegationId)
+          return
+        }
+        if (pendingEmail && isVoiceEmailSendCancellation(request)) {
+          pendingVoiceEmailDraftRef.current = null
+          client.sendCommentary('Okay, I will leave it as a draft.', delegationId)
+          return
+        }
+        if (pendingEmail && isVoiceEmailSendConfirmation(request)) {
+          try {
+            const response = await fetch('/api/email/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: pendingEmail.draft.recipientEmail,
+                recipientName: pendingEmail.draft.recipientName,
+                subject: pendingEmail.draft.subject,
+                content: pendingEmail.draft.body,
+                from: pendingEmail.draft.senderProfile?.email || 'booking@luxoratlaspalmas.com',
+                format: 'conversational',
+                track: true,
+                inquiryId: pendingEmail.draft.inquiryId,
+                idempotencyKey: pendingEmail.idempotencyKey,
+              }),
+            })
+            const result = await response.json() as { success?: boolean; error?: string }
+            if (!response.ok || !result.success) throw new Error(result.error || 'The email could not be sent.')
+            pendingVoiceEmailDraftRef.current = null
+            const sentReply = `The email to ${pendingEmail.draft.recipientName || pendingEmail.draft.recipientEmail} was accepted by the email provider.`
+            client.sendCommentary(sentReply, delegationId)
+          } catch (error) {
+            const failedReply = error instanceof Error ? error.message : 'The email could not be sent.'
+            client.sendCommentary(failedReply, delegationId)
+          }
           return
         }
         const result = await voiceSendRef.current?.(request, (reply) => {
@@ -823,9 +934,18 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           newContactCard: data.newContactCard,
           tourInviteCard: data.tourInviteCard,
           workflowDraft: data.workflowDraft,
+          textCampaignDraft: data.textCampaignDraft,
         }
       ])
-      const voiceReply = data.reply?.trim() || 'I did not get a clear answer back from the query service. Please try that question again, or ask me for a daily brief.'
+      const voiceReply = onVoiceReply && data.emailDraft
+        ? voiceEmailReadback(data.emailDraft)
+        : data.reply?.trim() || 'I did not get a clear answer back from the query service. Please try that question again, or ask me for a daily brief.'
+      if (onVoiceReply && data.emailDraft) {
+        pendingVoiceEmailDraftRef.current = {
+          draft: data.emailDraft,
+          idempotencyKey: `manual/${crypto.randomUUID()}`,
+        }
+      }
       onVoiceReply?.(voiceReply)
       
       // Refresh session sidebar metadata in background to update title & date order
@@ -841,7 +961,9 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         ...prev,
         {
           role: 'assistant',
-          content: voiceErrorReply
+          content: voiceErrorReply,
+          toolActivity: streamedActivities.length ? streamedActivities : undefined,
+          toolActivityFailed: streamedActivities.length > 0,
         }
       ])
       onVoiceReply?.(voiceErrorReply)
@@ -946,14 +1068,20 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const pathSuggestions = getSuggestionsForPath(activePath)
   const isSessionHydrating = Boolean(currentSessionId && loadedSessionId !== currentSessionId)
   const voiceActive = voiceState !== 'ended'
-  const voiceHasResults = messages.slice(voiceStartIndex).some(message => message.role === 'assistant')
+  const latestVoiceReplyIndex = messages.reduce((latestIndex, message, index) => (
+    index >= voiceStartIndex && message.role === 'assistant' ? index : latestIndex
+  ), -1)
+  const voiceOutputIndex = !isLoading && latestVoiceReplyIndex >= 0 && hasVoiceActionOutput(messages[latestVoiceReplyIndex])
+    ? latestVoiceReplyIndex
+    : -1
+  const voiceHasResults = voiceOutputIndex >= 0
 
   return (
     <motion.aside 
       initial={{ x: '100%' }}
       animate={{ x: isOpen ? 0 : '100%' }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-      className="fixed right-0 top-0 z-[65] flex w-full flex-col border-l border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] sm:w-[420px] max-lg:bottom-[var(--portal-mobile-nav-height)] max-lg:h-[calc(100dvh-var(--portal-mobile-nav-height))] lg:bottom-0 lg:h-full"
+      className="portal-elena-chat-panel fixed right-0 top-0 z-[65] flex w-full flex-col border-l-0 border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] max-lg:bottom-[var(--portal-mobile-nav-height)] max-lg:h-[calc(100dvh-var(--portal-mobile-nav-height))] lg:bottom-0 lg:h-full"
       aria-hidden={!isOpen}
       inert={!isOpen}
     >
@@ -1162,7 +1290,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         </AnimatePresence>
 
         {/* Messages Window */}
-        <div className={`portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 ${voiceActive && !voiceHasResults ? 'hidden' : ''}`}>
+        <div className={`portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 ${voiceActive && !voiceHasResults && !isLoading ? 'hidden' : ''}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSessionId || 'empty-session'}
@@ -1177,7 +1305,35 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                   <Loader2 size={20} className="animate-spin text-[#caa24c]" />
                   <p className="text-xs">Opening Elena’s conversation…</p>
                 </div>
-              ) : voiceActive && !voiceHasResults ? null : messages.length === 0 ? (
+              ) : voiceActive && !voiceHasResults ? isLoading ? (
+                <motion.div
+                  key="voice-tool-progress"
+                  initial={reduceVoiceMotion ? false : { opacity: 0, y: 8, filter: 'blur(5px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  exit={reduceVoiceMotion ? { opacity: 0 } : { opacity: 0, y: 4, filter: 'blur(5px)' }}
+                  transition={{ duration: reduceVoiceMotion ? 0 : 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex min-h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs text-[color:var(--portal-muted)]"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span aria-hidden="true" className="flex shrink-0 items-center gap-1 text-[#caa24c]">
+                    {[0, 1, 2].map((dot) => <span key={dot} className="h-1 w-1 rounded-full bg-current motion-safe:animate-pulse" style={{ animationDelay: `${dot * 140}ms` }} />)}
+                  </span>
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={loadingActivities.at(-1) || 'working'}
+                      initial={reduceVoiceMotion ? false : { opacity: 0, y: 4, filter: 'blur(4px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      exit={reduceVoiceMotion ? { opacity: 0 } : { opacity: 0, y: -3, filter: 'blur(4px)' }}
+                      transition={{ duration: reduceVoiceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+                      className="min-w-0 flex-1 elena-working-shimmer"
+                    >
+                      {loadingActivities.at(-1) || 'Working through your request…'}
+                    </motion.span>
+                  </AnimatePresence>
+                  <ToolActivityDisclosure steps={loadingActivities} active />
+                </motion.div>
+              ) : null : messages.length === 0 ? (
                 <div className="portal-elena-welcome flex flex-col items-center justify-center text-center px-1 sm:px-2 py-2 space-y-3 sm:space-y-4 my-auto">
                   <div className="portal-elena-avatar-wrap relative shrink-0">
                     <div className="portal-elena-avatar relative h-14 w-14 overflow-hidden rounded-full border-2 border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-2xl transition-all">
@@ -1276,12 +1432,13 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               ) : (
                 <div className="space-y-4">
                   <AnimatePresence initial={false}>
-                    {messages.map((msg, index) => voiceActive && index < voiceStartIndex ? null : (
+                    {messages.map((msg, index) => voiceActive && index !== voiceOutputIndex ? null : (
                       <motion.div 
                         layout="position"
                         key={index} 
                         className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                       >
+                        {(!voiceActive || isVoiceChoiceReply(msg)) && (
                         <motion.div
                           initial={reduceVoiceMotion ? false : { opacity: 0, y: 18, scale: 0.985, filter: 'blur(8px)', originX: msg.role === 'user' ? 1 : 0, originY: 1 }}
                           animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
@@ -1317,10 +1474,18 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             ) : renderFormattedContent(msg.content)}
                           </div>
                         </motion.div>
+                        )}
 
-                        {msg.toolActivity?.length ? (
-                          <ToolActivityDisclosure steps={msg.toolActivity} />
+                        {!voiceActive && msg.toolActivity?.length ? (
+                          <ToolActivityDisclosure steps={msg.toolActivity} failed={msg.toolActivityFailed} />
                         ) : null}
+
+                        {voiceActive && msg.toolActivityFailed && (
+                          <div className="mt-2 flex w-[96%] items-start gap-2 rounded-xl border border-rose-500/25 bg-rose-500/5 p-3 text-xs text-rose-800 dark:text-rose-200" role="status">
+                            <Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                            <span>{msg.content}</span>
+                          </div>
+                        )}
 
                         {msg.contactCard && <ElenaContactCard payload={msg.contactCard} />}
 
@@ -1349,8 +1514,28 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                           />
                         )}
 
+                        {msg.textCampaignDraft && (
+                          <section className="mt-2 w-[96%] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#e3bc65]">Text campaign draft</p>
+                            <h4 className="mt-1 font-serif text-base text-[color:var(--portal-text)]">{msg.textCampaignDraft.name}</h4>
+                            <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Prepared for the text campaign editor.</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                window.localStorage.setItem('luxor_elena_text_campaign_draft', JSON.stringify(msg.textCampaignDraft))
+                                stopVoice()
+                                onClose()
+                                router.push('/portal/marketing?tab=text-campaigns')
+                              }}
+                              className="mt-3 inline-flex min-h-10 items-center rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]"
+                            >
+                              Open campaign editor
+                            </button>
+                          </section>
+                        )}
+
                         {/* Render SQL execution indicators */}
-                        {msg.executedQueries && msg.executedQueries.length > 0 && (
+                        {!voiceActive && msg.executedQueries && msg.executedQueries.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2 pl-8">
                             {msg.executedQueries.map((eq, qIdx) => (
                               <span 

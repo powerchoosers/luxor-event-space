@@ -2264,6 +2264,11 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 }
 
 @media (hover: none) and (pointer: coarse) {
+  body[data-portal-theme] .portal-elena-chat-panel {
+    width: 100%;
+    border-left-width: 0;
+  }
+
   body[data-portal-theme] button[aria-label]:not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox),
   body[data-portal-theme] button[title]:not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox),
   body[data-portal-theme] button:has(svg):not(:has(span)):not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox) {
@@ -2312,6 +2317,13 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 
   body[data-portal-theme] .portal-contact-remove-action {
     opacity: 1;
+  }
+}
+
+@media (min-width: 1100px) and (hover: hover) and (pointer: fine) {
+  body[data-portal-theme] .portal-elena-chat-panel {
+    width: 420px;
+    border-left-width: 1px;
   }
 }
 
@@ -2434,7 +2446,7 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
   background-size: 220% 100%;
   background-clip: text;
   -webkit-background-clip: text;
-  animation: elena-working-wipe 1.8s ease-in-out infinite;
+  animation: elena-working-wipe 3.2s linear infinite;
 }
 
 .elena-tool-activity {
@@ -2484,18 +2496,27 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 
 .elena-tool-activity-reveal li {
   position: relative;
-  padding: 0.22rem 0 0.22rem 0.4rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.24rem 0;
 }
 
-.elena-tool-activity-reveal li::before {
-  position: absolute;
-  top: 0.67em;
-  left: -0.77rem;
-  width: 0.28rem;
-  height: 0.28rem;
-  border-radius: 50%;
-  background: #caa24c;
-  content: '';
+.elena-tool-activity-reveal li > span:first-child {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.08rem;
+  color: #26966b;
+}
+
+.elena-tool-activity-reveal li > span:first-child.is-current {
+  color: #a8792f;
+}
+
+.elena-tool-activity-reveal li > span:first-child.is-failed {
+  color: #c2414b;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       const inquiry = await getLuxorInquiry(inquiryId)
       const verifiedLeadEmail = normalizeEmailAddress(inquiry?.email)
       if (!inquiry || inquiry.is_test === true || !verifiedLeadEmail || verifiedLeadEmail !== normalizedRecipient) {
-        return NextResponse.json({ error: 'The recipient must match the selected inquiry’s verified email address.' }, { status: 409 })
+        return NextResponse.json({ error: 'The recipient must match the email address saved on the selected inquiry.' }, { status: 409 })
       }
     }
     const [senderProfile, senderPhone] = await Promise.all([
