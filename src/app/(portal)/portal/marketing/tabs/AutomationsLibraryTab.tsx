@@ -436,7 +436,7 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
             <motion.span
               aria-hidden="true"
               animate={{ rotate: expanded ? 0 : -90 }}
-              transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
               className="inline-flex"
             >
               <ChevronDown size={15} />
@@ -451,9 +451,22 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
             id={detailsId}
             role="region"
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+            animate={{
+              height: 'auto',
+              opacity: 1,
+              transition: {
+                height: { duration: reduceMotion ? 0 : 0.46, ease: [0.16, 1, 0.3, 1] },
+                opacity: { duration: reduceMotion ? 0 : 0.24, ease: 'easeOut' },
+              },
+            }}
+            exit={{
+              height: 0,
+              opacity: 0,
+              transition: {
+                height: { duration: reduceMotion ? 0 : 0.36, ease: [0.4, 0, 0.2, 1] },
+                opacity: { duration: reduceMotion ? 0 : 0.18, ease: 'easeIn' },
+              },
+            }}
             className="overflow-hidden"
           >
           <div className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-5 sm:px-6">
