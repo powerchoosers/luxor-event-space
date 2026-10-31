@@ -6,6 +6,9 @@ import { createNote } from '@/lib/luxorNotesServer'
 import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
 import { SAME_DAY_REVISION_MESSAGE } from '@/lib/luxorSameDayBookingServer'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
+import { getLuxorPaymentSettings } from '@/lib/luxorPaymentSettingsServer'
+import { queueLuxorZelleInstructionsEmail } from '@/lib/luxorZelleInstructionsServer'
+import { getInvoiceByBookingAndKind } from '@/lib/luxorInvoicesServer'
 
 const methods = ['card', 'cash', 'zelle', 'check'] as const
 const amounts = ['deposit', 'full'] as const
@@ -25,6 +28,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (body.method === 'card' && body.amount === 'full') return NextResponse.json({ error: 'Secure card checkout is currently available for the initial booking payment. Luxor can arrange a larger card payment after booking.' }, { status: 400 })
   const booking = invoice.booking_id ? await getLuxorBooking(invoice.booking_id) : (invoice.inquiry_id ? (await listLuxorBookingsByInquiry(invoice.inquiry_id)).find((item) => item.invoice_id === invoice.id) : null)
   if (!booking || booking.contract_status !== 'signed') return NextResponse.json({ error: 'Your signed agreement is required before choosing payment.' }, { status: 409 })
+  let zelleRecipient: string | null = null
+  let zelleAmount: number | null = null
+  if (body.method === 'zelle') {
+    try {
+      zelleRecipient = (await getLuxorPaymentSettings()).zelle_recipient?.trim() || null
+    } catch (error) {
+      console.error('Zelle settings are unavailable for payment instructions:', error)
+      return NextResponse.json({ error: 'Zelle instructions are not available right now. Please contact Luxor before sending a transfer.' }, { status: 503 })
+    }
+    if (!zelleRecipient) return NextResponse.json({ error: 'Zelle instructions are not configured yet. Please contact Luxor before sending a transfer.' }, { status: 503 })
+    const depositInvoice = await getInvoiceByBookingAndKind(booking.id, 'deposit')
+    zelleAmount = body.amount === 'deposit'
+      ? Number(depositInvoice?.payment_requested_amount || depositInvoice?.total || invoice.payment_requested_amount || invoice.total || 0)
+      : Number(invoice.total || 0)
+    if (!Number.isFinite(zelleAmount) || zelleAmount <= 0) return NextResponse.json({ error: 'The selected Zelle amount is unavailable. Please contact Luxor.' }, { status: 409 })
+  }
   const selectedAt = new Date().toISOString()
   const manualMethod = body.method === 'cash' || body.method === 'zelle'
   const handoffComplete = manualMethod && body.handoffComplete === true
@@ -41,5 +60,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     },
   })
   if (invoice.inquiry_id) await createNote(invoice.inquiry_id, `Client selected ${body.method === 'zelle' ? 'Zelle' : body.method} for ${body.amount === 'deposit' ? 'the reservation deposit' : 'the full event payment'}.`, 'status_change', 'Client Payment Portal')
-  return NextResponse.json({ ok: true, checkoutUrl: body.method === 'card' ? `/api/public/proposals/${encodeURIComponent(token)}/checkout?pay=${body.amount}` : null })
+  let zelleEmailStatus: string | null = null
+  if (body.method === 'zelle' && zelleRecipient && zelleAmount !== null) {
+    const inquiryId = invoice.inquiry_id || booking.inquiry_id || null
+    const inquiry = inquiryId ? await getLuxorInquiry(inquiryId) : null
+    const emailJob = await queueLuxorZelleInstructionsEmail({
+      booking,
+      inquiry,
+      amount: zelleAmount,
+      amountLabel: body.amount === 'deposit' ? 'reservation deposit' : 'full event balance',
+      recipient: zelleRecipient,
+    })
+    zelleEmailStatus = emailJob.status
+  }
+  return NextResponse.json({
+    ok: true,
+    checkoutUrl: body.method === 'card' ? `/api/public/proposals/${encodeURIComponent(token)}/checkout?pay=${body.amount}` : null,
+    ...(body.method === 'zelle' ? { zelleRecipient, zelleEmailStatus } : {}),
+  })
 }

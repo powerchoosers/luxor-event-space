@@ -30,6 +30,12 @@ type ReceivedEmail = {
   attachments: Array<{ id: string; filename: string; content_type: string; content_id: string | null; size: number }>
   raw?: { download_url: string; expires_at: string } | null
 }
+type SentEmail = {
+  id: string; from: string; to: string[]; cc?: string[]; reply_to?: string[]; subject: string
+  text: string | null; html: string | null; message_id: string; created_at: string
+  headers: Record<string, string>; tags?: Record<string, string> | Array<{ name: string; value: string }>
+  attachments?: unknown[]
+}
 type ResendAttachment = { id: string; filename: string; content_type: string; content_id: string | null; size: number; download_url: string }
 type MarketingRecipient = {
   id: string; campaign_id: string; open_count: number | null; click_count: number | null
@@ -172,6 +178,41 @@ async function receiveEmail(providerId: string) {
   }
 }
 
+async function recordExternalSentEmail(providerId: string, event: ResendEvent) {
+  // Provider webhooks are signed, but still retrieve the authoritative message
+  // and verify its sender before archiving a send created outside the portal.
+  const sent = await luxorResendApi<SentEmail>(`/emails/${encodeURIComponent(providerId)}`)
+  const fromAddress = address(sent.from || '')
+  const toAddresses = (sent.to || []).map(address).filter(Boolean)
+  if (!sent.id || sent.id !== providerId || !luxorMailSenders().includes(fromAddress) || !toAddresses.length) return null
+
+  const headers = Object.fromEntries(Object.entries(sent.headers || {}).map(([key, value]) => [key.toLowerCase(), value]))
+  const references = `${headers.references || ''} ${headers['in-reply-to'] || ''}`.match(/<[^<>\s]+>/g) || []
+  let threadKey = ''
+  for (const reference of references.slice().reverse()) {
+    const parents = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&internet_message_id=eq.${encodeURIComponent(reference)}&limit=1`)
+    if (parents[0]) { threadKey = parents[0].thread_key; break }
+  }
+
+  const metadataTags = Array.isArray(sent.tags)
+    ? Object.fromEntries(sent.tags.filter(tag => tag && typeof tag.name === 'string' && typeof tag.value === 'string').map(tag => [tag.name, tag.value]))
+    : sent.tags || {}
+  const id = randomUUID()
+  await supabaseRest('luxor_mail_messages?on_conflict=provider,provider_id', {
+    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' },
+    body: JSON.stringify({ id, provider: 'resend', provider_id: sent.id, direction: 'outgoing',
+      internet_message_id: sent.message_id || null, thread_key: threadKey || `mail-${id}`,
+      from_address: fromAddress, to_addresses: toAddresses, cc_addresses: (sent.cc || []).map(address).filter(Boolean),
+      reply_to_addresses: (sent.reply_to || []).map(address).filter(Boolean), reference_ids: references,
+      subject: sent.subject || '(No subject)', text_body: sent.text || '', html_body: sent.html || null,
+      status: 'sent', attempted_at: sent.created_at || event.created_at, accepted_at: sent.created_at || event.created_at,
+      occurred_at: sent.created_at || event.created_at,
+      metadata: { source: 'resend_webhook', externalSend: true, hasAttachments: Boolean(sent.attachments?.length), tags: metadataTags } }),
+  })
+  const rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&direction=eq.outgoing&provider_id=eq.${encodeURIComponent(sent.id)}&limit=1`)
+  return rows[0] || null
+}
+
 async function processDelivery(event: ResendEvent, eventId: string) {
   const providerId = event.data.email_id
   if (!providerId) return
@@ -185,12 +226,13 @@ async function processDelivery(event: ResendEvent, eventId: string) {
     rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&direction=eq.outgoing&id=eq.${localId}&limit=1`)
   }
   if (!rows[0] && event.data.message_id) rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&provider=eq.resend&direction=eq.outgoing&internet_message_id=eq.${encodeURIComponent(event.data.message_id)}&limit=1`)
-  const row = rows[0]
-  // This Resend account can receive lifecycle events for mail that predates
-  // the portal outbox, or that was sent from another approved application.
-  // Keep the signed event audit trail, but do not retry forever for an event
-  // that cannot belong to a local portal message. Current Luxor sends carry
-  // both a provider id and a Luxor message tag, so they continue below.
+  let row: LuxorMailRow | undefined = rows[0]
+  if (!row && event.data.from && luxorMailSenders().includes(address(event.data.from))) {
+    row = await recordExternalSentEmail(providerId, event) || undefined
+  }
+  // Other applications can share the Resend account. Keep their event audit
+  // trail without archiving mail unless the provider confirms an approved
+  // Luxor sender and supplies the complete authoritative message.
   if (!row) return
   const emailJobId = typeof row.metadata?.emailJobId === 'string' ? row.metadata.emailJobId : ''
   if (emailJobId && ['email.delivered', 'email.bounced', 'email.complained', 'email.delivery_delayed'].includes(event.type)) {

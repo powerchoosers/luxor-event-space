@@ -68,13 +68,14 @@ function money(value: number) {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
-function SignaturePaymentChoice({ options }: { options: NonNullable<PublicLuxorSignatureRequest['payment_options']> }) {
+function SignaturePaymentChoice({ options, clientEmail }: { options: NonNullable<PublicLuxorSignatureRequest['payment_options']>; clientEmail: string }) {
   const initialMethod: ClientPaymentMethod = options.initial_method === 'cash' || options.initial_method === 'zelle' ? options.initial_method : 'card'
   const [method, setMethod] = useState<ClientPaymentMethod>(initialMethod)
   const [amount, setAmount] = useState<ClientPaymentAmount>('deposit')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [manualHandoffComplete, setManualHandoffComplete] = useState(false)
+  const [zelleEmailStatus, setZelleEmailStatus] = useState<'queued' | 'sending' | 'sent' | 'failed' | 'cancelled' | null>(null)
   const amountValue = amount === 'deposit' ? options.deposit : options.full
   const amountLabel = amount === 'deposit' ? 'initial booking payment' : 'full event balance'
   const zelleDetails = options.zelle
@@ -86,14 +87,15 @@ function SignaturePaymentChoice({ options }: { options: NonNullable<PublicLuxorS
       const response = await fetch(`/api/public/proposals/${encodeURIComponent(options.proposal_token)}/payment-preference`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method, amount, handoffComplete: method !== 'card' }),
+        body: JSON.stringify({ method, amount, handoffComplete: method === 'cash' }),
       })
-      const data = await response.json().catch(() => ({})) as { checkoutUrl?: string; error?: string }
+      const data = await response.json().catch(() => ({})) as { checkoutUrl?: string; error?: string; zelleEmailStatus?: 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled' }
       if (!response.ok) throw new Error(data.error || 'We could not save your payment choice.')
       if (data.checkoutUrl) {
         window.location.assign(data.checkoutUrl)
         return
       }
+      if (method === 'zelle') setZelleEmailStatus(data.zelleEmailStatus || 'queued')
       setManualHandoffComplete(true)
     } catch (error) {
       setError(error instanceof Error ? error.message : 'We could not save your payment choice.')
@@ -109,12 +111,12 @@ function SignaturePaymentChoice({ options }: { options: NonNullable<PublicLuxorS
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e4f1e7] text-[#2f7547]"><CheckCircle2 size={21} /></span>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9b7740]">Next step</p>
-            <h3 className="mt-1 font-serif text-2xl font-medium">Hand the iPad back to Luxor.</h3>
-            <p className="mt-2 text-sm leading-6 text-[#6f665b]">{method === 'zelle' ? 'Your Zelle choice is ready for Luxor to verify before the payment is recorded.' : 'Luxor will take and verify the cash payment before it is recorded.'}</p>
+            <h3 className="mt-1 font-serif text-2xl font-medium">{method === 'zelle' ? 'Zelle instructions are on the way.' : 'Hand the iPad back to Luxor.'}</h3>
+            <p className="mt-2 text-sm leading-6 text-[#6f665b]">{method === 'zelle' ? `${zelleEmailStatus === 'sent' ? 'The instructions email was sent' : zelleEmailStatus === 'failed' || zelleEmailStatus === 'cancelled' ? 'The instructions email could not be sent' : zelleEmailStatus === 'sending' ? 'The instructions email is sending' : 'The instructions email is queued'} to ${clientEmail}. Your transfer is not marked received; Luxor will verify it before recording payment.` : 'Luxor will take and verify the cash payment before it is recorded.'}</p>
           </div>
         </div>
         <div className="mt-4 rounded-lg border border-[#ddd0b9] bg-white/70 px-4 py-3 text-xs leading-5 text-[#5f554a]">
-          <span className="font-semibold">Chosen today:</span> {method === 'zelle' ? 'Zelle' : 'Cash'} for the {amountLabel} ({money(amountValue)}). Your date is reserved only after Luxor confirms payment.
+          <span className="font-semibold">Chosen today:</span> {method === 'zelle' ? 'Zelle' : 'Cash'} for the {amountLabel} ({money(amountValue)}).{method === 'zelle' && zelleDetails?.recipient ? <> Send it to <span className="font-semibold">{zelleDetails.recipient}</span>.</> : null} Your date is reserved only after Luxor confirms payment.
         </div>
         <button type="button" onClick={() => setManualHandoffComplete(false)} className="mt-4 text-xs font-semibold text-[#966f35] underline decoration-[#caa24c]/50 underline-offset-4 transition hover:text-[#5c421d]">Choose a different payment method</button>
       </section>
@@ -140,7 +142,7 @@ function SignaturePaymentChoice({ options }: { options: NonNullable<PublicLuxorS
       </div>
       {method === 'card' ? <p className="mt-3 text-[11px] leading-5 text-[#6f665b]">Need to pay more by card today? Luxor can arrange that after the initial booking payment is complete.</p> : null}
       {method === 'zelle' ? <div className="mt-4 rounded-xl border border-[#d7c59f] bg-white/70 p-4"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#f5ead2] text-[#8c6529]"><QrCode size={18} /></span><div><p className="text-xs font-semibold text-[#2d251e]">Send {money(amountValue)} with Zelle</p><p className="mt-1 text-[11px] leading-5 text-[#6f665b]">{zelleDetails?.recipient ? <>Send it to <span className="font-semibold text-[#2d251e]">{zelleDetails.recipient}</span>, then come back here to hand the iPad to Luxor.</> : 'Luxor will confirm the Zelle recipient with you before you send anything.'}</p></div></div>{zelleDetails?.qr_code_url ? <div className="mt-4 flex items-center gap-4 rounded-lg border border-[#e1d7c8] bg-[#faf7f2] p-3"><div className="grid h-20 w-20 shrink-0 place-items-center rounded-md bg-white p-1.5"><Image src={zelleDetails.qr_code_url} alt="Luxor Zelle QR code" width={80} height={80} unoptimized referrerPolicy="no-referrer" className="h-full w-full object-contain" /></div><p className="text-[11px] leading-5 text-[#6f665b]">Open Zelle on your phone and scan this code to start the transfer.</p></div> : null}</div> : null}
-      <button type="button" disabled={busy} onClick={() => void submit()} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#c89d4b] px-4 text-xs font-bold text-[#20170d] transition hover:bg-[#d7ae60] disabled:cursor-wait disabled:opacity-60"><CreditCard size={15} />{busy ? 'Saving choice…' : method === 'card' ? 'Continue to secure card payment' : method === 'zelle' ? 'I sent the Zelle — hand iPad back' : 'Hand iPad back to Luxor'}</button>
+      <button type="button" disabled={busy} onClick={() => void submit()} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#c89d4b] px-4 text-xs font-bold text-[#20170d] transition hover:bg-[#d7ae60] disabled:cursor-wait disabled:opacity-60"><CreditCard size={15} />{busy ? 'Saving choice…' : method === 'card' ? 'Continue to secure card payment' : method === 'zelle' ? 'Confirm Zelle and email instructions' : 'Hand iPad back to Luxor'}</button>
       {error ? <p role="alert" className="mt-3 text-xs leading-5 text-[#a04b39]">{error}</p> : null}
     </section>
   )
@@ -614,7 +616,7 @@ export default function SignaturePage() {
                 </div>
                 {signature.same_day_booking ? <div className="mt-5 border-y border-[#ded5c8] py-4 text-[#6f665b]"><SameDayBookingNotice benefit={signature.same_day_booking} completed={signature.same_day_completed} review={signature.payment_review_required} /></div> : null}
                 <SavedPaymentSchedule schedule={signature.payment_schedule || null} tone="light" />
-                {signature.payment_options && !signature.payment_blocked ? <SignaturePaymentChoice options={signature.payment_options} /> : null}
+                {signature.payment_options && !signature.payment_blocked ? <SignaturePaymentChoice options={signature.payment_options} clientEmail={signature.client_email} /> : null}
               </div>
               <div className="shrink-0 border-t border-[#ded5c8] bg-[#eee8df] p-4 sm:p-5">
                 {signature.payment_url && !signature.payment_options && !signature.payment_blocked ? (

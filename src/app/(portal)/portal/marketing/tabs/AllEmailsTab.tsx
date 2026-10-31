@@ -42,6 +42,7 @@ import { PortalCloseButton, PortalContactAvatar, PortalSkeleton, PortalSkeletonT
 import { EmailRichTextEditor } from '@/components/portal/EmailRichTextEditor'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import type { LuxorSharedMailbox } from '@/lib/luxorSharedMailboxes'
+import { LUXOR_EMAIL_SENT_EVENT } from '@/lib/luxorLeadEmailNotice'
 import { decodeHtmlEntities, stripTrackingPixels } from '@/lib/luxorTextUtils'
 import { luxorMailDeliveryLabel } from '@/lib/luxorMailDelivery'
 import { luxorMailAdditionalFolders, type LuxorMailFolder } from '@/lib/luxorMailFolders'
@@ -607,6 +608,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     }
   }, [activeFolder, searchQuery, mailboxEmail])
 
+  useEffect(() => {
+    const refreshAfterSend = () => { void loadEmails(true) }
+    window.addEventListener(LUXOR_EMAIL_SENT_EVENT, refreshAfterSend)
+    return () => window.removeEventListener(LUXOR_EMAIL_SENT_EVENT, refreshAfterSend)
+  }, [loadEmails])
+
   const loadNextPage = useCallback(async () => {
     const key = JSON.stringify([activeFolder, searchQuery.trim(), mailboxEmail || ''])
     if (!hasMore || loading || loadingMore || mailboxRequest.current || pageSnapshot.current.key !== key || !pageSnapshot.current.value) return
@@ -822,7 +829,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
   useEffect(() => {
     const threadId = messageDetail?.threadId
-    if (!replyOpen || !threadId || messageDetail?.direction === 'campaign') {
+    if (!threadId || messageDetail?.direction === 'campaign') {
       setThread(null)
       setThreadError(null)
       return
@@ -879,7 +886,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       current = false
       controller.abort()
     }
-  }, [messageDetail?.threadId, messageDetail?.direction, replyOpen, threadRetryKey])
+  }, [messageDetail?.threadId, messageDetail?.direction, threadRetryKey])
 
   const draftWithElena = async () => {
     if (!thread?.threadId) return
