@@ -1,7 +1,7 @@
 'use client'
 import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useId } from 'react'
 import { 
   X, 
   Send, 
@@ -23,10 +23,13 @@ import {
   Loader2,
   Mic,
   MicOff,
+  PhoneOff,
   ArrowUp,
   Paperclip,
   FileText,
   CalendarDays,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
 } from 'lucide-react'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
@@ -34,9 +37,10 @@ import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion'
 import { PortalCloseButton, PortalContactAvatar, PortalDatePicker, PortalSelect } from './PortalUI'
 import { ElenaLiveVoiceClient, type ElenaVoiceState } from '@/lib/elenaLiveVoiceClient'
+import { ElenaSilkOrb } from './ElenaSilkOrb'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
 import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
 import { ElenaWorkflowDraftCard, type ElenaWorkflowDraftPayload } from './ElenaWorkflowDraftCard'
@@ -57,9 +61,11 @@ type ExecutedQuery = {
 }
 
 type Message = {
+  id?: string
   role: 'user' | 'assistant'
   content: string
   executedQueries?: ExecutedQuery[]
+  toolActivity?: string[]
   confirmation?: {
     query: string
     summary: string
@@ -75,6 +81,101 @@ type Message = {
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
   workflowDraft?: ElenaWorkflowDraftPayload
+  voiceTranscript?: Array<{ role: 'user' | 'assistant'; text: string }>
+}
+
+type ElenaChatResponse = {
+  reply: string
+  executedQueries: ExecutedQuery[]
+  toolActivity?: string[]
+  confirmation?: { query: string; summary: string }
+  textCampaignDraft?: { name: string; bodyTemplate: string; campaignType: string }
+  emailDraft?: EmailDraftPayload
+  crmUpdateCard?: LeadUpdatePayload
+  contractCard?: ContractCardPayload
+  invoiceCard?: InvoiceCardPayload
+  taskCard?: TaskCardPayload
+  contactCard?: LeadContactCardPayload
+  newContactCard?: NewContactCardPayload
+  tourInviteCard?: TourInviteCardPayload
+  workflowDraft?: ElenaWorkflowDraftPayload
+  navigation?: { href: string }
+}
+
+async function readElenaChatResponse(response: Response, onActivity: (step: string) => void): Promise<ElenaChatResponse> {
+  if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+    return response.json() as Promise<ElenaChatResponse>
+  }
+  if (!response.body) throw new Error('Elena’s progress stream ended before the reply arrived.')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const resultRef: { current: { ok: boolean; status: number; data: ElenaChatResponse & { error?: string } } | null } = { current: null }
+  let streamError = ''
+
+  const consume = (chunk: string) => {
+    buffer += chunk
+    const blocks = buffer.split(/\r?\n\r?\n/)
+    buffer = blocks.pop() || ''
+    for (const block of blocks) {
+      const payload = block.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).join('\n')
+      if (!payload) continue
+      try {
+        const event = JSON.parse(payload) as { type?: string; text?: string; ok?: boolean; status?: number; data?: ElenaChatResponse & { error?: string } }
+        if (event.type === 'activity' && event.text) onActivity(event.text)
+        if (event.type === 'error') streamError = event.text || 'Elena could not finish the request.'
+        if (event.type === 'result' && event.data) {
+          resultRef.current = { ok: Boolean(event.ok), status: Number(event.status || 200), data: event.data }
+        }
+      } catch {
+        streamError = 'Elena’s progress update could not be read.'
+      }
+    }
+  }
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    consume(decoder.decode(value, { stream: true }))
+  }
+  consume(decoder.decode())
+
+  if (streamError) throw new Error(streamError)
+  const result = resultRef.current
+  if (!result) throw new Error('Elena’s progress stream ended before the reply arrived.')
+  if (!result.ok) throw new Error(result.data.error || `Elena could not complete the request (${result.status}).`)
+  return result.data
+}
+
+function ToolActivityDisclosure({ steps, active = false }: { steps: string[]; active?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const contentId = useId()
+  const reduceMotion = useReducedMotion()
+  if (!steps.length) return null
+
+  return (
+      <div className={`elena-tool-activity${active ? ' is-active' : ''}`}>
+      <button type="button" aria-expanded={open} aria-controls={contentId} onClick={() => setOpen(value => !value)}>
+        <ChevronRight size={13} aria-hidden="true" className={open ? 'is-open' : ''} />
+        <span>{active ? `View activity · ${steps.length}` : `Activity · ${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`}</span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            id={contentId}
+            initial={reduceMotion ? false : { height: 0, opacity: 0, y: -3 }}
+            animate={{ height: 'auto', opacity: 1, y: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0, y: -3 }}
+            transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+            className="elena-tool-activity-reveal"
+          >
+            <ol>{steps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ol>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
 }
 
 type LeadContactCardPayload = {
@@ -217,12 +318,15 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingActivities, setLoadingActivities] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Sessions History States
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
+  const activeSessionRef = useRef<string | null>(null)
+  const isOpenRef = useRef(isOpen)
   const [showSessionsList, setShowSessionsList] = useState(false)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editTitleInput, setEditTitleInput] = useState('')
@@ -245,12 +349,31 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const voiceClientRef = useRef<ElenaLiveVoiceClient | null>(null)
-  const voiceTranscriptRef = useRef('')
   const handledVoiceDelegationsRef = useRef(new Set<string>())
+  const voiceSendRef = useRef<((text: string, onReply: (reply: string) => void) => Promise<string | null>) | null>(null)
   const [voiceState, setVoiceState] = useState<ElenaVoiceState>('ended')
   const [voiceLevel, setVoiceLevel] = useState(0)
   const [voiceMuted, setVoiceMuted] = useState(false)
   const [voiceError, setVoiceError] = useState('')
+  const [voiceButtonHovered, setVoiceButtonHovered] = useState(false)
+  const [voiceStartIndex, setVoiceStartIndex] = useState(0)
+  const [voiceCaption, setVoiceCaption] = useState<{ role: 'user' | 'assistant'; text: string } | null>(null)
+  const voiceStartButtonRef = useRef<HTMLButtonElement>(null)
+  const voiceEndButtonRef = useRef<HTMLButtonElement>(null)
+  const wasVoiceActiveRef = useRef(false)
+  const reduceVoiceMotion = useReducedMotion()
+
+  useEffect(() => { activeSessionRef.current = currentSessionId }, [currentSessionId])
+  useEffect(() => { isOpenRef.current = isOpen }, [isOpen])
+  useEffect(() => {
+    if (voiceState === 'connecting') {
+      wasVoiceActiveRef.current = true
+      voiceEndButtonRef.current?.focus()
+    } else if (voiceState === 'ended' && wasVoiceActiveRef.current) {
+      wasVoiceActiveRef.current = false
+      if (isOpen) voiceStartButtonRef.current?.focus()
+    }
+  }, [voiceState, isOpen])
 
   const stopVoice = () => {
     voiceClientRef.current?.stop()
@@ -261,26 +384,81 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   const startVoice = () => {
     if (voiceClientRef.current || isLoading || !isOpen) return
     setVoiceError('')
-    voiceTranscriptRef.current = ''
+    setVoiceStartIndex(messages.length)
+    setVoiceCaption(null)
     handledVoiceDelegationsRef.current.clear()
-    const pendingDelegations = new Map<string, number>()
+    const pendingDelegations = new Map<string, { timer: number; startedAt: number }>()
+    let transcript = ''
+    let consumedLength = 0
+    const voiceTurns: Array<{ role: 'user' | 'assistant'; text: string }> = []
+    const recordVoiceFragment = (role: 'user' | 'assistant', fragment: string) => {
+      const last = voiceTurns[voiceTurns.length - 1]
+      if (last?.role === role) last.text += fragment
+      else voiceTurns.push({ role, text: fragment })
+    }
+    let queue = Promise.resolve()
     let processDelegation: (delegationId: string) => void = () => {}
+    const scheduleDelegation = (delegationId: string, delay: number) => {
+      const pending = pendingDelegations.get(delegationId)
+      if (!pending) return
+      window.clearTimeout(pending.timer)
+      pending.timer = window.setTimeout(() => processDelegation(delegationId), delay)
+    }
     const client = new ElenaLiveVoiceClient({
       messages: messages.map(({ role, content }) => ({ role, content })),
       onState: (state) => {
         setVoiceState(state)
-        if (state === 'ended' && voiceClientRef.current === client) voiceClientRef.current = null
+        if (state === 'ended') {
+          for (const pending of pendingDelegations.values()) window.clearTimeout(pending.timer)
+          pendingDelegations.clear()
+          if (voiceClientRef.current === client) {
+            voiceClientRef.current = null
+            if (voiceTurns.some(turn => turn.role === 'user' && turn.text.trim())) {
+              const turns = voiceTurns.filter(turn => turn.text.trim()).map(turn => ({ ...turn }))
+              const entry: Message = {
+                id: `voice-${crypto.randomUUID()}`,
+                role: 'user',
+                content: `Voice conversation:\n${turns.map(turn => `${turn.role === 'user' ? 'You' : 'Elena'}: ${turn.text.trim()}`).join('\n')}`,
+                voiceTranscript: turns,
+              }
+              setMessages(previous => [...previous, entry])
+              if (currentSessionId) {
+                void queue.then(async () => {
+                  const response = await fetch('/api/portal/elena-chat/sessions', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: currentSessionId, appendVoiceTranscript: entry }),
+                  })
+                  if (!response.ok) throw new Error('Could not save the voice transcript')
+                  if (isOpenRef.current && activeSessionRef.current === currentSessionId) {
+                    setMessages(previous => previous.some(message => message.id === entry.id) ? previous : [...previous, entry])
+                  }
+                }).catch(() => setVoiceError('The voice transcript is visible here but could not be saved.'))
+              }
+            }
+          }
+        }
       },
       onLevel: setVoiceLevel,
       onError: setVoiceError,
       onEvent: (event) => {
-        if (event.type === 'input_audio_buffer.speech_started') voiceTranscriptRef.current = ''
-        if (event.type === 'session.input_transcript.completed' && typeof event.transcript === 'string') {
-          voiceTranscriptRef.current = event.transcript.trim()
-          for (const [delegationId, timer] of pendingDelegations) {
-            window.clearTimeout(timer)
-            window.setTimeout(() => processDelegation(delegationId), 100)
+        if (event.type === 'session.input_transcript.delta' && typeof event.delta === 'string') {
+          transcript += event.delta
+          const fragment = event.delta
+          recordVoiceFragment('user', fragment)
+          setVoiceCaption(previous => previous?.role === 'user'
+            ? { role: 'user', text: previous.text + fragment }
+            : { role: 'user', text: fragment })
+          for (const [delegationId, pending] of pendingDelegations) {
+            scheduleDelegation(delegationId, Math.max(0, Math.min(1200, 8000 - (Date.now() - pending.startedAt))))
           }
+        }
+        if (event.type === 'session.output_transcript.delta' && typeof event.delta === 'string') {
+          const fragment = event.delta
+          recordVoiceFragment('assistant', fragment)
+          setVoiceCaption(previous => previous?.role === 'assistant'
+            ? { role: 'assistant', text: previous.text + fragment }
+            : { role: 'assistant', text: fragment })
         }
         if (event.type !== 'session.delegation.created') return
 
@@ -291,21 +469,33 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         if (typeof delegationId !== 'string' || handledVoiceDelegationsRef.current.has(delegationId)) return
         handledVoiceDelegationsRef.current.add(delegationId)
         client.sendThinking('I’m checking that with our existing Luxor tools now.', delegationId)
-        const timer = window.setTimeout(() => processDelegation(delegationId), 1_500)
-        pendingDelegations.set(delegationId, timer)
+        pendingDelegations.set(delegationId, { timer: 0, startedAt: Date.now() })
+        scheduleDelegation(delegationId, 1200)
       },
     })
     processDelegation = (delegationId) => {
-      const timer = pendingDelegations.get(delegationId)
-      if (timer) window.clearTimeout(timer)
-      pendingDelegations.delete(delegationId)
-      const transcript = voiceTranscriptRef.current
-      if (!transcript || voiceClientRef.current !== client) {
-        client.sendCommentary('I did not catch that clearly. Please say it again.', delegationId)
+      const pending = pendingDelegations.get(delegationId)
+      if (!pending || voiceClientRef.current !== client) return
+      if (!transcript.slice(consumedLength).trim() && Date.now() - pending.startedAt < 8000) {
+        scheduleDelegation(delegationId, 500)
         return
       }
-      void handleSend(transcript, (reply) => {
-        if (voiceClientRef.current === client) client.sendCommentary(reply, delegationId)
+      window.clearTimeout(pending.timer)
+      pendingDelegations.delete(delegationId)
+      const request = transcript.slice(consumedLength).trim()
+      consumedLength = transcript.length
+      queue = queue.then(async () => {
+        if (voiceClientRef.current !== client) return
+        if (!request) {
+          client.sendCommentary('I did not catch that clearly. Please say it again.', delegationId)
+          return
+        }
+        const result = await voiceSendRef.current?.(request, (reply) => {
+          if (voiceClientRef.current === client) client.sendCommentary(reply, delegationId)
+        })
+        if (result == null && voiceClientRef.current === client) {
+          client.sendCommentary('I could not finish that request. Please try again.', delegationId)
+        }
       })
     }
     voiceClientRef.current = client
@@ -407,6 +597,15 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const refreshSessionsMetadata = async () => {
+    try {
+      const response = await fetch('/api/portal/elena-chat/sessions')
+      if (response.ok) setSessions(await response.json() as ChatSession[])
+    } catch (error) {
+      console.error('Could not refresh chat sessions:', error)
+    }
   }
 
   const loadSessionsList = async (selectSessionId?: string, forceReload = false) => {
@@ -565,18 +764,19 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     
     const updatedMessages: Message[] = [...messages, { role: 'user', content: fullDisplayContent }]
     setMessages(updatedMessages)
+    let streamedActivities: string[] = []
+    setLoadingActivities([])
     setIsLoading(true)
 
     try {
-      const apiMessages = updatedMessages.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }))
+      // Keep cards in saved chat history; the server sends only role and text to the model.
+      const apiMessages = updatedMessages
 
       const response = await fetch('/api/portal/elena-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
         },
         body: JSON.stringify({ 
           messages: apiMessages,
@@ -590,26 +790,10 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         throw new Error('Failed to get response')
       }
 
-      const data = (await response.json()) as {
-        reply: string
-        executedQueries: ExecutedQuery[]
-        confirmation?: { query: string; summary: string }
-        textCampaignDraft?: {
-          name: string
-          bodyTemplate: string
-          campaignType: string
-        }
-        emailDraft?: EmailDraftPayload
-        crmUpdateCard?: LeadUpdatePayload
-        contractCard?: ContractCardPayload
-        invoiceCard?: InvoiceCardPayload
-        taskCard?: TaskCardPayload
-        contactCard?: LeadContactCardPayload
-        newContactCard?: NewContactCardPayload
-        tourInviteCard?: TourInviteCardPayload
-        workflowDraft?: ElenaWorkflowDraftPayload
-        navigation?: { href: string }
-      }
+      const data = await readElenaChatResponse(response, (step) => {
+        streamedActivities = streamedActivities.at(-1) === step ? streamedActivities : [...streamedActivities, step]
+        setLoadingActivities(streamedActivities)
+      })
       if (requestId !== messageRequestRef.current) return null
 
       if (data.textCampaignDraft) {
@@ -628,6 +812,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           role: 'assistant',
           content: data.reply?.trim() || 'I did not get a clear answer back from the query service. Please try that question again, or ask me for a daily brief.',
           executedQueries: data.executedQueries,
+          toolActivity: data.toolActivity?.length ? data.toolActivity : streamedActivities,
           confirmation: data.confirmation,
           emailDraft: data.emailDraft,
           crmUpdateCard: data.crmUpdateCard,
@@ -645,7 +830,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       
       // Refresh session sidebar metadata in background to update title & date order
       if (currentSessionId) {
-        loadSessionsList(currentSessionId)
+        void refreshSessionsMetadata()
       }
       return voiceReply
     } catch (err) {
@@ -662,10 +847,14 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       onVoiceReply?.(voiceErrorReply)
       return voiceErrorReply
     } finally {
-      if (requestId === messageRequestRef.current) setIsLoading(false)
+      if (requestId === messageRequestRef.current) {
+        setIsLoading(false)
+        setLoadingActivities([])
+      }
     }
     return null
   }
+  voiceSendRef.current = handleSend
 
   const handleWorkflowDraftSaved = (msgIndex: number, workflow: { id: string; name: string }) => {
     const updatedMessages = messages.map((message, index) => index === msgIndex && message.workflowDraft
@@ -679,7 +868,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         body: JSON.stringify({ id: currentSessionId, messages: updatedMessages }),
       }).then((response) => {
         if (!response.ok) throw new Error('Could not save the workflow draft status in chat history.')
-        loadSessionsList(currentSessionId)
+        void refreshSessionsMetadata()
       }).catch((error) => console.error(error))
     }
   }
@@ -690,10 +879,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     setIsLoading(true)
 
     try {
-      const apiMessages = messages.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }))
+      const apiMessages = messages.map((msg, index) => index === msgIndex ? { ...msg, isConfirmed: true } : msg)
 
       const response = await fetch('/api/portal/elena-chat', {
         method: 'POST',
@@ -729,7 +915,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       ])
 
       if (currentSessionId) {
-        loadSessionsList(currentSessionId)
+        void refreshSessionsMetadata()
       }
     } catch (err) {
       if (requestId !== messageRequestRef.current) return
@@ -759,6 +945,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
   const pathSuggestions = getSuggestionsForPath(activePath)
   const isSessionHydrating = Boolean(currentSessionId && loadedSessionId !== currentSessionId)
+  const voiceActive = voiceState !== 'ended'
+  const voiceHasResults = messages.slice(voiceStartIndex).some(message => message.role === 'assistant')
 
   return (
     <motion.aside 
@@ -790,7 +978,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button 
+          {!voiceActive && <button
             type="button"
             onClick={() => setShowSessionsList(curr => !curr)}
             className={`rounded-lg p-1.5 transition-all cursor-pointer ${
@@ -802,8 +990,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             aria-label="Chat History Sessions"
           >
             <History size={16} />
-          </button>
-          <button 
+          </button>}
+          {!voiceActive && <button
             type="button"
             onClick={handleCreateSession}
             className="rounded-lg p-1.5 text-zinc-500 opacity-80 transition-all hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 cursor-pointer"
@@ -811,8 +999,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             aria-label="Start New Chat Session"
           >
             <SquarePen size={16} />
-          </button>
-          <div className="h-4 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
+          </button>}
+          {!voiceActive && <div className="h-4 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />}
           <PortalCloseButton onClick={onClose} aria-label="Close Elena Chat" />
         </div>
       </div>
@@ -924,8 +1112,57 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           )}
         </AnimatePresence>
 
+        <AnimatePresence mode="popLayout">
+        {voiceActive && (
+          <motion.section
+            key="voice-conversation"
+            layout={!reduceVoiceMotion}
+            initial={reduceVoiceMotion ? false : { opacity: 0, y: 20, filter: 'blur(8px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            exit={reduceVoiceMotion ? { opacity: 0 } : { opacity: 0, y: 20, filter: 'blur(8px)' }}
+            transition={{ duration: reduceVoiceMotion ? 0 : 0.35, ease: [0.23, 1, 0.32, 1] }}
+            aria-label="Voice conversation with Elena"
+            className={`relative z-10 flex min-h-0 items-center justify-center overflow-hidden bg-[color:var(--portal-card)] px-5 py-4 text-center ${voiceHasResults ? 'shrink-0 border-b border-[color:var(--portal-border)]' : 'flex-1'}`}
+          >
+            <ElenaVoiceAtmosphere level={voiceLevel} reducedMotion={Boolean(reduceVoiceMotion)} />
+            <div className={`relative z-10 mx-auto flex max-w-sm flex-col items-center ${voiceHasResults ? '' : '-translate-y-3'}`}>
+              <ElenaSilkOrb level={voiceLevel} size={voiceHasResults ? 150 : 200} />
+              <p className="-mt-3 font-serif text-xl text-[color:var(--portal-text)]">Elena</p>
+              <p aria-live="polite" className="mt-1 text-xs text-[color:var(--portal-muted)]">
+                {voiceState === 'connecting' ? 'Connecting…' : voiceState === 'thinking' ? 'Working on it…' : voiceState === 'speaking' ? 'Speaking' : voiceState === 'closing' ? 'Ending voice…' : voiceMuted ? 'Microphone muted' : 'Listening'}
+              </p>
+              {voiceCaption?.text.trim() && (
+                <p className="mt-2 line-clamp-2 max-w-[300px] text-xs leading-relaxed text-[color:var(--portal-muted)]">
+                  <span className="sr-only">{voiceCaption.role === 'user' ? 'You said: ' : 'Elena said: '}</span>
+                  {voiceCaption.text}
+                </p>
+              )}
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { voiceClientRef.current?.mute(!voiceMuted); setVoiceMuted(current => !current) }}
+                  aria-label={voiceMuted ? 'Unmute microphone' : 'Mute microphone'}
+                  aria-pressed={voiceMuted}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]"
+                >
+                  {voiceMuted ? <MicOff size={16} /> : <Mic size={16} />} {voiceMuted ? 'Unmute' : 'Mute'}
+                </button>
+                <button
+                  type="button"
+                  ref={voiceEndButtonRef}
+                  onClick={stopVoice}
+                  className="portal-gold-button inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#916823] px-4 text-xs font-semibold text-white transition hover:bg-[#805b1e] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]"
+                >
+                  <PhoneOff size={16} /> End voice
+                </button>
+              </div>
+            </div>
+          </motion.section>
+        )}
+        </AnimatePresence>
+
         {/* Messages Window */}
-        <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+        <div className={`portal-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 ${voiceActive && !voiceHasResults ? 'hidden' : ''}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSessionId || 'empty-session'}
@@ -933,14 +1170,14 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -12, scale: 0.98 }}
               transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-              className={messages.length === 0 ? 'min-h-full flex flex-col justify-center [justify-content:safe_center]' : 'min-h-full flex flex-col justify-between space-y-4'}
+              className={messages.length === 0 && !voiceActive ? 'min-h-full flex flex-col justify-center [justify-content:safe_center]' : 'min-h-full flex flex-col justify-between space-y-4'}
             >
               {isSessionHydrating ? (
                 <div className="flex flex-col items-center justify-center gap-3 text-center text-zinc-500" role="status" aria-live="polite">
                   <Loader2 size={20} className="animate-spin text-[#caa24c]" />
                   <p className="text-xs">Opening Elena’s conversation…</p>
                 </div>
-              ) : messages.length === 0 ? (
+              ) : voiceActive && !voiceHasResults ? null : messages.length === 0 ? (
                 <div className="portal-elena-welcome flex flex-col items-center justify-center text-center px-1 sm:px-2 py-2 space-y-3 sm:space-y-4 my-auto">
                   <div className="portal-elena-avatar-wrap relative shrink-0">
                     <div className="portal-elena-avatar relative h-14 w-14 overflow-hidden rounded-full border-2 border-[#caa24c]/40 ring-4 ring-[#caa24c]/10 shadow-2xl transition-all">
@@ -1039,16 +1276,16 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               ) : (
                 <div className="space-y-4">
                   <AnimatePresence initial={false}>
-                    {messages.map((msg, index) => (
+                    {messages.map((msg, index) => voiceActive && index < voiceStartIndex ? null : (
                       <motion.div 
                         layout="position"
                         key={index} 
                         className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                       >
                         <motion.div
-                          initial={{ opacity: 0, y: 30, scale: 0.88, originX: msg.role === 'user' ? 1 : 0, originY: 1 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                          initial={reduceVoiceMotion ? false : { opacity: 0, y: 18, scale: 0.985, filter: 'blur(8px)', originX: msg.role === 'user' ? 1 : 0, originY: 1 }}
+                          animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                          transition={{ duration: reduceVoiceMotion ? 0 : 0.38, ease: [0.22, 1, 0.36, 1] }}
                           className={`flex items-start gap-2 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
                         >
                           {msg.role === 'assistant' && (
@@ -1063,9 +1300,27 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                 : 'rounded-tl-none bg-zinc-900/60 border-zinc-800/30 text-zinc-300'
                             }`}
                           >
-                            {renderFormattedContent(msg.content)}
+                            {msg.voiceTranscript ? (
+                              <details>
+                                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
+                                  Voice conversation
+                                  <ChevronDown size={15} aria-hidden="true" className="shrink-0 text-[color:var(--portal-muted)] transition-transform duration-300 ease-out group-open:rotate-180 motion-reduce:transition-none" />
+                                </summary>
+                                <div className="grid grid-rows-[0fr] opacity-0 blur-[2px] transition-[grid-template-rows,opacity,filter] duration-300 ease-out group-open:grid-rows-[1fr] group-open:opacity-100 group-open:blur-0 motion-reduce:transition-none">
+                                <div className="mt-3 min-h-0 overflow-hidden space-y-2 text-xs leading-relaxed">
+                                  {msg.voiceTranscript.map((turn, turnIndex) => (
+                                    <p key={turnIndex}><span className="font-semibold">{turn.role === 'user' ? 'You' : 'Elena'}:</span> {turn.text}</p>
+                                  ))}
+                                </div>
+                                </div>
+                              </details>
+                            ) : renderFormattedContent(msg.content)}
                           </div>
                         </motion.div>
+
+                        {msg.toolActivity?.length ? (
+                          <ToolActivityDisclosure steps={msg.toolActivity} />
+                        ) : null}
 
                         {msg.contactCard && <ElenaContactCard payload={msg.contactCard} />}
 
@@ -1242,19 +1497,30 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                       <motion.div
                         layout
                         key="thinking-indicator"
-                        initial={{ opacity: 0, y: 20, scale: 0.9, originX: 0, originY: 1 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8, y: 10 }}
-                        transition={{ duration: 0.3 }}
-                        className="flex items-start gap-2 max-w-[80%]"
+                        initial={reduceVoiceMotion ? false : { opacity: 0, y: 8, filter: 'blur(5px)', originX: 0, originY: 1 }}
+                        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                        exit={reduceVoiceMotion ? { opacity: 0 } : { opacity: 0, y: 4, filter: 'blur(5px)' }}
+                        transition={{ duration: reduceVoiceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+                        className="flex min-h-8 flex-wrap items-center gap-x-2 gap-y-0.5 pl-8 text-xs text-[color:var(--portal-muted)]"
                       >
-                        <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-full border border-zinc-700 mt-1">
-                          <Image src="/luxor-concierge.png" alt="Elena" fill sizes="24px" className="object-cover" />
-                        </div>
-                        <div className="rounded-2xl rounded-tl-none bg-zinc-900/60 border border-zinc-800/80 px-4 py-3 text-zinc-400 text-xs flex items-center gap-2">
-                          <RefreshCw size={12} className="animate-spin text-[#caa24c]" />
-                          <span>Querying database...</span>
-                        </div>
+                        <span aria-hidden="true" className="flex shrink-0 items-center gap-1 text-[#caa24c]">
+                          {[0, 1, 2].map((dot) => <span key={dot} className="h-1 w-1 rounded-full bg-current motion-safe:animate-pulse" style={{ animationDelay: `${dot * 140}ms` }} />)}
+                        </span>
+                        <AnimatePresence mode="wait" initial={false}>
+                          <motion.span
+                            key={loadingActivities.at(-1) || 'working'}
+                            initial={reduceVoiceMotion ? false : { opacity: 0, y: 4, filter: 'blur(4px)' }}
+                            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                            exit={reduceVoiceMotion ? { opacity: 0 } : { opacity: 0, y: -3, filter: 'blur(4px)' }}
+                            transition={{ duration: reduceVoiceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+                            className="elena-working-shimmer"
+                            role="status"
+                            aria-live="polite"
+                          >
+                            {loadingActivities.at(-1) || 'Working through your request…'}
+                          </motion.span>
+                        </AnimatePresence>
+                        <ToolActivityDisclosure steps={loadingActivities} active />
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -1266,55 +1532,34 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         </div>
 
         {/* Input */}
-        <div className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-md p-3 shrink-0">
-          <AnimatePresence initial={false}>
-            {voiceState !== 'ended' && (
+        {!voiceActive && <div className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-md p-3 shrink-0">
+          <AnimatePresence>
+            {voiceError && (
               <motion.div
-                initial={{ opacity: 0, y: 8, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                exit={{ opacity: 0, y: 5, height: 0 }}
-                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                className="mb-2.5 overflow-hidden"
+                key="voice-notice"
+                initial={reduceVoiceMotion ? false : { height: 0, opacity: 0, y: 6, filter: 'blur(4px)' }}
+                animate={{ height: 'auto', opacity: 1, y: 0, filter: 'blur(0px)' }}
+                exit={reduceVoiceMotion ? { height: 0, opacity: 0 } : { height: 0, opacity: 0, y: 6, filter: 'blur(4px)' }}
+                transition={{ duration: reduceVoiceMotion ? 0 : 0.3, ease: [0.23, 1, 0.32, 1] }}
+                className="overflow-hidden"
               >
-                <div className="flex items-center gap-3 rounded-xl border border-[#caa24c]/25 bg-[color:var(--portal-soft)] px-3 py-2.5">
-                  <ElenaVoiceOrb level={voiceLevel} active />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-[color:var(--portal-text)]">Elena voice</p>
-                    <p aria-live="polite" className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">
-                      {voiceState === 'connecting' ? 'Connecting securely…' : voiceState === 'thinking' ? 'Working on it with you…' : voiceState === 'speaking' ? 'Elena is speaking' : voiceState === 'closing' ? 'Wrapping up…' : 'Listening'}
-                    </p>
-                  </div>
+                <div className="mb-2 flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 pl-3 pr-1 text-[10px] text-rose-700 dark:text-rose-300">
+                  <p role="status" className="min-w-0 flex-1 py-2">{voiceError}</p>
                   <button
                     type="button"
+                    aria-label="Dismiss voice notice"
                     onClick={() => {
-                      voiceClientRef.current?.mute(!voiceMuted)
-                      setVoiceMuted((current) => !current)
+                      setVoiceError('')
+                      voiceStartButtonRef.current?.focus()
                     }}
-                    aria-label={voiceMuted ? 'Unmute microphone' : 'Mute microphone'}
-                    title={voiceMuted ? 'Unmute microphone' : 'Mute microphone'}
-                    className="rounded-lg p-2 text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]"
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-rose-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
                   >
-                    {voiceMuted ? <MicOff size={15} /> : <Mic size={15} />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={stopVoice}
-                    aria-label="End voice conversation"
-                    title="End voice conversation"
-                    className="rounded-lg p-2 text-[#9f762d] transition hover:bg-[#caa24c]/10"
-                  >
-                    <X size={15} />
+                    <X size={14} aria-hidden="true" />
                   </button>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
-
-          {voiceError && (
-            <p role="status" className="mb-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-[10px] text-rose-700 dark:text-rose-300">
-              {voiceError}
-            </p>
-          )}
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2 px-0.5">
               {attachments.map((att) => (
@@ -1369,12 +1614,17 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             />
 
             <button
+              ref={voiceStartButtonRef}
               type={input.trim() || attachments.length > 0 ? 'submit' : 'button'}
               onClick={input.trim() || attachments.length > 0 ? undefined : startVoice}
+              onMouseEnter={() => setVoiceButtonHovered(true)}
+              onMouseLeave={() => setVoiceButtonHovered(false)}
+              onFocus={() => setVoiceButtonHovered(true)}
+              onBlur={() => setVoiceButtonHovered(false)}
               disabled={isLoading || (!input.trim() && attachments.length === 0 && voiceState !== 'ended')}
               aria-label={input.trim() || attachments.length > 0 ? 'Send message' : 'Start voice conversation with Elena'}
               title={input.trim() || attachments.length > 0 ? 'Send message' : 'Start voice conversation'}
-              className="ml-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] transition-all hover:bg-[#caa24c]/20 disabled:cursor-not-allowed disabled:opacity-35"
+              className="ml-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] transition-all hover:bg-[#caa24c]/20 disabled:cursor-not-allowed disabled:opacity-35"
             >
               <AnimatePresence mode="wait" initial={false}>
                 {input.trim() || attachments.length > 0 ? (
@@ -1383,7 +1633,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                   </motion.span>
                 ) : (
                   <motion.span key="voice" initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 0.15 }}>
-                    <ElenaVoiceOrb level={0} />
+                    <ElenaVoiceWave active={voiceButtonHovered && !input.trim() && attachments.length === 0} />
                   </motion.span>
                 )}
               </AnimatePresence>
@@ -1393,31 +1643,81 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             <Info size={9} />
             Queries run securely on the server with owner authorization.
           </p>
-        </div>
+        </div>}
       </div>
     </motion.aside>
   )
 }
 
-function ElenaVoiceOrb({ level, active = false }: { level: number; active?: boolean }) {
-  const scale = 1 + Math.min(1, Math.max(0, level)) * 0.28
+function ElenaVoiceAtmosphere({ level, reducedMotion }: { level: number; reducedMotion: boolean }) {
+  const audio = useMotionValue(0)
+  const pulse = useSpring(audio, { stiffness: 120, damping: 24, mass: 0.7 })
+  const opacity = useTransform(pulse, [0, 1], [0.4, 0.9])
+  const scale = useTransform(pulse, [0, 1], [1, 1.18])
+  const drift = useTransform(pulse, [0, 1], [0, 24])
+  const counterDrift = useTransform(pulse, [0, 1], [0, -18])
+
+  useEffect(() => {
+    const rms = Math.max(0, Math.min(1, level)) / 4.5
+    audio.set(reducedMotion ? 0 : Math.min(1, Math.pow(Math.max(0, rms - 0.006) * 11, 0.65)))
+  }, [audio, level, reducedMotion])
+
   return (
-    <span aria-hidden="true" className={`relative inline-flex shrink-0 items-center justify-center ${active ? 'h-10 w-10' : 'h-6 w-6'}`}>
-      {active && (
-        <motion.span
-          className="absolute inset-0 rounded-full border border-[#caa24c]/45 motion-reduce:hidden"
-          animate={{ scale: [1, 1.16 + level * 0.2, 1], opacity: [0.55, 0.1, 0.55] }}
-          transition={{ duration: level > 0.08 ? 0.8 : 2.4, repeat: Infinity, ease: 'easeInOut' }}
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+      <motion.div
+        className="absolute -inset-1/4"
+        style={{
+          background: 'radial-gradient(ellipse at 50% 42%, rgba(217,183,117,0.32), rgba(235,218,182,0.16) 38%, transparent 72%)',
+          opacity: reducedMotion ? 0.4 : opacity,
+          scale: reducedMotion ? 1 : scale,
+        }}
+      />
+      <motion.div
+        className="absolute -inset-1/4"
+        style={{
+          background: 'radial-gradient(ellipse at 30% 68%, rgba(207,170,110,0.25), transparent 58%), radial-gradient(ellipse at 76% 25%, rgba(244,222,177,0.3), transparent 55%)',
+          opacity: reducedMotion ? 0.4 : opacity,
+          x: reducedMotion ? 0 : drift,
+          y: reducedMotion ? 0 : counterDrift,
+          scale: reducedMotion ? 1 : scale,
+        }}
+      />
+    </div>
+  )
+}
+
+function ElenaVoiceWave({ active }: { active: boolean }) {
+  const reduceMotion = useReducedMotion()
+  const bars = [
+    { x: 4, height: 7 },
+    { x: 8, height: 11 },
+    { x: 12, height: 15 },
+    { x: 16, height: 11 },
+    { x: 20, height: 7 },
+  ]
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="block h-5 w-5 shrink-0 overflow-visible">
+      {bars.map(({ x, height }, index) => (
+        <motion.line
+          key={index}
+          x1={x}
+          x2={x}
+          y1={12 - height / 2}
+          y2={12 + height / 2}
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          animate={{ scaleY: active && !reduceMotion ? [0.62, 0.88, 1.12, 0.72, 1, 0.62] : 1 }}
+          style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+          transition={active && !reduceMotion ? {
+            duration: 0.72,
+            delay: Math.abs(2 - index) * 0.07,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          } : { duration: 0.2, ease: 'easeOut' }}
         />
-      )}
-      <motion.span
-        className={`relative inline-flex items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/55 bg-[radial-gradient(circle_at_32%_28%,#fff9e9_0%,#e8cd87_48%,#b17e2c_100%)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.7),0_2px_8px_rgba(174,128,45,0.18)] ${active ? 'h-8 w-8' : 'h-6 w-6'}`}
-        animate={{ scale }}
-        transition={{ type: 'spring', stiffness: 240, damping: 18 }}
-      >
-        <Image src="/luxor-portal-mark-gold-tight.png" alt="" width={active ? 20 : 15} height={active ? 20 : 15} className="h-[65%] w-[65%] object-contain opacity-90 mix-blend-multiply" />
-      </motion.span>
-    </span>
+      ))}
+    </svg>
   )
 }
 

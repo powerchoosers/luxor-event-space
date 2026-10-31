@@ -5,12 +5,14 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
 
 interface ChatMessage {
+  id?: string
   role: MessageRole
   content: string | null
   name?: string
   tool_call_id?: string
   tool_calls?: Record<string, unknown>[]
   executedQueries?: Record<string, unknown>[]
+  voiceTranscript?: Array<{ role: 'user' | 'assistant'; text: string }>
 }
 
 interface ElenaChatSession {
@@ -106,14 +108,37 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id, title, messages } = (await request.json()) as {
+    const { id, title, messages, appendVoiceTranscript } = (await request.json()) as {
       id?: string
       title?: string
       messages?: ChatMessage[]
+      appendVoiceTranscript?: ChatMessage
     }
 
     if (!id) {
       return NextResponse.json({ error: 'Session ID is required' }, { status: 400 })
+    }
+
+    if (appendVoiceTranscript !== undefined) {
+      const entry = appendVoiceTranscript
+      if (!entry || typeof entry !== 'object' || title !== undefined || messages !== undefined || entry.role !== 'user' || typeof entry.id !== 'string' || !/^voice-[0-9a-f-]{36}$/i.test(entry.id) || typeof entry.content !== 'string' || entry.content.length > 100_000 || !Array.isArray(entry.voiceTranscript) || entry.voiceTranscript.length > 500 || !entry.voiceTranscript.every(turn => turn && (turn.role === 'user' || turn.role === 'assistant') && typeof turn.text === 'string') || entry.voiceTranscript.reduce((total, turn) => total + turn.text.length, 0) > 100_000) {
+        return NextResponse.json({ error: 'Invalid voice transcript' }, { status: 400 })
+      }
+      const safeEntry: ChatMessage = { id: entry.id, role: 'user', content: entry.content, voiceTranscript: entry.voiceTranscript.map(({ role, text }) => ({ role, text })) }
+      // Compare the timestamp on every update so a concurrent chat save is not overwritten.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const filter = `id=eq.${encodeURIComponent(id)}&user_email=eq.${encodeURIComponent(session.email)}`
+        const chats = await supabaseRest<ElenaChatSession[]>(`luxor_elena_chats?${filter}&select=id,messages,updated_at`)
+        const chat = chats?.[0]
+        if (!chat) return NextResponse.json({ error: 'Session not found or unauthorized' }, { status: 404 })
+        if ((chat.messages || []).some(message => message.id === entry.id)) return NextResponse.json({ saved: true })
+        const updated = await supabaseRest<ElenaChatSession[]>(
+          `luxor_elena_chats?${filter}&updated_at=eq.${encodeURIComponent(chat.updated_at)}`,
+          { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ messages: [...(chat.messages || []), safeEntry], updated_at: new Date().toISOString() }) },
+        )
+        if (updated?.length) return NextResponse.json({ saved: true })
+      }
+      return NextResponse.json({ error: 'Chat changed while saving the voice transcript. Please try again.' }, { status: 409 })
     }
 
     const payload: Record<string, unknown> = {

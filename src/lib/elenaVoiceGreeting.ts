@@ -1,0 +1,1 @@
+export const ELENA_VOICE_GREETING = 'Greet the owner now in English in a warm, natural, brief way, varying the wording each time. A casual hello and an open question are welcome. If the provided conversation explicitly establishes a recent success, you may briefly acknowledge it; never invent or assume one. Then pause and listen.'

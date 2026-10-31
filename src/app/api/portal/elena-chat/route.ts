@@ -29,6 +29,7 @@ type ChatMessage = {
   tool_call_id?: string
   tool_calls?: ToolCall[]
   executedQueries?: Record<string, unknown>[]
+  toolActivity?: string[]
   confirmation?: {
     query: string
     summary: string
@@ -828,7 +829,69 @@ async function saveChatSessionMessages(
   }
 }
 
+function toolActivityLabel(name: string) {
+  const labels: Record<string, string> = {
+    request_action_confirmation: 'Preparing an action for your review',
+    request_tour_days_confirmation: 'Preparing the tour calendar change for your review',
+    lookup_luxor_lead: 'Checking the matching Luxor inquiry',
+    execute_database_sql: 'Checking Luxor records',
+    prepare_custom_workflow_draft: 'Building a workflow draft',
+    open_marketing_email_builder: 'Opening the email builder',
+    create_text_campaign_draft: 'Preparing a text campaign draft',
+    request_text_message_confirmation: 'Preparing a text for your review',
+    prepare_email_draft: 'Preparing an email draft',
+    navigate_to_lead: 'Opening the lead record',
+    prepare_new_contact_card: 'Preparing a contact card',
+    prepare_tour_invite_card: 'Preparing a tour invitation',
+    prepare_crm_update_card: 'Preparing a lead update',
+    prepare_contract_card: 'Preparing a contract draft',
+    prepare_invoice_card: 'Preparing an invoice draft',
+    prepare_task_card: 'Preparing a task',
+  }
+  return labels[name]
+}
+
 export async function POST(request: Request) {
+  if (!request.headers.get('accept')?.includes('text/event-stream')) {
+    return processElenaChatRequest(request)
+  }
+
+  const encoder = new TextEncoder()
+  let cancelled = false
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (event: Record<string, unknown>) => {
+        if (!cancelled) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+      }
+
+      void processElenaChatRequest(request, (text) => send({ type: 'activity', text }))
+        .then(async (response) => {
+          const data = await response.json().catch(() => ({ error: 'Elena could not finish the request.' }))
+          send({ type: 'result', ok: response.ok, status: response.status, data })
+          if (!cancelled) controller.close()
+        })
+        .catch((error: unknown) => {
+          send({ type: 'error', text: error instanceof Error ? error.message : 'Elena could not finish the request.' })
+          if (!cancelled) controller.close()
+        })
+    },
+    cancel() {
+      cancelled = true
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
+async function processElenaChatRequest(request: Request, onToolActivity?: (text: string) => void) {
+  const toolActivity: string[] = []
   try {
     const session = await getLuxorPortalSession()
     if (!session) {
@@ -921,7 +984,7 @@ export async function POST(request: Request) {
       // Feed confirmation result back to Gemini so Elena can report the success
       const confirmationMessages: ChatMessage[] = [
         { role: 'system', content: SYSTEM_PROMPT },
-        ...messages.slice(-15),
+        ...messages.slice(-15).map(({ role, content }) => ({ role, content })),
         {
           role: 'system',
           content: `[CONFIRMATION_RESULT] The user clicked 'Confirm' for this action: "${confirmSummary}". The server-authorized action completed with this response: ${JSON.stringify(queryResult)}. Report the actual result clearly. Do not describe a dedicated tour-day or text action as a SQL query.`
@@ -1431,7 +1494,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
     })
 
     // Append conversation history
-    const history = messages.slice(-15)
+    const history = messages.slice(-15).map(({ role, content }) => ({ role, content }))
     openrouterMessages.push(...history)
 
     const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user')?.content || ''
@@ -1524,6 +1587,12 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
         let confirmationInterrupted = false
 
         for (const toolCall of assistantMessage.tool_calls) {
+          const activityLabel = toolActivityLabel(toolCall.function?.name || '')
+          if (activityLabel) {
+            toolActivity.push(activityLabel)
+            onToolActivity?.(activityLabel)
+          }
+
           // A. Confirmation request
           if (toolCall.function?.name === 'request_action_confirmation') {
             try {
@@ -2105,6 +2174,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
         content: finalContent,
         executedQueries,
         confirmation: confirmationPayload || undefined,
+        toolActivity,
         emailDraft: emailDraftPayload || undefined,
         crmUpdateCard: crmUpdatePayload || undefined,
         contractCard: contractPayload || undefined,
@@ -2138,6 +2208,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
       newContactCard: newContactCardPayload || undefined,
       tourInviteCard: tourInviteCardPayload || undefined,
       workflowDraft: workflowDraftPayload || undefined,
+      toolActivity,
       navigation: navigationPayload || undefined,
     })
   } catch (err: unknown) {

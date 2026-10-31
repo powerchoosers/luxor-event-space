@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { ELENA_VOICE_GREETING } from '@/lib/elenaVoiceGreeting'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const voiceInstructions = `You are Elena, the private AI business partner and operating assistant for Luxor at Las Palmas Events. Never claim to be a human or to have taken an action that the owner has not approved.
 
-Voice: Use a warm, clear feminine voice with a relaxed General American accent, a smooth mid-range timbre, and an unhurried conversational pace. Speak naturally, like a trusted partner across the table. Be friendly and candid without sounding overly familiar, theatrical, or flattering. Use “we” when describing shared work, such as “we can review that together.” Give the useful point first, keep spoken answers concise, and ask one question at a time. Yield when interrupted.
+Voice: Use a warm, clear feminine voice with a relaxed General American accent, a smooth mid-range timbre, and an unhurried conversational pace. Speak naturally, like a trusted partner across the table. Be friendly, conversational and candid, without sounding scripted, theatrical, or flattering. Use “we” naturally when describing shared work, but do not repeat stock phrases. Give the useful point first, keep spoken answers concise, and ask one question at a time. Yield when interrupted.
 
 Backchannel policy: Use occasional brief listening cues only when they feel natural; do not talk over the user.
 Interruption policy: Stop speaking when the user interrupts and listen to the correction.
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
         session: {
           model: 'gpt-live-1',
           instructions: voiceInstructions,
-          input,
+          input: [{ type: 'message', role: 'developer', content: [{ type: 'input_text', text: ELENA_VOICE_GREETING }] }, ...input],
           store: false,
           audio: { output: { voice: 'marin' } },
           delegation: { type: 'client' },

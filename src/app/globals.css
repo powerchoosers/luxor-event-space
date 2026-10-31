@@ -2423,3 +2423,82 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
     animation: none;
   }
 }
+@keyframes elena-working-wipe {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+.elena-working-shimmer {
+  color: transparent;
+  background-image: linear-gradient(100deg, #9a8a6f 15%, #e2c98f 42%, #fff4d8 50%, #e2c98f 58%, #9a8a6f 85%);
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: elena-working-wipe 1.8s ease-in-out infinite;
+}
+
+.elena-tool-activity {
+  max-width: calc(88% - 2rem);
+  margin: 0.15rem 0 0 2rem;
+  color: var(--portal-muted);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.elena-tool-activity.is-active {
+  max-width: none;
+  margin: 0;
+}
+
+.elena-tool-activity > button {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0;
+  color: inherit;
+  text-align: left;
+}
+
+.elena-tool-activity > button svg {
+  flex: none;
+  transition: transform 0.2s ease;
+}
+
+.elena-tool-activity > button svg.is-open {
+  transform: rotate(90deg);
+}
+
+.elena-tool-activity-reveal {
+  overflow: hidden;
+}
+
+.elena-tool-activity-reveal ol {
+  max-height: 10rem;
+  overflow: auto;
+  margin: 0.15rem 0 0 0.35rem;
+  padding: 0.1rem 0 0.1rem 0.7rem;
+  border-left: 1px solid var(--portal-border);
+  list-style: none;
+}
+
+.elena-tool-activity-reveal li {
+  position: relative;
+  padding: 0.22rem 0 0.22rem 0.4rem;
+}
+
+.elena-tool-activity-reveal li::before {
+  position: absolute;
+  top: 0.67em;
+  left: -0.77rem;
+  width: 0.28rem;
+  height: 0.28rem;
+  border-radius: 50%;
+  background: #caa24c;
+  content: '';
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .elena-working-shimmer { color: var(--portal-muted); background: none; animation: none; }
+  .elena-tool-activity > button svg { transition: none; }
+}

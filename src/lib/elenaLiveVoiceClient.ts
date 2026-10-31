@@ -1,3 +1,5 @@
+import { ELENA_VOICE_GREETING } from './elenaVoiceGreeting'
+
 export type ElenaVoiceState = 'connecting' | 'listening' | 'thinking' | 'speaking' | 'closing' | 'ended'
 const VOICE_IDLE_TIMEOUT_MS = 2 * 60 * 1_000
 
@@ -33,6 +35,13 @@ export class ElenaLiveVoiceClient {
         throw new Error('Voice needs microphone access in a secure browser window.')
       }
 
+      // Start the meter from the user's click so mobile browsers can run it
+      // after microphone permission resolves.
+      try {
+        this.audioContext = new AudioContext()
+        void this.audioContext.resume().catch(() => {})
+      } catch { /* Voice can still connect without the visual meter. */ }
+
       this.microphone = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
@@ -63,9 +72,9 @@ export class ElenaLiveVoiceClient {
         if (event.type === 'session.started') {
           this.options.onState('listening')
           this.resetIdleTimeout()
-          this.sendCommentary('Hi, we can work through this together. What’s on your mind?', null)
+          this.sendCommentary(ELENA_VOICE_GREETING, null)
         }
-        if (['input_audio_buffer.speech_started', 'session.input_transcript.delta', 'session.input_transcript.completed', 'response.audio.delta', 'session.output_audio_buffer.started'].includes(String(event.type))) this.resetIdleTimeout()
+        if (['session.input_transcript.delta', 'session.output_transcript.delta', 'response.audio.delta', 'session.output_audio_buffer.started'].includes(String(event.type))) this.resetIdleTimeout()
         if (event.type === 'session.delegation.created') this.options.onState('thinking')
         if (event.type === 'session.output_audio_buffer.started' || event.type === 'response.audio.delta') this.options.onState('speaking')
         if (event.type === 'session.output_audio_buffer.stopped') this.options.onState('listening')
