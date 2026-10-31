@@ -23,6 +23,7 @@ import {
   Loader2,
   Mic,
   MicOff,
+  ArrowUp,
   Paperclip,
   FileText,
   CalendarDays,
@@ -35,6 +36,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PortalCloseButton, PortalContactAvatar, PortalDatePicker, PortalSelect } from './PortalUI'
+import { ElenaLiveVoiceClient, type ElenaVoiceState } from '@/lib/elenaLiveVoiceClient'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
 import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
 import { ElenaWorkflowDraftCard, type ElenaWorkflowDraftPayload } from './ElenaWorkflowDraftCard'
@@ -241,54 +243,82 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
   }
 
   const [attachments, setAttachments] = useState<AttachedFile[]>([])
-  const [isListening, setIsListening] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null)
+  const voiceClientRef = useRef<ElenaLiveVoiceClient | null>(null)
+  const voiceTranscriptRef = useRef('')
+  const handledVoiceDelegationsRef = useRef(new Set<string>())
+  const [voiceState, setVoiceState] = useState<ElenaVoiceState>('ended')
+  const [voiceLevel, setVoiceLevel] = useState(0)
+  const [voiceMuted, setVoiceMuted] = useState(false)
+  const [voiceError, setVoiceError] = useState('')
 
-  const toggleVoiceDictation = () => {
-    if (isListening) {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop() } catch {}
-      }
-      setIsListening(false)
-      return
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      alert('Voice dictation is not supported in this browser. Please use Chrome, Safari, or Edge.')
-      return
-    }
-
-    try {
-      const recognition = new SpeechRecognition()
-      recognition.continuous = true
-      recognition.interimResults = true
-      recognition.lang = 'en-US'
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      recognition.onresult = (event: any) => {
-        let transcript = ''
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript
-        }
-        if (transcript.trim()) {
-          setInput((prev) => (prev ? `${prev} ${transcript.trim()}` : transcript.trim()))
-        }
-      }
-
-      recognition.onerror = () => setIsListening(false)
-      recognition.onend = () => setIsListening(false)
-
-      recognition.start()
-      recognitionRef.current = recognition
-      setIsListening(true)
-    } catch {
-      setIsListening(false)
-    }
+  const stopVoice = () => {
+    voiceClientRef.current?.stop()
+    voiceClientRef.current = null
+    setVoiceMuted(false)
   }
+
+  const startVoice = () => {
+    if (voiceClientRef.current || isLoading || !isOpen) return
+    setVoiceError('')
+    voiceTranscriptRef.current = ''
+    handledVoiceDelegationsRef.current.clear()
+    const pendingDelegations = new Map<string, number>()
+    let processDelegation: (delegationId: string) => void = () => {}
+    const client = new ElenaLiveVoiceClient({
+      messages: messages.map(({ role, content }) => ({ role, content })),
+      onState: (state) => {
+        setVoiceState(state)
+        if (state === 'ended' && voiceClientRef.current === client) voiceClientRef.current = null
+      },
+      onLevel: setVoiceLevel,
+      onError: setVoiceError,
+      onEvent: (event) => {
+        if (event.type === 'input_audio_buffer.speech_started') voiceTranscriptRef.current = ''
+        if (event.type === 'session.input_transcript.completed' && typeof event.transcript === 'string') {
+          voiceTranscriptRef.current = event.transcript.trim()
+          for (const [delegationId, timer] of pendingDelegations) {
+            window.clearTimeout(timer)
+            window.setTimeout(() => processDelegation(delegationId), 100)
+          }
+        }
+        if (event.type !== 'session.delegation.created') return
+
+        const delegation = event.delegation
+        const delegationId = delegation && typeof delegation === 'object' && 'id' in delegation
+          ? (delegation as { id?: unknown }).id
+          : null
+        if (typeof delegationId !== 'string' || handledVoiceDelegationsRef.current.has(delegationId)) return
+        handledVoiceDelegationsRef.current.add(delegationId)
+        client.sendThinking('I’m checking that with our existing Luxor tools now.', delegationId)
+        const timer = window.setTimeout(() => processDelegation(delegationId), 1_500)
+        pendingDelegations.set(delegationId, timer)
+      },
+    })
+    processDelegation = (delegationId) => {
+      const timer = pendingDelegations.get(delegationId)
+      if (timer) window.clearTimeout(timer)
+      pendingDelegations.delete(delegationId)
+      const transcript = voiceTranscriptRef.current
+      if (!transcript || voiceClientRef.current !== client) {
+        client.sendCommentary('I did not catch that clearly. Please say it again.', delegationId)
+        return
+      }
+      void handleSend(transcript, (reply) => {
+        if (voiceClientRef.current === client) client.sendCommentary(reply, delegationId)
+      })
+    }
+    voiceClientRef.current = client
+    void client.start()
+  }
+
+  useEffect(() => {
+    if (!isOpen) {
+      voiceClientRef.current?.stop()
+      voiceClientRef.current = null
+    }
+    return () => voiceClientRef.current?.stop()
+  }, [isOpen])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -518,15 +548,14 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     }
   }
 
-  const handleSend = async (textToSend: string) => {
-    if ((!textToSend.trim() && attachments.length === 0) || isLoading) return
+  const handleSend = async (textToSend: string, onVoiceReply?: (reply: string) => void): Promise<string | null> => {
+    if ((!textToSend.trim() && attachments.length === 0) || isLoading) return null
     const requestId = ++messageRequestRef.current
 
     const userMessageText = textToSend.trim()
     const currentAttachments = [...attachments]
     setInput('')
     setAttachments([])
-    if (isListening) toggleVoiceDictation()
 
     let fullDisplayContent = userMessageText
     if (currentAttachments.length > 0) {
@@ -581,7 +610,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         workflowDraft?: ElenaWorkflowDraftPayload
         navigation?: { href: string }
       }
-      if (requestId !== messageRequestRef.current) return
+      if (requestId !== messageRequestRef.current) return null
 
       if (data.textCampaignDraft) {
         window.localStorage.setItem('luxor_elena_text_campaign_draft', JSON.stringify(data.textCampaignDraft))
@@ -611,24 +640,31 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           workflowDraft: data.workflowDraft,
         }
       ])
+      const voiceReply = data.reply?.trim() || 'I did not get a clear answer back from the query service. Please try that question again, or ask me for a daily brief.'
+      onVoiceReply?.(voiceReply)
       
       // Refresh session sidebar metadata in background to update title & date order
       if (currentSessionId) {
         loadSessionsList(currentSessionId)
       }
+      return voiceReply
     } catch (err) {
-      if (requestId !== messageRequestRef.current) return
+      if (requestId !== messageRequestRef.current) return null
       console.error(err)
+      const voiceErrorReply = 'Sorry, I ran into an error connecting to the query service. Please check your network and try again.'
       setMessages(prev => [
         ...prev,
         {
           role: 'assistant',
-          content: 'Sorry, I ran into an error connecting to the query service. Please check your network and try again.'
+          content: voiceErrorReply
         }
       ])
+      onVoiceReply?.(voiceErrorReply)
+      return voiceErrorReply
     } finally {
       if (requestId === messageRequestRef.current) setIsLoading(false)
     }
+    return null
   }
 
   const handleWorkflowDraftSaved = (msgIndex: number, workflow: { id: string; name: string }) => {
@@ -1005,7 +1041,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                   <AnimatePresence initial={false}>
                     {messages.map((msg, index) => (
                       <motion.div 
-                        layout
+                        layout="position"
                         key={index} 
                         className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                       >
@@ -1231,6 +1267,54 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
         {/* Input */}
         <div className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-md p-3 shrink-0">
+          <AnimatePresence initial={false}>
+            {voiceState !== 'ended' && (
+              <motion.div
+                initial={{ opacity: 0, y: 8, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: 'auto' }}
+                exit={{ opacity: 0, y: 5, height: 0 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                className="mb-2.5 overflow-hidden"
+              >
+                <div className="flex items-center gap-3 rounded-xl border border-[#caa24c]/25 bg-[color:var(--portal-soft)] px-3 py-2.5">
+                  <ElenaVoiceOrb level={voiceLevel} active />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-[color:var(--portal-text)]">Elena voice</p>
+                    <p aria-live="polite" className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">
+                      {voiceState === 'connecting' ? 'Connecting securely…' : voiceState === 'thinking' ? 'Working on it with you…' : voiceState === 'speaking' ? 'Elena is speaking' : voiceState === 'closing' ? 'Wrapping up…' : 'Listening'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      voiceClientRef.current?.mute(!voiceMuted)
+                      setVoiceMuted((current) => !current)
+                    }}
+                    aria-label={voiceMuted ? 'Unmute microphone' : 'Mute microphone'}
+                    title={voiceMuted ? 'Unmute microphone' : 'Mute microphone'}
+                    className="rounded-lg p-2 text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]"
+                  >
+                    {voiceMuted ? <MicOff size={15} /> : <Mic size={15} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopVoice}
+                    aria-label="End voice conversation"
+                    title="End voice conversation"
+                    className="rounded-lg p-2 text-[#9f762d] transition hover:bg-[#caa24c]/10"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {voiceError && (
+            <p role="status" className="mb-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-[10px] text-rose-700 dark:text-rose-300">
+              {voiceError}
+            </p>
+          )}
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2 px-0.5">
               {attachments.map((att) => (
@@ -1279,30 +1363,30 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={isListening ? 'Listening to your voice...' : 'Type a message or ask Elena anything...'}
+              placeholder="Type a message or ask Elena anything..."
               className="portal-input-transparent flex-1 bg-transparent py-1 text-xs text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] outline-none"
               disabled={isLoading}
             />
 
             <button
-              type="button"
-              onClick={toggleVoiceDictation}
-              title={isListening ? 'Stop dictation' : 'Voice dictation'}
-              className={`mx-1 p-1.5 rounded-lg transition-all cursor-pointer ${
-                isListening
-                  ? 'text-[#caa24c] animate-pulse ring-1 ring-[#caa24c]/50 bg-[#caa24c]/15'
-                  : 'text-[color:var(--portal-muted)] hover:text-[#caa24c]'
-              }`}
+              type={input.trim() || attachments.length > 0 ? 'submit' : 'button'}
+              onClick={input.trim() || attachments.length > 0 ? undefined : startVoice}
+              disabled={isLoading || (!input.trim() && attachments.length === 0 && voiceState !== 'ended')}
+              aria-label={input.trim() || attachments.length > 0 ? 'Send message' : 'Start voice conversation with Elena'}
+              title={input.trim() || attachments.length > 0 ? 'Send message' : 'Start voice conversation'}
+              className="ml-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] transition-all hover:bg-[#caa24c]/20 disabled:cursor-not-allowed disabled:opacity-35"
             >
-              {isListening ? <MicOff size={14} /> : <Mic size={14} />}
-            </button>
-
-            <button 
-              type="submit" 
-              disabled={(!input.trim() && attachments.length === 0) || isLoading}
-              className="ml-1 rounded-lg bg-[#caa24c]/10 border border-[#caa24c]/20 p-1.5 text-[#caa24c] hover:bg-[#caa24c]/20 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
-            >
-              <Send size={14} />
+              <AnimatePresence mode="wait" initial={false}>
+                {input.trim() || attachments.length > 0 ? (
+                  <motion.span key="send" initial={{ opacity: 0, y: 4, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.8 }} transition={{ duration: 0.15 }}>
+                    <ArrowUp size={17} strokeWidth={2.4} />
+                  </motion.span>
+                ) : (
+                  <motion.span key="voice" initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }} transition={{ duration: 0.15 }}>
+                    <ElenaVoiceOrb level={0} />
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
           </form>
           <p className="mt-1.5 text-[9px] text-center text-[color:var(--portal-muted)] flex items-center justify-center gap-1">
@@ -1312,6 +1396,28 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         </div>
       </div>
     </motion.aside>
+  )
+}
+
+function ElenaVoiceOrb({ level, active = false }: { level: number; active?: boolean }) {
+  const scale = 1 + Math.min(1, Math.max(0, level)) * 0.28
+  return (
+    <span aria-hidden="true" className={`relative inline-flex shrink-0 items-center justify-center ${active ? 'h-10 w-10' : 'h-6 w-6'}`}>
+      {active && (
+        <motion.span
+          className="absolute inset-0 rounded-full border border-[#caa24c]/45 motion-reduce:hidden"
+          animate={{ scale: [1, 1.16 + level * 0.2, 1], opacity: [0.55, 0.1, 0.55] }}
+          transition={{ duration: level > 0.08 ? 0.8 : 2.4, repeat: Infinity, ease: 'easeInOut' }}
+        />
+      )}
+      <motion.span
+        className={`relative inline-flex items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/55 bg-[radial-gradient(circle_at_32%_28%,#fff9e9_0%,#e8cd87_48%,#b17e2c_100%)] shadow-[inset_0_1px_2px_rgba(255,255,255,0.7),0_2px_8px_rgba(174,128,45,0.18)] ${active ? 'h-8 w-8' : 'h-6 w-6'}`}
+        animate={{ scale }}
+        transition={{ type: 'spring', stiffness: 240, damping: 18 }}
+      >
+        <Image src="/luxor-portal-mark-gold-tight.png" alt="" width={active ? 20 : 15} height={active ? 20 : 15} className="h-[65%] w-[65%] object-contain opacity-90 mix-blend-multiply" />
+      </motion.span>
+    </span>
   )
 }
 

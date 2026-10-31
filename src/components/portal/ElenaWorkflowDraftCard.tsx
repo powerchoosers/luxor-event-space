@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import { Check, ChevronDown, LoaderCircle, Save, Workflow } from 'lucide-react'
 import {
@@ -8,6 +9,7 @@ import {
   type CustomWorkflowDefinition,
   type CustomWorkflowStep,
 } from '@/lib/luxorCustomWorkflowDefinition'
+import { WorkflowVariableText } from './WorkflowTokenEditor'
 
 export type ElenaWorkflowDraftPayload = {
   name: string
@@ -57,18 +59,21 @@ function stepDescription(step: CustomWorkflowStep) {
 function StepDetails({ step }: { step: CustomWorkflowStep }) {
   if (step.type === 'email' && step.mode !== 'existing_inquiry_acknowledgment') {
     return <div className="mt-2 space-y-1.5 whitespace-pre-wrap break-words text-xs leading-5 text-[color:var(--portal-muted)]">
-      {step.previewText ? <p>Preview: {step.previewText}</p> : null}
-      {step.body ? <p>{step.body}</p> : step.aiPrompt ? <p>AI copy instructions: {step.aiPrompt}</p> : null}
-      {step.ctaText ? <p>Button: {step.ctaText} · {step.ctaUrl}</p> : null}
+      {step.previewText ? <p>Preview: <WorkflowVariableText value={step.previewText} /></p> : null}
+      {step.body ? <p><WorkflowVariableText value={step.body} /></p> : step.aiPrompt ? <p>AI copy instructions: <WorkflowVariableText value={step.aiPrompt} /></p> : null}
+      {step.ctaText ? <p>Button: <WorkflowVariableText value={step.ctaText} /> · <WorkflowVariableText value={step.ctaUrl} /></p> : null}
     </div>
   }
   if (step.type === 'call_task' && step.scriptNotes) {
-    return <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-[color:var(--portal-muted)]">{step.scriptNotes}</p>
+    return <WorkflowVariableText value={step.scriptNotes} className="mt-2 block whitespace-pre-wrap break-words text-xs leading-5 text-[color:var(--portal-muted)]" />
   }
   return null
 }
 
 export function ElenaWorkflowDraftCard({ draft, onSaved }: ElenaWorkflowDraftCardProps) {
+  const reduceMotion = useReducedMotion()
+  const [isSequenceOpen, setIsSequenceOpen] = React.useState(false)
+  const sequenceDetailsId = React.useId()
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const savedId = draft.savedWorkflowId
@@ -118,26 +123,57 @@ export function ElenaWorkflowDraftCard({ draft, onSaved }: ElenaWorkflowDraftCar
         </div>
       </div>
 
-      <details className="group mt-3 border-t border-[color:var(--portal-border)] pt-2">
-        <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 [&::-webkit-details-marker]:hidden">
+      <div className="group mt-3 border-t border-[color:var(--portal-border)] pt-2">
+        <button
+          type="button"
+          aria-expanded={isSequenceOpen}
+          aria-controls={sequenceDetailsId}
+          onClick={() => setIsSequenceOpen((open) => !open)}
+          className="flex min-h-10 w-full cursor-pointer list-none items-center justify-between gap-2 text-left text-xs font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+        >
           Review sequence and message copy
-          <ChevronDown size={15} aria-hidden="true" className="shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" />
-        </summary>
-        <ol className="mt-1 space-y-2">
-          {draft.definition.steps.map((step, index) => (
-            <li key={`${step.id}-${index}`} className="min-w-0 rounded-lg bg-[color:var(--portal-soft)] p-2.5">
-              <div className="flex min-w-0 items-start gap-2">
-                <span className="mt-0.5 shrink-0 text-[10px] font-semibold tabular-nums text-[color:var(--portal-muted)]">{index + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="break-words text-xs font-semibold">{step.name}</p>
-                  <p className="mt-0.5 break-words text-[11px] leading-4 text-[color:var(--portal-muted)]">{stepKind(step)} · {stepDescription(step)}</p>
-                  <StepDetails step={step} />
-                </div>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </details>
+          <ChevronDown size={15} aria-hidden="true" className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-200 ${isSequenceOpen ? 'rotate-180' : ''}`} />
+        </button>
+        <AnimatePresence initial={false}>
+          {isSequenceOpen ? (
+            <motion.div
+              id={sequenceDetailsId}
+              key="workflow-sequence-details"
+              aria-hidden={!isSequenceOpen}
+              inert={!isSequenceOpen}
+              initial={reduceMotion ? false : { height: 0 }}
+              animate={{ height: 'auto' }}
+              exit={{
+                height: 0,
+                transition: {
+                  duration: reduceMotion ? 0 : 0.5,
+                  ease: [0.4, 0, 0.2, 1],
+                },
+              }}
+              transition={{
+                duration: reduceMotion ? 0 : 0.5,
+                ease: [0.4, 0, 0.2, 1],
+              }}
+              className="overflow-hidden"
+            >
+              <ol className="mt-1 space-y-2">
+                {draft.definition.steps.map((step, index) => (
+                  <li key={`${step.id}-${index}`} className="min-w-0 rounded-lg bg-[color:var(--portal-soft)] p-2.5">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <span className="mt-0.5 shrink-0 text-[10px] font-semibold tabular-nums text-[color:var(--portal-muted)]">{index + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-xs font-semibold">{step.name}</p>
+                        <p className="mt-0.5 break-words text-[11px] leading-4 text-[color:var(--portal-muted)]">{stepKind(step)} · <WorkflowVariableText value={stepDescription(step)} /></p>
+                        <StepDetails step={step} />
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
 
       <p className="mt-3 border-t border-[color:var(--portal-border)] pt-3 text-[11px] leading-4 text-[color:var(--portal-muted)]">
         Saving creates a draft only. It will not enroll contacts or send messages. To change the sequence or copy, tell Elena what to adjust before saving.

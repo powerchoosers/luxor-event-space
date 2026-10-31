@@ -557,10 +557,11 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
   const drawerClasses = `
     fixed inset-x-0 top-[var(--email-compose-top,0px)] h-[var(--email-compose-height,100dvh)] z-[110] flex flex-col overflow-hidden bg-[color:var(--portal-card)] shadow-2xl
     pt-[env(safe-area-inset-top)] sm:pt-0 ${isMinimized ? '' : 'pb-[env(safe-area-inset-bottom)] sm:pb-0'}
-    sm:inset-auto sm:right-4 sm:top-1/2 sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(760px,calc(100vw-2rem))] sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:border-[color:var(--portal-border)]
+    sm:inset-auto sm:right-4 sm:h-[min(760px,calc(100dvh-2rem))] sm:w-[min(760px,calc(100vw-2rem))] sm:rounded-2xl sm:border sm:border-[color:var(--portal-border)]
     lg:right-6 lg:w-[min(820px,calc(100vw-3rem))]
     ${isMinimized ? 'sm:h-12' : ''}
     ${isExpanded ? 'sm:h-[calc(100dvh-2rem)] sm:w-[min(1100px,calc(100vw-2rem))]' : ''}
+    ${position ? 'sm:translate-y-0' : 'sm:top-1/2 sm:-translate-y-1/2'}
   `
 
   return (
@@ -581,7 +582,6 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
         top: position ? `${position.y}px` : undefined,
         right: position ? 'auto' : undefined,
         bottom: position ? 'auto' : undefined,
-        transform: position ? 'none' : undefined,
       } as React.CSSProperties}
       className={drawerClasses}
     >
