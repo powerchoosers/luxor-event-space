@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useRef, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Mail,
   Plus,
@@ -18,6 +20,10 @@ import {
   FilePenLine,
   Clock3,
   Workflow,
+  Menu,
+  ChevronDown,
+  ChevronRight,
+  X,
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -111,6 +117,35 @@ const LEGACY_MARKETING_TABS = [
   { id: 'call-center', label: 'Call Center', icon: <Phone size={15} /> },
   { id: 'calendar', label: 'Marketing Calendar', icon: <Calendar size={15} /> },
 ] as const satisfies readonly { id: MarketingTab; label: string; icon: React.ReactNode }[]
+
+const MOBILE_MARKETING_VIEW_GROUPS = [
+  {
+    title: 'Performance & Activity',
+    items: [
+      { id: 'overview', label: 'Overview', description: 'Inquiry and campaign performance', icon: <BarChart3 size={16} /> },
+      { id: 'activity', label: 'Activity', description: 'Recent email and campaign history', icon: <Clock3 size={16} /> },
+    ],
+  },
+  {
+    title: 'Audience & Workflows',
+    items: [
+      { id: 'automations', label: 'Automations', description: 'Follow-ups, confirmations, and reminders', icon: <Workflow size={16} /> },
+      { id: 'contact-lists', label: 'Contacts & Lists', description: 'Manage contact records and audiences', icon: <Users size={16} /> },
+      { id: 'sources', label: 'Lead Sources', description: 'See where new inquiries come from', icon: <TrendingUp size={16} /> },
+      { id: 'call-center', label: 'Call Center', description: 'Review call activity and outcomes', icon: <Phone size={16} /> },
+    ],
+  },
+  {
+    title: 'Campaigns & Content',
+    items: [
+      { id: 'email-campaigns', label: 'Campaigns', description: 'Review email campaigns and schedules', icon: <Megaphone size={16} /> },
+      { id: 'text-campaigns', label: 'Text Campaigns', description: 'Review text campaigns and delivery', icon: <MessageSquare size={16} /> },
+      { id: 'builder-automation', label: 'Email Builder', description: 'Create and edit email content', icon: <PenSquare size={16} /> },
+      { id: 'templates', label: 'Templates', description: 'Browse reusable email templates', icon: <LayoutTemplate size={16} /> },
+      { id: 'calendar', label: 'Marketing Calendar', description: 'Review scheduled campaigns', icon: <Calendar size={16} /> },
+    ],
+  },
+] as const satisfies readonly { title: string; items: readonly { id: MarketingTab; label: string; description: string; icon: React.ReactNode }[] }[]
 
 function isMarketingTab(tab: string | null): tab is MarketingTab {
   return PRIMARY_MARKETING_TABS.some((item) => item.id === tab) || LEGACY_MARKETING_TABS.some((item) => item.id === tab)
@@ -265,6 +300,7 @@ function MarketingPageContent() {
   const [campaignModalOpen, setCampaignModalOpen] = useState(activeTab === 'builder-automation')
   const [campaignModalView, setCampaignModalView] = useState<'start' | 'templates'>('start')
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false)
+  const [mobileViewPickerOpen, setMobileViewPickerOpen] = useState(false)
 
   // Watchers & References
   const latestActivityAtRef = useRef<string | null>(null)
@@ -841,10 +877,15 @@ function MarketingPageContent() {
       ) : null}
 
       {!builderCanvasOpen ? (
-        <div className="shrink-0">
+        <>
+        <div className="shrink-0 md:hidden">
+          <MarketingMobileViewPicker activeTab={activeTab} open={mobileViewPickerOpen} onOpenChange={setMobileViewPickerOpen} onTabChange={handleTabChange} />
+        </div>
+        <div className="hidden shrink-0 md:block">
           <MarketingWorkspaceNav activeTab={activeTab} onTabChange={handleTabChange} />
           <MarketingSubnav activeTab={activeTab} onTabChange={handleTabChange} />
         </div>
+        </>
       ) : null}
 
       <div className="mt-1 flex min-h-0 flex-grow flex-col overflow-hidden">
@@ -964,6 +1005,125 @@ function MarketingWorkspaceNav({ activeTab, onTabChange }: { activeTab: Marketin
         })}
       </div>
     </nav>
+  )
+}
+
+function MarketingMobileViewPicker({
+  activeTab,
+  open,
+  onOpenChange,
+  onTabChange,
+}: {
+  activeTab: MarketingTab
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onTabChange: (tab: MarketingTab) => void
+}) {
+  const activeView = PRIMARY_MARKETING_TABS.find((item) => item.id === activeTab)
+    ?? LEGACY_MARKETING_TABS.find((item) => item.id === activeTab)
+
+  useEffect(() => {
+    if (!open) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onOpenChange(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onOpenChange, open])
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onOpenChange(true)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+      >
+        <Menu size={18} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse views</span>
+          <span className="mt-0.5 block truncate text-sm font-bold">{activeView?.label ?? 'Overview'}</span>
+        </span>
+        <ChevronDown size={17} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
+      </button>
+
+      {typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence initial={false}>
+          {open ? (
+            <motion.div
+              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onMouseDown={() => onOpenChange(false)}
+            >
+              <motion.section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="marketing-view-menu-title"
+                className="flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+                initial={{ opacity: 0, y: 56, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 40, scale: 0.985 }}
+                transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-5 py-4">
+                  <div>
+                    <h2 id="marketing-view-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse views</h2>
+                    <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a marketing view.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpenChange(false)}
+                    aria-label="Close views menu"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
+                  <nav aria-label="Marketing views" className="space-y-4">
+                    {MOBILE_MARKETING_VIEW_GROUPS.map((group) => (
+                      <section key={group.title}>
+                        <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.title}</h3>
+                        <div className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] divide-y divide-[color:var(--portal-border)]">
+                          {group.items.map((item) => {
+                            const selected = activeTab === item.id
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                aria-current={selected ? 'page' : undefined}
+                                onClick={() => {
+                                  onTabChange(item.id)
+                                  onOpenChange(false)
+                                }}
+                                className={`flex min-h-16 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}
+                              >
+                                <span className="shrink-0">{item.icon}</span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-sm font-bold">{item.label}</span>
+                                  <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{item.description}</span>
+                                </span>
+                                <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  </nav>
+                </div>
+              </motion.section>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>,
+        document.body,
+      ) : null}
+    </>
   )
 }
 

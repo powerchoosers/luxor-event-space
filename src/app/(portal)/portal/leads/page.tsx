@@ -689,7 +689,7 @@ export default function LeadsPage() {
         />
       </div>
 
-      {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 flex flex-col overflow-visible mt-0 max-md:![transform:none] max-md:![filter:none] ${activeTab === 'dashboard' ? '' : '-mx-4 sm:mx-0'}`}>
+      {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 flex flex-col overflow-visible mt-0 max-md:![transform:none] max-md:![filter:none] ${activeTab === 'dashboard' ? '' : '-mx-4 sm:mx-0'} ${activeTab === 'tours' ? 'max-md:-mb-16' : ''}`}>
         {activeTab === 'dashboard' && (
           <LeadsDashboard
             leads={activeLeads}
@@ -957,7 +957,7 @@ export default function LeadsPage() {
             className="fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[#fffdf9]/85 dark:bg-[#080706]/80 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] backdrop-blur-2xl md:hidden"
             style={{ WebkitBackdropFilter: 'blur(24px)' }}
           >
-            {loading ? <><PortalSkeleton className="h-3 w-32 rounded" /><PortalSkeleton className="h-11 w-40 rounded-lg" /></> : <><span className="min-w-0">Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}–{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</span>
+            {loading ? <><PortalSkeleton className="h-3 w-32 rounded" /><PortalSkeleton className="h-11 w-40 rounded-lg" /></> : <><span className="min-w-0"><span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}–{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</span>
             <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
             </>}
           </div>, document.body
@@ -1404,7 +1404,7 @@ function LeadsDashboard({
   const bookedPct = ((bookedStageCount / total) * 100).toFixed(0)
 
   return (
-    <div className="h-full overflow-y-auto portal-scrollbar pr-1 space-y-6 pb-8">
+    <div className="h-full max-md:h-auto overflow-y-auto max-md:overflow-visible portal-scrollbar pr-1 space-y-6 pb-8 max-md:pb-2">
       {/* Metrics Row */}
       <PortalStaggerGroup className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
         <PortalStaggerCard>
@@ -1852,6 +1852,36 @@ function SortableHeader<Key extends string>({
   )
 }
 
+function LeadsListPagination({
+  count,
+  currentPage,
+  totalPages,
+  startIndex,
+  noun,
+  onPageChange,
+}: {
+  count: number
+  currentPage: number
+  totalPages: number
+  startIndex: number
+  noun: string
+  onPageChange: (page: number) => void
+}) {
+  const rangeEnd = Math.min(startIndex + 25, count)
+  return <>
+    <div className="hidden w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none md:flex">
+      <span><span className="tabular-nums text-[color:var(--portal-text)]">{count ? startIndex + 1 : 0}–{rangeEnd}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{count}</span> {noun}</span>
+      <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
+    </div>
+    {typeof document !== 'undefined' ? createPortal(
+      <div data-portal-fixed-pagination className="fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[#fffdf9]/85 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] backdrop-blur-2xl dark:bg-[#080706]/80 md:hidden" style={{ WebkitBackdropFilter: 'blur(24px)' }}>
+        <span className="min-w-0"><span className="tabular-nums text-[color:var(--portal-text)]">{count ? startIndex + 1 : 0}–{rangeEnd}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{count}</span> {noun}</span>
+        <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
+      </div>, document.body,
+    ) : null}
+  </>
+}
+
 function LeadsClientsTab({
   leads,
   loading = false,
@@ -1865,6 +1895,8 @@ function LeadsClientsTab({
   onSort: (key: ClientSortKey, direction?: SortDirection) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
 }) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
   const clients = useMemo(() => leads.filter((lead) => lead.status === 'booked').sort((a, b) => {
     let comparison = 0
     switch (sort.key) {
@@ -1875,12 +1907,29 @@ function LeadsClientsTab({
     }
     return sort.direction === 'asc' ? comparison : -comparison
   }), [leads, sort])
+  const filteredClients = useMemo(() => {
+    const query = searchTerm.trim().toLocaleLowerCase()
+    return query ? clients.filter((client) => [client.full_name, client.email, client.phone, client.event_type, client.target_date].some((value) => String(value ?? '').toLocaleLowerCase().includes(query))) : clients
+  }, [clients, searchTerm])
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / 25))
+  const page = Math.min(currentPage, totalPages)
+  const startIndex = (page - 1) * 25
+  const paginatedClients = filteredClients.slice(startIndex, startIndex + 25)
   return (
     <PortalTableCard
       mobilePageScroll
+      footerClassName="max-md:hidden"
+      footer={<LeadsListPagination count={filteredClients.length} currentPage={page} totalPages={totalPages} startIndex={startIndex} noun="clients" onPageChange={setCurrentPage} />}
       controls={
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients ({loading ? '…' : clients.length})</h3>
+        <PortalFilterBar
+          searchValue={searchTerm}
+          onSearchChange={(value) => { setSearchTerm(value); setCurrentPage(1) }}
+          searchPlaceholder="Search clients, events, or contact details"
+          resultLabel={loading ? 'Loading clients' : `${filteredClients.length.toLocaleString()} ${filteredClients.length === 1 ? 'client' : 'clients'}`}
+          searchWidthClassName="w-full min-w-0"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients</h3>
           <div className="w-full sm:w-60">
             <PortalSelect aria-label="Sort booked clients" value={sort.key + ':' + sort.direction} onChange={(value) => { const [key, direction] = value.split(':'); onSort(key as ClientSortKey, direction as SortDirection) }} options={[
               { value: 'name:asc', label: 'Client · A to Z' }, { value: 'name:desc', label: 'Client · Z to A' },
@@ -1889,27 +1938,29 @@ function LeadsClientsTab({
               { value: 'targetDate:asc', label: 'Event date · Earliest first' }, { value: 'targetDate:desc', label: 'Event date · Latest first' },
             ]} />
           </div>
-        </div>
+          </div>
+        </PortalFilterBar>
       }
     >
       <PortalSkeletonTransition
         loading={loading}
         skeleton={
-          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 md:p-4 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <PortalClientCardSkeleton key={i} />
             ))}
           </div>
         }
       >
-        {clients.length === 0 ? (
+        {filteredClients.length === 0 ? (
           <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No booked clients in pipeline currently.</div>
         ) : (
-          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
-            {clients.map((client) => (
+          <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 md:p-4 xl:grid-cols-3">
+            {paginatedClients.map((client) => (
               <LuxorCrmRecordCard
                 key={client.id}
                 lead={client}
+                className="max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none"
                 badges={[{ label: 'Booked', tone: 'green' }]}
                 subtitle={<>{client.event_type || 'Quinceañera'} · {client.target_date || 'Date TBD'}{client.guest_count ? <> · {client.guest_count} guests</> : <> · Flexible guest count</>}</>}
                 contact={client.email || (client.phone ? formatPhoneDisplay(client.phone) : 'No contact details')}
@@ -2089,43 +2140,74 @@ function MobileLeadCard({
   )
 }
 function LeadsLostTab({ leads, loading = false }: { leads: LuxorInquiry[]; loading?: boolean }) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [eventType, setEventType] = useState('all')
+  const [currentPage, setCurrentPage] = useState(1)
   const lostLeads = useMemo(
     () => leads
       .filter((lead) => getPipelineStage(lead) === 'closed_lost')
       .sort((a, b) => new Date(b.archived_at || b.updated_at || b.created_at).getTime() - new Date(a.archived_at || a.updated_at || a.created_at).getTime()),
     [leads],
   )
+  const eventTypes = useMemo(() => [...new Set(lostLeads.map((lead) => lead.event_type?.trim()).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b)), [lostLeads])
+  const filteredLeads = useMemo(() => {
+    const query = searchTerm.trim().toLocaleLowerCase()
+    return lostLeads.filter((lead) => {
+      if (eventType !== 'all' && lead.event_type !== eventType) return false
+      return !query || [lead.full_name, lead.email, lead.phone, lead.event_type, lead.target_date].some((value) => String(value ?? '').toLocaleLowerCase().includes(query))
+    })
+  }, [eventType, lostLeads, searchTerm])
+  const activeFilters = [
+    ...(eventType !== 'all' ? [{ id: 'event-type', label: eventType, onRemove: () => { setEventType('all'); setCurrentPage(1) } }] : []),
+  ]
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / 25))
+  const page = Math.min(currentPage, totalPages)
+  const startIndex = (page - 1) * 25
+  const paginatedLeads = filteredLeads.slice(startIndex, startIndex + 25)
 
   return (
     <PortalTableCard
+      mobilePageScroll
+      footerClassName="max-md:hidden"
+      footer={<LeadsListPagination count={filteredLeads.length} currentPage={page} totalPages={totalPages} startIndex={startIndex} noun="leads" onPageChange={setCurrentPage} />}
       controls={
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Archived Leads</h3>
-            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">A record of inquiries that are no longer active, preserved for future reference.</p>
-          </div>
-        </div>
+        <PortalFilterBar
+          searchValue={searchTerm}
+          onSearchChange={(value) => { setSearchTerm(value); setCurrentPage(1) }}
+          searchPlaceholder="Search archived leads or contact details"
+          resultLabel={loading ? 'Loading archived leads' : `${filteredLeads.length.toLocaleString()} archived ${filteredLeads.length === 1 ? 'lead' : 'leads'}`}
+          activeFilters={activeFilters}
+          onClearFilters={() => { setEventType('all'); setCurrentPage(1) }}
+          searchWidthClassName="w-full min-w-0"
+        >
+          <PortalSelect
+            value={eventType}
+            onChange={(value) => { setEventType(value); setCurrentPage(1) }}
+            className="w-full"
+            options={[{ value: 'all', label: 'All event types' }, ...eventTypes.map((value) => ({ value, label: value }))]}
+          />
+        </PortalFilterBar>
       }
     >
       <PortalSkeletonTransition
         loading={loading}
         skeleton={
-          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 md:p-4 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <PortalClientCardSkeleton key={i} />
             ))}
           </div>
         }
       >
-        {lostLeads.length === 0 ? (
+        {filteredLeads.length === 0 ? (
           <div className="px-8 py-16 text-center">
                   <Archive size={22} className="mx-auto text-[color:var(--portal-muted)]" aria-hidden="true" />
                   <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">No archived leads</p>
                   <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Archived inquiries and their complete history will appear here.</p>
           </div>
         ) : (
-          <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
-            {lostLeads.map((lead) => {
+          <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 md:p-4 xl:grid-cols-3">
+            {paginatedLeads.map((lead) => {
               const dealLost = lead.metadata?.dealLost
               const dealLostRecord = dealLost && typeof dealLost === 'object' && !Array.isArray(dealLost)
                 ? dealLost as Record<string, unknown>
@@ -2146,6 +2228,7 @@ function LeadsLostTab({ leads, loading = false }: { leads: LuxorInquiry[]; loadi
               return <LuxorCrmRecordCard
                 key={lead.id}
                 lead={lead}
+                className="max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none"
                 badges={[{ label: 'Archived', tone: 'neutral' }]}
                 subtitle={<>{lead.event_type || 'Event'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
                 contact={lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact detail')}
@@ -2187,6 +2270,7 @@ function LeadsToursTab({
     const saved = window.localStorage.getItem('luxor_leads_tours_view')
     return saved === 'past' ? 'needs_outcome' : saved && ['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'].includes(saved) ? saved as TourView : 'all'
   })
+  const [searchTerm, setSearchTerm] = useState('')
 
   const saveView = (nextView: TourView) => {
     setView(nextView)
@@ -2194,7 +2278,22 @@ function LeadsToursTab({
   }
 
   const [todayKey, setTodayKey] = useState(() => luxorTodayKey())
-  const tours = leads.filter((lead) => getLuxorTourSection(lead, todayKey) !== null)
+  const tours = useMemo(() => {
+    const query = searchTerm.trim().toLocaleLowerCase()
+    return leads.filter((lead) => {
+      if (!getLuxorTourSection(lead, todayKey)) return false
+      if (!query) return true
+      return [
+        lead.full_name,
+        lead.email,
+        lead.phone,
+        lead.event_type,
+        lead.target_date,
+        lead.preferred_tour_date,
+        lead.preferred_tour_time,
+      ].some((value) => String(value ?? '').toLocaleLowerCase().includes(query))
+    })
+  }, [leads, searchTerm, todayKey])
 
   useEffect(() => {
     const refreshToday = () => {
@@ -2219,6 +2318,11 @@ function LeadsToursTab({
 
   const categoryLabels: Record<TourCategory, string> = { today: 'Today', upcoming: 'Upcoming', completed: 'Completed', no_shows: 'No Shows', needs_outcome: 'Needs Outcome', needs_schedule: 'Needs Schedule', cancelled: 'Cancelled' }
   const categoryOrder: TourCategory[] = ['today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled']
+  const activeTourFilters = view === 'all' ? [] : [{
+    id: 'tour-category',
+    label: categoryLabels[view],
+    onRemove: () => saveView('all'),
+  }]
 
   const tourStatusTones: Record<TourCategory, PortalStatusTone> = {
     today: 'blue', upcoming: 'gold', completed: 'green', no_shows: 'red',
@@ -2241,7 +2345,7 @@ function LeadsToursTab({
         }
         subtitle={<>{tour.event_type || 'Quinceañera'} · {tour.target_date || 'Event date not set'}{tour.guest_count ? <> · {tour.guest_count} guests</> : null}</>}
         contact={tour.email || (tour.phone ? formatPhoneDisplay(tour.phone) : 'No contact details')}
-        className={category === 'no_shows' ? 'border-rose-300 dark:border-rose-400/40' : ''}
+        className="max-md:shadow-none"
         onOpen={() => { window.location.href = `/portal/leads/${tour.id}` }}
         interactionLabel={`Open lead record for ${tour.full_name}`}
         actions={
@@ -2266,25 +2370,48 @@ function LeadsToursTab({
 
   return (
     <PortalTableCard
+      mobilePageScroll
+      footerClassName="max-md:hidden"
       controls={
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Scheduled Tours ({loading ? '…' : tours.length})</h3>
-          <div className="flex max-w-full flex-wrap items-center justify-start gap-1 rounded-lg border border-[color:var(--portal-border)] p-1 sm:justify-end" role="tablist" aria-label="Tour date filter">
-            {(['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'] as TourView[]).map((option) => <button key={option} type="button" role="tab" aria-selected={view === option} onClick={() => saveView(option)} className={`rounded-md px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${view === option ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{option === 'all' ? 'All' : `${categoryLabels[option]} (${grouped[option].length})`}</button>)}
+        <PortalFilterBar
+          searchValue={searchTerm}
+          onSearchChange={setSearchTerm}
+          searchPlaceholder="Search tours, clients, or contact details"
+          resultLabel={loading ? 'Loading tours' : `${tours.length.toLocaleString()} ${tours.length === 1 ? 'tour' : 'tours'}`}
+          activeFilters={activeTourFilters}
+          onClearFilters={() => saveView('all')}
+          searchWidthClassName="w-full min-w-0"
+        >
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4" role="group" aria-label="Filter tours by date and status">
+            {(['all', ...categoryOrder] as TourView[]).map((option) => {
+              const selected = view === option
+              const label = option === 'all' ? 'All tours' : `${categoryLabels[option]} (${grouped[option].length})`
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => saveView(option)}
+                  className={`min-h-10 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 ${selected ? 'border-[#caa24c]/40 bg-[#caa24c]/10 text-[#8a652b] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
+                >
+                  {label}
+                </button>
+              )
+            })}
           </div>
-        </div>
+        </PortalFilterBar>
       }
     >
       <PortalSkeletonTransition
         loading={loading}
         skeleton={
-          <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
+          <div className="space-y-7 py-4 sm:p-6">
             <section aria-label="Loading scheduled tours">
-              <div className="mb-3 flex items-center gap-3">
+              <div className="mb-3 flex items-center gap-3 px-4 sm:px-0">
                 <PortalSkeleton className="h-3 w-28 rounded" />
                 <PortalSkeleton className="h-3 w-6 rounded-full" />
               </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 xl:grid-cols-3 max-md:[&>article:not(:last-child)]:border-b-0">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <PortalTourCardSkeleton key={i} />
                 ))}
@@ -2293,11 +2420,11 @@ function LeadsToursTab({
           </div>
         }
       >
-        <div className="space-y-7 overflow-y-auto p-4 sm:p-6">
+        <div className="space-y-7 py-4 sm:p-6">
           {(view === 'all' ? categoryOrder : [view]).map((category) => (
             <section key={category} aria-labelledby={'tour-' + category + '-heading'}>
-              <div className="mb-3 flex items-center gap-3"><h4 id={'tour-' + category + '-heading'} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
-              {grouped[category].length === 0 ? <p className="rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tours in this category.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{grouped[category].map(renderTourCard)}</div>}
+              <div className="mb-3 flex items-center gap-3 px-4 sm:px-0"><h4 id={'tour-' + category + '-heading'} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
+              {grouped[category].length === 0 ? <p className="mx-4 rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)] sm:mx-0">No tours in this category.</p> : <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 xl:grid-cols-3 max-md:[&>article:not(:last-child)]:border-b-0">{grouped[category].map(renderTourCard)}</div>}
             </section>
           ))}
         </div>
@@ -2315,27 +2442,59 @@ function LeadsProposalsTab({
   loading?: boolean
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
 }) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [eventType, setEventType] = useState('all')
+  const [currentPage, setCurrentPage] = useState(1)
   const proposals = leads.filter((lead) => lead.status === 'proposal_sent')
+  const eventTypes = [...new Set(proposals.map((lead) => lead.event_type?.trim()).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b))
+  const filteredProposals = proposals.filter((lead) => {
+    if (eventType !== 'all' && lead.event_type !== eventType) return false
+    const query = searchTerm.trim().toLocaleLowerCase()
+    return !query || [lead.full_name, lead.email, lead.phone, lead.event_type, lead.target_date, lead.source].some((value) => String(value ?? '').toLocaleLowerCase().includes(query))
+  })
+  const totalPages = Math.max(1, Math.ceil(filteredProposals.length / 25))
+  const page = Math.min(currentPage, totalPages)
+  const startIndex = (page - 1) * 25
+  const paginatedProposals = filteredProposals.slice(startIndex, startIndex + 25)
+  const activeFilters = eventType === 'all' ? [] : [{ id: 'event-type', label: eventType, onRemove: () => { setEventType('all'); setCurrentPage(1) } }]
   return (
-    <PortalTableCard controls={<h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Sent Proposals ({loading ? '…' : proposals.length})</h3>}>
+    <PortalTableCard
+      mobilePageScroll
+      footerClassName="max-md:hidden"
+      footer={<LeadsListPagination count={filteredProposals.length} currentPage={page} totalPages={totalPages} startIndex={startIndex} noun="proposals" onPageChange={setCurrentPage} />}
+      controls={
+        <PortalFilterBar
+          searchValue={searchTerm}
+          onSearchChange={(value) => { setSearchTerm(value); setCurrentPage(1) }}
+          searchPlaceholder="Search proposals, clients, or contact details"
+          resultLabel={loading ? 'Loading proposals' : `${filteredProposals.length.toLocaleString()} ${filteredProposals.length === 1 ? 'proposal' : 'proposals'}`}
+          activeFilters={activeFilters}
+          onClearFilters={() => { setEventType('all'); setCurrentPage(1) }}
+          searchWidthClassName="w-full min-w-0"
+        >
+          <PortalSelect value={eventType} onChange={(value) => { setEventType(value); setCurrentPage(1) }} className="w-full" options={[{ value: 'all', label: 'All event types' }, ...eventTypes.map((value) => ({ value, label: value }))]} />
+        </PortalFilterBar>
+      }
+    >
       <PortalSkeletonTransition
         loading={loading}
         skeleton={
-          <div className="grid gap-3 py-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 md:p-4 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <PortalClientCardSkeleton key={i} />
             ))}
           </div>
         }
       >
-        {proposals.length === 0 ? (
+        {filteredProposals.length === 0 ? (
           <div className="px-5 py-12 text-center text-sm text-[color:var(--portal-muted)]">No sent proposals are waiting for client review.</div>
         ) : (
-          <div className="grid gap-3 py-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
-            {proposals.map((lead) => (
+          <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 md:p-4 xl:grid-cols-3">
+            {paginatedProposals.map((lead) => (
               <LuxorCrmRecordCard
                 key={lead.id}
                 lead={lead}
+                className="max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none"
                 badges={[{ label: 'Sent', tone: luxorCrmStatusTone('sent') }]}
                 subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
                 contact={lead.email || 'No email registered'}

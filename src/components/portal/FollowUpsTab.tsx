@@ -1,13 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { CalendarClock, Check, ChevronRight, CircleAlert, Clock3, Eye, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Pencil, Phone, Plus, Search, Settings2, UserRound, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
 import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
 import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask } from '@/lib/luxorFollowUpTaskPolicy'
-import { PortalButton, PortalDatePicker, PortalModal, PortalSelect, PortalSkeletonTransition, PortalTourCardSkeleton, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
+import { PortalButton, PortalDatePicker, PortalModal, PortalPagination, PortalSelect, PortalSkeletonTransition, PortalTourCardSkeleton, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import { LuxorCrmRecordCard } from '@/components/portal/LuxorCrmRecordCard'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
@@ -125,6 +126,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
+  const [currentPage, setCurrentPage] = useState(1)
   const [eventType, setEventType] = useState('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedIdRef = useRef<string | null>(null)
@@ -331,6 +333,9 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       && (filter !== 'new' || isCurrentNewLead(lead)) && (filter !== 'post_tour' || isPostTour(lead))
       && (filter !== 'overdue' || row.next.status === 'Overdue')
   }), [rows, leadById, query, eventType, filter])
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / 25))
+  const page = Math.min(currentPage, totalPages)
+  const paginatedRows = visibleRows.slice((page - 1) * 25, page * 25)
   const selected = selectedId ? leadById.get(selectedId) : undefined
   const getStageLabel = (lead: LuxorInquiry) => stageOverrides[lead.id] || stageLabel(lead)
   const selectedTasks = selectedId ? followUpTasks.filter((task) => task.inquiry_id === selectedId) : []
@@ -657,15 +662,16 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     return true
   }
 
-  return <section className="portal-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto pb-1 text-[color:var(--portal-text)]">
+  return <section className="portal-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-visible pb-1 text-[color:var(--portal-text)] max-md:px-4">
     <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-3 text-sm"><div className="flex items-start gap-2"><CircleAlert size={17} className="mt-0.5 shrink-0 text-[#caa24c]" /><p><strong>{sendingEnabled ? 'Automated brochure follow-up is on.' : 'Automated brochure follow-up is off.'}</strong> This status covers only consented brochure leads. Calls remain manual. Texting is unavailable. Replies are not matched automatically; staff must record them on the lead.</p></div></div>
     <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-serif text-2xl text-[color:var(--portal-text)]">Follow-Ups</h2><PortalButton variant="ghost" onClick={() => void openTemplateSettings()}><Settings2 size={15} /> Edit brochure templates</PortalButton></div>
     {settingsOpen && <section className="space-y-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="font-medium">Brochure sequence templates</h3><p className="text-xs text-[color:var(--portal-muted)]">Saving does not expand consent, enrollment or send approval.</p></div><PortalButton variant="ghost" onClick={() => setSettingsOpen(false)}>Close</PortalButton></div>{templates.map((template) => <article key={template.id} className="grid gap-3 border-t border-[color:var(--portal-border)] pt-3 md:grid-cols-[minmax(12rem,0.7fr)_minmax(18rem,1.3fr)]"><div><div className="font-medium">{template.name}</div><div className="mt-1 text-xs text-[color:var(--portal-muted)]">{template.channel === 'email' ? 'Email' : 'Manual phone task'} · day {template.delay_days}</div><label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={template.active} onChange={(event) => changeTemplate(template.id, 'active', event.target.checked)} /> Template active</label><label className="mt-2 block text-xs">Day offset<input type="number" min="0" max="365" value={template.delay_days} onChange={(event) => changeTemplate(template.id, 'delay_days', Number(event.target.value))} className="mt-1 w-24 rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1" /></label><div className="mt-3 flex gap-2"><PortalButton size="sm" onClick={() => void saveTemplate(template)}>Save</PortalButton><PortalButton size="sm" variant="ghost" onClick={() => setPreviewId(previewId === template.id ? null : template.id)}><Eye size={14} /> Preview</PortalButton></div></div><div className="space-y-2">{template.channel === 'email' && <label className="block text-xs">Subject<input value={template.subject ?? ''} onChange={(event) => changeTemplate(template.id, 'subject', event.target.value)} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label>}<label className="block text-xs">Body<textarea value={template.body ?? ''} onChange={(event) => changeTemplate(template.id, 'body', event.target.value)} rows={3} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label>{template.channel === 'email' && <div className="grid gap-2 sm:grid-cols-2"><label className="block text-xs">CTA label<input value={template.cta_text ?? ''} onChange={(event) => changeTemplate(template.id, 'cta_text', event.target.value)} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label><label className="block text-xs">CTA link<input value={template.cta_url ?? ''} onChange={(event) => changeTemplate(template.id, 'cta_url', event.target.value)} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label></div>}{previewId === template.id && <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm"><strong>{template.subject}</strong><p className="mt-2 whitespace-pre-wrap">{template.body}</p><span className="mt-2 inline-block text-xs">{template.cta_text} {template.cta_url}</span></div>}</div></article>)}</section>}
 
     <div className="grid grid-cols-3 gap-2">{stats.map((stat) => <div key={stat.label} className={`portal-card-surface rounded-xl px-4 py-3 shadow-none ${stat.tone === 'red' ? 'border-rose-300 bg-rose-50 dark:border-rose-400/30 dark:bg-rose-500/10' : stat.tone === 'blue' ? 'border-sky-300 bg-sky-50 dark:border-sky-400/30 dark:bg-sky-500/10' : stat.tone === 'gold' ? 'border-[#dfc98f] bg-[#fbf5e7] dark:border-[#caa24c]/35 dark:bg-[#caa24c]/10' : ''}`}><div className="text-2xl font-semibold">{stat.value}</div><div className="text-xs text-[color:var(--portal-muted)]">{stat.label}</div></div>)}</div>
-    <div className="flex flex-col gap-3"><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-[14rem] flex-1 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2"><Search size={15} className="text-[color:var(--portal-muted)]" /><input aria-label="Search leads or follow-ups" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search leads or follow-ups" className="w-full bg-transparent text-sm outline-none" /></div><PortalSelect value={eventType} onChange={setEventType} options={[{ value: 'all', label: 'All event types' }, ...eventTypes.map((value) => ({ value, label: value }))]} /></div><div className="flex flex-wrap items-center gap-2"><div className="flex flex-wrap gap-2" role="group" aria-label="Filter leads">{([{ id: 'all', label: 'All' }, { id: 'new', label: 'New Leads' }, { id: 'post_tour', label: 'Post-Tour' }, { id: 'overdue', label: 'Overdue' }] as const).map((item) => <button key={item.id} type="button" aria-pressed={filter === item.id} onClick={() => setFilter(item.id)} className={`min-h-9 rounded-full border px-4 text-xs font-semibold transition ${filter === item.id ? 'border-[#a8792f] bg-[#a8792f] text-white' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] hover:border-[#caa24c]/60'}`}>{item.label}</button>)}</div><div className="ml-auto"><PortalButton onClick={() => { if (leads[0]) openAddTask(leads[0].id) }}><Plus size={15} /> Add Follow-Up</PortalButton></div></div></div>
+    <div className="sticky top-0 z-30 -mx-4 flex flex-col gap-3 border-b border-[color:var(--portal-border)] bg-[#fffdf9]/90 px-4 py-3 shadow-sm backdrop-blur-2xl dark:bg-[#080706]/85"><div className="flex flex-wrap items-center gap-2"><div className="flex min-w-[14rem] flex-1 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2"><Search size={15} className="text-[color:var(--portal-muted)]" /><input aria-label="Search leads or follow-ups" value={query} onChange={(event) => { setQuery(event.target.value); setCurrentPage(1) }} placeholder="Search leads or follow-ups" className="w-full bg-transparent text-sm outline-none" /></div><PortalSelect value={eventType} onChange={(value) => { setEventType(value); setCurrentPage(1) }} options={[{ value: 'all', label: 'All event types' }, ...eventTypes.map((value) => ({ value, label: value }))]} /></div><div className="flex flex-wrap items-center gap-2"><div className="flex flex-wrap gap-2" role="group" aria-label="Filter leads">{([{ id: 'all', label: 'All' }, { id: 'new', label: 'New Leads' }, { id: 'post_tour', label: 'Post-Tour' }, { id: 'overdue', label: 'Overdue' }] as const).map((item) => <button key={item.id} type="button" aria-pressed={filter === item.id} onClick={() => { setFilter(item.id); setCurrentPage(1) }} className={`min-h-9 rounded-full border px-4 text-xs font-semibold transition ${filter === item.id ? 'border-[#a8792f] bg-[#a8792f] text-white' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-text)] hover:border-[#caa24c]/60'}`}>{item.label}</button>)}</div><div className="ml-auto"><PortalButton onClick={() => { if (leads[0]) openAddTask(leads[0].id) }}><Plus size={15} /> Add Follow-Up</PortalButton></div></div></div>
 
-    <div className={`grid min-h-0 flex-1 gap-4 ${selected ? 'xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]' : ''}`}>
+    <div className={`grid min-h-0 flex-1 gap-4 max-md:-mt-4 ${selected ? 'xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]' : ''}`}>
+      <div className="min-w-0">
       <PortalSkeletonTransition
         loading={loading}
         skeleton={
@@ -676,8 +682,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
           </div>
         }
       >
-        <div className="space-y-3">
-          {visibleRows.map((row) => {
+        <div className="max-md:-mx-4 max-md:border-t max-md:border-[color:var(--portal-border)]">
+          {paginatedRows.map((row) => {
             const lead = leadById.get(row.inquiryId)!
             const state = row.next.status
             const stage = getStageLabel(lead)
@@ -700,7 +706,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                 expanded={isExpanded}
                 expandedContentId={cardDetailsId}
                 interactionLabel={`${isExpanded ? 'Collapse' : 'Expand'} follow-up details for ${lead.full_name}`}
-                className={`cursor-pointer ${cardMenuLeadId === lead.id ? 'z-20' : ''} ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}
+                className={`cursor-pointer max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none ${cardMenuLeadId === lead.id ? 'z-20' : ''} ${state === 'Overdue' ? 'border-rose-300 dark:border-rose-400/40' : ''}`}
                 contentColumn
                 responsiveContentColumn
               >
@@ -718,9 +724,9 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                     {(() => {
                       const hasPhone = Boolean(lead.phone?.trim())
                       const unavailableLabel = 'Call unavailable: no phone number on this lead'
-                      return <button type="button" onClick={() => dial(lead)} disabled={!hasPhone} title={!hasPhone ? unavailableLabel : 'Call through Luxor Twilio'} aria-label={hasPhone ? `Call ${lead.full_name} through Luxor` : unavailableLabel} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#ead9b8] text-xs font-bold text-[#211d17] transition hover:bg-[#dfc99e] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>
+                      return <button type="button" onClick={() => dial(lead)} disabled={!hasPhone} title={!hasPhone ? unavailableLabel : 'Call through Luxor Twilio'} aria-label={hasPhone ? `Call ${lead.full_name} through Luxor` : unavailableLabel} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#a8792f] text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>
                     })()}
-                    <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#ead9b8] text-xs font-bold text-[#211d17] transition hover:bg-[#dfc99e] disabled:opacity-50"><Mail size={14} /> Email</button>
+                    <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#a8792f] text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Mail size={14} /> Email</button>
                     <button type="button" onClick={() => logCall(lead, row.next.task)} disabled={!lead.phone?.trim()} title={!lead.phone?.trim() ? 'Logging a call is unavailable: no phone number on this lead' : undefined} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#dfd4c2] bg-[#faf8f4] text-xs font-semibold text-[#211d17] disabled:cursor-not-allowed disabled:opacity-50"><Pencil size={14} /> Log</button>
                     <div className="relative" data-follow-up-menu-root="true">
                       <button id={`follow-up-menu-toggle-${row.inquiryId}`} type="button" aria-label={`More actions for ${lead.full_name}`} aria-haspopup="menu" aria-controls={`follow-up-menu-${row.inquiryId}`} aria-expanded={cardMenuLeadId === lead.id} onClick={(event) => toggleCardMenu(event, lead.id)} className="flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a]"><MoreHorizontal size={18} /></button>
@@ -770,7 +776,18 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
           {!visibleRows.length && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-12 text-center text-sm text-[color:var(--portal-muted)]">{filter === 'post_tour' ? 'No completed tours match these filters.' : 'No matching follow-up leads. Add a task to keep the next step with its lead.'}</div>}
         </div>
       </PortalSkeletonTransition>
+      <div className="sticky bottom-0 z-20 hidden items-center justify-between gap-4 border-t border-[color:var(--portal-border)] bg-[#fffdf9]/90 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] shadow-sm backdrop-blur-2xl dark:bg-[#080706]/85 md:flex">
+        <span><span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length ? (page - 1) * 25 + 1 : 0}–{Math.min(page * 25, visibleRows.length)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length}</span> follow-ups</span>
+        <PortalPagination currentPage={page} totalPages={totalPages} onPageChange={setCurrentPage} />
+      </div>
+      </div>
 
+      {typeof document !== 'undefined' ? createPortal(
+        <div data-portal-fixed-pagination className="fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[#fffdf9]/85 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] backdrop-blur-2xl dark:bg-[#080706]/80 md:hidden" style={{ WebkitBackdropFilter: 'blur(24px)' }}>
+          <span><span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length ? (page - 1) * 25 + 1 : 0}–{Math.min(page * 25, visibleRows.length)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length}</span></span>
+          <PortalPagination currentPage={page} totalPages={totalPages} onPageChange={setCurrentPage} />
+        </div>, document.body,
+      ) : null}
       {selected && <aside className="min-h-[28rem] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
         <>
           <div className="flex items-start justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3"><div><h2 className="font-serif text-xl">{selected.full_name}</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">{selected.event_type ?? 'Event not specified'} · {selected.target_date ?? 'Date not set'}</p><span className="mt-2 inline-flex rounded-full bg-[#caa24c]/15 px-3 py-1 text-[11px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">{getStageLabel(selected)}</span></div><button type="button" aria-label="Close lead workspace" onClick={() => { setSelectedId(null); setMoreOpen(false); resetCallDraft() }} className="rounded-lg border border-[color:var(--portal-border)] p-2"><X size={15} /></button></div>

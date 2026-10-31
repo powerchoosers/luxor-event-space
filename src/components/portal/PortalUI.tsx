@@ -302,10 +302,10 @@ export function PortalTabTransition({
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={activeKey}
-        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0.75 }}
-        animate={{ opacity: 1 }}
-        exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
-        transition={{ duration: 0.15, ease: LUXOR_PORTAL_EASE }}
+        initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0.72, filter: 'blur(10px)' }}
+        animate={{ opacity: 1, filter: 'blur(0px)' }}
+        exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, filter: 'blur(10px)' }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: LUXOR_PORTAL_EASE }}
         className={className}
       >
         {children}
@@ -402,6 +402,7 @@ export function PortalFilterBar({
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const hasFilterControls = Boolean(children)
+  const shouldReduceMotion = useReducedMotion()
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -443,11 +444,21 @@ export function PortalFilterBar({
                 }`}
               >
                 <SlidersHorizontal size={13} />
-                {activeFilters.length ? (
-                  <span className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#caa24c] px-0.5 text-[8px] font-black text-[#18130d] leading-none shadow-xs">
-                    {activeFilters.length}
-                  </span>
-                ) : null}
+                <AnimatePresence initial={false}>
+                  {activeFilters.length ? (
+                    <motion.span
+                      key={activeFilters.length}
+                      initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.45, y: -2 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.55, y: -2 }}
+                      transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.23, 1, 0.32, 1] }}
+                      aria-hidden="true"
+                      className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#caa24c] px-0.5 text-[8px] font-black text-[#18130d] leading-none shadow-xs"
+                    >
+                      {activeFilters.length}
+                    </motion.span>
+                  ) : null}
+                </AnimatePresence>
               </button>
             ) : null}
           </div>
@@ -474,10 +485,29 @@ export function PortalFilterBar({
         ) : null}
       </AnimatePresence>
 
-      {activeFilters.length ? (
-        <div className="flex flex-wrap items-center gap-1.5" aria-label="Active filters">
-          {activeFilters.map((filter) => (
-            <span key={filter.id} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[#caa24c]/20 bg-[#caa24c]/8 pl-2.5 pr-1.5 text-[10px] font-semibold text-[#8a652b] dark:text-[#dfbd68]">
+      <AnimatePresence initial={false}>
+        {activeFilters.length ? (
+          <motion.div
+            key="active-filter-container"
+            initial={shouldReduceMotion ? false : { width: 0, height: 0, opacity: 0 }}
+            animate={{ width: '100%', height: 'auto', opacity: 1 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { width: 0, height: 0, opacity: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className="max-w-full overflow-hidden"
+            aria-label="Active filters"
+          >
+            <motion.div layout className="flex flex-wrap items-center gap-1.5">
+              <AnimatePresence initial={false} mode="popLayout">
+                {activeFilters.map((filter) => (
+                  <motion.span
+                    key={`${filter.id}:${filter.label}`}
+                    layout
+                    initial={shouldReduceMotion ? false : { opacity: 0, width: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, width: 'auto', scale: 1 }}
+                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, width: 0, scale: 0.96 }}
+                    transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.23, 1, 0.32, 1] }}
+                    className="inline-flex h-7 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-md border border-[#caa24c]/20 bg-[#caa24c]/8 pl-2.5 pr-1.5 text-[10px] font-semibold text-[#8a652b] dark:text-[#dfbd68]"
+                  >
               {filter.label}
               <button
                 type="button"
@@ -487,19 +517,28 @@ export function PortalFilterBar({
               >
                 <X size={10} />
               </button>
-            </span>
-          ))}
-          {activeFilters.length > 1 && onClearFilters ? (
-            <button
-              type="button"
-              onClick={onClearFilters}
-              className="h-7 px-2 text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
-            >
-              Clear all
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+                  </motion.span>
+                ))}
+              </AnimatePresence>
+              <AnimatePresence initial={false}>
+                {activeFilters.length > 1 && onClearFilters ? (
+                  <motion.button
+                    type="button"
+                    onClick={onClearFilters}
+                    initial={shouldReduceMotion ? false : { opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: 'auto' }}
+                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, width: 0 }}
+                    transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.23, 1, 0.32, 1] }}
+                    className="h-7 overflow-hidden whitespace-nowrap px-2 text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
+                  >
+                    Clear all
+                  </motion.button>
+                ) : null}
+              </AnimatePresence>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }

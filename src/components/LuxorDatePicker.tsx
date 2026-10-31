@@ -276,8 +276,8 @@ export function LuxorDatePicker({
   useEffect(() => {
     if (!monthYearOpen) return
     const frame = requestAnimationFrame(() => {
-      panelRef.current?.querySelector<HTMLElement>(`[data-month="${draftMonth}"]`)?.scrollIntoView({ block: 'center', inline: 'nearest' })
-      panelRef.current?.querySelector<HTMLElement>(`[data-year="${draftYear}"]`)?.scrollIntoView({ block: 'center', inline: 'nearest' })
+      monthYearDialogRef.current?.querySelector<HTMLElement>(`[data-month="${draftMonth}"]`)?.scrollIntoView({ block: 'center', inline: 'nearest' })
+      monthYearDialogRef.current?.querySelector<HTMLElement>(`[data-year="${draftYear}"]`)?.scrollIntoView({ block: 'center', inline: 'nearest' })
       monthYearDialogRef.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus()
     })
     return () => cancelAnimationFrame(frame)
@@ -532,33 +532,33 @@ export function LuxorDatePicker({
                 ))}
               </div>
             </div>
-            {monthYearOpen ? (
-              <div className="fixed inset-0 z-[9990] flex items-center justify-center bg-[#241d17]/45 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) { returnFocusToMonthYearRef.current = true; setMonthYearOpen(false) } }}>
-                <section ref={monthYearDialogRef} role="dialog" aria-modal="true" aria-label="Select Month & Year" tabIndex={-1} className={`flex max-h-[min(440px,calc(100dvh-2rem))] w-full max-w-[320px] flex-col overflow-hidden rounded-2xl border p-4 shadow-2xl ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] bg-[color:var(--portal-bg,#100d0b)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#e4d4bf] bg-[#fffdfa]'}`}>
-                  <h2 className={`text-center font-serif text-lg font-semibold ${isPortal ? 'text-[color:var(--portal-text,#f7efe3)]' : 'text-[#33291f]'}`}>Select Month &amp; Year</h2>
-                  <div className="mt-3 grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-hidden">
-                    <div aria-label="Months" className={`public-calendar-scroll overflow-y-auto overscroll-contain rounded-xl border p-1 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
-                      {localizedMonths.map((item, index) => {
-                        const disabled = !hasSelectableDateInMonth(new Date(draftYear, index, 1), today)
-                        return <button key={item} type="button" data-month={index} disabled={disabled} aria-pressed={draftMonth === index} onClick={() => setDraftMonth(index)} className={`w-full rounded-lg px-2 py-2.5 text-left text-sm transition ${disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'cursor-not-allowed text-[#c9c1b7]') : draftMonth === index ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]'}`}>{item}</button>
-                      })}
-                    </div>
-                    <div aria-label="Years" className={`public-calendar-scroll overflow-y-auto overscroll-contain rounded-xl border p-1 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
-                      {years.map((item) => {
-                        const disabled = !Array.from({ length: 12 }, (_, index) => new Date(item, index, 1)).some((monthDate) => hasSelectableDateInMonth(monthDate, today))
-                        return <button key={item} type="button" data-year={item} disabled={disabled} aria-pressed={draftYear === item} onClick={() => chooseDraftYear(item)} className={`w-full rounded-lg px-2 py-2.5 text-center text-sm tabular-nums transition disabled:cursor-not-allowed ${disabled ? (isPortal ? 'text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'text-[#c9c1b7]') : draftYear === item ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]'}`}>{item}</button>
-                      })}
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <button type="button" onClick={resetCalendarView} className={`min-h-10 rounded-xl border px-4 text-sm font-medium text-[#6f4d1f] hover:bg-[#f7efe3] ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'border-[#d8c4a4]'}`}>Reset</button>
-                    <button type="button" disabled={!hasSelectableDateInMonth(new Date(draftYear, draftMonth, 1), today)} onClick={applyDraftMonthYear} className="min-h-10 rounded-xl bg-[#caa24c] px-5 text-sm font-semibold text-white hover:bg-[#b98a3d] disabled:cursor-not-allowed disabled:opacity-50">Done</button>
-                  </div>
-                </section>
-              </div>
-            ) : null}
           </div>
           </motion.div>
+          {monthYearOpen ? (
+            <div className="fixed inset-0 z-[9990] flex items-center justify-center bg-[#241d17]/45 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) { returnFocusToMonthYearRef.current = true; setMonthYearOpen(false) } }}>
+              <section ref={monthYearDialogRef} role="dialog" aria-modal="true" aria-label="Select Month & Year" tabIndex={-1} className={`flex max-h-[min(440px,calc(100dvh-2rem))] w-full max-w-[320px] flex-col overflow-hidden rounded-2xl border p-4 shadow-2xl ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] bg-[color:var(--portal-bg,#100d0b)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#e4d4bf] bg-[#fffdfa]'}`}>
+                <h2 className={`text-center font-serif text-lg font-semibold ${isPortal ? 'text-[color:var(--portal-text,#f7efe3)]' : 'text-[#33291f]'}`}>Select Month &amp; Year</h2>
+                <div className="mt-3 grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-hidden">
+                  <div aria-label="Months" className={`public-calendar-scroll overflow-y-auto overscroll-contain rounded-xl border p-1 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
+                    {localizedMonths.map((item, index) => {
+                      const disabled = !hasSelectableDateInMonth(new Date(draftYear, index, 1), today)
+                      return <button key={item} type="button" data-month={index} disabled={disabled} aria-pressed={draftMonth === index} onClick={() => setDraftMonth(index)} className={`w-full rounded-lg px-2 py-2.5 text-left text-sm transition ${disabled ? (isPortal ? 'cursor-not-allowed text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'cursor-not-allowed text-[#c9c1b7]') : draftMonth === index ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]'}`}>{item}</button>
+                    })}
+                  </div>
+                  <div aria-label="Years" className={`public-calendar-scroll overflow-y-auto overscroll-contain rounded-xl border p-1 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))]' : 'border-[#eadfce]'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
+                    {years.map((item) => {
+                      const disabled = !Array.from({ length: 12 }, (_, index) => new Date(item, index, 1)).some((monthDate) => hasSelectableDateInMonth(monthDate, today))
+                      return <button key={item} type="button" data-year={item} disabled={disabled} aria-pressed={draftYear === item} onClick={() => chooseDraftYear(item)} className={`w-full rounded-lg px-2 py-2.5 text-center text-sm tabular-nums transition disabled:cursor-not-allowed ${disabled ? (isPortal ? 'text-[color:var(--portal-muted,#b9ad9f)] opacity-50' : 'text-[#c9c1b7]') : draftYear === item ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : isPortal ? 'text-[color:var(--portal-text,#f7efe3)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]'}`}>{item}</button>
+                    })}
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <button type="button" onClick={resetCalendarView} className={`min-h-10 rounded-xl border px-4 text-sm font-medium text-[#6f4d1f] hover:bg-[#f7efe3] ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft,rgba(255,255,255,0.06))]' : 'border-[#d8c4a4]'}`}>Reset</button>
+                  <button type="button" disabled={!hasSelectableDateInMonth(new Date(draftYear, draftMonth, 1), today)} onClick={applyDraftMonthYear} className="min-h-10 rounded-xl bg-[#caa24c] px-5 text-sm font-semibold text-white hover:bg-[#b98a3d] disabled:cursor-not-allowed disabled:opacity-50">Done</button>
+                </div>
+              </section>
+            </div>
+          ) : null}
         </> : null}
         </AnimatePresence>,
         document.body,
