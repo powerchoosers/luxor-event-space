@@ -139,7 +139,7 @@ export function AutomationsLibraryTab() {
   if (loading && !data) return <AutomationLibrarySkeleton />
 
   return (
-    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto portal-scrollbar pb-8">
+    <div className="min-h-0 min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto portal-scrollbar pb-8">
       {error ? (
         <div role="alert" className="flex flex-col gap-3 rounded-xl border border-rose-500/25 bg-rose-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
