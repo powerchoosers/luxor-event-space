@@ -15,6 +15,10 @@ export type AutomationLibraryEntry = {
   name: string
   kind: 'saved' | 'system'
   status: AutomationStatus
+  enabled: boolean
+  canToggle?: boolean
+  canEnable?: boolean
+  controlReason?: string | null
   statusNote: string | null
   description: string
   trigger: string

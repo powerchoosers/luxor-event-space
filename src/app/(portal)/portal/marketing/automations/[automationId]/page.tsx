@@ -156,6 +156,8 @@ export default function AutomationDetailPage() {
   const [queuedPreview, setQueuedPreview] = React.useState<QueuedCopyPreview | null>(null)
   const [queuePreviewing, setQueuePreviewing] = React.useState(false)
   const [feedback, setFeedback] = React.useState<string | null>(null)
+  const [automationSaving, setAutomationSaving] = React.useState(false)
+  const [automationError, setAutomationError] = React.useState<string | null>(null)
   const pendingSaveReload = React.useRef(false)
   const pendingSaveMessage = React.useRef<string | null>(null)
   const preserveFeedbackOnTemplateRefresh = React.useRef(false)
@@ -282,6 +284,26 @@ export default function AutomationDetailPage() {
     if (dirty && !window.confirm('Discard unsaved email changes and reload saved automation data?')) return
     if (dirty && activeTemplate) setDraft(draftFromTemplate(activeTemplate))
     setReloadVersion((value) => value + 1)
+  }
+
+  async function handleAutomationToggle() {
+    if (!entry || automationSaving) return
+    setAutomationSaving(true)
+    setAutomationError(null)
+    try {
+      const response = await fetch('/api/marketing/automations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ automationKey: entry.kind === 'system' ? 'tour_notifications' : entry.id, enabled: !entry.enabled }),
+      })
+      const payload = await response.json().catch(() => ({})) as { enabled?: boolean; status?: AutomationStatus; error?: string }
+      if (!response.ok) throw new Error(payload.error || 'Automation setting could not be saved.')
+      setEntry((current) => current ? { ...current, enabled: payload.enabled === true, ...(payload.status ? { status: payload.status } : {}) } : current)
+    } catch (error) {
+      setAutomationError(error instanceof Error ? error.message : 'Automation setting could not be saved.')
+    } finally {
+      setAutomationSaving(false)
+    }
   }
 
   function handleSelectStep(key: string) {
@@ -429,6 +451,7 @@ export default function AutomationDetailPage() {
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#caa24c]/10 text-[#8c6424] dark:text-[#f1d27a]">{entry?.kind === 'system' ? <CalendarClock size={17} aria-hidden="true" /> : <Workflow size={17} aria-hidden="true" />}</span>
                 <h1 className="font-serif text-2xl font-semibold text-[color:var(--portal-text)] sm:text-3xl">{entry?.name || 'Automation details'}</h1>
                 {entry ? <StatusBadge status={entry.status} /> : null}
+                {entry ? <div className="ml-1 flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-1.5"><span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{entry.enabled ? 'On' : 'Off'}</span><button type="button" role="switch" aria-checked={entry.enabled} aria-label={`${entry.name} automation`} disabled={automationSaving || entry.canToggle === false || (entry.canEnable === false && !entry.enabled)} onClick={() => void handleAutomationToggle()} title={entry.canToggle === false ? entry.controlReason || 'Use the deployed portal to change live automation.' : entry.canEnable === false && !entry.enabled ? entry.controlReason || 'This automation is not ready to enable.' : undefined} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-50 ${entry.enabled ? 'bg-[#a8792f]' : 'bg-[color:var(--portal-border)]'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} /></button></div> : null}
               </div>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--portal-muted)]">{entry?.description || 'Inspect the saved automation configuration.'}</p>
             </div>
@@ -442,6 +465,8 @@ export default function AutomationDetailPage() {
         {loadError ? <Notice tone="error" title="Automation data could not load." body={loadError} action={<button type="button" onClick={handleRefresh} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 font-semibold">Try again</button>} /> : null}
         {loading && entry ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing saved automation data.</p> : null}
         {detailError ? <Notice tone="info" title="Runtime details are unavailable." body={detailError} /> : null}
+        {automationError ? <Notice tone="error" title="Automation setting could not be saved." body={automationError} /> : null}
+        {entry?.canToggle === false ? <Notice tone="info" title="Live controls are unavailable in this local preview." body="Use the deployed portal to change production automation settings." /> : null}
 
         {savedDetail ? (
           <SavedWorkflowDetail

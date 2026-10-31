@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { CalendarClock, ChevronDown, ChevronRight, Clock3, Compass, Mail, Phone, Search, Workflow, Zap, ArrowRight, Check } from 'lucide-react'
+import { CalendarClock, ChevronDown, ChevronRight, Clock3, Compass, Mail, Phone, Search, Workflow, Zap, ArrowRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { PREBUILT_WORKFLOWS, type PrebuiltWorkflow } from '@/lib/luxorPrebuiltWorkflows'
 import { ElenaWorkflowArchitectModal } from '@/components/portal/ElenaWorkflowArchitectModal'
@@ -55,7 +55,35 @@ export function AutomationsLibraryTab() {
   const [customRetryVersion, setCustomRetryVersion] = React.useState(0)
   const [isArchitectOpen, setIsArchitectOpen] = React.useState(false)
   const [enrollingWorkflowId, setEnrollingWorkflowId] = React.useState<string | null>(null)
+  const [savingAutomationId, setSavingAutomationId] = React.useState<string | null>(null)
+  const [automationControlError, setAutomationControlError] = React.useState<string | null>(null)
   const router = useRouter()
+
+  const setAutomationEnabled = React.useCallback(async (entry: AutomationLibraryEntry) => {
+    if (savingAutomationId) return
+    setSavingAutomationId(entry.id)
+    setAutomationControlError(null)
+    try {
+      const response = await fetch('/api/marketing/automations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ automationKey: entry.kind === 'system' ? 'tour_notifications' : entry.id, enabled: !entry.enabled }),
+      })
+      const payload = await response.json().catch(() => ({})) as { enabled?: boolean; error?: string; status?: AutomationStatus }
+      if (!response.ok) throw new Error(payload.error || 'Automation setting could not be saved.')
+      setData((current) => {
+        if (!current) return current
+        const update = (item: AutomationLibraryEntry) => item.id === entry.id
+          ? { ...item, enabled: payload.enabled === true, ...(payload.status ? { status: payload.status } : {}) }
+          : item
+        return { ...current, workflows: current.workflows.map(update), systemManaged: update(current.systemManaged) }
+      })
+    } catch (error) {
+      setAutomationControlError(error instanceof Error ? error.message : 'Automation setting could not be saved.')
+    } finally {
+      setSavingAutomationId(null)
+    }
+  }, [savingAutomationId])
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -128,6 +156,8 @@ export function AutomationsLibraryTab() {
       ) : null}
 
       {loading && data ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing saved workflow data…</p> : null}
+      {automationControlError ? <p role="alert" className="rounded-lg border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs text-[color:var(--portal-muted)]">{automationControlError}</p> : null}
+      {data && [...data.workflows, data.systemManaged].some((entry) => entry.canToggle === false) ? <p role="note" className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-muted)]">Switches are read-only in this local preview. Use the deployed portal to change live automation.</p> : null}
 
       {/* Pre-built Workflows / Templates Library */}
       <section aria-labelledby="prebuilt-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6 space-y-4">
@@ -145,7 +175,7 @@ export function AutomationsLibraryTab() {
               Pre-built Workflows
             </h2>
             <p className="mt-0.5 text-xs text-[color:var(--portal-muted)] max-w-2xl">
-              Use standard unedited flows immediately or customize any workflow in the builder to tailor talking points and timing.
+              These are templates, not running workflows. Use one for selected leads or customize it to create a saved workflow with its own on/off control.
             </p>
           </div>
         </div>
@@ -161,8 +191,8 @@ export function AutomationsLibraryTab() {
                   <span className="rounded bg-[color:var(--portal-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-text)]">
                     {pb.triggerBadge}
                   </span>
-                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <Check size={11} strokeWidth={3} /> Ready
+                  <span className="text-[10px] font-semibold text-[color:var(--portal-muted)] flex items-center gap-1">
+                    Template
                   </span>
                 </div>
                 <h3 className="font-serif text-sm font-semibold text-[color:var(--portal-text)]">
@@ -255,7 +285,7 @@ export function AutomationsLibraryTab() {
         </p>
       )}
       <p className="-mt-4 text-[11px] leading-5 text-[color:var(--portal-muted)]">
-        Workflow structure and status controls are read-only. Saved brochure email copy can be edited from its detail page.
+        Use the switches to control saved automations. Templates stay inactive until you use or customize them; brochure email copy can be edited from its detail page.
       </p>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -300,6 +330,8 @@ export function AutomationsLibraryTab() {
             entry={data.systemManaged}
             expanded={openEntryId === data.systemManaged.id}
             onToggle={() => setOpenEntryId((current) => current === data.systemManaged.id ? null : data.systemManaged.id)}
+            onSetEnabled={() => void setAutomationEnabled(data.systemManaged)}
+            saving={savingAutomationId === data.systemManaged.id}
           />
         </>
       ) : visibleEntries.length === 0 ? (
@@ -315,6 +347,8 @@ export function AutomationsLibraryTab() {
               entry={entry}
               expanded={openEntryId === entry.id}
               onToggle={() => setOpenEntryId((current) => current === entry.id ? null : entry.id)}
+              onSetEnabled={() => void setAutomationEnabled(entry)}
+              saving={savingAutomationId === entry.id}
             />
           ))}
         </section>
@@ -333,7 +367,7 @@ function SummaryMetric({ label, value, detail }: { label: string; value: number 
   )
 }
 
-function AutomationEntryCard({ entry, expanded, onToggle }: { entry: AutomationLibraryEntry; expanded: boolean; onToggle: () => void }) {
+function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }: { entry: AutomationLibraryEntry; expanded: boolean; onToggle: () => void; onSetEnabled: () => void; saving: boolean }) {
   const detailsId = `automation-summary-${entry.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
   const icon = entry.kind === 'system'
     ? <CalendarClock size={18} aria-hidden="true" />
@@ -367,7 +401,22 @@ function AutomationEntryCard({ entry, expanded, onToggle }: { entry: AutomationL
           {entry.updatedAt ? <Metadata label="Updated" value={formatDate(entry.updatedAt) || 'Unavailable'} /> : null}
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{entry.enabled ? 'On' : 'Off'}</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={entry.enabled}
+              aria-label={`${entry.name} automation`}
+              disabled={saving || entry.canToggle === false || (entry.canEnable === false && !entry.enabled)}
+              onClick={onSetEnabled}
+              title={entry.canEnable === false && !entry.enabled ? entry.controlReason || 'This automation is not ready to enable.' : undefined}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-50 ${entry.enabled ? 'bg-[#a8792f]' : 'bg-[color:var(--portal-border)]'}`}
+            >
+              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
           <Link
             href={`/portal/marketing/automations/${entry.kind === 'system' ? 'tour-notifications' : encodeURIComponent(entry.id)}`}
             className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"

@@ -5,6 +5,7 @@ import { getLuxorCalendarEvent, normalizedState, type LuxorCalendarEvent, type L
 import { sendLuxorResendEmail } from './luxorResendMailServer'
 import type { LuxorEmailJob, LuxorInquiry } from './luxorInquiryTypes'
 import { LUXOR_TEST_EMAIL_RECIPIENT, sendLuxorTestEmail } from './luxorTestEmailDelivery'
+import { areLuxorTourNotificationsEnabled } from './luxorTourNotificationsServer'
 
 type TourTemplate = { subject: string; body: string; text?: string; heroImage?: string; aiGenerated?: boolean }
 type SavedTour = {
@@ -64,6 +65,7 @@ export async function deliverLuxorTourNotice(job: LuxorEmailJob, options: { test
     })
     return { status: 'sent' as const, messageId: sent.providerMessageId, provider: 'resend' as const }
   }
+  if (!await areLuxorTourNotificationsEnabled()) return { status: 'skipped' as const }
   const expectedKind = job.tour_notice === 'confirmation' ? 'tour_confirmation'
     : ['reminder_24', 'reminder_2'].includes(job.tour_notice || '') ? 'tour_reminder' : null
   if (!job.inquiry_id || !job.tour_revision_id || !expectedKind || job.job_type !== expectedKind) {

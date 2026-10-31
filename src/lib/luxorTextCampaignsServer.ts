@@ -7,6 +7,7 @@ import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment } from './l
 import { createOrUpdateLuxorMessage } from './luxorMessagesServer'
 import { getActiveLuxorPhoneNumber } from './luxorPhoneNumbersServer'
 import { supabaseRest } from './supabaseRestServer'
+import { areLuxorTourNotificationsEnabled } from './luxorTourNotificationsServer'
 import {
   assertLuxorAutomatedSmsAllowed,
   getLuxorSmsConsent,
@@ -303,6 +304,7 @@ export async function createUniqueTextJob(data: {
   metadata?: Record<string, unknown>
   requiredScope?: string
 }) {
+  if (['tour_confirmation', 'tour_reminder'].includes(data.jobType) && !await areLuxorTourNotificationsEnabled()) return null
   const phone = await assertLuxorAutomatedSmsAllowed(data.phone, data.requiredScope || 'customer_care')
   const body = validateCampaignBody(data.body)
   const [existing] = await supabaseRest<LuxorTextJob[]>(
@@ -641,6 +643,10 @@ async function processTextJob(job: LuxorTextJob, options: { customWorkflowDispat
     }
     if (!isCustomWorkflowJob && customWorkflowDispatch) {
       return { id: job.id, status: 'skipped' as const, error: 'not_a_custom_workflow_job' }
+    }
+    if (!isCustomWorkflowJob && ['tour_confirmation', 'tour_reminder'].includes(job.job_type) && !await areLuxorTourNotificationsEnabled()) {
+      await finishTextJob(job, 'cancelled', 'Tour notifications are turned off in Marketing settings.')
+      return { id: job.id, status: 'skipped' as const, error: 'tour_notifications_disabled' }
     }
     const inquiry = job.inquiry_id ? await getLuxorInquiry(job.inquiry_id) : null
     if (inquiry?.is_test) {

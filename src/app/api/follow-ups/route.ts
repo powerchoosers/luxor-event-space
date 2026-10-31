@@ -5,13 +5,24 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorFollowUpAction, LuxorFollowUpEnrollment } from '@/lib/luxorFollowUpsServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
+import { classifyAutomationStatus } from '@/lib/luxorAutomationsLibrary'
+import { getLuxorPhoneRoutingSettings } from '@/lib/luxorPhoneRoutingServer'
 
 export async function GET(request: NextRequest) {
   if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
   try {
     const inquiryId = request.nextUrl.searchParams.get('inquiryId')
     if (request.nextUrl.searchParams.get('dashboard') === '1') {
-      const sendingEnabled = await isLuxorBrochureFollowUpSendingEnabled()
+      const [setup, sendingEnabled, phoneSettings] = await Promise.all([
+        getLuxorFollowUpSetup(),
+        isLuxorBrochureFollowUpSendingEnabled(),
+        getLuxorPhoneRoutingSettings(),
+      ])
+      const sequenceStatus = !setup.automation
+        ? 'unknown'
+        : process.env.NODE_ENV !== 'production' && process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED !== 'true'
+          ? 'local-preview'
+          : classifyAutomationStatus(setup.automation, setup.templates, sendingEnabled)
       const enrollments = await supabaseRest<Array<{ id: string; inquiry_id: string; status: string }>>(
         'luxor_follow_up_enrollments?select=id,inquiry_id,status&automation_key=eq.brochure_lead&status=in.(active,paused)&order=started_at.desc&limit=500',
       )
@@ -19,14 +30,14 @@ export async function GET(request: NextRequest) {
       const enrollmentById = new Map(activeEnrollments.map((item) => [item.id, item.inquiry_id]))
       const pausedEnrollmentIds = enrollments.filter((item) => item.status === 'paused').map((item) => item.id)
       const ids = [...enrollmentById.keys()]
-      if (!ids.length) return NextResponse.json({ emailActions: [], pausedEnrollmentIds, pausedEnrollments: enrollments.filter((item) => item.status === 'paused'), sendingEnabled })
+      if (!ids.length) return NextResponse.json({ emailActions: [], pausedEnrollmentIds, pausedEnrollments: enrollments.filter((item) => item.status === 'paused'), sequenceStatus, missedCallTextEnabled: phoneSettings.missed_call_text_enabled, inboundTextReplyEnabled: phoneSettings.inbound_text_reply_enabled })
       const actions = await supabaseRest<Array<{ id: string; enrollment_id: string; step_key: string; scheduled_at: string; status: string; channel: string; email_job_id: string | null }>>(
         `luxor_follow_up_actions?select=id,enrollment_id,step_key,scheduled_at,status,channel,email_job_id&channel=eq.email&status=in.(email_queued,scheduled)&enrollment_id=in.(${ids.map(encodeURIComponent).join(',')})&order=scheduled_at.asc&limit=1000`,
       )
       return NextResponse.json({ emailActions: actions.flatMap((item) => {
         const inquiry_id = enrollmentById.get(item.enrollment_id)
         return inquiry_id ? [{ ...item, inquiry_id }] : []
-      }), pausedEnrollmentIds, pausedEnrollments: enrollments.filter((item) => item.status === 'paused'), sendingEnabled })
+      }), pausedEnrollmentIds, pausedEnrollments: enrollments.filter((item) => item.status === 'paused'), sequenceStatus, missedCallTextEnabled: phoneSettings.missed_call_text_enabled, inboundTextReplyEnabled: phoneSettings.inbound_text_reply_enabled })
     }
     if (inquiryId) {
       const historyPage = Math.max(0, Math.min(100, Number(request.nextUrl.searchParams.get('historyPage') || '0') || 0))
