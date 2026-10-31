@@ -371,6 +371,7 @@ function SummaryMetric({ label, value, detail }: { label: string; value: number 
 function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }: { entry: AutomationLibraryEntry; expanded: boolean; onToggle: () => void; onSetEnabled: () => void; saving: boolean }) {
   const detailsId = `automation-summary-${entry.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
   const reduceMotion = useReducedMotion() ?? false
+  const productionSettingIsOn = entry.id === 'brochure_lead' && entry.enabled && entry.status === 'unknown' && entry.canToggle === false
   const icon = entry.kind === 'system'
     ? <CalendarClock size={18} aria-hidden="true" />
     : <Workflow size={18} aria-hidden="true" />
@@ -383,7 +384,11 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="break-words font-serif text-base font-semibold text-[color:var(--portal-text)] sm:text-lg">{entry.name}</h2>
-              <StatusBadge status={entry.status} />
+              <StatusBadge
+                status={productionSettingIsOn ? 'active' : entry.status}
+                label={productionSettingIsOn ? 'Live in prod' : undefined}
+                title={productionSettingIsOn ? 'The saved production setting is on. This local preview is read-only and does not send follow-ups.' : undefined}
+              />
             </div>
             <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{entry.description}</p>
           </div>
@@ -499,7 +504,7 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
             <aside className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4">
               <p className="text-xs font-bold text-[color:var(--portal-text)]">{entry.kind === 'system' ? 'System-managed behavior' : 'Current controls'}</p>
               <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{entry.summaryNote}</p>
-              {entry.statusNote ? <p className="mt-3 border-t border-[color:var(--portal-border)] pt-3 text-xs leading-5 text-[color:var(--portal-muted)]">{entry.statusNote}</p> : null}
+              {entry.statusNote ? <p className="mt-3 border-t border-[color:var(--portal-border)] pt-3 text-xs leading-5 text-[color:var(--portal-muted)]">{productionSettingIsOn ? 'The production automation is live. This local preview is read-only and does not send follow-ups.' : entry.statusNote}</p> : null}
             </aside>
           </div>
           </div>
@@ -519,7 +524,7 @@ function Metadata({ label, value }: { label: string; value: string }) {
   )
 }
 
-function StatusBadge({ status }: { status: AutomationStatus }) {
+function StatusBadge({ status, label, title }: { status: AutomationStatus; label?: string; title?: string }) {
   const styles: Record<AutomationStatus, string> = {
     active: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
     draft: 'bg-amber-500/10 text-amber-800 dark:text-amber-200',
@@ -527,8 +532,8 @@ function StatusBadge({ status }: { status: AutomationStatus }) {
     unknown: 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]',
     'system-managed': 'bg-[#caa24c]/15 text-[#8c6424] dark:text-[#f1d27a]',
   }
-  const label = status === 'system-managed' ? 'System-managed' : status[0].toUpperCase() + status.slice(1)
-  return <span className={`inline-flex min-h-6 items-center rounded-full px-2.5 text-[9px] font-black uppercase tracking-[0.1em] ${styles[status]}`}>{label}</span>
+  const badgeLabel = label ?? (status === 'system-managed' ? 'System-managed' : status[0].toUpperCase() + status.slice(1))
+  return <span title={title} className={`inline-flex min-h-6 items-center rounded-full px-2.5 text-[9px] font-black uppercase tracking-[0.1em] ${styles[status]}`}>{badgeLabel}</span>
 }
 
 function ChannelIcon({ channel }: { channel: string }) {

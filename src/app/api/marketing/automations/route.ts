@@ -4,6 +4,7 @@ import { getLuxorFollowUpSetup, isLuxorBrochureFollowUpSendingEnabled } from '@/
 import { cancelQueuedLuxorTourNotifications } from '@/lib/luxorTourNotificationsServer'
 import { requireCustomWorkflowOperator, CustomWorkflowServiceError } from '@/lib/luxorCustomWorkflowsServer'
 import { supabaseRest, supabaseRestCount } from '@/lib/supabaseRestServer'
+import { canControlLiveLuxorAutomations } from '@/lib/luxorAutomationEnvironment'
 import {
   classifyAutomationStatus,
   summarizeSavedAutomations,
@@ -102,7 +103,7 @@ function buildSavedEntry(
 ): AutomationLibraryEntry {
   const isBrochureFollowUp = automation.automation_key === 'brochure_lead'
   const steps = stepsFor(templates)
-  const controlsAvailable = process.env.NODE_ENV === 'production'
+  const controlsAvailable = canControlLiveLuxorAutomations()
   const status = classifyAutomationStatus(automation, templates, isBrochureFollowUp ? (runtimeGateEnabled ? sendsConfigured : null) : null)
 
   return {
@@ -142,9 +143,9 @@ function buildTourNotifications(sentCount: number | null, enabled: boolean): Aut
     kind: 'system',
     status: 'system-managed',
     enabled,
-    canToggle: process.env.NODE_ENV === 'production',
-    canEnable: process.env.NODE_ENV === 'production',
-    controlReason: process.env.NODE_ENV === 'production' ? null : 'Switches are disabled in this local preview; use the deployed portal to change live automation.',
+    canToggle: canControlLiveLuxorAutomations(),
+    canEnable: canControlLiveLuxorAutomations(),
+    controlReason: canControlLiveLuxorAutomations() ? null : 'Switches are disabled in this local preview; use the deployed portal to change live automation.',
     statusNote: null,
     description: 'Calendar scheduling creates the confirmation and reminder jobs for a confirmed tour.',
     trigger: 'Tour scheduled or rescheduled',
@@ -219,7 +220,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   const session = await getLuxorPortalSession()
   if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
-  if (process.env.NODE_ENV !== 'production') {
+  if (!canControlLiveLuxorAutomations()) {
     return NextResponse.json({ error: 'Automation switches are disabled in the local preview. Use the deployed portal to change live automation.' }, { status: 409 })
   }
 
