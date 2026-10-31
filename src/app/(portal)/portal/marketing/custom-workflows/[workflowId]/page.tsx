@@ -2,6 +2,8 @@
 
 import React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
+import { motion } from 'framer-motion'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowDown,
@@ -11,7 +13,6 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  Compass,
   Copy,
   Eye,
   Mail,
@@ -26,7 +27,7 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import { PortalPageFrame, PortalSelect, PortalButton } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalSelect, PortalButton, PortalAnimatedTabs, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
 import {
   addCustomWorkflowStep,
   canEditCustomWorkflowStep,
@@ -51,6 +52,7 @@ import {
 import { PREBUILT_WORKFLOWS } from '@/lib/luxorPrebuiltWorkflows'
 import { ElenaWorkflowArchitectModal } from '@/components/portal/ElenaWorkflowArchitectModal'
 import { WorkflowVariableChipsBar } from '@/components/portal/WorkflowVariableChipsBar'
+import { WorkflowTokenEditor, WorkflowVariableText, type WorkflowTokenEditorHandle } from '@/components/portal/WorkflowTokenEditor'
 
 type WorkflowRow = {
   id: string
@@ -96,6 +98,18 @@ const ADDABLE_STEPS: Array<{ type: Exclude<CustomWorkflowChannel, 'end'>; label:
   { type: 'condition', label: 'Condition', icon: <Workflow size={14} className="text-purple-500" /> },
 ]
 
+const WORKFLOW_DESKTOP_QUERY = '(min-width: 1024px)'
+
+function subscribeToWorkflowDesktopViewport(callback: () => void) {
+  const query = window.matchMedia(WORKFLOW_DESKTOP_QUERY)
+  query.addEventListener('change', callback)
+  return () => query.removeEventListener('change', callback)
+}
+
+function getWorkflowDesktopViewportSnapshot() {
+  return window.matchMedia(WORKFLOW_DESKTOP_QUERY).matches
+}
+
 export default function CustomWorkflowEditorPage() {
   const params = useParams<{ workflowId: string }>()
   const searchParams = useSearchParams()
@@ -139,6 +153,37 @@ export default function CustomWorkflowEditorPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [mobileInspectorOpen, setMobileInspectorOpen] = React.useState(false)
+  const [inspectorBodyHeight, setInspectorBodyHeight] = React.useState<number | null>(null)
+  const isDesktopViewport = React.useSyncExternalStore(
+    subscribeToWorkflowDesktopViewport,
+    getWorkflowDesktopViewportSnapshot,
+    () => true,
+  )
+  const workspaceRef = React.useRef<HTMLDivElement>(null)
+  const canvasRef = React.useRef<HTMLDivElement>(null)
+  const inspectorRef = React.useRef<HTMLDivElement>(null)
+  const inspectorContentRef = React.useRef<HTMLDivElement>(null)
+  const callScriptEditorRef = React.useRef<WorkflowTokenEditorHandle>(null)
+
+  React.useEffect(() => {
+    const scrollport = workspaceRef.current?.closest<HTMLElement>('.portal-scrollbar')
+    const columns = [canvasRef.current, inspectorRef.current].filter((column): column is HTMLDivElement => Boolean(column))
+    if (!scrollport || columns.length !== 2) return
+
+    // Each column follows the page until its last field reaches the viewport bottom.
+    const updateStickyOffsets = () => {
+      const bottomPadding = Number.parseFloat(getComputedStyle(scrollport).paddingBottom) || 0
+      for (const column of columns) {
+        const top = Math.min(0, scrollport.clientHeight - bottomPadding - column.offsetHeight)
+        column.style.setProperty('--workflow-sticky-top', `${top}px`)
+      }
+    }
+    const observer = new ResizeObserver(updateStickyOffsets)
+    observer.observe(scrollport)
+    columns.forEach((column) => observer.observe(column))
+    updateStickyOffsets()
+    return () => observer.disconnect()
+  }, [loading])
 
   const dirty = isNew
     ? Boolean(nameDraft.trim() !== 'New Custom Workflow' || definitionDraft.steps.length > 0)
@@ -151,6 +196,23 @@ export default function CustomWorkflowEditorPage() {
 
   const selectedStep = definitionDraft.steps.find((s) => s.id === selectedStepId) || null
   const validationErrors = React.useMemo(() => validateCustomWorkflowDefinition(definitionDraft), [definitionDraft])
+
+  React.useLayoutEffect(() => {
+    const content = inspectorContentRef.current
+    const body = content?.parentElement
+    if (!content || !body) return
+
+    const updateHeight = () => {
+      const style = window.getComputedStyle(body)
+      const verticalPadding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom)
+      setInspectorBodyHeight(Math.ceil(content.scrollHeight + verticalPadding))
+    }
+
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(content)
+    updateHeight()
+    return () => observer.disconnect()
+  }, [inspectorTab, isDesktopViewport, selectedStepId])
 
   // Check authoring status
   React.useEffect(() => {
@@ -257,8 +319,7 @@ export default function CustomWorkflowEditorPage() {
       const current = selectedStep.body || ''
       updateStepField(selectedStep.id, 'body', `${current} ${token}`.trim())
     } else if (selectedStep.type === 'call_task') {
-      const current = selectedStep.scriptNotes || ''
-      updateStepField(selectedStep.id, 'scriptNotes', `${current} ${token}`.trim())
+      callScriptEditorRef.current?.insertToken(token)
     }
   }
 
@@ -411,7 +472,7 @@ export default function CustomWorkflowEditorPage() {
   }
 
   return (
-    <PortalPageFrame className="flex min-h-0 flex-1 flex-col overflow-clip">
+    <PortalPageFrame className="flex h-full !min-h-0 flex-1 flex-col !gap-0 overflow-visible lg:h-auto lg:flex-none lg:!gap-6 lg:overflow-visible">
       {/* Elena Architect Modal */}
       <ElenaWorkflowArchitectModal
         isOpen={isArchitectOpen}
@@ -425,13 +486,15 @@ export default function CustomWorkflowEditorPage() {
       />
 
       {/* Top Navigation & Status Bar */}
-      <div className="flex shrink-0 flex-col gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:rounded-xl lg:px-6">
         <div className="flex items-center gap-3 min-w-0">
           <Link
             href="/portal/marketing?tab=automations"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition hover:text-[color:var(--portal-text)]"
+            aria-label="Go back"
+            title="Go back"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={14} />
           </Link>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -458,15 +521,16 @@ export default function CustomWorkflowEditorPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-nowrap items-center gap-2 lg:w-auto">
           {/* Elena Architect Button */}
           <button
             type="button"
             onClick={() => setIsArchitectOpen(true)}
-            className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-[#caa24c]/60 bg-[#caa24c]/10 px-3 text-xs font-bold text-[#8c6424] dark:text-[#f1d27a] transition hover:bg-[#caa24c]/20"
+            aria-haspopup="dialog"
+            className="inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-[color:var(--portal-border)] px-2 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:min-h-9 lg:flex-none lg:border-0 lg:px-2"
           >
-            <Compass size={14} />
-            <span>Elena Architect</span>
+            <Image src="/luxor-concierge.png" alt="" width={24} height={24} className="h-6 w-6 rounded-full object-cover" />
+            <span>Build with Elena</span>
           </button>
 
           {/* Save Draft Button */}
@@ -474,10 +538,10 @@ export default function CustomWorkflowEditorPage() {
             variant="primary"
             onClick={saveDraft}
             disabled={saving || (!dirty && !isNew)}
-            className="min-h-9 px-4 text-xs"
+            className="min-h-9 min-w-0 flex-1 px-2 text-xs lg:flex-none lg:px-4"
           >
             {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
-            <span>{isNew ? 'Create Workflow' : 'Save Draft'}</span>
+            <span>Save Draft</span>
           </PortalButton>
 
           {/* Activate / Pause Toggle (for saved workflows) */}
@@ -486,7 +550,7 @@ export default function CustomWorkflowEditorPage() {
               variant="secondary"
               onClick={handleToggleActivate}
               disabled={activating || validationErrors.length > 0}
-              className="min-h-9 text-xs"
+              className="min-h-9 min-w-0 flex-1 text-xs lg:flex-none"
             >
               {activating ? (
                 <RefreshCw size={13} className="animate-spin" />
@@ -520,12 +584,12 @@ export default function CustomWorkflowEditorPage() {
       ) : null}
 
       {/* Main Workspace Frame: Two Columns (Canvas + Inspector) */}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
+      <div ref={workspaceRef} className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-none lg:flex-row lg:items-start lg:overflow-visible">
         {/* Left Column: Visual Sequencer Canvas */}
-        <div className="flex-1 overflow-y-auto portal-scrollbar p-4 sm:p-6 lg:p-8 space-y-4">
+        <div ref={canvasRef} className="min-h-0 flex-1 overflow-y-auto portal-scrollbar p-4 lg:sticky lg:top-[var(--workflow-sticky-top,0px)] lg:self-start lg:overflow-visible lg:py-8 lg:pr-8 lg:pl-0 space-y-4">
           {/* Trigger Header Card */}
-          <div className="rounded-2xl border-2 border-[#caa24c]/60 bg-[color:var(--portal-card)] p-4 sm:p-5 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="rounded-2xl border-2 border-[#caa24c]/60 bg-[color:var(--portal-card)] p-4 lg:p-5 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-[#17130b]">
                   <Workflow size={20} />
@@ -541,7 +605,7 @@ export default function CustomWorkflowEditorPage() {
               </div>
 
               {/* Trigger Dropdown */}
-              <div className="w-full sm:w-64">
+              <div className="w-full lg:w-64">
                 <PortalSelect
                   value={definitionDraft.trigger}
                   onChange={(val) => {
@@ -563,7 +627,7 @@ export default function CustomWorkflowEditorPage() {
           </div>
 
           {/* Step Timeline Nodes */}
-          <div className="space-y-3 relative pl-3 sm:pl-4 border-l-2 border-[#caa24c]/30 ml-5 sm:ml-6 my-4">
+          <div className="relative my-4 ml-0 space-y-3 border-l-0 border-[#caa24c]/30 pl-0 lg:ml-6 lg:border-l-2 lg:pl-4">
             {definitionDraft.steps.map((step, idx) => {
               const isSelected = selectedStepId === step.id
               const isEnd = step.type === 'end'
@@ -584,7 +648,7 @@ export default function CustomWorkflowEditorPage() {
                       <div className="flex items-start gap-3 min-w-0">
                         {/* Step Type Icon */}
                         <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white ${
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#fff] sm:text-white ${
                             step.type === 'call_task'
                               ? 'bg-emerald-500'
                               : step.type === 'email'
@@ -631,7 +695,7 @@ export default function CustomWorkflowEditorPage() {
                           {/* Snippet preview */}
                           <div className="mt-1 text-xs text-[color:var(--portal-muted)] line-clamp-2">
                             {step.type === 'call_task' && step.scriptNotes ? (
-                              <span>Script: {step.scriptNotes}</span>
+                              <span>Script: <WorkflowVariableText value={step.scriptNotes} /></span>
                             ) : step.type === 'email' && step.subject ? (
                               <span>Subject: {step.subject}</span>
                             ) : step.type === 'text' && step.body ? (
@@ -715,50 +779,39 @@ export default function CustomWorkflowEditorPage() {
           </div>
         </div>
 
-        {/* Mobile Backdrop Overlay (matches mobile settings expansion) */}
-        {mobileInspectorOpen ? (
-          <div
-            role="presentation"
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
-            onClick={() => setMobileInspectorOpen(false)}
-            aria-hidden="true"
-          />
-        ) : null}
-
         {/* Right Column: Step Inspector & Live Preview */}
-        <div
-          className={`portal-inspector-surface flex flex-col shrink-0 ${
+        <motion.div
+          ref={inspectorRef}
+          initial={false}
+          animate={{
+            x: mobileInspectorOpen || isDesktopViewport ? '0%' : '100%',
+            visibility: mobileInspectorOpen || isDesktopViewport ? 'visible' : 'hidden',
+          }}
+          transition={{
+            x: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
+            visibility: { delay: mobileInspectorOpen || isDesktopViewport ? 0 : 0.28 },
+          }}
+          aria-hidden={!mobileInspectorOpen && !isDesktopViewport}
+          inert={!mobileInspectorOpen && !isDesktopViewport}
+          className={`portal-inspector-surface flex min-h-0 flex-col shrink-0 lg:sticky lg:top-[var(--workflow-sticky-top,0px)] lg:self-start lg:overflow-visible lg:rounded-2xl lg:border lg:border-[color:var(--portal-border)] ${
             mobileInspectorOpen
-              ? 'portal-sheet fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] top-14 z-50 max-h-[calc(100dvh-4.5rem-env(safe-area-inset-bottom))] rounded-2xl border border-[color:var(--portal-border)] shadow-2xl overflow-hidden lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:max-h-none lg:w-[460px] xl:w-[500px] lg:rounded-none lg:border-t-0 lg:border-l lg:shadow-none'
-              : 'hidden lg:flex lg:w-[460px] xl:w-[500px] border-t lg:border-t-0 lg:border-l border-[color:var(--portal-border)]'
+              ? 'fixed inset-0 z-50 max-h-none overflow-hidden max-lg:!bg-[color:var(--portal-card)] lg:inset-x-auto lg:bottom-auto lg:max-h-none lg:w-[460px] xl:w-[500px] lg:shadow-none'
+              : 'fixed inset-0 z-10 max-lg:pointer-events-none lg:static lg:flex lg:w-[460px] xl:w-[500px] border-t border-[color:var(--portal-border)]'
           }`}
         >
           {/* Inspector Header */}
-          <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-3.5 portal-inspector-surface">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setInspectorTab('edit')}
-                className={`pb-1 text-xs font-bold transition border-b-2 ${
-                  inspectorTab === 'edit'
-                    ? 'border-[#caa24c] text-[#8c6424] dark:text-[#f1d27a]'
-                    : 'border-transparent text-[color:var(--portal-muted)]'
-                }`}
-              >
-                Step Configuration
-              </button>
-              <button
-                type="button"
-                onClick={() => setInspectorTab('preview')}
-                className={`pb-1 text-xs font-bold transition border-b-2 ${
-                  inspectorTab === 'preview'
-                    ? 'border-[#caa24c] text-[#8c6424] dark:text-[#f1d27a]'
-                    : 'border-transparent text-[color:var(--portal-muted)]'
-                }`}
-              >
-                Live Preview
-              </button>
-            </div>
+          <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-3.5 portal-inspector-surface lg:!static lg:z-auto lg:rounded-t-[15px]">
+            <PortalAnimatedTabs
+              tabs={[
+                { id: 'edit', label: 'Step Configuration' },
+                { id: 'preview', label: 'Live Preview' },
+              ]}
+              activeTab={inspectorTab}
+              onTabChange={setInspectorTab}
+              className="gap-3"
+              buttonClassName="normal-case tracking-normal text-xs font-bold"
+              ariaLabel="Step inspector views"
+            />
 
             <button
               type="button"
@@ -771,20 +824,27 @@ export default function CustomWorkflowEditorPage() {
           </div>
 
           {/* Inspector Body */}
-          <div className="flex-1 overflow-y-auto overscroll-contain portal-scrollbar p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-5">
+          <motion.div
+            initial={false}
+            animate={{ height: isDesktopViewport && inspectorBodyHeight ? `${inspectorBodyHeight}px` : 'auto' }}
+            transition={{ height: { duration: 0.42, ease: [0.22, 1, 0.36, 1] } }}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain portal-scrollbar p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:flex-none lg:overflow-hidden"
+          >
+            <div ref={inspectorContentRef}>
+            <PortalTabTransition activeKey={`${inspectorTab}:${selectedStep?.id || 'none'}`} className="space-y-5" mode="popLayout">
             {!selectedStep ? (
-              <div className="py-12 text-center text-xs text-[color:var(--portal-muted)]">
+              <PortalStaggerCard className="py-12 text-center text-xs text-[color:var(--portal-muted)]">
                 Select a step on the canvas to configure its properties.
-              </div>
+              </PortalStaggerCard>
             ) : inspectorTab === 'preview' ? (
               /* Live Preview with Real Lead Mock Context */
-              <div className="space-y-4">
-                <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-muted)]">
+              <PortalStaggerGroup className="space-y-4" delayChildren={0.07} staggerDelay={0.05}>
+                <PortalStaggerCard className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-muted)]">
                   Previewing with sample lead: <span className="font-semibold text-[color:var(--portal-text)]">Sarah Jenkins · Wedding Reception (150 guests)</span>
-                </div>
+                </PortalStaggerCard>
 
                 {selectedStep.type === 'call_task' ? (
-                  <div className="rounded-2xl border-2 border-emerald-500/50 bg-[color:var(--portal-card)] p-5 space-y-3">
+                  <PortalStaggerCard className="rounded-2xl border-2 border-emerald-500/50 bg-[color:var(--portal-card)] p-5 space-y-3">
                     <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-xs">
                       <Phone size={15} /> Arianna Call Task Card
                     </div>
@@ -792,85 +852,81 @@ export default function CustomWorkflowEditorPage() {
                       {selectedStep.name}
                     </h4>
                     <div className="space-y-1.5 text-xs text-[color:var(--portal-muted)]">
-                      <p>Priority: <span className="font-bold uppercase text-[color:var(--portal-text)]">{selectedStep.type === 'call_task' ? selectedStep.priority : ''}</span></p>
-                      <p>Due Timeframe: <span className="font-bold text-[color:var(--portal-text)]">Within {selectedStep.type === 'call_task' ? selectedStep.dueWithinHours : ''}h</span></p>
+                      <p>Priority: <span className="font-bold uppercase text-[color:var(--portal-text)]">{selectedStep.priority}</span></p>
+                      <p>Due Timeframe: <span className="font-bold text-[color:var(--portal-text)]">Within {selectedStep.dueWithinHours}h</span></p>
                     </div>
                     <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3.5 text-xs text-[color:var(--portal-text)] whitespace-pre-wrap">
-                      {selectedStep.type === 'call_task'
-                        ? (selectedStep.scriptNotes
-                            ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
-                            ?.replace(/\{\{\s*full_name\s*\}\}/g, 'Sarah Jenkins')
-                            ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception')
-                            ?.replace(/\{\{\s*guest_count\s*\}\}/g, '150 guests')
-                            ?.replace(/\{\{\s*target_date\s*\}\}/g, 'October 24, 2026') || 'No script notes entered.')
-                        : 'No script notes entered.'}
+                      {selectedStep.scriptNotes
+                        ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
+                        ?.replace(/\{\{\s*full_name\s*\}\}/g, 'Sarah Jenkins')
+                        ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception')
+                        ?.replace(/\{\{\s*guest_count\s*\}\}/g, '150 guests')
+                        ?.replace(/\{\{\s*target_date\s*\}\}/g, 'October 24, 2026') || 'No script notes entered.'}
                     </div>
-                  </div>
+                  </PortalStaggerCard>
                 ) : selectedStep.type === 'email' ? (
-                  <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-4 shadow-sm">
+                  <PortalStaggerCard className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-4 shadow-sm">
                     <div className="border-b border-[color:var(--portal-border)] pb-3">
                       <p className="text-[10px] font-bold text-[color:var(--portal-muted)] uppercase">Subject</p>
                       <h4 className="font-serif text-base font-semibold text-[color:var(--portal-text)]">
-                        {selectedStep.type === 'email' ? (selectedStep.subject?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah') || 'No subject') : 'No subject'}
+                        {selectedStep.subject?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah') || 'No subject'}
                       </h4>
                       <p className="text-xs text-[color:var(--portal-muted)] mt-1">
-                        {selectedStep.type === 'email' ? selectedStep.previewText?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah') : ''}
+                        {selectedStep.previewText?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')}
                       </p>
                     </div>
                     <div className="text-xs text-[color:var(--portal-text)] whitespace-pre-wrap leading-5">
-                      {selectedStep.type === 'email'
-                        ? (selectedStep.body
-                            ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
-                            ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception')
-                            ?.replace(/\{\{\s*guest_count\s*\}\}/g, '150 guests') || 'Email body content goes here.')
-                        : 'Email body content goes here.'}
+                      {selectedStep.body
+                        ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
+                        ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception')
+                        ?.replace(/\{\{\s*guest_count\s*\}\}/g, '150 guests') || 'Email body content goes here.'}
                     </div>
-                    {selectedStep.type === 'email' && selectedStep.ctaText ? (
+                    {selectedStep.ctaText ? (
                       <div className="pt-2">
                         <button type="button" disabled className="rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-bold text-[#17130b]">
                           {selectedStep.ctaText}
                         </button>
                       </div>
                     ) : null}
-                  </div>
+                  </PortalStaggerCard>
                 ) : selectedStep.type === 'text' ? (
-                  <div className="rounded-2xl border border-sky-500/40 bg-[color:var(--portal-card)] p-5 space-y-3">
+                  <PortalStaggerCard className="rounded-2xl border border-sky-500/40 bg-[color:var(--portal-card)] p-5 space-y-3">
                     <div className="flex items-center gap-2 text-sky-500 font-bold text-xs">
                       <MessageSquare size={14} /> SMS Text Preview
                     </div>
                     <div className="rounded-2xl rounded-bl-sm bg-sky-500/10 border border-sky-500/20 p-4 text-xs text-[color:var(--portal-text)] leading-5">
-                      {selectedStep.type === 'text'
-                        ? (selectedStep.body
-                            ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
-                            ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception') || 'SMS message text.')
-                        : 'SMS message text.'}
+                      {selectedStep.body
+                        ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
+                        ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception') || 'SMS message text.'}
                     </div>
-                  </div>
+                  </PortalStaggerCard>
                 ) : (
-                  <div className="text-xs text-[color:var(--portal-muted)]">
+                  <PortalStaggerCard className="text-xs text-[color:var(--portal-muted)]">
                     Control step: {selectedStep.name}
-                  </div>
+                  </PortalStaggerCard>
                 )}
-              </div>
+              </PortalStaggerGroup>
             ) : (
               /* Step Configuration Form */
-              <div className="space-y-4">
+              <PortalStaggerGroup className="space-y-4" delayChildren={0.06} staggerDelay={0.045}>
                 {/* Step Name */}
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
-                    Step Name / Title
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedStep.name}
-                    onChange={(e) => updateStepField(selectedStep.id, 'name', e.target.value)}
-                    className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
-                  />
-                </div>
+                <PortalStaggerCard>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
+                      Step Name / Title
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedStep.name}
+                      onChange={(e) => updateStepField(selectedStep.id, 'name', e.target.value)}
+                      className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
+                    />
+                  </div>
+                </PortalStaggerCard>
 
                 {/* CALL TASK SPECIFIC CONFIGURATION */}
                 {selectedStep.type === 'call_task' ? (
-                  <div className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
+                  <PortalStaggerCard className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
@@ -885,6 +941,7 @@ export default function CustomWorkflowEditorPage() {
                             { value: 'high', label: 'High' },
                             { value: 'urgent', label: 'Urgent (Immediate)' },
                           ]}
+                        buttonClassName="!min-h-9"
                         />
                       </div>
                       <div>
@@ -901,6 +958,7 @@ export default function CustomWorkflowEditorPage() {
                             { value: '24', label: 'Within 24 hours' },
                             { value: '48', label: 'Within 48 hours' },
                           ]}
+                        buttonClassName="!min-h-9"
                         />
                       </div>
                     </div>
@@ -924,20 +982,22 @@ export default function CustomWorkflowEditorPage() {
                       <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
                         Talking Points & Script Notes
                       </label>
-                      <textarea
+                      <WorkflowTokenEditor
+                        key={selectedStep.id}
+                        ref={callScriptEditorRef}
+                        label="Talking points and script notes"
                         value={selectedStep.type === 'call_task' ? (selectedStep.scriptNotes || '') : ''}
-                        onChange={(e) => updateStepField(selectedStep.id, 'scriptNotes', e.target.value)}
+                        onChange={(value) => updateStepField(selectedStep.id, 'scriptNotes', value)}
                         rows={4}
                         placeholder="e.g. Call {{first_name}} to discuss date availability for {{target_date}} with {{guest_count}}..."
-                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
                       />
                     </div>
-                  </div>
+                  </PortalStaggerCard>
                 ) : null}
 
                 {/* EMAIL SPECIFIC CONFIGURATION */}
                 {selectedStep.type === 'email' ? (
-                  <div className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
+                  <PortalStaggerCard className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
                     {/* Mode toggle */}
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
@@ -1061,12 +1121,12 @@ export default function CustomWorkflowEditorPage() {
                         />
                       </div>
                     </div>
-                  </div>
+                  </PortalStaggerCard>
                 ) : null}
 
                 {/* TEXT (SMS) SPECIFIC CONFIGURATION */}
                 {selectedStep.type === 'text' ? (
-                  <div className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
+                  <PortalStaggerCard className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
                         Authoring Mode
@@ -1144,12 +1204,12 @@ export default function CustomWorkflowEditorPage() {
                         Must start with &ldquo;Luxor Events:&rdquo; and end with &ldquo;Reply STOP to opt out.&rdquo;
                       </p>
                     </div>
-                  </div>
+                  </PortalStaggerCard>
                 ) : null}
 
                 {/* WAIT DELAY SPECIFIC CONFIGURATION */}
                 {selectedStep.type === 'wait' ? (
-                  <div className="grid grid-cols-2 gap-3 border-t border-[color:var(--portal-border)] pt-4">
+                  <PortalStaggerCard className="grid grid-cols-2 gap-3 border-t border-[color:var(--portal-border)] pt-4">
                     <div>
                       <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
                         Delay Amount
@@ -1160,7 +1220,7 @@ export default function CustomWorkflowEditorPage() {
                         max={365}
                         value={selectedStep.type === 'wait' ? (selectedStep.amount || 1) : 1}
                         onChange={(e) => updateStepField(selectedStep.id, 'amount', Number(e.target.value))}
-                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none"
+                        className="h-9 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-xs text-[color:var(--portal-text)] outline-none"
                       />
                     </div>
                     <div>
@@ -1175,14 +1235,15 @@ export default function CustomWorkflowEditorPage() {
                           { value: 'hours', label: 'Hours' },
                           { value: 'days', label: 'Days' },
                         ]}
+                        buttonClassName="!min-h-9"
                       />
                     </div>
-                  </div>
+                  </PortalStaggerCard>
                 ) : null}
 
                 {/* CONDITION SPECIFIC CONFIGURATION */}
                 {selectedStep.type === 'condition' ? (
-                  <div className="space-y-3 border-t border-[color:var(--portal-border)] pt-4">
+                  <PortalStaggerCard className="space-y-3 border-t border-[color:var(--portal-border)] pt-4">
                     <div>
                       <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
                         Condition Rule
@@ -1198,17 +1259,20 @@ export default function CustomWorkflowEditorPage() {
                           { value: 'tour_attended', label: 'Tour was completed' },
                           { value: 'unresponsive', label: 'Lead has not yet scheduled a visit' },
                         ]}
+                        buttonClassName="!min-h-9"
                       />
                     </div>
                     <p className="text-[11px] text-[color:var(--portal-muted)]">
                       If condition is not met, the workflow automatically halts execution cleanly.
                     </p>
-                  </div>
+                  </PortalStaggerCard>
                 ) : null}
-              </div>
+              </PortalStaggerGroup>
             )}
-          </div>
-        </div>
+            </PortalTabTransition>
+            </div>
+          </motion.div>
+        </motion.div>
       </div>
     </PortalPageFrame>
   )

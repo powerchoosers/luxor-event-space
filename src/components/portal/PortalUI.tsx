@@ -291,15 +291,17 @@ export function PortalTabTransition({
   activeKey,
   children,
   className = '',
+  mode = 'wait',
 }: {
   activeKey: string
   children: React.ReactNode
   className?: string
+  mode?: 'sync' | 'wait' | 'popLayout'
 }) {
   const shouldReduceMotion = useReducedMotion()
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
+    <AnimatePresence mode={mode} initial={false}>
       <motion.div
         key={activeKey}
         initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0.72, filter: 'blur(10px)' }}

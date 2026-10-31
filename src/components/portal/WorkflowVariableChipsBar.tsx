@@ -25,9 +25,10 @@ export function WorkflowVariableChipsBar({ onInsert, className = '' }: WorkflowV
           <button
             key={chip.token}
             type="button"
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => onInsert(chip.token)}
             title={`Preview: ${chip.preview}`}
-            className="group inline-flex items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-1 text-[11px] font-medium text-[color:var(--portal-text)] transition hover:border-[#caa24c]/60 hover:bg-[#caa24c]/10 hover:text-[#8c6424] dark:hover:text-[#f1d27a]"
+            className="group inline-flex !min-h-9 items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-0 text-[11px] font-medium text-[color:var(--portal-text)] transition hover:border-[#caa24c]/60 hover:bg-[#caa24c]/10 hover:text-[#8c6424] dark:hover:text-[#f1d27a] sm:!min-h-0 sm:py-1"
           >
             <Plus size={10} className="text-[#a8792f] transition group-hover:scale-125" />
             <span>{chip.label}</span>

@@ -37,6 +37,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { PortalCloseButton, PortalContactAvatar, PortalDatePicker, PortalSelect } from './PortalUI'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
 import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
+import { ElenaWorkflowDraftCard, type ElenaWorkflowDraftPayload } from './ElenaWorkflowDraftCard'
 import {
   ElenaLeadUpdateCard,
   ElenaContractCard,
@@ -71,6 +72,7 @@ type Message = {
   contactCard?: LeadContactCardPayload
   newContactCard?: NewContactCardPayload
   tourInviteCard?: TourInviteCardPayload
+  workflowDraft?: ElenaWorkflowDraftPayload
 }
 
 type LeadContactCardPayload = {
@@ -576,6 +578,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         contactCard?: LeadContactCardPayload
         newContactCard?: NewContactCardPayload
         tourInviteCard?: TourInviteCardPayload
+        workflowDraft?: ElenaWorkflowDraftPayload
         navigation?: { href: string }
       }
       if (requestId !== messageRequestRef.current) return
@@ -605,6 +608,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           contactCard: data.contactCard,
           newContactCard: data.newContactCard,
           tourInviteCard: data.tourInviteCard,
+          workflowDraft: data.workflowDraft,
         }
       ])
       
@@ -624,6 +628,23 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       ])
     } finally {
       if (requestId === messageRequestRef.current) setIsLoading(false)
+    }
+  }
+
+  const handleWorkflowDraftSaved = (msgIndex: number, workflow: { id: string; name: string }) => {
+    const updatedMessages = messages.map((message, index) => index === msgIndex && message.workflowDraft
+      ? { ...message, workflowDraft: { ...message.workflowDraft, savedWorkflowId: workflow.id, savedWorkflowName: workflow.name } }
+      : message)
+    setMessages(updatedMessages)
+    if (currentSessionId) {
+      void fetch('/api/portal/elena-chat/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentSessionId, messages: updatedMessages }),
+      }).then((response) => {
+        if (!response.ok) throw new Error('Could not save the workflow draft status in chat history.')
+        loadSessionsList(currentSessionId)
+      }).catch((error) => console.error(error))
     }
   }
 
@@ -1027,6 +1048,13 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             onSuccess={(successMessage) => {
                               setMessages((prev) => [...prev, { role: 'assistant', content: successMessage }])
                             }}
+                          />
+                        )}
+
+                        {msg.workflowDraft && (
+                          <ElenaWorkflowDraftCard
+                            draft={msg.workflowDraft}
+                            onSaved={(workflow) => handleWorkflowDraftSaved(index, workflow)}
                           />
                         )}
 

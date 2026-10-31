@@ -342,6 +342,10 @@ function validateDraftShape(input: unknown) {
         || step.previewText !== 'We received your Luxor inquiry and will connect with you shortly.'
         || step.body !== '' || step.ctaText !== '' || step.ctaUrl !== ''))
     if (step.type === 'text') return step.requiredConsentScope !== 'marketing' || typeof step.body !== 'string' || step.body.length > 480
+    if (step.type === 'call_task') return typeof step.scriptNotes !== 'string'
+      || typeof step.dueWithinHours !== 'number' || step.dueWithinHours < 1 || step.dueWithinHours > 168
+      || !['low', 'medium', 'high', 'urgent'].includes(step.priority)
+      || (step.assignee !== undefined && typeof step.assignee !== 'string')
     if (step.type === 'wait') return !['minutes', 'hours', 'days'].includes(step.unit) || (step.amount !== null && (!Number.isInteger(step.amount) || step.amount < 0 || step.amount > 365))
     if (step.type === 'condition') return !['follow_up_eligible', 'marketing_email_consent', 'marketing_sms_consent'].includes(step.condition) || step.whenFalse !== 'stop'
     return step.type !== 'end'
