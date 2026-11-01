@@ -5,6 +5,7 @@ import { luxorMailAddress, luxorMailDisplayName, luxorMailFrom } from './luxorMa
 import { luxorResendApi } from './luxorResendApiServer'
 import { prepareLuxorOutbox, saveLuxorMailAttachment, updateLuxorMailRow } from './luxorMailboxServer'
 import { supabaseRest } from './supabaseRestServer'
+import { luxorEmailHtmlToPlainText } from './luxorConversationalEmailServer'
 
 export type LuxorSendMailInput = {
   to: string; subject: string; content: string; from?: string; fromName?: string
@@ -31,8 +32,9 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
   if (!content) throw new Error('Please add an email message.')
   if (input.calendar && input.attachments?.length) throw new Error('Send calendar invitations separately from other attachments.')
   const fromName = luxorMailDisplayName(input.fromName)
-  const html = /<\/?[a-z][\s\S]*>/i.test(content) ? content : null
-  const text = input.text ?? (html ? content.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : content)
+  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(content)
+  const html = hasHtml ? content : null
+  const text = input.text ?? luxorEmailHtmlToPlainText(content)
   const references = (input.references || []).filter((value) => /^<[^<>\s]+>$/.test(value)).slice(-50)
   if (input.inReplyTo && !/^<[^<>\s]+>$/.test(input.inReplyTo)) throw new Error('Invalid reply message identifier.')
   const attachments = input.attachments || []

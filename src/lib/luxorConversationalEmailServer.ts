@@ -26,7 +26,61 @@ function sanitizeRichEmailHtml(html: string) {
     .replace(/<(script|style|iframe|object|embed|form|input|button|meta|link)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
     .replace(/<(script|style|iframe|object|embed|form|input|button|meta|link)\b[^>]*\/?>/gi, '')
     .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/\s+(href|src)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, '')
+    .replace(/\s+(href|src|xlink:href|formaction|action)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi, (attribute, _name: string, _rawValue: string, doubleQuoted: string | undefined, singleQuoted: string | undefined, unquoted: string | undefined) => {
+      const value = decodeEmailHtmlEntities(doubleQuoted ?? singleQuoted ?? unquoted ?? '').replace(/[\u0000-\u0020]/g, '')
+      return /^(?:javascript|vbscript):/i.test(value) ? '' : attribute
+    })
+}
+
+const commonHtmlEntities: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘',
+  rdquo: '”', ldquo: '“', ndash: '–', mdash: '—', hellip: '…', copy: '©', reg: '®', trade: '™',
+}
+
+function decodeEmailHtmlEntities(value: string) {
+  let decoded = value
+  for (let pass = 0; pass < 3; pass += 1) {
+    const previous = decoded
+    decoded = decoded.replace(/&(#(?:x[\da-f]+|\d+)|[a-z][\da-z]+);/gi, (entity, token: string) => {
+      if (token[0] !== '#') return commonHtmlEntities[token.toLowerCase()] ?? entity
+      const isHex = token[1]?.toLowerCase() === 'x'
+      const codePoint = Number.parseInt(token.slice(isHex ? 2 : 1), isHex ? 16 : 10)
+      if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return '\uFFFD'
+      return String.fromCodePoint(codePoint)
+    })
+    if (decoded === previous) break
+  }
+  return decoded
+}
+
+/** Normalize rich-editor output without changing its formatting or leaking editor NBSP artifacts. */
+export function normalizeLuxorReplyHtml(content: string) {
+  return sanitizeRichEmailHtml(content)
+    .replace(/&nbsp;|&#0*160;|&#x0*a0;/gi, ' ')
+    .replace(/[\u00a0\t ]+(?=<\/(?:p|div|li|td|th|h[1-6])\s*>)/gi, '')
+    .trim()
+}
+
+/** Convert editor HTML to readable plain text for provider fallback and sent-history previews. */
+export function luxorEmailHtmlToPlainText(content: string) {
+  const text = content
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/(?:p|div|li|tr|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+  return decodeEmailHtmlEntities(text)
+    .replace(/\u00a0/g, ' ')
+    .replace(/[\t ]+\n/g, '\n')
+    .replace(/\n[\t ]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+export function withoutLuxorEmailSignature(html: string) {
+  return html.replace(
+    /\s*<tr>\s*<td class=["']luxor-signature-wrap["'][\s\S]*(?=\s*<\/table>\s*<\/td>\s*<\/tr>\s*<\/table>)/i,
+    '',
+  )
 }
 
 export function buildConversationalEmailHtml(params: ConversationalEmailParams): string {

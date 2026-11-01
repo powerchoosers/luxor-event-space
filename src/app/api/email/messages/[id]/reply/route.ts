@@ -10,6 +10,9 @@ import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { enqueueLuxorTestEmail } from '@/lib/luxorTestLeadServer'
 import { buildLuxorTestEmailTemplate } from '@/lib/luxorTestEmailTemplates'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { buildConversationalEmailHtml, luxorEmailHtmlToPlainText, normalizeLuxorReplyHtml, withoutLuxorEmailSignature } from '@/lib/luxorConversationalEmailServer'
+import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
+import { getPublicLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -17,8 +20,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     const { id } = await params
     const body = await request.json() as { content?: string; folderId?: string | null; inquiryId?: string | null; deliveryKey?: string }
-    const content = String(body.content || '').trim()
-    if (!content) return NextResponse.json({ error: 'Reply content is required.' }, { status: 400 })
+    const editorContent = String(body.content || '').trim()
+    if (!editorContent) return NextResponse.json({ error: 'Reply content is required.' }, { status: 400 })
     const linkedInquiry = body.inquiryId ? await getLuxorInquiry(body.inquiryId) : null
     if (linkedInquiry?.is_test === true) {
       const [run] = await supabaseRest<Array<{ id: string }>>(
@@ -53,6 +56,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       : normalizeEmailAddress(original.to)
     const baseSubject = original.subject.replace(/^(\s*re\s*:\s*)+/i, '').trim() || '(No subject)'
     const subject = `Re: ${baseSubject}`
+    const normalizedHtml = normalizeLuxorReplyHtml(editorContent)
+    const replyText = luxorEmailHtmlToPlainText(normalizedHtml)
+    const content = replyText
+    if (!replyText) return NextResponse.json({ error: 'Reply content is required.' }, { status: 400 })
+    const [senderProfile, senderPhone] = await Promise.all([
+      getLuxorUserProfile(session.email),
+      getPublicLuxorPhoneNumber(),
+    ])
+    const senderEmail = session.mailboxAddress || senderProfile.email
+    const hasCompleteLuxorLayout = /class=["']luxor-outer["']/i.test(normalizedHtml)
+    const textTail = replyText.trimEnd().toLowerCase()
+    const hasSenderSignature = /class=["']luxor-signature-wrap["']/i.test(normalizedHtml)
+      || textTail.endsWith(senderEmail.toLowerCase())
+      || (senderProfile.displayName.length > 2 && textTail.endsWith(senderProfile.displayName.toLowerCase()))
+    const formattedContent = buildConversationalEmailHtml({
+      to: recipient,
+      subject,
+      body: replyText,
+      bodyHtml: /<\/?[a-z][\s\S]*>/i.test(normalizedHtml) ? normalizedHtml : undefined,
+      senderName: senderProfile.displayName,
+      senderRole: senderProfile.roleTitle,
+      senderEmail,
+      senderPhone,
+      senderImageUrl: senderProfile.avatarUrl,
+    })
+    const outgoingContent = hasCompleteLuxorLayout
+      ? normalizedHtml
+      : hasSenderSignature
+        ? withoutLuxorEmailSignature(formattedContent)
+        : formattedContent
+
     let internetMessageId = mailRow?.internet_message_id
     if (useResend && mailRow?.provider === 'resend' && !internetMessageId && mailRow.provider_id) {
       const sent = await luxorResendApi<{ message_id: string }>(`/emails/${encodeURIComponent(mailRow.provider_id)}`)
@@ -60,13 +94,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     if (useResend && !internetMessageId) throw new Error('The original email identifier is missing or still syncing. Review the original before replying.')
     const result = useResend && mailRow ? await sendLuxorResendEmail({
-      content, to: mailRow.direction === 'incoming' ? mailRow.reply_to_addresses[0] || recipient : recipient,
+      content: outgoingContent, to: mailRow.direction === 'incoming' ? mailRow.reply_to_addresses[0] || recipient : recipient,
       subject, from: session.mailboxAddress || session.email, inReplyTo: internetMessageId!,
       references: [...mailRow.reference_ids, internetMessageId!], threadId: mailRow.thread_key,
       idempotencyKey: body.deliveryKey ? `reply/${body.deliveryKey}` : undefined,
     }) : await replyLuxorZohoEmail({
       messageId: mailRow ? String(mailRow.metadata.zohoMessageId || '') : id,
-      content,
+      content: outgoingContent,
       to: recipient,
       subject,
       from: session.mailboxAddress || session.email,
@@ -87,9 +121,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         to: result.to,
         cc: '',
         receivedAt: now,
-        summary: content,
-        content,
-        htmlContent: null,
+        summary: replyText,
+        content: replyText,
+        htmlContent: outgoingContent,
         hasAttachment: false,
         isRead: true,
         direction: 'outgoing',
