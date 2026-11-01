@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
+import { LeadPaymentsDashboard } from '@/components/portal/LeadPaymentsDashboard'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
@@ -1010,6 +1011,10 @@ export default function LeadDetailPage({
     () => isolatedTestLead ? [] : selectedLeadEvent ? bookings.filter((booking) => booking.lead_event_id === selectedLeadEvent.id) : bookings,
     [bookings, isolatedTestLead, selectedLeadEvent],
   )
+  const paymentDashboardBooking = useMemo(
+    () => [...eventBookings].filter((booking) => booking.status !== 'cancelled').sort((left, right) => new Date(right.updated_at || right.created_at).getTime() - new Date(left.updated_at || left.created_at).getTime())[0] || null,
+    [eventBookings],
+  )
   const eventBookingIds = useMemo(() => new Set(eventBookings.map((booking) => booking.id)), [eventBookings])
   const eventInvoices = useMemo(
     () => isolatedTestLead ? [] : selectedLeadEvent
@@ -1060,7 +1065,7 @@ export default function LeadDetailPage({
   })
   useEffect(() => {
     let cancelled = false
-    const bookingId = currentProposalBooking?.id
+    const bookingId = paymentDashboardBooking?.id
     if (!bookingId) {
       setPaymentInstallments([])
       return () => { cancelled = true }
@@ -1070,7 +1075,7 @@ export default function LeadDetailPage({
       .then((rows) => { if (!cancelled) setPaymentInstallments(Array.isArray(rows) ? rows : []) })
       .catch(() => { if (!cancelled) setPaymentInstallments([]) })
     return () => { cancelled = true }
-  }, [currentProposalBooking?.id, paymentInstallmentRefresh])
+  }, [paymentDashboardBooking?.id, paymentInstallmentRefresh])
   const lifecycleBooking = currentProposalInvoice ? currentProposalBooking : latestBooking
   const activeEventForDisplay = useMemo(() => {
     if (!lead) return null
@@ -4021,7 +4026,7 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final', receivedMethod?: 'cash' | 'zelle' | 'check', timingEvidence?: SameDayReceiptEvidence) => {
+  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final' | 'security_deposit', receivedMethod?: 'cash' | 'zelle' | 'check', timingEvidence?: SameDayReceiptEvidence) => {
     const master = invoices.find(invoice => invoice.id === booking.invoice_id)
     if (paymentKind === 'deposit' && sameDayBookingPromotion(master)?.coverage_amount && !timingEvidence) { setSameDayReceipt({ booking, method: receivedMethod }); return }
     const preferredMethod = receivedMethod || ((booking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'manual').toLowerCase()
@@ -4052,20 +4057,24 @@ export default function LeadDetailPage({
       if (paymentPayload.reviewRequired) { notify({ title: 'Payment received — review required', description: paymentPayload.message || 'Please do not collect another payment. The reservation is pending owner review.', variant: 'info' }); return }
       if (paymentPayload.alreadyPaid) {
         notify({
-          title: paymentKind === 'deposit' ? 'Initial payment already recorded' : 'Final balance already recorded',
-          description: paymentKind === 'deposit'
-            ? 'The initial booking payment is complete and the $750 refundable security deposit is held.'
-            : 'The final event balance is already paid. The $750 refundable security deposit remains held separately.',
+        title: paymentKind === 'deposit' ? 'Initial payment already recorded' : paymentKind === 'security_deposit' ? 'Security deposit already recorded' : 'Final balance already recorded',
+        description: paymentKind === 'deposit'
+          ? 'The initial booking payment is complete and the refundable security deposit is held.'
+          : paymentKind === 'security_deposit'
+            ? 'The refundable security deposit is already recorded.'
+            : 'The final event balance is already paid. The refundable security deposit remains held separately.',
           variant: 'success',
         })
         return
       }
       const amount = Number(paymentPayload.payment?.amount || paymentPayload.invoice?.total || 0)
       notify({
-        title: paymentKind === 'deposit' ? 'Initial payment recorded' : 'Final event balance recorded',
+        title: paymentKind === 'deposit' ? 'Initial payment recorded' : paymentKind === 'security_deposit' ? 'Security deposit recorded' : 'Final event balance recorded',
         description: paymentKind === 'deposit'
-          ? formatMoney(amount) + ' recorded. This includes the initial booking payment and the separate $750 refundable security deposit, now held.'
-          : formatMoney(amount) + ' recorded for the final event balance. The $750 refundable security deposit remains held separately.',
+          ? formatMoney(amount) + ' recorded. The refundable security deposit is tracked separately.'
+          : paymentKind === 'security_deposit'
+            ? formatMoney(amount) + ' recorded as a refundable security deposit.'
+            : formatMoney(amount) + ' recorded for the final event balance. The refundable security deposit remains held separately.',
         variant: 'success',
       })
     } catch (err) {
@@ -4376,9 +4385,7 @@ export default function LeadDetailPage({
   const selectedEventProposalContext = selectedLeadEvent && currentProposalEvent?.id === selectedLeadEvent.id
     ? currentProposalInvoice?.proposal_context
     : null
-  const selectedEventBooking = [...eventBookings]
-    .filter((booking) => booking.status !== 'cancelled')
-    .sort((left, right) => new Date(right.updated_at || right.created_at).getTime() - new Date(left.updated_at || left.created_at).getTime())[0]
+  const selectedEventBooking = paymentDashboardBooking
   const resolvedPlanningTimes = resolveLuxorEventPlanningTimes(
     selectedLeadEvent?.metadata,
     selectedEventProposalContext,
@@ -9128,9 +9135,8 @@ export default function LeadDetailPage({
           </div>
           ) : null}
 
-          {activeLeadTab === 'documents' || activeLeadTab === 'payments' ? (
+          {activeLeadTab === 'documents' ? (
           <div id="lead-billing" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
-            {activeLeadTab === 'payments' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="payments" onOpenProposal={() => openProposalBuilder()} /> : null}
             <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
               <span className="flex items-center gap-2.5">
                 <FileText size={16} className="text-zinc-500" />
@@ -9209,6 +9215,24 @@ export default function LeadDetailPage({
               </div>
             )}
           </div>
+          ) : null}
+
+          {activeLeadTab === 'payments' ? (isLuxorTestInquiry(lead)
+            ? activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="payments" onOpenProposal={() => openProposalBuilder()} /> : null
+            : <LeadPaymentsDashboard
+                leadName={lead.full_name}
+                leadEmail={lead.email}
+                booking={paymentDashboardBooking}
+                eventInvoice={eventInvoices.find((invoice) => invoice.id === paymentDashboardBooking?.invoice_id) || eventInvoices.find((invoice) => invoice.invoice_kind === 'event') || currentProposalInvoice}
+                invoices={eventInvoices}
+                payments={eventPayments}
+                installments={paymentInstallments}
+                reminderJobs={tourEmailJobs}
+                paymentLoadError={paymentLoadError}
+                onRecordPayment={(booking, kind) => handleRecordManualPayment(booking, kind)}
+                onViewInvoice={setPdfPreviewInvoice}
+                onRequestInvoicePayment={openPaymentRequest}
+              />
           ) : null}
         </div>
       </div>
