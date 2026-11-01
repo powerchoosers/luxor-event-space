@@ -155,6 +155,16 @@ function getRequestedTourLanguage(lead: LuxorInquiry) {
 const DEFAULT_LEAD_SORT: TableSort<LeadSortKey> = { key: 'intake', direction: 'desc' }
 const DEFAULT_CLIENT_SORT: TableSort<ClientSortKey> = { key: 'targetDate', direction: 'asc' }
 
+const LEADS_TAB_LABELS: Record<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups', string> = {
+  dashboard: 'Funnel Dashboard',
+  pipeline: 'Pipeline Board',
+  tours: 'Tours',
+  followups: 'Follow Ups',
+  proposals: 'Proposals & Contracts',
+  clients: 'Booked Clients',
+  lost: 'Archived',
+}
+
 export default function LeadsPage() {
   const { notify } = useToast()
   const reduceMotion = useReducedMotion()
@@ -635,6 +645,24 @@ export default function LeadsPage() {
 
               </>
             )}
+            {/* iPad/Tablet Browse Views button (positioned immediately to the left of New Lead) */}
+            <button
+              type="button"
+              onClick={() => setIsTabMenuOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={isTabMenuOpen}
+              aria-label={`Browse views. Currently viewing ${LEADS_TAB_LABELS[activeTab] || 'views'}`}
+              className="hidden md:inline-flex xl:hidden min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+            >
+              <Menu size={16} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[8px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)] leading-none">Browse views</span>
+                <span className="mt-0.5 block truncate text-xs font-bold leading-tight max-w-[130px] lg:max-w-[170px]">
+                  {LEADS_TAB_LABELS[activeTab] || 'Funnel Dashboard'}
+                </span>
+              </span>
+              <ChevronDown size={15} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
+            </button>
             <PortalButton variant="primary" className="max-sm:gap-1.5 max-sm:px-3 max-sm:text-[9px] !text-white hover:!text-white [&>svg]:!text-white" onClick={() => setIsLeadDrawerOpen(true)}>
               <Plus size={14} /> New Lead
             </PortalButton>
@@ -655,21 +683,15 @@ export default function LeadsPage() {
           <span className="min-w-0 flex-1">
             <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse views</span>
             <span className="mt-0.5 block truncate text-sm font-bold">
-              {activeTab === 'dashboard' && 'Funnel Dashboard'}
-              {activeTab === 'pipeline' && 'Pipeline Board'}
-              {activeTab === 'tours' && 'Tours'}
-              {activeTab === 'followups' && 'Follow Ups'}
-              {activeTab === 'proposals' && 'Proposals & Contracts'}
-              {activeTab === 'clients' && 'Booked Clients'}
-              {activeTab === 'lost' && 'Archived'}
+              {LEADS_TAB_LABELS[activeTab] || 'Funnel Dashboard'}
             </span>
           </span>
           <ChevronDown size={17} className="text-[color:var(--portal-muted)] shrink-0" aria-hidden="true" />
         </button>
       </div>
 
-      {/* Desktop & tablet sub-tab navigation */}
-      <div className="hidden md:flex portal-scrollbar min-w-0 w-full max-w-full shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2">
+      {/* Desktop sub-tab navigation (hidden on mobile and tablet/iPad to prevent overflow scrolling) */}
+      <div className="hidden xl:flex portal-scrollbar min-w-0 w-full max-w-full shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2">
         <PortalAnimatedTabs
           tabs={[
           { id: 'dashboard', label: 'Funnel Dashboard', icon: <TrendingUp size={15} /> },
@@ -689,7 +711,7 @@ export default function LeadsPage() {
         />
       </div>
 
-      {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 flex flex-col overflow-visible mt-0 max-md:![transform:none] max-md:![filter:none] ${activeTab === 'dashboard' ? '' : '-mx-4 sm:mx-0'} ${activeTab === 'tours' ? 'max-md:-mb-16' : ''}`}>
+      {viewPreferencesReady ? <PortalTabTransition activeKey={activeTab} className={`flex-1 min-h-0 flex flex-col overflow-visible mt-0 max-md:![transform:none] max-md:![filter:none] ${activeTab === 'dashboard' ? '' : '-mx-4 sm:mx-0'}`}>
         {activeTab === 'dashboard' && (
           <LeadsDashboard
             leads={activeLeads}
@@ -2271,9 +2293,11 @@ function LeadsToursTab({
     return saved === 'past' ? 'needs_outcome' : saved && ['all', 'today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled'].includes(saved) ? saved as TourView : 'all'
   })
   const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
 
   const saveView = (nextView: TourView) => {
     setView(nextView)
+    setCurrentPage(1)
     window.localStorage.setItem('luxor_leads_tours_view', nextView)
   }
 
@@ -2318,6 +2342,53 @@ function LeadsToursTab({
 
   const categoryLabels: Record<TourCategory, string> = { today: 'Today', upcoming: 'Upcoming', completed: 'Completed', no_shows: 'No Shows', needs_outcome: 'Needs Outcome', needs_schedule: 'Needs Schedule', cancelled: 'Cancelled' }
   const categoryOrder: TourCategory[] = ['today', 'upcoming', 'completed', 'no_shows', 'needs_outcome', 'needs_schedule', 'cancelled']
+
+  const allOrderedTours = useMemo(() => {
+    return categoryOrder.flatMap((category) => grouped[category])
+  }, [grouped])
+
+  const activeTours = useMemo(() => {
+    return view === 'all' ? allOrderedTours : grouped[view]
+  }, [allOrderedTours, grouped, view])
+
+  const totalPages = Math.max(1, Math.ceil(activeTours.length / 25))
+  const page = Math.min(currentPage, totalPages)
+  const startIndex = (page - 1) * 25
+  const paginatedTours = useMemo(() => {
+    return activeTours.slice(startIndex, startIndex + 25)
+  }, [activeTours, startIndex])
+
+  const paginatedGrouped = useMemo(() => {
+    const result: Record<TourCategory, LuxorInquiry[]> = { today: [], upcoming: [], completed: [], no_shows: [], needs_outcome: [], needs_schedule: [], cancelled: [] }
+    paginatedTours.forEach((tour) => {
+      const category = getLuxorTourSection(tour, todayKey)
+      if (category && result[category]) {
+        result[category].push(tour)
+      }
+    })
+    return result
+  }, [paginatedTours, todayKey])
+
+  const visibleCategories = useMemo(() => {
+    if (view !== 'all') return [view]
+    if (activeTours.length === 0) return ['today', 'upcoming'] as TourCategory[]
+    if (page === 1) {
+      return categoryOrder.filter((category) => category === 'today' || category === 'upcoming' || paginatedGrouped[category].length > 0)
+    }
+    return categoryOrder.filter((category) => paginatedGrouped[category].length > 0)
+  }, [activeTours.length, page, paginatedGrouped, view])
+
+  const handlePageChange = (nextPage: number) => {
+    setCurrentPage(nextPage)
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      const tableScroller = document.querySelector('[data-portal-table-scroller]') as HTMLElement | null
+      if (tableScroller) {
+        tableScroller.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+  }
+
   const activeTourFilters = view === 'all' ? [] : [{
     id: 'tour-category',
     label: categoryLabels[view],
@@ -2372,12 +2443,13 @@ function LeadsToursTab({
     <PortalTableCard
       mobilePageScroll
       footerClassName="max-md:hidden"
+      footer={<LeadsListPagination count={activeTours.length} currentPage={page} totalPages={totalPages} startIndex={startIndex} noun={activeTours.length === 1 ? 'tour' : 'tours'} onPageChange={handlePageChange} />}
       controls={
         <PortalFilterBar
           searchValue={searchTerm}
-          onSearchChange={setSearchTerm}
+          onSearchChange={(value) => { setSearchTerm(value); setCurrentPage(1) }}
           searchPlaceholder="Search tours, clients, or contact details"
-          resultLabel={loading ? 'Loading tours' : `${tours.length.toLocaleString()} ${tours.length === 1 ? 'tour' : 'tours'}`}
+          resultLabel={loading ? 'Loading tours' : `${activeTours.length.toLocaleString()} ${activeTours.length === 1 ? 'tour' : 'tours'}`}
           activeFilters={activeTourFilters}
           onClearFilters={() => saveView('all')}
           searchWidthClassName="w-full min-w-0"
@@ -2405,7 +2477,7 @@ function LeadsToursTab({
       <PortalSkeletonTransition
         loading={loading}
         skeleton={
-          <div className="space-y-7 py-4 sm:p-6">
+          <div className="space-y-7 py-4 sm:p-6 pb-20 md:pb-6">
             <section aria-label="Loading scheduled tours">
               <div className="mb-3 flex items-center gap-3 px-4 sm:px-0">
                 <PortalSkeleton className="h-3 w-28 rounded" />
@@ -2420,13 +2492,17 @@ function LeadsToursTab({
           </div>
         }
       >
-        <div className="space-y-7 py-4 sm:p-6">
-          {(view === 'all' ? categoryOrder : [view]).map((category) => (
-            <section key={category} aria-labelledby={'tour-' + category + '-heading'}>
-              <div className="mb-3 flex items-center gap-3 px-4 sm:px-0"><h4 id={'tour-' + category + '-heading'} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
-              {grouped[category].length === 0 ? <p className="mx-4 rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)] sm:mx-0">No tours in this category.</p> : <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 xl:grid-cols-3 max-md:[&>article:not(:last-child)]:border-b-0">{grouped[category].map(renderTourCard)}</div>}
-            </section>
-          ))}
+        <div className="space-y-7 py-4 sm:p-6 pb-20 md:pb-6">
+          {searchTerm.trim() && activeTours.length === 0 ? (
+            <p className="mx-4 rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-8 text-center text-sm text-[color:var(--portal-muted)] sm:mx-0">No tours matching search parameters.</p>
+          ) : (
+            visibleCategories.map((category) => (
+              <section key={category} aria-labelledby={'tour-' + category + '-heading'}>
+                <div className="mb-3 flex items-center gap-3 px-4 sm:px-0"><h4 id={'tour-' + category + '-heading'} className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{categoryLabels[category]}</h4><span className="text-[10px] text-[color:var(--portal-muted)]">{grouped[category].length}</span></div>
+                {grouped[category].length === 0 ? <p className="mx-4 rounded-lg border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)] sm:mx-0">No tours in this category.</p> : <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-4 xl:grid-cols-3 max-md:[&>article:not(:last-child)]:border-b-0">{paginatedGrouped[category].map(renderTourCard)}</div>}
+              </section>
+            ))
+          )}
         </div>
       </PortalSkeletonTransition>
     </PortalTableCard>
