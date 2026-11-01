@@ -2274,10 +2274,17 @@ function ThreadMessage({
         scrollContainer.scrollTop += event.deltaY
         event.preventDefault()
       }
+      const getTouchScreenY = (touch: Touch | undefined) => {
+        if (!touch) return null
+        if (typeof touch.screenY === 'number' && Number.isFinite(touch.screenY)) {
+          return touch.screenY
+        }
+        return typeof touch.clientY === 'number' && Number.isFinite(touch.clientY) ? touch.clientY : null
+      }
       const beginTouch = (event: TouchEvent) => {
         cancelContainerMomentum()
         touchVelocity = 0
-        lastTouchY = event.touches.length === 1 ? event.touches[0]?.clientY ?? null : null
+        lastTouchY = event.touches.length === 1 ? getTouchScreenY(event.touches[0]) : null
         lastTouchAt = event.timeStamp
       }
       const handOffTouch = (event: TouchEvent) => {
@@ -2286,8 +2293,8 @@ function ThreadMessage({
           cancelContainerMomentum()
           return
         }
-        const nextTouchY = event.touches[0]?.clientY
-        if (nextTouchY === undefined) return
+        const nextTouchY = getTouchScreenY(event.touches[0])
+        if (nextTouchY === null) return
         if (lastTouchY === null) {
           lastTouchY = nextTouchY
           lastTouchAt = event.timeStamp
@@ -2301,7 +2308,7 @@ function ThreadMessage({
           : 0
         lastTouchY = nextTouchY
         lastTouchAt = event.timeStamp
-        event.preventDefault()
+        if (event.cancelable) event.preventDefault()
       }
       const endTouch = (event: TouchEvent) => {
         lastTouchY = null
@@ -2376,7 +2383,7 @@ function ThreadMessage({
               srcDoc={html}
               title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
               ref={cleanupMessageFrame}
-              className="w-full border-0 bg-transparent"
+              className="w-full border-0 bg-transparent touch-pan-y"
               style={{
                 height: frameHeight,
                 opacity: readyFrameKey === frameKey ? 1 : 0,
@@ -2464,7 +2471,7 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:0;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}table.luxor-card{border-radius:16px!important;overflow:hidden!important}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:0;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}table.luxor-card{border-radius:16px!important;overflow:hidden!important}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
 }
 
 function hasDarkEmailSurface(html: string) {
