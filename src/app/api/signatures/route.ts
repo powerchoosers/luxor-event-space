@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
           status: signature.status,
           contract_title: signature.contract_title,
           signed_at: signature.signed_at,
+          has_executed_document: Boolean(signature.executed_document_path),
         },
         signingUrl: `/secure-portal/sign/${encodeURIComponent(signature.token)}`,
       })
@@ -45,6 +46,7 @@ export async function GET(request: NextRequest) {
       created_at: signature.created_at,
       updated_at: signature.updated_at,
       signed_at: signature.signed_at,
+      has_executed_document: Boolean(signature.executed_document_path),
     })))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch signature requests.'

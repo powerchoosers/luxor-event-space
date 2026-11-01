@@ -489,7 +489,7 @@ export default function LeadDetailPage({
   const bookingsRef = useRef(bookings)
   bookingsRef.current = bookings
   const [documents, setDocuments] = useState<LuxorDocument[]>([])
-  const [signatureRequests, setSignatureRequests] = useState<Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null }>>([])
+  const [signatureRequests, setSignatureRequests] = useState<Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null; has_executed_document: boolean }>>([])
   const [leadEvents, setLeadEvents] = useState<LuxorLeadEvent[]>([])
   const [activeEventId, setActiveEventId] = useState<string | null>(null)
   const selectedLeadEventIdRef = useRef<string | null>(null)
@@ -1856,7 +1856,7 @@ export default function LeadDetailPage({
       setTasks(isLuxorTestInquiry(leadData) ? [] : tasksData)
       setInvoices(invoicesData)
       setDocuments((documentsData as LuxorDocument[]).filter((document) => document.inquiry_id === id))
-      setSignatureRequests((signaturesData as Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null }>).filter((signature) => signature.inquiry_id === id))
+      setSignatureRequests((signaturesData as Array<{ id: string; booking_id: string; inquiry_id: string | null; client_name: string; status: string; created_at: string; signed_at: string | null; has_executed_document: boolean }>).filter((signature) => signature.inquiry_id === id))
       const nextBookings = bookingsData as LuxorBooking[]
       const previousStatuses = contractStatusSnapshotRef.current
       if (Object.keys(previousStatuses).length) {
@@ -3704,17 +3704,20 @@ export default function LeadDetailPage({
     try {
       setContractActionKey(`preview-${booking.id}`)
       let response = await fetch(`/api/signatures?bookingId=${encodeURIComponent(booking.id)}`, { cache: 'no-store' })
-      let data = await response.json().catch(() => ({})) as { signature?: { id: string; status: string }; error?: string }
+      let data = await response.json().catch(() => ({})) as { signature?: { id: string; status: string; has_executed_document?: boolean }; error?: string }
       if (!response.ok) {
         response = await fetch('/api/signatures', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bookingId: booking.id, sendEmail: false, signingMode: 'in_person' }),
         })
-        data = await response.json().catch(() => ({})) as { signature?: { id: string; status: string }; error?: string }
+        data = await response.json().catch(() => ({})) as { signature?: { id: string; status: string; has_executed_document?: boolean }; error?: string }
       }
       if (!response.ok || !data.signature?.id) throw new Error(data.error || 'The agreement preview could not be prepared.')
       const signed = data.signature.status === 'signed'
+      if (signed && !data.signature.has_executed_document) {
+        throw new Error('The executed agreement PDF is not available yet. The original agreement remains available in the PDF library below.')
+      }
       setDocumentPreview({
         title: signed ? 'Executed agreement preview' : 'Agreement preview',
         url: `/api/signatures/${encodeURIComponent(data.signature.id)}/document?kind=${signed ? 'executed' : 'contract'}`,
@@ -8944,11 +8947,20 @@ export default function LeadDetailPage({
                 })}
                 {signatureRequests.map((signature) => {
                   const signed = signature.status === 'signed' || Boolean(signature.signed_at)
-                  const title = signed ? 'Executed agreement' : 'Agreement PDF'
-                  const url = `/api/signatures/${encodeURIComponent(signature.id)}/document?kind=${signed ? 'executed' : 'contract'}`
-                  return <div key={signature.id} className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                    <div className="min-w-0"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{title}</p><p className="mt-1 truncate text-[10px] capitalize text-[color:var(--portal-muted)]">{signature.status.replaceAll('_', ' ')}{signature.signed_at ? ` • ${formatDisplayDate(signature.signed_at)}` : ''}</p></div>
-                    <div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => setDocumentPreview({ title, url })} className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><Eye size={12} /> Preview</button><a href={url} download className="inline-flex items-center rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Download</a></div>
+                  const status = `${signature.status.replaceAll('_', ' ')}${signature.signed_at ? ` • ${formatDisplayDate(signature.signed_at)}` : ''}`
+                  const originalTitle = 'Original agreement'
+                  const originalUrl = `/api/signatures/${encodeURIComponent(signature.id)}/document?kind=contract`
+                  const executedTitle = 'Executed agreement'
+                  const executedUrl = `/api/signatures/${encodeURIComponent(signature.id)}/document?kind=executed`
+                  return <div key={signature.id} className="space-y-2">
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                      <div className="min-w-0"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{originalTitle}</p><p className="mt-1 truncate text-[10px] capitalize text-[color:var(--portal-muted)]">{status}</p></div>
+                      <div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => setDocumentPreview({ title: originalTitle, url: originalUrl })} className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><Eye size={12} /> Preview</button><a href={originalUrl} download className="inline-flex items-center rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Download</a></div>
+                    </div>
+                    {signed && signature.has_executed_document ? <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                      <div className="min-w-0"><p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{executedTitle}</p><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">Signed copy</p></div>
+                      <div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => setDocumentPreview({ title: executedTitle, url: executedUrl })} className="inline-flex items-center gap-1.5 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><Eye size={12} /> Preview</button><a href={executedUrl} download className="inline-flex items-center rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]">Download</a></div>
+                    </div> : signed ? <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Executed agreement PDF is not available yet. The original agreement remains available above.</p> : null}
                   </div>
                 })}
               </div>

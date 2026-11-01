@@ -11,10 +11,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const signature = await getLuxorSignatureRequestById(id)
     if (!signature) return NextResponse.json({ error: 'Signature request not found.' }, { status: 404 })
     const kind = request.nextUrl.searchParams.get('kind') === 'executed' ? 'executed' : 'contract'
-    const path = kind === 'executed' && signature.executed_document_path
+    const path = kind === 'executed'
       ? signature.executed_document_path
       : signature.contract_document_path
-    if (!path) return NextResponse.json({ error: 'That PDF is not available yet.' }, { status: 404 })
+    if (!path) {
+      const label = kind === 'executed' ? 'The executed agreement PDF' : 'The original agreement PDF'
+      return NextResponse.json({ error: `${label} is not available yet.` }, { status: 404 })
+    }
     const pdf = await downloadLuxorPrivatePdf(path)
     return new NextResponse(Buffer.from(pdf), {
       headers: {
