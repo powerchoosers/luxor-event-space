@@ -817,10 +817,6 @@ export async function signLuxorSignatureRequest(input: {
     immutableSignatureDataUrl = recordedClientSignatureDataUrl(updated)
 
     if (signatureRecordedByThisAttempt && updated) {
-      if (!sameDayBookingPromotion(master)?.coverage_amount) await updateLuxorBooking(signature.booking_id, {
-        contract_status: 'signed',
-        contract_signed_at: signedAt,
-      })
       await reconcileLuxorSameDayReceipts(signature.booking_id)
 
       // Persist the owner-visible signing signal before rendering PDFs,
@@ -910,14 +906,6 @@ export async function signLuxorSignatureRequest(input: {
   // failed, restore the one required booking state before continuing the
   // idempotent execution/payment recovery below.
   if (!signatureRecordedByThisAttempt && executionSignature.status === 'signed') {
-    const recoveredBooking = await getLuxorBooking(signature.booking_id)
-    const recoveredMaster = recoveredBooking?.invoice_id ? await getInvoice(recoveredBooking.invoice_id) : null
-    if (recoveredBooking && recoveredBooking.contract_status !== 'signed' && !sameDayBookingPromotion(recoveredMaster)?.coverage_amount) {
-      await updateLuxorBooking(signature.booking_id, {
-        contract_status: 'signed',
-        contract_signed_at: recoveredBooking.contract_signed_at || signedAt,
-      })
-    }
     await ensureLuxorSignedOwnerActivity(executionSignature, input.signedName)
     await reconcileLuxorSameDayReceipts(signature.booking_id)
   }
@@ -941,12 +929,11 @@ export async function signLuxorSignatureRequest(input: {
   let executedAuditPdf: Uint8Array
   let executionCreatedThisAttempt = false
 
-  // If execution was already stored, do not regenerate its immutable client
-  // copy or re-notify the owner. We can still safely resume the Stripe/email
+  // If a complete execution was already stored, do not regenerate its
+  // immutable client copy. We can still safely resume the Stripe/email
   // handoff below, where the checkout and mail job have their own idempotency
-  // keys. If either stored PDF is unavailable, rebuilding the same paths is
-  // the recovery path.
-  if (signature.executed_document_path && signature.audit_document_path) {
+  // keys. Missing owner-signature evidence requires rebuilding the same paths.
+  if (signature.owner_signed_at && signature.executed_document_path && signature.audit_document_path) {
     try {
       ;[executedCustomerPdf, executedAuditPdf] = await Promise.all([
         downloadLuxorPrivatePdf(signature.executed_document_path),
@@ -998,8 +985,8 @@ export async function signLuxorSignatureRequest(input: {
       ownerSignedAt,
       events,
     })
-    const executedPath = `contracts/${signature.booking_id}/${signature.id}/Luxor-Event-Agreement-Executed.pdf`
-    const auditPath = `contracts/${signature.booking_id}/${signature.id}/audit/Luxor-Event-Agreement-Audit.pdf`
+    const executedPath = signature.executed_document_path || `contracts/${signature.booking_id}/${signature.id}/Luxor-Event-Agreement-Executed.pdf`
+    const auditPath = signature.audit_document_path || `contracts/${signature.booking_id}/${signature.id}/audit/Luxor-Event-Agreement-Audit.pdf`
     executedCustomerPdf = executed.customer.bytes
     executedAuditPdf = executed.audit.bytes
     await Promise.all([
@@ -1018,6 +1005,37 @@ export async function signLuxorSignatureRequest(input: {
     if (!completed) throw new Error('The executed agreement could not be recorded. Please retry the signing step.')
     executionCreatedThisAttempt = true
   }
+
+  // A booking is eligible for payment only after the owner's countersignature
+  // and both immutable agreement artifacts are saved. The client signature is
+  // durable earlier so this flow can resume after an interrupted PDF upload.
+  if (!completed?.owner_signed_at || !completed.executed_document_path || !completed.audit_document_path) {
+    completed = await updateLuxorSignatureRequest(signature.id, {
+      owner_name: ownerName,
+      owner_email: ownerEmail,
+      owner_signed_at: ownerSignedAt,
+      executed_document_path: completed?.executed_document_path || signature.executed_document_path,
+      audit_document_path: completed?.audit_document_path || signature.audit_document_path,
+      metadata: { ...(completed?.metadata || executionSignature.metadata || {}), transactionalNoticesVersion: 1 },
+    })
+    if (!completed) throw new Error('The executed agreement could not be recorded. Please retry the signing step.')
+  }
+  if (!completed.owner_signed_at || !completed.executed_document_path || !completed.audit_document_path) {
+    throw new Error('The executed agreement is not complete yet. Please retry the signing step.')
+  }
+
+  const bookingBeforeCompletion = await getLuxorBooking(signature.booking_id)
+  if (!bookingBeforeCompletion) throw new Error('The signed booking could not be reloaded after agreement execution.')
+  if (bookingBeforeCompletion.contract_status !== 'signed') {
+    const signedBooking = await updateLuxorBooking(signature.booking_id, {
+      contract_status: 'signed',
+      contract_signed_at: bookingBeforeCompletion.contract_signed_at || signedAt,
+    })
+    if (!signedBooking || signedBooking.contract_status !== 'signed') {
+      throw new Error('The executed agreement was saved, but the booking could not be marked signed. Please retry.')
+    }
+  }
+
   if (!events.some((event) => event.event_type === 'completed')) {
     await recordLuxorSignatureEvent({ signatureRequestId: signature.id, eventType: 'completed' })
   }

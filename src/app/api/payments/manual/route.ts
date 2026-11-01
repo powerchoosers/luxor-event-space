@@ -467,7 +467,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ payment, invoice: updatedInvoice, booking: updatedBooking || booking }, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to record manual payment.'
-    const status = /must be signed|before recording|needs its finalized|missing its final payment due date|must include|required \$750|must not include/i.test(message) ? 409 : 500
-    return NextResponse.json({ error: message }, { status })
+    const agreementFinalizing = /LUXOR_CLAIM_INVALID: Verified signed terms and initial payment invoice are required\./i.test(message)
+    const status = agreementFinalizing || /must be signed|before recording|needs its finalized|missing its final payment due date|must include|required \$750|must not include/i.test(message) ? 409 : 500
+    return NextResponse.json({
+      error: agreementFinalizing
+        ? 'The executed agreement is still being finalized. No payment was recorded. Reopen the original signing link to finish the agreement, then retry.'
+        : message,
+    }, { status })
   }
 }

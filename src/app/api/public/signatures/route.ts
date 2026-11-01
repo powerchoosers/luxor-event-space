@@ -26,6 +26,7 @@ function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureR
     client_last_name: signature.client_last_name,
     owner_name: signature.owner_name,
     status: signature.status,
+    agreement_execution_ready: Boolean(signature.owner_signed_at && signature.executed_document_path && signature.audit_document_path),
     contract_title: signature.contract_title,
     contract_body: signature.contract_body,
     signed_name: signature.signed_name,
@@ -38,6 +39,9 @@ function publicSignature(signature: Awaited<ReturnType<typeof getLuxorSignatureR
 
 async function publicPayment(signature: NonNullable<Awaited<ReturnType<typeof getLuxorSignatureRequestByToken>>>) {
   if (signature.status !== 'signed') return {}
+  if (!signature.owner_signed_at || !signature.executed_document_path || !signature.audit_document_path) {
+    return { agreement_finalizing: true }
+  }
   const booking = await getLuxorBooking(signature.booking_id)
   const masterInvoice = booking?.invoice_id ? await getInvoice(booking.invoice_id) : null
   const benefit = sameDayBookingPromotion(masterInvoice)

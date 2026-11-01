@@ -38,6 +38,7 @@ const ContractPdfViewer = dynamic(() => import('./ContractPdfViewer'), {
 
 type SignatureMode = 'type' | 'draw'
 type PublicLuxorSignatureRequest = LuxorSignatureRequest & {
+  agreement_execution_ready?: boolean
   payment_schedule?: Exclude<LuxorSavedPaymentSchedule, null>
   signature_placement?: LuxorContractSignaturePlacement
   payment_email_status?: 'sent' | 'pending' | 'failed' | 'unknown'
@@ -281,6 +282,7 @@ export default function SignaturePage() {
   const [pageNumber, setPageNumber] = useState(1)
   const [numPages, setNumPages] = useState(0)
   const [pageWidth, setPageWidth] = useState(0)
+  const recoveryStarted = useRef(false)
   const viewerRef = useRef<HTMLDivElement | null>(null)
 
   const pdfUrl = useMemo(() => {
@@ -311,7 +313,8 @@ export default function SignaturePage() {
         if (!active) return
         setSignature(data)
         setSignedName(data.signed_name || data.client_name || '')
-        setComplete(data.status === 'signed')
+        const executionReady = data.agreement_execution_ready === true
+        setComplete(data.status === 'signed' && executionReady)
       } catch (loadError) {
         if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to open this agreement.')
       } finally {
@@ -422,31 +425,37 @@ export default function SignaturePage() {
     }
   }, [signaturePlacement.pageIndex])
 
-  const recoverPaymentLink = async (attempt = 0): Promise<void> => {
-    if (attempt >= 8) {
-      setPaymentPreparing(false)
-      setError('Your agreement is signed, but the secure payment link is taking longer than expected. Please refresh this page shortly.')
-      return
-    }
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 1_500))
-    try {
-      const response = await fetch('/api/public/signatures', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: params.token }),
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Unable to prepare the payment link.')
-      setSignature(data)
-      if (data.payment_url) {
-        setPaymentPreparing(false)
-        return
+  const recoverPaymentLink = useCallback(async (): Promise<void> => {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 1_500))
+      try {
+        const response = await fetch('/api/public/signatures', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: params.token }),
+        })
+        const data = await response.json() as PublicLuxorSignatureRequest
+        if (!response.ok) continue
+        setSignature(data)
+        if (data.agreement_execution_ready) setComplete(true)
+        if (data.payment_url) {
+          setPaymentPreparing(false)
+          return
+        }
+      } catch {
+        // Retry the idempotent completion flow on transient storage or mail errors.
       }
-      await recoverPaymentLink(attempt + 1)
-    } catch {
-      await recoverPaymentLink(attempt + 1)
     }
-  }
+    setPaymentPreparing(false)
+    setError('Your signature was saved, but the executed agreement or payment link could not be finished yet. Please retry shortly or contact Luxor Event Space.')
+  }, [params.token])
+
+  useEffect(() => {
+    if (signature?.status !== 'signed' || signature.agreement_execution_ready || recoveryStarted.current) return
+    recoveryStarted.current = true
+    setPaymentPreparing(true)
+    void recoverPaymentLink()
+  }, [recoverPaymentLink, signature?.agreement_execution_ready, signature?.status])
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -465,7 +474,7 @@ export default function SignaturePage() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Unable to complete the agreement.')
       setSignature(data)
-      setComplete(true)
+      setComplete(data.agreement_execution_ready === true)
       setPageNumber(1)
       setNumPages(0)
       if (data.payment_url) {
@@ -502,7 +511,7 @@ export default function SignaturePage() {
       <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-[#c9a76e]">
-            <FileText size={13} /> {complete ? 'Completed agreement' : signature.status === 'draft' ? 'Preparing your agreement' : 'Ready for your review'}
+            <FileText size={13} /> {complete ? 'Completed agreement' : signature.status === 'signed' ? 'Finalizing agreement' : signature.status === 'draft' ? 'Preparing your agreement' : 'Ready for your review'}
           </div>
           <h1 className="truncate font-serif text-[22px] font-medium leading-none text-[#f7f1e8] sm:text-2xl">
             {signature.contract_title || 'Event Space Agreement'}
@@ -627,6 +636,33 @@ export default function SignaturePage() {
                 <a href={pdfUrl} download className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#2d251e] px-4 text-sm font-semibold text-white transition hover:bg-[#45392f]">
                   <Download size={16} /> Download executed agreement
                 </a>
+              </div>
+            </div>
+          ) : signature.status === 'signed' ? (
+            <div className="flex min-h-[520px] flex-1 flex-col lg:min-h-0">
+              <div className="flex-1 overflow-y-auto p-6 sm:p-8">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#fff3d8] text-[#9b7740]">
+                  <LoaderCircle className={paymentPreparing ? 'animate-spin' : ''} size={23} />
+                </div>
+                <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.18em] text-[#9b7740]">Signature received</p>
+                <h2 className="mt-2 font-serif text-3xl font-medium leading-tight">Finishing your agreement.</h2>
+                <p aria-live="polite" className="mt-4 text-sm leading-6 text-[#6f665b]">
+                  Luxor is saving the executed agreement and its audit copy before preparing your payment details.
+                </p>
+                {error && (
+                  <div role="alert" className="mt-6 flex items-start gap-2 rounded-xl bg-[#fff3d8] p-3 text-xs leading-5 text-[#8d672b]">
+                    <AlertCircle className="mt-0.5 shrink-0" size={14} /> {error}
+                  </div>
+                )}
+                {!paymentPreparing && (
+                  <button
+                    type="button"
+                    onClick={() => { recoveryStarted.current = false; setError(null); setPaymentPreparing(true); void recoverPaymentLink() }}
+                    className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#c89d4b] px-5 text-sm font-semibold text-[#20170d] transition hover:bg-[#d7ae60]"
+                  >
+                    Retry agreement finalization
+                  </button>
+                )}
               </div>
             </div>
           ) : signature.status === 'draft' ? (
