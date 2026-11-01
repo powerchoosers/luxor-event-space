@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { CalendarClock, Check, ChevronDown, ChevronRight, CircleAlert, Clock3, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Pencil, Phone, Plus, UserRound, X } from 'lucide-react'
+import { CalendarClock, Check, ChevronDown, ChevronRight, Clock3, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Pencil, Phone, Plus, UserRound, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
@@ -122,8 +122,6 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [emailActions, setEmailActions] = useState<EmailAction[]>([])
   const [pausedEnrollmentIds, setPausedEnrollmentIds] = useState<string[]>([])
   const [pausedSequenceRecords, setPausedSequenceRecords] = useState<PausedEnrollment[]>([])
-  const [sequenceStatus, setSequenceStatus] = useState<'active' | 'draft' | 'paused' | 'unknown' | 'local-preview'>('unknown')
-  const [smsAutomationStatus, setSmsAutomationStatus] = useState<{ missedCall: boolean; inboundReply: boolean } | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -147,7 +145,6 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [assignee, setAssignee] = useState('')
   const [notes, setNotes] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [isLocalhost, setIsLocalhost] = useState(false)
   const shouldReduceMotion = useReducedMotion()
   const [activity, setActivity] = useState<Activity[]>([])
   const [historyPage, setHistoryPage] = useState(0)
@@ -239,8 +236,6 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       setEmailActions(emailResult.emailActions)
       setPausedEnrollmentIds(emailResult.pausedEnrollmentIds ?? [])
       setPausedSequenceRecords(emailResult.pausedEnrollments ?? [])
-      setSequenceStatus(emailResult.sequenceStatus)
-      setSmsAutomationStatus({ missedCall: emailResult.missedCallTextEnabled, inboundReply: emailResult.inboundTextReplyEnabled })
       if (!assignee && result.assignees[0]) setAssignee(result.assignees[0])
       await Promise.all(Array.from(expandedRowIdsRef.current, (inquiryId) => loadExpandedCardDetails(inquiryId, 0, false, true)))
     } catch (error) {
@@ -248,9 +243,6 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     } finally { setLoading(false) }
   }, [assignee, loadExpandedCardDetails, notify])
 
-  useEffect(() => {
-    setIsLocalhost(typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-  }, [])
   useEffect(() => { void refresh() }, [refresh])
   useEffect(() => {
     if (!cardMenuLeadId) return
@@ -748,28 +740,6 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   }
 
   return <div className="flex h-full min-h-0 flex-1 flex-col gap-4 text-[color:var(--portal-text)]">
-    {!isLocalhost && sequenceStatus !== 'local-preview' && sequenceStatus !== 'unknown' ? (
-      <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-3 text-sm">
-        <div className="flex items-start gap-2">
-          <CircleAlert size={17} className="mt-0.5 shrink-0 text-[#caa24c]" />
-          <p>
-            <strong>
-              {sequenceStatus === 'active'
-                ? 'Brochure follow-up is active.'
-                : sequenceStatus === 'paused'
-                  ? 'Brochure follow-up is paused.'
-                  : sequenceStatus === 'draft'
-                    ? 'Brochure follow-up is not ready.'
-                    : 'Brochure follow-up status is unavailable.'}
-            </strong>{' '}
-            When active, it emails eligible brochure leads and creates call tasks for staff to place; it does not send texts. Separately, missed-call texts are{' '}
-            {smsAutomationStatus ? (smsAutomationStatus.missedCall ? 'on' : 'off') : 'not available'}, and automatic replies to incoming texts are{' '}
-            {smsAutomationStatus ? (smsAutomationStatus.inboundReply ? 'on' : 'off') : 'not available'}. Incoming texts link to a lead when the phone number matches.
-          </p>
-        </div>
-      </div>
-    ) : null}
-
     <div className={`grid min-h-0 flex-1 gap-4 ${selected ? 'xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]' : ''}`}>
       <PortalTableCard
         mobilePageScroll
