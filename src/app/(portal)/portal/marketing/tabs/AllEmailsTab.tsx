@@ -1926,7 +1926,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
             <div className="flex min-h-0 flex-1 flex-col">
             {/* Scrollable email thread — grows to fill, reply pinned below */}
-            <div ref={threadScrollRef} data-email-thread-scroll className="portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-bg)] p-2 [overflow-anchor:none] sm:px-6 sm:py-4 lg:px-8">
+            <div ref={threadScrollRef} data-email-thread-scroll className="portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-bg)] p-3.5 [overflow-anchor:none] sm:px-6 sm:py-4 lg:px-8">
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {loadingThread && !thread && (
                   <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">
@@ -2471,7 +2471,7 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:0;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}table.luxor-card{border-radius:16px!important;overflow:hidden!important}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}table.luxor-card{border-radius:16px!important;overflow:hidden!important}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
 }
 
 function hasDarkEmailSurface(html: string) {
