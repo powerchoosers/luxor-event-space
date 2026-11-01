@@ -403,6 +403,14 @@ body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="subm
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#dfbd68\] *,
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#f1d27a\],
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#f1d27a\] *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#b9872f\],
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#b9872f\] *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#b98a3d\],
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#b98a3d\] *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#b98a3e\],
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#b98a3e\] *,
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#a8792f\],
+body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-\[\#a8792f\] *,
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-400,
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-400 *,
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-500,
@@ -410,10 +418,15 @@ body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="subm
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-600,
 body[data-portal-theme='light'] :is(button, a, [role="button"], input[type="submit"], input[type="button"]).bg-amber-600 * {
   color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
-body[data-portal-theme='light'] button[class~='bg-[#a8792f]'] {
+body[data-portal-theme='light'] button[class~='bg-[#a8792f]'],
+body[data-portal-theme='light'] button[class~='bg-[#b9872f]'],
+body[data-portal-theme='light'] button[class~='bg-[#b98a3d]'],
+body[data-portal-theme='light'] button[class~='bg-[#b98a3e]'] {
   color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 /* Light mode overrides for portal dropdown menus to ensure high contrast text and readable hover states */
@@ -633,6 +646,13 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
     border-color: var(--portal-border);
     color: var(--portal-muted);
     background: var(--portal-card);
+  }
+
+  @media (pointer: coarse) {
+    .layout-action { min-height: 2.75rem; }
+    .layout-icon { height: 2.75rem; width: 2.75rem; }
+    /* 16px prevents iOS Safari from zooming the page when an input is focused. */
+    .planning-editor-input { font-size: 1rem; min-height: 2.75rem; }
   }
 
   .layout-kicker {

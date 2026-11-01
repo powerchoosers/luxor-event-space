@@ -2,6 +2,7 @@
 
 import {
   Bell,
+  Clock,
   Calendar,
   FileText,
   LayoutDashboard,
@@ -50,6 +51,7 @@ import { PortalViewportDiagnostics } from '@/components/portal/PortalViewportDia
 import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
 import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
+import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads, saveRecentLead, clearRecentLeads, type RecentLeadItem } from '@/lib/luxorRecentLeads'
 
 type PortalUserProfile = {
   displayName: string
@@ -586,20 +588,77 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const mobileSearchInputRef = useRef<HTMLInputElement>(null)
   const deferredSearchQuery = useDeferredValue(searchQuery)
 
+  const recentLeads = useSyncExternalStore(
+    subscribeRecentLeads,
+    getRecentLeads,
+    getRecentLeadsServerSnapshot,
+  )
+
+  // Auto-record current opened lead if pathname is a lead dossier
+  useEffect(() => {
+    if (!pathname.startsWith('/portal/leads/')) return
+    const id = pathname.replace('/portal/leads/', '').split('/')[0].split('?')[0]
+    if (!id || id === 'new') return
+    const matched = inquiries.find((inq) => inq.id === id)
+    if (matched) {
+      saveRecentLead({
+        id: matched.id,
+        fullName: matched.full_name,
+        email: matched.email,
+        phone: matched.phone,
+        eventType: matched.event_type,
+        status: matched.status,
+        avatarUrl: typeof matched.metadata?.avatar_url === 'string' ? matched.metadata.avatar_url : undefined,
+      })
+    }
+  }, [pathname, inquiries])
+
+  const displayRecentLeads = useMemo<RecentLeadItem[]>(() => {
+    if (recentLeads.length > 0) {
+      return recentLeads.map((item) => {
+        const live = inquiries.find((i) => i.id === item.id)
+        if (!live) return item
+        return {
+          ...item,
+          fullName: live.full_name || item.fullName,
+          email: live.email || item.email,
+          phone: live.phone || item.phone,
+          eventType: live.event_type || item.eventType,
+          status: live.status || item.status,
+          avatarUrl: (typeof live.metadata?.avatar_url === 'string' ? live.metadata.avatar_url : undefined) || item.avatarUrl,
+        }
+      }).slice(0, 6)
+    }
+    return [...inquiries]
+      .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
+      .slice(0, 5)
+      .map((inq) => ({
+        id: inq.id,
+        fullName: inq.full_name,
+        email: inq.email || undefined,
+        phone: inq.phone || undefined,
+        eventType: inq.event_type || undefined,
+        status: inq.status || undefined,
+        avatarUrl: typeof inq.metadata?.avatar_url === 'string' ? inq.metadata.avatar_url : undefined,
+        openedAt: new Date(inq.updated_at || inq.created_at).getTime(),
+      }))
+  }, [recentLeads, inquiries])
 
   // Derived Search Results
   const searchResults = useMemo(() => {
     const query = deferredSearchQuery.trim().toLowerCase()
-    if (query.length < 2) return []
+    if (!query) return []
 
     return inquiries.filter((inq) =>
       inq.full_name.toLowerCase().includes(query) ||
       (inq.email && inq.email.toLowerCase().includes(query)) ||
+      (inq.phone && inq.phone.includes(query)) ||
       (inq.event_type && inq.event_type.toLowerCase().includes(query))
-    ).slice(0, 5)
+    ).slice(0, 6)
   }, [deferredSearchQuery, inquiries])
 
   const nextBestAction = useMemo(() => {
@@ -683,10 +742,22 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [])
 
   const selectSearchResult = useCallback((id: string) => {
+    const targetLead = inquiries.find((inq) => inq.id === id)
+    if (targetLead) {
+      saveRecentLead({
+        id: targetLead.id,
+        fullName: targetLead.full_name,
+        email: targetLead.email,
+        phone: targetLead.phone,
+        eventType: targetLead.event_type,
+        status: targetLead.status,
+        avatarUrl: typeof targetLead.metadata?.avatar_url === 'string' ? targetLead.metadata.avatar_url : undefined,
+      })
+    }
     setSearchQuery('')
     setSearchFocused(false)
     router.push(`/portal/leads/${id}`)
-  }, [router])
+  }, [inquiries, router])
 
   return (
     <body data-portal-theme={portalTheme} className="portal-shell h-[100dvh] overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
@@ -954,81 +1025,201 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           </div>
 
           {/* Header Search Command Bar */}
-          <div className="group relative col-start-2 hidden w-full max-w-80 items-center justify-self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 transition-[max-width,padding,border-color,box-shadow] duration-200 ease-out hover:max-w-[22rem] hover:border-[#caa24c]/35 hover:py-2 focus-within:!max-w-96 focus-within:border-[#caa24c]/50 focus-within:py-2 focus-within:shadow-[0_8px_24px_rgba(202,162,76,0.10)] sm:flex">
-              <Search size={14} className="shrink-0 text-zinc-500 group-focus-within:text-[#caa24c] transition-colors" />
-              <input
-                type="text"
-                value={searchQuery}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setTimeout(() => setSearchFocused(false), 250)}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search clients, events, or emails..."
-                className="portal-input-transparent w-full px-2 text-xs font-semibold text-zinc-200 outline-none placeholder:text-zinc-500"
-              />
+          <div
+            className="group relative col-start-2 hidden w-full max-w-80 items-center justify-self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 transition-[max-width,padding,border-color,box-shadow] duration-200 ease-out hover:max-w-[22rem] hover:border-[#caa24c]/35 hover:py-2 focus-within:!max-w-96 focus-within:border-[#caa24c]/50 focus-within:py-2 focus-within:shadow-[0_8px_24px_rgba(202,162,76,0.10)] sm:flex cursor-text"
+            onClick={() => {
+              searchInputRef.current?.focus()
+              setSearchFocused(true)
+            }}
+          >
+            <Search size={14} className="shrink-0 text-[color:var(--portal-muted)] group-focus-within:text-[#caa24c] transition-colors" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onFocus={() => setSearchFocused(true)}
+              onClick={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 220)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setSearchFocused(false)
+                  searchInputRef.current?.blur()
+                }
+              }}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search clients, events, or emails..."
+              className="portal-input-transparent w-full px-2 text-xs font-semibold text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSearchQuery('')
+                  searchInputRef.current?.focus()
+                }}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Clear search"
+              >
+                <X size={12} />
+              </button>
+            )}
               
-              {/* Search Results Dropdown overlay */}
-              <AnimatePresence>
-                {searchFocused && searchResults.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                    transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                    className="portal-search-dropdown absolute left-0 top-12 z-[100] w-full min-w-[22rem] rounded-xl border p-2 space-y-1 shadow-2xl backdrop-blur-2xl"
-                  >
-                    <div className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1 border-b mb-1 border-[color:var(--portal-border)]">
-                      Matching Dossier Records
-                    </div>
-                    {searchResults.map((result) => (
-                      <div
-                        key={result.id}
-                        onMouseDown={(e) => e.preventDefault()}
-                        className="group/item flex items-center justify-between rounded-lg p-2 hover:bg-[color:var(--portal-soft)] transition-colors"
-                      >
-                        <Link
-                          href={`/portal/leads/${result.id}`}
-                          onClick={() => selectSearchResult(result.id)}
-                          className="flex flex-1 items-center gap-2.5 min-w-0 outline-none cursor-pointer"
-                        >
-                          <PortalContactAvatar
-                            name={result.full_name}
-                            avatarUrl={typeof result.metadata?.avatar_url === 'string' ? result.metadata.avatar_url : undefined}
-                            size="sm"
-                          />
-                          <div className="truncate min-w-0 flex-1">
-                            <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate group-hover/item:text-[#caa24c] transition-colors">
-                              {result.full_name}
-                            </p>
-                            <p className="text-[9px] text-[color:var(--portal-muted)] truncate mt-0.5">
-                              {result.email || 'No email registered'}
-                            </p>
-                          </div>
-                        </Link>
-                        <div className="flex items-center gap-1.5 pl-2 shrink-0">
-                          {result.email && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                e.preventDefault()
-                                window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: result } }))
-                              }}
-                              className="rounded p-1.5 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#caa24c] transition-colors cursor-pointer"
-                              title={`Email ${result.full_name}`}
-                            >
-                              <Mail size={13} />
-                            </button>
-                          )}
-                          <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded">
-                            {result.event_type || 'Booking'}
+            {/* Search Results Dropdown overlay */}
+            <AnimatePresence>
+              {searchFocused && (
+                <motion.div
+                  onMouseDown={(e) => e.preventDefault()}
+                  initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                  className="portal-search-dropdown absolute left-0 top-12 z-[100] w-full min-w-[24rem] rounded-xl border p-2 space-y-1 shadow-2xl backdrop-blur-2xl"
+                >
+                  {searchQuery.trim().length > 0 ? (
+                    <>
+                      <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1.5 border-b mb-1 border-[color:var(--portal-border)]">
+                        <span className="flex items-center gap-1.5">
+                          <Search size={10} className="text-[#caa24c]" />
+                          Matching Dossier Records
+                        </span>
+                        {searchResults.length > 0 && (
+                          <span className="font-mono text-[9px] text-[color:var(--portal-faint)]">
+                            {searchResults.length} {searchResults.length === 1 ? 'match' : 'matches'}
                           </span>
-                        </div>
+                        )}
                       </div>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                      {searchResults.length > 0 ? (
+                        searchResults.map((result) => (
+                          <div
+                            key={result.id}
+                            className="group/item flex items-center justify-between rounded-lg p-2 hover:bg-[color:var(--portal-soft)] transition-colors"
+                          >
+                            <Link
+                              href={`/portal/leads/${result.id}`}
+                              onClick={() => selectSearchResult(result.id)}
+                              className="flex flex-1 items-center gap-2.5 min-w-0 outline-none cursor-pointer"
+                            >
+                              <PortalContactAvatar
+                                name={result.full_name}
+                                avatarUrl={typeof result.metadata?.avatar_url === 'string' ? result.metadata.avatar_url : undefined}
+                                size="sm"
+                              />
+                              <div className="truncate min-w-0 flex-1">
+                                <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate group-hover/item:text-[#caa24c] transition-colors">
+                                  {result.full_name}
+                                </p>
+                                <p className="text-[9px] text-[color:var(--portal-muted)] truncate mt-0.5">
+                                  {result.email || result.phone || 'No contact details registered'}
+                                </p>
+                              </div>
+                            </Link>
+                            <div className="flex items-center gap-1.5 pl-2 shrink-0">
+                              {result.email && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    e.preventDefault()
+                                    window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: result } }))
+                                  }}
+                                  className="rounded p-1.5 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#caa24c] transition-colors cursor-pointer"
+                                  title={`Email ${result.full_name}`}
+                                >
+                                  <Mail size={13} />
+                                </button>
+                              )}
+                              <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded">
+                                {result.event_type || 'Booking'}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-6 text-center text-xs text-[color:var(--portal-muted)]">
+                          No leads found matching “{searchQuery.trim()}”
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1.5 border-b mb-1 border-[color:var(--portal-border)]">
+                        <span className="flex items-center gap-1.5">
+                          <Clock size={10} className="text-[#caa24c]" />
+                          {recentLeads.length > 0 ? 'Recently Opened Leads' : 'Recent Leads'}
+                        </span>
+                        {recentLeads.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              clearRecentLeads()
+                            }}
+                            className="text-[8px] font-semibold text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      {displayRecentLeads.length > 0 ? (
+                        displayRecentLeads.map((item) => (
+                          <div
+                            key={item.id}
+                            className="group/item flex items-center justify-between rounded-lg p-2 hover:bg-[color:var(--portal-soft)] transition-colors"
+                          >
+                            <Link
+                              href={`/portal/leads/${item.id}`}
+                              onClick={() => selectSearchResult(item.id)}
+                              className="flex flex-1 items-center gap-2.5 min-w-0 outline-none cursor-pointer"
+                            >
+                              <PortalContactAvatar
+                                name={item.fullName}
+                                avatarUrl={item.avatarUrl}
+                                size="sm"
+                              />
+                              <div className="truncate min-w-0 flex-1">
+                                <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate group-hover/item:text-[#caa24c] transition-colors">
+                                  {item.fullName}
+                                </p>
+                                <p className="text-[9px] text-[color:var(--portal-muted)] truncate mt-0.5">
+                                  {item.email || item.phone || 'Lead Dossier'}
+                                </p>
+                              </div>
+                            </Link>
+                            <div className="flex items-center gap-1.5 pl-2 shrink-0">
+                              {item.email && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    e.preventDefault()
+                                    const fullLead = inquiries.find((i) => i.id === item.id)
+                                    window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: fullLead || { id: item.id, full_name: item.fullName, email: item.email } } }))
+                                  }}
+                                  className="rounded p-1.5 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[#caa24c] transition-colors cursor-pointer"
+                                  title={`Email ${item.fullName}`}
+                                >
+                                  <Mail size={13} />
+                                </button>
+                              )}
+                              <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded">
+                                {item.eventType || item.status || 'Lead'}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-6 text-center text-xs text-[color:var(--portal-muted)]">
+                          No recent leads yet. Start by searching or opening a dossier.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           <div className="flex items-center justify-self-end">
             {/* Mobile Header Actions (Search | Phone | Notifications) */}
@@ -1224,47 +1415,122 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
               {/* Mobile Search Results Floating Dropdown Overlay */}
               <AnimatePresence>
-                {searchResults.length > 0 && (
+                {mobileSearchOpen && (
                   <motion.div
                     initial={{ opacity: 0, y: -6, scale: 0.99 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.99 }}
-                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.32, 1] }}
                     className="absolute left-3 right-3 top-[calc(100%+0.375rem)] z-50 max-h-80 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]/40 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/98 backdrop-blur-2xl shadow-2xl"
                   >
-                    <div className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1.5 bg-[color:var(--portal-soft)]/50">
-                      Matching Dossier Records
-                    </div>
-                    {searchResults.map((result) => (
-                      <Link
-                        key={result.id}
-                        href={`/portal/leads/${result.id}`}
-                        onClick={() => {
-                          selectSearchResult(result.id)
-                          setMobileSearchOpen(false)
-                        }}
-                        className="flex items-center justify-between p-2.5 hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <PortalContactAvatar
-                            name={result.full_name}
-                            avatarUrl={typeof result.metadata?.avatar_url === 'string' ? result.metadata.avatar_url : undefined}
-                            size="sm"
-                          />
-                          <div className="truncate min-w-0 flex-1">
-                            <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate">
-                              {result.full_name}
-                            </p>
-                            <p className="text-[10px] text-[color:var(--portal-muted)] truncate mt-0.5">
-                              {result.email || 'No email registered'}
-                            </p>
-                          </div>
+                    {searchQuery.trim().length > 0 ? (
+                      <>
+                        <div className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1.5 bg-[color:var(--portal-soft)]/50 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <Search size={10} className="text-[#caa24c]" />
+                            Matching Dossier Records
+                          </span>
+                          {searchResults.length > 0 && (
+                            <span className="font-mono text-[9px] text-[color:var(--portal-faint)]">
+                              {searchResults.length}
+                            </span>
+                          )}
                         </div>
-                        <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded shrink-0 ml-2">
-                          {result.event_type || 'Lead'}
-                        </span>
-                      </Link>
-                    ))}
+                        {searchResults.length > 0 ? (
+                          searchResults.map((result) => (
+                            <Link
+                              key={result.id}
+                              href={`/portal/leads/${result.id}`}
+                              onClick={() => {
+                                selectSearchResult(result.id)
+                                setMobileSearchOpen(false)
+                              }}
+                              className="flex items-center justify-between p-2.5 hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <PortalContactAvatar
+                                  name={result.full_name}
+                                  avatarUrl={typeof result.metadata?.avatar_url === 'string' ? result.metadata.avatar_url : undefined}
+                                  size="sm"
+                                />
+                                <div className="truncate min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate">
+                                    {result.full_name}
+                                  </p>
+                                  <p className="text-[10px] text-[color:var(--portal-muted)] truncate mt-0.5">
+                                    {result.email || result.phone || 'No contact details registered'}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded shrink-0 ml-2">
+                                {result.event_type || 'Lead'}
+                              </span>
+                            </Link>
+                          ))
+                        ) : (
+                          <div className="px-3 py-6 text-center text-xs text-[color:var(--portal-muted)]">
+                            No leads found matching “{searchQuery.trim()}”
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1.5 bg-[color:var(--portal-soft)]/50 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <Clock size={10} className="text-[#caa24c]" />
+                            {recentLeads.length > 0 ? 'Recently Opened Leads' : 'Recent Leads'}
+                          </span>
+                          {recentLeads.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                clearRecentLeads()
+                              }}
+                              className="text-[8px] font-semibold text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        {displayRecentLeads.length > 0 ? (
+                          displayRecentLeads.map((item) => (
+                            <Link
+                              key={item.id}
+                              href={`/portal/leads/${item.id}`}
+                              onClick={() => {
+                                selectSearchResult(item.id)
+                                setMobileSearchOpen(false)
+                              }}
+                              className="flex items-center justify-between p-2.5 hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <PortalContactAvatar
+                                  name={item.fullName}
+                                  avatarUrl={item.avatarUrl}
+                                  size="sm"
+                                />
+                                <div className="truncate min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate">
+                                    {item.fullName}
+                                  </p>
+                                  <p className="text-[10px] text-[color:var(--portal-muted)] truncate mt-0.5">
+                                    {item.email || item.phone || 'Lead Dossier'}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded shrink-0 ml-2">
+                                {item.eventType || item.status || 'Lead'}
+                              </span>
+                            </Link>
+                          ))
+                        ) : (
+                          <div className="px-3 py-6 text-center text-xs text-[color:var(--portal-muted)]">
+                            No recent leads yet. Start by searching or opening a dossier.
+                          </div>
+                        )}
+                      </>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

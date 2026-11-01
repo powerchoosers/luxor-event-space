@@ -62,6 +62,7 @@ import {
 } from 'lucide-react'
 import { isLuxorInquiryArchived, isLuxorTestInquiry, LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS, LUXOR_MAX_GUESTS, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
+import { saveRecentLead } from '@/lib/luxorRecentLeads'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
 import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
@@ -642,7 +643,12 @@ export default function LeadDetailPage({
   const [savingPlanningSection, setSavingPlanningSection] = useState(false)
   const [planningDraft, setPlanningDraft] = useState<Record<string, string>>({})
   const [planningColors, setPlanningColors] = useState<string[]>([])
-  const [layoutDesignerOpen, setLayoutDesignerOpen] = useState(false)
+  const [layoutDesignerOpen, setLayoutDesignerOpenState] = useState(false)
+  const layoutDesignerOpenRef = useRef(false)
+  const setLayoutDesignerOpen = useCallback((open: boolean) => {
+    layoutDesignerOpenRef.current = open
+    setLayoutDesignerOpenState(open)
+  }, [])
   const [layoutReviewRefreshKey, setLayoutReviewRefreshKey] = useState(0)
   const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
   const [activitySearch, setActivitySearch] = useState('')
@@ -1792,6 +1798,15 @@ export default function LeadDetailPage({
       if (!leadRes.ok) throw new Error('Failed to fetch lead details.')
       const leadData = await leadRes.json()
       setLead(leadData)
+      saveRecentLead({
+        id: leadData.id,
+        fullName: leadData.full_name,
+        email: leadData.email,
+        phone: leadData.phone,
+        eventType: leadData.event_type,
+        status: leadData.status,
+        avatarUrl: typeof leadData.metadata?.avatar_url === 'string' ? leadData.metadata.avatar_url : undefined,
+      })
       void fetch(`/api/portal/leads/${encodeURIComponent(id)}/brochure-clicks`, { cache: 'no-store' })
         .then(async (response) => setBrochureClick(response.ok ? await response.json() : 'unavailable'))
         .catch(() => setBrochureClick('unavailable'))
@@ -2002,7 +2017,7 @@ export default function LeadDetailPage({
   useEffect(() => {
     if (!id) return
     const intervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void fetchAllData(false, false)
+      if (document.visibilityState === 'visible' && !layoutDesignerOpenRef.current) void fetchAllData(false, false)
     }, 5_000)
     return () => window.clearInterval(intervalId)
   }, [id])
@@ -2019,50 +2034,52 @@ export default function LeadDetailPage({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_inquiries', filter: `id=eq.${id}` },
         () => {
-          void fetchAllData(false)
+          if (!layoutDesignerOpenRef.current) void fetchAllData(false)
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_payments' },
         () => {
-          void fetchAllData(false)
+          if (!layoutDesignerOpenRef.current) void fetchAllData(false)
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_invoices' },
         () => {
-          void fetchAllData(false)
+          if (!layoutDesignerOpenRef.current) void fetchAllData(false)
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_marketing_events' },
         () => {
-          void fetchAllData(false)
-          if (lead?.email) void fetchMarketingEngagement(lead.email, { silent: true })
+          if (!layoutDesignerOpenRef.current) {
+            void fetchAllData(false)
+            if (lead?.email) void fetchMarketingEngagement(lead.email, { silent: true })
+          }
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_messages' },
         () => {
-          void fetchAllData(false)
+          if (!layoutDesignerOpenRef.current) void fetchAllData(false)
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_calls' },
         () => {
-          void fetchAllData(false)
+          if (!layoutDesignerOpenRef.current) void fetchAllData(false)
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_notes' },
         () => {
-          void fetchAllData(false)
+          if (!layoutDesignerOpenRef.current) void fetchAllData(false)
         }
       )
       .on(
