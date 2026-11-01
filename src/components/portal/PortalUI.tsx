@@ -390,6 +390,7 @@ export function PortalFilterBar({
   defaultExpanded = false,
   className = '',
   searchWidthClassName = 'w-full sm:w-72 md:w-80',
+  actions,
 }: {
   searchValue: string
   onSearchChange: (value: string) => void
@@ -401,6 +402,7 @@ export function PortalFilterBar({
   defaultExpanded?: boolean
   className?: string
   searchWidthClassName?: string
+  actions?: React.ReactNode
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const hasFilterControls = Boolean(children)
@@ -409,61 +411,64 @@ export function PortalFilterBar({
   return (
     <div className={`space-y-3 ${className}`}>
       <div className="flex items-center justify-between gap-3">
-        <div className={`relative min-w-0 ${searchWidthClassName}`}>
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
-          <input
-            type="search"
-            value={searchValue}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder={searchPlaceholder}
-            className={`h-9 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] pl-9 text-xs font-semibold text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10 ${
-              searchValue && hasFilterControls ? 'pr-16' : hasFilterControls || searchValue ? 'pr-10' : 'pr-4'
-            }`}
-          />
-          <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
-            {searchValue ? (
-              <button
-                type="button"
-                onClick={() => onSearchChange('')}
-                aria-label="Clear search"
-                className="portal-inline-action inline-flex h-6 w-6 !min-w-0 !min-h-0 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
-              >
-                <X size={12} />
-              </button>
-            ) : null}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className={`relative min-w-0 ${searchWidthClassName}`}>
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
+            <input
+              type="search"
+              value={searchValue}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder={searchPlaceholder}
+              className={`h-9 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] pl-9 text-xs font-semibold text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10 ${
+                searchValue && hasFilterControls ? 'pr-16' : hasFilterControls || searchValue ? 'pr-10' : 'pr-4'
+              }`}
+            />
+            <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
+              {searchValue ? (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange('')}
+                  aria-label="Clear search"
+                  className="portal-inline-action inline-flex h-6 w-6 !min-w-0 !min-h-0 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
+                >
+                  <X size={12} />
+                </button>
+              ) : null}
 
-            {hasFilterControls ? (
-              <button
-                type="button"
-                aria-expanded={expanded}
-                aria-label={activeFilters.length ? `Filter options (${activeFilters.length} active)` : 'Filter options'}
-                title={activeFilters.length ? `Filters (${activeFilters.length} active)` : 'Filters'}
-                onClick={() => setExpanded((current) => !current)}
-                className={`portal-inline-action relative inline-flex h-6 w-6 !min-w-0 !min-h-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer ${
-                  expanded || activeFilters.length
-                    ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]'
-                    : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
-                }`}
-              >
-                <SlidersHorizontal size={13} />
-                <AnimatePresence initial={false}>
-                  {activeFilters.length ? (
-                    <motion.span
-                      key={activeFilters.length}
-                      initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.45, y: -2 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.55, y: -2 }}
-                      transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.23, 1, 0.32, 1] }}
-                      aria-hidden="true"
-                      className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#caa24c] px-0.5 text-[8px] font-black text-[#18130d] leading-none shadow-xs"
-                    >
-                      {activeFilters.length}
-                    </motion.span>
-                  ) : null}
-                </AnimatePresence>
-              </button>
-            ) : null}
+              {hasFilterControls ? (
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-label={activeFilters.length ? `Filter options (${activeFilters.length} active)` : 'Filter options'}
+                  title={activeFilters.length ? `Filters (${activeFilters.length} active)` : 'Filters'}
+                  onClick={() => setExpanded((current) => !current)}
+                  className={`portal-inline-action relative inline-flex h-6 w-6 !min-w-0 !min-h-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer ${
+                    expanded || activeFilters.length
+                      ? 'bg-[#caa24c]/15 text-[#9a712e] dark:text-[#f1d27a]'
+                      : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
+                  }`}
+                >
+                  <SlidersHorizontal size={13} />
+                  <AnimatePresence initial={false}>
+                    {activeFilters.length ? (
+                      <motion.span
+                        key={activeFilters.length}
+                        initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.45, y: -2 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.55, y: -2 }}
+                        transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.23, 1, 0.32, 1] }}
+                        aria-hidden="true"
+                        className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#caa24c] px-0.5 text-[8px] font-black text-[#18130d] leading-none shadow-xs"
+                      >
+                        {activeFilters.length}
+                      </motion.span>
+                    ) : null}
+                  </AnimatePresence>
+                </button>
+              ) : null}
+            </div>
           </div>
+          {actions}
         </div>
 
         {resultLabel ? (

@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarClock, Check, ChevronRight, CircleAlert, Clock3, Eye, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Pencil, Phone, Plus, Settings2, UserRound, X } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { CalendarClock, Check, ChevronDown, ChevronRight, CircleAlert, Clock3, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Pencil, Phone, Plus, UserRound, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
-import type { LuxorFollowUpTemplate } from '@/lib/luxorFollowUpsServer'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
 import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask } from '@/lib/luxorFollowUpTaskPolicy'
-import { PortalButton, PortalDatePicker, PortalFilterBar, type PortalActiveFilter, PortalModal, PortalPagination, PortalSelect, PortalSkeletonTransition, PortalTourCardSkeleton, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
+import { PortalButton, PortalDatePicker, PortalFilterBar, type PortalActiveFilter, PortalModal, PortalPagination, PortalSelect, PortalSkeletonTransition, PortalTableCard, PortalTourCardSkeleton, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import { LuxorCrmRecordCard } from '@/components/portal/LuxorCrmRecordCard'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
@@ -21,7 +21,7 @@ type SequenceAction = { id: string; enrollment_id: string; step_key: string; cha
 type EmailAction = { id: string; inquiry_id: string; step_key: string; scheduled_at: string | null; status: string; enrollment_id?: string; channel?: string; email_job_id?: string | null }
 type PausedEnrollment = { id: string; inquiry_id: string }
 type FollowUpRow = { inquiryId: string; next: { id: string; channel: Channel; title: string; dueAt: string | null; dueDate: string | null; status: string; assignee: string; task?: LuxorTask }; activities: Activity[]; postTourStatus?: string }
-type Filter = 'all' | 'new' | 'post_tour' | 'overdue'
+type Filter = 'all' | 'new' | 'post_tour' | 'overdue' | 'upcoming' | 'completed'
 type DetailTab = 'overview' | 'event' | 'proposals' | 'notes' | 'timeline'
 type CallDraft = { lead: LuxorInquiry; task?: LuxorTask } | null
 type ProfileWorkspace = { leadId: string; stage: 'tour' | 'proposal' | 'profile' } | null
@@ -147,9 +147,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [assignee, setAssignee] = useState('')
   const [notes, setNotes] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [templates, setTemplates] = useState<LuxorFollowUpTemplate[]>([])
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [previewId, setPreviewId] = useState<string | null>(null)
+  const [isLocalhost, setIsLocalhost] = useState(false)
+  const shouldReduceMotion = useReducedMotion()
   const [activity, setActivity] = useState<Activity[]>([])
   const [historyPage, setHistoryPage] = useState(0)
   const [historyHasMore, setHistoryHasMore] = useState(false)
@@ -249,6 +248,9 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     } finally { setLoading(false) }
   }, [assignee, loadExpandedCardDetails, notify])
 
+  useEffect(() => {
+    setIsLocalhost(typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+  }, [])
   useEffect(() => { void refresh() }, [refresh])
   useEffect(() => {
     if (!cardMenuLeadId) return
@@ -327,17 +329,95 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     }))
     return [...rowsWithStatus, ...missingPostTourRows].sort((a, b) => (a.next.dueAt ?? a.next.dueDate ?? '').localeCompare(b.next.dueAt ?? b.next.dueDate ?? ''))
   }, [followUpTasks, emailActions, leadById, pausedEnrollmentIds, pausedSequenceRecords, today, completedTourLeads])
-  const visibleRows = useMemo(() => rows.filter((row) => {
+
+  const completedRows = useMemo<FollowUpRow[]>(() => {
+    const completedTasks = followUpTasks.filter((task) => task.status === 'completed')
+    const grouped = new Map<string, LuxorTask[]>()
+    for (const task of completedTasks) {
+      grouped.set(task.inquiry_id, [...(grouped.get(task.inquiry_id) ?? []), task])
+    }
+    const rowsFromTasks = [...grouped.entries()].flatMap(([inquiryId, taskList]) => {
+      const lead = leadById.get(inquiryId)
+      if (!lead || isLuxorInquiryArchived(lead)) return []
+      const ordered = [...taskList].sort((a, b) => {
+        const aDate = a.completed_at ?? a.due_at ?? a.due_date ?? a.created_at
+        const bDate = b.completed_at ?? b.due_at ?? b.due_date ?? b.created_at
+        return bDate.localeCompare(aDate)
+      })
+      const latestTask = ordered[0]
+      const activities: Activity[] = ordered.map((item) => ({
+        id: `completed-task-${item.id}`,
+        at: item.completed_at || item.due_at || item.due_date || item.created_at,
+        kind: taskChannel(item) === 'phone' ? 'call' : 'follow-up',
+        label: `${taskChannel(item) === 'phone' ? 'Phone call' : 'Email task'} · ${item.title}`,
+        detail: `Completed · ${dateLabel(item.completed_at ?? item.due_at ?? null, item.due_date ?? null)}${item.call_outcome ? ` · ${item.call_outcome.replaceAll('_', ' ')}` : ''}${taskNotes(item) ? ` · ${taskNotes(item)}` : ''}`,
+      }))
+      const postStatus = isPostTour(lead) ? getLuxorPostTourFollowUpStatus(followUpTasks.filter((t) => t.inquiry_id === inquiryId)) : undefined
+      return [{
+        inquiryId,
+        next: {
+          id: latestTask.id,
+          channel: taskChannel(latestTask),
+          title: latestTask.title,
+          dueAt: latestTask.completed_at ?? latestTask.due_at ?? null,
+          dueDate: latestTask.due_date ?? null,
+          status: 'Completed',
+          assignee: latestTask.assigned_to ?? 'Unassigned',
+          task: latestTask,
+        },
+        activities,
+        postTourStatus: postStatus,
+      }]
+    })
+
+    const completedInquiryIds = new Set(rowsFromTasks.map((r) => r.inquiryId))
+    const additionalCompletedTourRows = completedTourLeads
+      .filter((lead) => !completedInquiryIds.has(lead.id) && getLuxorPostTourFollowUpStatus(followUpTasks.filter((t) => t.inquiry_id === lead.id)) === 'Follow-Up Completed')
+      .map((lead) => ({
+        inquiryId: lead.id,
+        next: {
+          id: `post-tour-${lead.id}`,
+          channel: 'email' as const,
+          title: 'Post-Tour Follow-Up',
+          dueAt: null,
+          dueDate: null,
+          status: 'Follow-Up Completed',
+          assignee: 'Unassigned',
+        },
+        activities: [{
+          id: `post-tour-${lead.id}-activity`,
+          at: lead.preferred_tour_date || '',
+          kind: 'follow-up' as const,
+          label: 'Completed tour follow-up',
+          detail: `Tour date: ${lead.preferred_tour_date || 'Not recorded'}${lead.preferred_tour_time ? ` · ${lead.preferred_tour_time}` : ''}`,
+        }],
+        postTourStatus: 'Follow-Up Completed',
+      }))
+
+    return [...rowsFromTasks, ...additionalCompletedTourRows].sort((a, b) => {
+      const aDate = a.next.dueAt ?? a.next.dueDate ?? ''
+      const bDate = b.next.dueAt ?? b.next.dueDate ?? ''
+      return bDate.localeCompare(aDate)
+    })
+  }, [followUpTasks, leadById, completedTourLeads])
+
+  const targetRows = filter === 'completed' ? completedRows : rows
+
+  const visibleRows = useMemo(() => targetRows.filter((row) => {
     const lead = leadById.get(row.inquiryId)!
     const search = `${lead.full_name} ${lead.email ?? ''} ${lead.phone ?? ''} ${row.activities.map((item) => item.label).join(' ')}`.toLowerCase()
     return !isLuxorInquiryArchived(lead) && search.includes(query.toLowerCase())
-      && (filter !== 'new' || isCurrentNewLead(lead)) && (filter !== 'post_tour' || isPostTour(lead))
+      && (filter !== 'new' || isCurrentNewLead(lead))
+      && (filter !== 'post_tour' || isPostTour(lead))
       && (filter !== 'overdue' || row.next.status === 'Overdue')
-  }), [rows, leadById, query, filter])
+      && (filter !== 'upcoming' || row.next.status === 'Upcoming')
+  }), [targetRows, leadById, query, filter])
 
   const newLeadsCount = useMemo(() => rows.filter((row) => isCurrentNewLead(leadById.get(row.inquiryId)!)).length, [rows, leadById])
   const postTourCount = useMemo(() => rows.filter((row) => isPostTour(leadById.get(row.inquiryId)!)).length, [rows, leadById])
   const overdueCount = useMemo(() => rows.filter((row) => row.next.status === 'Overdue').length, [rows])
+  const upcomingCount = useMemo(() => rows.filter((row) => row.next.status === 'Upcoming').length, [rows])
+  const completedCount = completedRows.length
 
   const activeFilters = useMemo<PortalActiveFilter[]>(() => {
     if (filter === 'all') return []
@@ -345,6 +425,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       new: 'New Leads',
       post_tour: 'Post-Tour',
       overdue: 'Overdue',
+      upcoming: 'Upcoming',
+      completed: 'Completed',
     }
     return [{
       id: 'followup-filter',
@@ -354,7 +436,9 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   }, [filter])
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / 25))
   const page = Math.min(currentPage, totalPages)
-  const paginatedRows = visibleRows.slice((page - 1) * 25, page * 25)
+  const startIndex = (page - 1) * 25
+  const rangeEnd = Math.min(startIndex + 25, visibleRows.length)
+  const paginatedRows = visibleRows.slice(startIndex, startIndex + 25)
   const selected = selectedId ? leadById.get(selectedId) : undefined
   const getStageLabel = (lead: LuxorInquiry) => stageOverrides[lead.id] || stageLabel(lead)
   const selectedTasks = selectedId ? followUpTasks.filter((task) => task.inquiry_id === selectedId) : []
@@ -362,24 +446,6 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     ...activity,
     ...selectedTasks.map((task) => ({ id: `task-${task.id}`, at: task.completed_at || task.due_at || task.due_date || task.created_at, kind: taskChannel(task) === 'phone' ? 'call' as const : 'follow-up' as const, label: `${task.title} · ${task.status}${task.call_outcome ? ` · ${task.call_outcome.replaceAll('_', ' ')}` : ''}`, detail: taskNotes(task) })),
   ].sort((a, b) => b.at.localeCompare(a.at)), [activity, selectedTasks])
-  const stats = [
-    { label: 'Due Today', value: rows.filter((row) => row.next.status === 'Due today').length, tone: 'blue' },
-    { label: 'Overdue', value: rows.filter((row) => row.next.status === 'Overdue').length, tone: 'red' },
-    { label: 'Upcoming', value: rows.filter((row) => row.next.status === 'Upcoming').length, tone: 'gold' },
-  ]
-
-  async function openTemplateSettings() {
-    const response = await fetch('/api/follow-ups', { cache: 'no-store' })
-    if (!response.ok) { notify({ title: 'Templates could not be loaded', variant: 'error' }); return }
-    const data = await response.json() as { templates: LuxorFollowUpTemplate[] }
-    setTemplates(data.templates); setSettingsOpen(true)
-  }
-  function changeTemplate(id: string, field: keyof LuxorFollowUpTemplate, value: string | boolean | number | null) { setTemplates((current) => current.map((template) => template.id === id ? { ...template, [field]: value } : template)) }
-  async function saveTemplate(template: LuxorFollowUpTemplate) {
-    const response = await fetch('/api/follow-ups', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ templateId: template.id, updates: { name: template.name, subject: template.subject, body: template.body, cta_text: template.cta_text, cta_url: template.cta_url, secondary_cta_text: template.secondary_cta_text, secondary_cta_url: template.secondary_cta_url, delay_days: template.delay_days, active: template.active } }) })
-    if (!response.ok) { notify({ title: 'Template could not be saved', variant: 'error' }); return }
-    notify({ title: 'Follow-up template saved', description: 'Saving templates does not activate or change enrollment.', variant: 'success' })
-  }
 
   async function saveTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -681,184 +747,284 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     return true
   }
 
-  return <section className="portal-scrollbar flex h-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto max-md:h-auto max-md:overflow-visible pr-1 pb-8 text-[color:var(--portal-text)] max-md:px-4">
-    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-3 text-sm"><div className="flex items-start gap-2"><CircleAlert size={17} className="mt-0.5 shrink-0 text-[#caa24c]" /><p><strong>{sequenceStatus === 'active' ? 'Brochure follow-up is active.' : sequenceStatus === 'paused' ? 'Brochure follow-up is paused.' : sequenceStatus === 'draft' ? 'Brochure follow-up is not ready.' : sequenceStatus === 'local-preview' ? 'Production send status is not shown in this local preview.' : 'Brochure follow-up status is unavailable.'}</strong> When active, it emails eligible brochure leads and creates call tasks for staff to place; it does not send texts. Separately, missed-call texts are {smsAutomationStatus ? (smsAutomationStatus.missedCall ? 'on' : 'off') : 'not available'}, and automatic replies to incoming texts are {smsAutomationStatus ? (smsAutomationStatus.inboundReply ? 'on' : 'off') : 'not available'}. Incoming texts link to a lead when the phone number matches.</p></div></div>
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2 className="font-serif text-2xl text-[color:var(--portal-text)]">Follow-Ups</h2>
-      <div className="flex flex-wrap items-center gap-2">
-        <PortalButton variant="primary" className="!text-white hover:!text-white [&>svg]:!text-white" onClick={() => { if (leads[0]) openAddTask(leads[0].id) }}>
-          <Plus size={15} /> Add Follow-Up
-        </PortalButton>
-        <PortalButton variant="ghost" onClick={() => void openTemplateSettings()}>
-          <Settings2 size={15} /> Edit brochure templates
-        </PortalButton>
-      </div>
-    </div>
-    {settingsOpen && <section className="space-y-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="font-medium">Brochure sequence templates</h3><p className="text-xs text-[color:var(--portal-muted)]">Saving does not expand consent, enrollment or send approval.</p></div><PortalButton variant="ghost" onClick={() => setSettingsOpen(false)}>Close</PortalButton></div>{templates.map((template) => <article key={template.id} className="grid gap-3 border-t border-[color:var(--portal-border)] pt-3 md:grid-cols-[minmax(12rem,0.7fr)_minmax(18rem,1.3fr)]"><div><div className="font-medium">{template.name}</div><div className="mt-1 text-xs text-[color:var(--portal-muted)]">{template.channel === 'email' ? 'Email' : 'Manual phone task'} · day {template.delay_days}</div><label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={template.active} onChange={(event) => changeTemplate(template.id, 'active', event.target.checked)} /> Template active</label><label className="mt-2 block text-xs">Day offset<input type="number" min="0" max="365" value={template.delay_days} onChange={(event) => changeTemplate(template.id, 'delay_days', Number(event.target.value))} className="mt-1 w-24 rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1" /></label><div className="mt-3 flex gap-2"><PortalButton size="sm" onClick={() => void saveTemplate(template)}>Save</PortalButton><PortalButton size="sm" variant="ghost" onClick={() => setPreviewId(previewId === template.id ? null : template.id)}><Eye size={14} /> Preview</PortalButton></div></div><div className="space-y-2">{template.channel === 'email' && <label className="block text-xs">Subject<input value={template.subject ?? ''} onChange={(event) => changeTemplate(template.id, 'subject', event.target.value)} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label>}<label className="block text-xs">Body<textarea value={template.body ?? ''} onChange={(event) => changeTemplate(template.id, 'body', event.target.value)} rows={3} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label>{template.channel === 'email' && <div className="grid gap-2 sm:grid-cols-2"><label className="block text-xs">CTA label<input value={template.cta_text ?? ''} onChange={(event) => changeTemplate(template.id, 'cta_text', event.target.value)} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label><label className="block text-xs">CTA link<input value={template.cta_url ?? ''} onChange={(event) => changeTemplate(template.id, 'cta_url', event.target.value)} className="mt-1 w-full rounded border border-[color:var(--portal-border)] bg-transparent px-2 py-1.5" /></label></div>}{previewId === template.id && <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm"><strong>{template.subject}</strong><p className="mt-2 whitespace-pre-wrap">{template.body}</p><span className="mt-2 inline-block text-xs">{template.cta_text} {template.cta_url}</span></div>}</div></article>)}</section>}
-
-    <div className="grid grid-cols-3 gap-2">{stats.map((stat) => <div key={stat.label} className={`portal-card-surface rounded-xl px-4 py-3 shadow-none ${stat.tone === 'red' ? 'border-rose-300 bg-rose-50 dark:border-rose-400/30 dark:bg-rose-500/10' : stat.tone === 'blue' ? 'border-sky-300 bg-sky-50 dark:border-sky-400/30 dark:bg-sky-500/10' : stat.tone === 'gold' ? 'border-[#dfc98f] bg-[#fbf5e7] dark:border-[#caa24c]/35 dark:bg-[#caa24c]/10' : ''}`}><div className="text-2xl font-semibold">{stat.value}</div><div className="text-xs text-[color:var(--portal-muted)]">{stat.label}</div></div>)}</div>
-    <div className="sticky top-0 z-30 -mx-4 border-b border-[color:var(--portal-border)] bg-[#fffdf9]/90 px-4 py-3 shadow-sm backdrop-blur-2xl dark:bg-[#080706]/85 md:mx-0 md:rounded-xl md:border md:bg-[color:var(--portal-card)] md:shadow-xs">
-      <PortalFilterBar
-        searchValue={query}
-        onSearchChange={(value) => { setQuery(value); setCurrentPage(1) }}
-        searchPlaceholder="Search leads or follow-ups"
-        resultLabel={loading ? 'Loading…' : `${visibleRows.length.toLocaleString()} ${visibleRows.length === 1 ? 'follow-up' : 'follow-ups'}`}
-        activeFilters={activeFilters}
-        onClearFilters={() => { setFilter('all'); setCurrentPage(1) }}
-        searchWidthClassName="w-full min-w-0 sm:max-w-md"
-      >
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Filter follow-up tasks">
-          {([
-            { id: 'all', label: 'All follow-ups', count: rows.length },
-            { id: 'new', label: 'New Leads', count: newLeadsCount },
-            { id: 'post_tour', label: 'Post-Tour', count: postTourCount },
-            { id: 'overdue', label: 'Overdue', count: overdueCount },
-          ] as const).map((option) => {
-            const selected = filter === option.id
-            return (
-              <button
-                key={option.id}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => {
-                  setFilter(option.id)
-                  setCurrentPage(1)
-                }}
-                className={`min-h-10 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer ${
-                  selected
-                    ? 'border-[#caa24c]/40 bg-[#caa24c]/10 text-[#8a652b] dark:text-[#f1d27a]'
-                    : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
-                }`}
-              >
-                <span className="block truncate">{option.label}</span>
-                <span className="mt-0.5 block text-[10px] font-bold tabular-nums opacity-75">
-                  {option.count} {option.count === 1 ? 'task' : 'tasks'}
-                </span>
-              </button>
-            )
-          })}
+  return <div className="flex h-full min-h-0 flex-1 flex-col gap-4 text-[color:var(--portal-text)]">
+    {!isLocalhost && sequenceStatus !== 'local-preview' && sequenceStatus !== 'unknown' ? (
+      <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-3 text-sm">
+        <div className="flex items-start gap-2">
+          <CircleAlert size={17} className="mt-0.5 shrink-0 text-[#caa24c]" />
+          <p>
+            <strong>
+              {sequenceStatus === 'active'
+                ? 'Brochure follow-up is active.'
+                : sequenceStatus === 'paused'
+                  ? 'Brochure follow-up is paused.'
+                  : sequenceStatus === 'draft'
+                    ? 'Brochure follow-up is not ready.'
+                    : 'Brochure follow-up status is unavailable.'}
+            </strong>{' '}
+            When active, it emails eligible brochure leads and creates call tasks for staff to place; it does not send texts. Separately, missed-call texts are{' '}
+            {smsAutomationStatus ? (smsAutomationStatus.missedCall ? 'on' : 'off') : 'not available'}, and automatic replies to incoming texts are{' '}
+            {smsAutomationStatus ? (smsAutomationStatus.inboundReply ? 'on' : 'off') : 'not available'}. Incoming texts link to a lead when the phone number matches.
+          </p>
         </div>
-      </PortalFilterBar>
-    </div>
+      </div>
+    ) : null}
 
-    <div className={`grid min-h-0 flex-1 gap-4 max-md:-mt-4 ${selected ? 'xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]' : ''}`}>
-      <div className="min-w-0">
-      <PortalSkeletonTransition
-        loading={loading}
-        skeleton={
-          <div className="space-y-3 pb-20 md:pb-0">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <PortalTourCardSkeleton key={i} />
-            ))}
+    <div className={`grid min-h-0 flex-1 gap-4 ${selected ? 'xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)]' : ''}`}>
+      <PortalTableCard
+        mobilePageScroll
+        footerClassName="max-md:hidden"
+        controls={
+          <PortalFilterBar
+            searchValue={query}
+            onSearchChange={(value) => { setQuery(value); setCurrentPage(1) }}
+            searchPlaceholder="Search leads or follow-ups"
+            resultLabel={loading ? 'Loading…' : `${visibleRows.length.toLocaleString()} ${visibleRows.length === 1 ? 'follow-up' : 'follow-ups'}`}
+            activeFilters={activeFilters}
+            onClearFilters={() => { setFilter('all'); setCurrentPage(1) }}
+            searchWidthClassName="w-full min-w-0"
+            actions={
+              <button
+                type="button"
+                className="portal-inline-action inline-flex h-9 w-9 shrink-0 aspect-square items-center justify-center rounded-lg bg-[#caa24c] text-white shadow-xs transition hover:bg-[#b8913d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
+                style={{ height: '36px', width: '36px', minHeight: '36px', maxHeight: '36px', minWidth: '36px', maxWidth: '36px' }}
+                onClick={() => { if (leads[0]) openAddTask(leads[0].id) }}
+                title="Add Follow-Up"
+                aria-label="Add Follow-Up"
+              >
+                <Plus size={16} strokeWidth={2.5} />
+              </button>
+            }
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" role="group" aria-label="Filter follow-up tasks">
+              {([
+                { id: 'all', label: 'All follow-ups', count: rows.length },
+                { id: 'new', label: 'New Leads', count: newLeadsCount },
+                { id: 'post_tour', label: 'Post-Tour', count: postTourCount },
+                { id: 'overdue', label: 'Overdue', count: overdueCount },
+                { id: 'upcoming', label: 'Upcoming', count: upcomingCount },
+                { id: 'completed', label: 'Completed', count: completedCount },
+              ] as const).map((option) => {
+                const isOptionSelected = filter === option.id
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={isOptionSelected}
+                    onClick={() => {
+                      setFilter(option.id)
+                      setCurrentPage(1)
+                    }}
+                    className={`min-h-10 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer ${
+                      isOptionSelected
+                        ? 'border-[#caa24c]/40 bg-[#caa24c]/10 text-[#8a652b] dark:text-[#f1d27a]'
+                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
+                    }`}
+                  >
+                    <span className="block truncate">{option.label}</span>
+                    <span className="mt-0.5 block text-[10px] font-bold tabular-nums opacity-75">
+                      {option.count} {option.count === 1 ? 'task' : 'tasks'}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </PortalFilterBar>
+        }
+        footer={
+          <div className="hidden w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none md:flex">
+            <span><span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length ? startIndex + 1 : 0}–{rangeEnd}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length}</span> {visibleRows.length === 1 ? 'follow-up' : 'follow-ups'}</span>
+            <PortalPagination currentPage={page} totalPages={totalPages} onPageChange={setCurrentPage} />
           </div>
         }
       >
-        <div className="max-md:-mx-4 max-md:border-t max-md:border-[color:var(--portal-border)] pb-20 md:pb-0 md:space-y-3">
-          {paginatedRows.map((row) => {
-            const lead = leadById.get(row.inquiryId)!
-            const state = row.next.status
-            const stage = getStageLabel(lead)
-            const stageTone = followUpStageTone(stage)
-            const isExpanded = expandedRowIds.has(row.inquiryId)
-            const cardDetails = expandedCardDetails[row.inquiryId]
-            const additionalTaskHistory: Activity[] = followUpTasks
-              .filter((task) => task.inquiry_id === row.inquiryId && task.id !== row.next.id)
-              .map((task) => ({ id: `task-${task.id}`, at: task.completed_at || task.due_at || task.due_date || task.created_at, kind: taskChannel(task) === 'phone' ? 'call' : 'follow-up', label: `${task.title} · ${task.status}${task.call_outcome ? ` · ${task.call_outcome.replaceAll('_', ' ')}` : ''}`, detail: taskNotes(task) }))
-            const cardHistory = [...(cardDetails?.history ?? []), ...additionalTaskHistory].sort((a, b) => b.at.localeCompare(a.at))
-            const cardDetailsId = `follow-up-details-${row.inquiryId}`
-            return (
-              <LuxorCrmRecordCard
-                key={row.inquiryId}
-                lead={lead}
-                avatar={<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span>}
-                badges={[{ label: stage, tone: stageTone }]}
-                subtitle={<>{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</>}
-                onOpen={() => toggleExpandedRow(row.inquiryId)}
-                expanded={isExpanded}
-                expandedContentId={cardDetailsId}
-                interactionLabel={`${isExpanded ? 'Collapse' : 'Expand'} follow-up details for ${lead.full_name}`}
-                className={`cursor-pointer max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none ${cardMenuLeadId === lead.id ? 'z-20' : ''}`}
-                contentColumn
-                responsiveContentColumn
-              >
-                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className={`flex min-w-0 items-start gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>
-                      {row.next.channel === 'phone' ? <Phone className="mt-0.5 shrink-0" size={14} /> : <Mail className="mt-0.5 shrink-0" size={14} />}<span className="min-w-0 break-words [overflow-wrap:anywhere]">{row.next.title}</span>
+        <PortalSkeletonTransition
+          loading={loading}
+          skeleton={
+            <div className="space-y-3 p-4 sm:p-6 pb-20 md:pb-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <PortalTourCardSkeleton key={i} />
+              ))}
+            </div>
+          }
+        >
+          <div className="space-y-3 p-4 sm:p-6 pb-20 md:pb-6">
+            {paginatedRows.map((row) => {
+              const lead = leadById.get(row.inquiryId)!
+              const state = row.next.status
+              const stage = getStageLabel(lead)
+              const stageTone = followUpStageTone(stage)
+              const isExpanded = expandedRowIds.has(row.inquiryId)
+              const cardDetails = expandedCardDetails[row.inquiryId]
+              const additionalTaskHistory: Activity[] = followUpTasks
+                .filter((task) => task.inquiry_id === row.inquiryId && task.id !== row.next.id)
+                .map((task) => ({ id: `task-${task.id}`, at: task.completed_at || task.due_at || task.due_date || task.created_at, kind: taskChannel(task) === 'phone' ? 'call' : 'follow-up', label: `${task.title} · ${task.status}${task.call_outcome ? ` · ${task.call_outcome.replaceAll('_', ' ')}` : ''}`, detail: taskNotes(task) }))
+              const cardHistory = [...(cardDetails?.history ?? []), ...additionalTaskHistory].sort((a, b) => b.at.localeCompare(a.at))
+              const cardDetailsId = `follow-up-details-${row.inquiryId}`
+              return (
+                <LuxorCrmRecordCard
+                  key={row.inquiryId}
+                  lead={lead}
+                  avatar={<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span>}
+                  badges={[{ label: stage, tone: stageTone }]}
+                  headerAction={
+                    <span
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[color:var(--portal-border)]/60 bg-[color:var(--portal-soft)]/50 text-[color:var(--portal-muted)] transition-colors group-hover:border-[#caa24c]/50 group-hover:text-[#8c6529] dark:group-hover:text-[#dfbd68]"
+                      aria-hidden="true"
+                      title={isExpanded ? 'Collapse follow-up details' : 'Expand follow-up details'}
+                    >
+                      <ChevronDown
+                        size={15}
+                        className={`transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${isExpanded ? 'rotate-180 text-[#8c6529] dark:text-[#dfbd68]' : ''}`}
+                      />
+                    </span>
+                  }
+                  subtitle={<>{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</>}
+                  onOpen={() => toggleExpandedRow(row.inquiryId)}
+                  expanded={isExpanded}
+                  expandedContentId={cardDetailsId}
+                  interactionLabel={`${isExpanded ? 'Collapse' : 'Expand'} follow-up details for ${lead.full_name}`}
+                  className={`cursor-pointer ${cardMenuLeadId === lead.id ? 'z-20' : ''}`}
+                  contentColumn
+                  responsiveContentColumn
+                >
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className={`flex min-w-0 items-start gap-1.5 text-sm font-medium ${state === 'Overdue' ? 'text-red-700 dark:text-red-300' : 'text-[color:var(--portal-text)]'}`}>
+                          {row.next.channel === 'phone' ? <Phone className="mt-0.5 shrink-0" size={14} /> : <Mail className="mt-0.5 shrink-0" size={14} />}<span className="min-w-0 break-words [overflow-wrap:anywhere]">{row.next.title}</span>
+                        </div>
+                        {row.next.id.startsWith('post-tour-') && row.postTourStatus
+                          ? <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>
+                          : <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>}
+                        {row.postTourStatus && !row.next.id.startsWith('post-tour-') && <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
+                      </div>
+                      <div className="flex items-center gap-1.5 sm:shrink-0" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+                      {(() => {
+                        const hasPhone = Boolean(lead.phone?.trim())
+                        const unavailableLabel = 'Call unavailable: no phone number on this lead'
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => dial(lead)}
+                            disabled={!hasPhone}
+                            title={hasPhone ? `Call ${lead.full_name}` : unavailableLabel}
+                            aria-label={hasPhone ? `Call ${lead.full_name} through Luxor` : unavailableLabel}
+                            className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[#8c6529] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/15 hover:text-[#724f1c] dark:text-[#dfbd68] dark:hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+                          >
+                            <Phone size={15} />
+                          </button>
+                        )
+                      })()}
+                      <button
+                        type="button"
+                        onClick={() => composeEmail(lead)}
+                        disabled={!lead.email}
+                        title={lead.email ? `Email ${lead.full_name}` : 'Email unavailable: no email on this lead'}
+                        aria-label={lead.email ? `Email ${lead.full_name}` : 'Email unavailable: no email on this lead'}
+                        className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[#8c6529] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/15 hover:text-[#724f1c] dark:text-[#dfbd68] dark:hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+                      >
+                        <Mail size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => logCall(lead, row.next.task)}
+                        disabled={!lead.phone?.trim()}
+                        title={lead.phone?.trim() ? `Log call for ${lead.full_name}` : 'Logging a call is unavailable: no phone number on this lead'}
+                        aria-label={lead.phone?.trim() ? `Log call for ${lead.full_name}` : 'Logging a call is unavailable: no phone number on this lead'}
+                        className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/50 hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <div className="relative" data-follow-up-menu-root="true">
+                        <button
+                          id={`follow-up-menu-toggle-${row.inquiryId}`}
+                          type="button"
+                          aria-label={`More actions for ${lead.full_name}`}
+                          title={`More actions for ${lead.full_name}`}
+                          aria-haspopup="menu"
+                          aria-controls={`follow-up-menu-${row.inquiryId}`}
+                          aria-expanded={cardMenuLeadId === lead.id}
+                          onClick={(event) => toggleCardMenu(event, lead.id)}
+                          className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/50 hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] cursor-pointer"
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+                        {cardMenuLeadId === lead.id && <div id={`follow-up-menu-${row.inquiryId}`} role="menu" aria-label={`Actions for ${lead.full_name}`} onKeyDown={(event) => {
+                          const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                          const currentIndex = items.indexOf(document.activeElement as HTMLElement)
+                          const nextIndex = event.key === 'ArrowDown' ? (currentIndex + 1) % items.length : event.key === 'ArrowUp' ? (currentIndex - 1 + items.length) % items.length : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : -1
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
+                            setCardMenuLeadId(null)
+                            document.getElementById(`follow-up-menu-toggle-${row.inquiryId}`)?.focus()
+                          } else if (nextIndex >= 0 && items.length) {
+                            event.preventDefault()
+                            items[nextIndex]?.focus()
+                          }
+                        }} style={cardMenuPosition?.leadId === lead.id ? { left: cardMenuPosition.left, width: cardMenuPosition.width, ...(cardMenuPosition.above ? { bottom: 'calc(100% + 0.5rem)' } : { top: 'calc(100% + 0.5rem)' }) } : undefined} className="absolute z-30 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl">
+                          <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openLeadWorkspaceFromCard(lead) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View Full Workspace</button>
+                          <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openAddTask(lead.id) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Add Follow-Up</button>
+                        </div>}
+                      </div>
                     </div>
-                    {row.next.id.startsWith('post-tour-') && row.postTourStatus
-                      ? <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>
-                      : <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>}
-                    {row.postTourStatus && !row.next.id.startsWith('post-tour-') && <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
                   </div>
-                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0" onClick={(event) => event.stopPropagation()}>
-                    {(() => {
-                      const hasPhone = Boolean(lead.phone?.trim())
-                      const unavailableLabel = 'Call unavailable: no phone number on this lead'
-                      return <button type="button" onClick={() => dial(lead)} disabled={!hasPhone} title={!hasPhone ? unavailableLabel : 'Call through Luxor Twilio'} aria-label={hasPhone ? `Call ${lead.full_name} through Luxor` : unavailableLabel} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#a8792f] text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Phone size={14} /> Call</button>
-                    })()}
-                    <button type="button" onClick={() => composeEmail(lead)} disabled={!lead.email} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#a8792f] text-xs font-bold text-white transition hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50"><Mail size={14} /> Email</button>
-                    <button type="button" onClick={() => logCall(lead, row.next.task)} disabled={!lead.phone?.trim()} title={!lead.phone?.trim() ? 'Logging a call is unavailable: no phone number on this lead' : undefined} className="inline-flex h-10 w-[5.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#dfd4c2] bg-[#faf8f4] text-xs font-semibold text-[#211d17] disabled:cursor-not-allowed disabled:opacity-50"><Pencil size={14} /> Log</button>
-                    <div className="relative" data-follow-up-menu-root="true">
-                      <button id={`follow-up-menu-toggle-${row.inquiryId}`} type="button" aria-label={`More actions for ${lead.full_name}`} aria-haspopup="menu" aria-controls={`follow-up-menu-${row.inquiryId}`} aria-expanded={cardMenuLeadId === lead.id} onClick={(event) => toggleCardMenu(event, lead.id)} className="flex h-9 w-9 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a]"><MoreHorizontal size={18} /></button>
-                      {cardMenuLeadId === lead.id && <div id={`follow-up-menu-${row.inquiryId}`} role="menu" aria-label={`Actions for ${lead.full_name}`} onKeyDown={(event) => {
-                        const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-                        const currentIndex = items.indexOf(document.activeElement as HTMLElement)
-                        const nextIndex = event.key === 'ArrowDown' ? (currentIndex + 1) % items.length : event.key === 'ArrowUp' ? (currentIndex - 1 + items.length) % items.length : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : -1
-                        if (event.key === 'Escape') {
-                          event.preventDefault()
-                          setCardMenuLeadId(null)
-                          document.getElementById(`follow-up-menu-toggle-${row.inquiryId}`)?.focus()
-                        } else if (nextIndex >= 0 && items.length) {
-                          event.preventDefault()
-                          items[nextIndex]?.focus()
-                        }
-                      }} style={cardMenuPosition?.leadId === lead.id ? { left: cardMenuPosition.left, width: cardMenuPosition.width, ...(cardMenuPosition.above ? { bottom: 'calc(100% + 0.5rem)' } : { top: 'calc(100% + 0.5rem)' }) } : undefined} className="absolute z-30 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl">
-                        <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openLeadWorkspaceFromCard(lead) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View Full Workspace</button>
-                        <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openAddTask(lead.id) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Add Follow-Up</button>
-                      </div>}
-                    </div>
+                  <AnimatePresence initial={false}>
+                    {isExpanded ? (
+                      <motion.div
+                        id={cardDetailsId}
+                        key={`card-details-${row.inquiryId}`}
+                        initial={shouldReduceMotion ? false : { height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={shouldReduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                        transition={{
+                          height: { duration: shouldReduceMotion ? 0 : 0.35, ease: [0.23, 1, 0.32, 1] },
+                          opacity: { duration: shouldReduceMotion ? 0 : 0.24, ease: 'easeOut' },
+                        }}
+                        className="overflow-hidden"
+                        style={{ willChange: 'height, opacity' }}
+                      >
+                        <div className="mt-3 border-t border-[color:var(--portal-border)] pt-3.5">
+                          <div className="space-y-3">
+                            {cardDetails?.error && <p role="status" className="text-xs text-red-700 dark:text-red-300">{cardDetails.error}</p>}
+                            <div className="grid min-w-0 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
+                              <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Email</p><p className="mt-0.5 break-words">{lead.email || 'Not provided'}</p></div>
+                              <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Phone</p><p className="mt-0.5 break-words">{lead.phone ? formatPhoneDisplay(lead.phone) : 'Not provided'}</p></div>
+                              <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Location</p><p className="mt-0.5 break-words">{typeof lead.metadata?.location === 'string' ? lead.metadata.location : typeof lead.metadata?.address === 'string' ? lead.metadata.address : 'Not provided'}</p></div>
+                              <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Guests</p><p className="mt-0.5 break-words">{lead.guest_count ? `${lead.guest_count} guests` : 'Not provided'}</p></div>
+                              <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Budget</p><p className="mt-0.5 break-words">{lead.budget || 'Not provided'}</p></div>
+                              <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Lead source</p><p className="mt-0.5 break-words">{lead.source?.replaceAll('_', ' ') || 'Not provided'}</p></div>
+                            </div>
+                            {(cardDetails?.contacts.length ?? 0) > 0 && <section className="space-y-2"><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Other event contacts</h4><ul className="grid gap-2 sm:grid-cols-2">{cardDetails!.contacts.map((contact) => <li key={contact.id} className="min-w-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-xs"><p className="break-words font-semibold">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="mt-1 break-words text-[color:var(--portal-muted)]">{[contact.email, contact.phone ? formatPhoneDisplay(contact.phone) : null].filter(Boolean).join(' · ') || 'No contact details'}</p></li>)}</ul></section>}
+                            {lead.message && <section><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Inquiry notes</h4><p className="mt-1 whitespace-pre-wrap break-words text-xs">{lead.message}</p></section>}
+                            <section className="space-y-2">
+                              <h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">History &amp; activity</h4>
+                              {cardHistory.length ? (
+                                <ol className="space-y-2">{cardHistory.map((item) => <li key={item.id} className="min-w-0 border-l-2 border-[#caa24c]/50 pl-3"><div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1"><strong className="break-words text-xs">{item.label}</strong>{item.at && <time className="shrink-0 text-[10px] text-[color:var(--portal-muted)]">{new Date(item.at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium' })}</time>}</div>{item.detail && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[color:var(--portal-muted)]">{item.detail}</p>}</li>)}</ol>
+                              ) : cardDetails?.loading ? (
+                                <div className="space-y-1.5 py-1">
+                                  <div className="h-3 w-40 rounded bg-[color:var(--portal-soft)] animate-pulse" />
+                                  <div className="h-2.5 w-56 rounded bg-[color:var(--portal-soft)] animate-pulse" />
+                                </div>
+                              ) : (
+                                <p className="text-xs text-[color:var(--portal-muted)]">No earlier activity is recorded.</p>
+                              )}
+                              {cardDetails?.hasMoreHistory && <button type="button" onClick={() => void loadExpandedCardDetails(row.inquiryId, cardDetails.historyPage + 1, true)} disabled={cardDetails.loading} className="min-h-9 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Load earlier activity</button>}
+                            </section>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
                   </div>
-                </div>
-                <div id={cardDetailsId} hidden={!isExpanded} className={isExpanded ? 'mt-3 border-t border-[color:var(--portal-border)] pt-3' : 'hidden'}>
-                  {isExpanded ? <div className="space-y-3">
-                    {cardDetails?.loading && <p className="text-xs text-[color:var(--portal-muted)]">Loading additional details…</p>}
-                    {cardDetails?.error && <p role="status" className="text-xs text-red-700 dark:text-red-300">{cardDetails.error}</p>}
-                    <div className="grid min-w-0 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
-                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Email</p><p className="mt-0.5 break-words">{lead.email || 'Not provided'}</p></div>
-                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Phone</p><p className="mt-0.5 break-words">{lead.phone ? formatPhoneDisplay(lead.phone) : 'Not provided'}</p></div>
-                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Location</p><p className="mt-0.5 break-words">{typeof lead.metadata?.location === 'string' ? lead.metadata.location : typeof lead.metadata?.address === 'string' ? lead.metadata.address : 'Not provided'}</p></div>
-                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Guests</p><p className="mt-0.5 break-words">{lead.guest_count ? `${lead.guest_count} guests` : 'Not provided'}</p></div>
-                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Budget</p><p className="mt-0.5 break-words">{lead.budget || 'Not provided'}</p></div>
-                      <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Lead source</p><p className="mt-0.5 break-words">{lead.source?.replaceAll('_', ' ') || 'Not provided'}</p></div>
-                    </div>
-                    {(cardDetails?.contacts.length ?? 0) > 0 && <section className="space-y-2"><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Other event contacts</h4><ul className="grid gap-2 sm:grid-cols-2">{cardDetails!.contacts.map((contact) => <li key={contact.id} className="min-w-0 rounded-lg border border-[color:var(--portal-border)] p-2 text-xs"><p className="break-words font-semibold">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="mt-1 break-words text-[color:var(--portal-muted)]">{[contact.email, contact.phone ? formatPhoneDisplay(contact.phone) : null].filter(Boolean).join(' · ') || 'No contact details'}</p></li>)}</ul></section>}
-                    {lead.message && <section><h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Inquiry notes</h4><p className="mt-1 whitespace-pre-wrap break-words text-xs">{lead.message}</p></section>}
-                    <section className="space-y-2">
-                      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">History &amp; activity</h4>
-                      {cardHistory.length ? <ol className="space-y-2">{cardHistory.map((item) => <li key={item.id} className="min-w-0 border-l-2 border-[#caa24c]/50 pl-3"><div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1"><strong className="break-words text-xs">{item.label}</strong>{item.at && <time className="shrink-0 text-[10px] text-[color:var(--portal-muted)]">{new Date(item.at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium' })}</time>}</div>{item.detail && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[color:var(--portal-muted)]">{item.detail}</p>}</li>)}</ol> : !cardDetails?.loading ? <p className="text-xs text-[color:var(--portal-muted)]">No earlier activity is recorded.</p> : null}
-                      {cardDetails?.hasMoreHistory && <button type="button" onClick={() => void loadExpandedCardDetails(row.inquiryId, cardDetails.historyPage + 1, true)} disabled={cardDetails.loading} className="min-h-9 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Load earlier activity</button>}
-                    </section>
-                  </div> : null}
-                </div>
-              </LuxorCrmRecordCard>
-            )
-          })}
-          {!visibleRows.length && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-12 text-center text-sm text-[color:var(--portal-muted)]">{filter === 'post_tour' ? 'No completed tours match these filters.' : 'No matching follow-up leads. Add a task to keep the next step with its lead.'}</div>}
-        </div>
-      </PortalSkeletonTransition>
-      <div className="sticky bottom-0 z-20 hidden items-center justify-between gap-4 border-t border-[color:var(--portal-border)] bg-[#fffdf9]/90 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] shadow-sm backdrop-blur-2xl dark:bg-[#080706]/85 md:flex md:rounded-xl md:border md:bg-[color:var(--portal-card)] md:shadow-xs md:mt-3">
-        <span><span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length ? (page - 1) * 25 + 1 : 0}–{Math.min(page * 25, visibleRows.length)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length}</span> follow-ups</span>
-        <PortalPagination currentPage={page} totalPages={totalPages} onPageChange={setCurrentPage} />
-      </div>
-      </div>
+                </LuxorCrmRecordCard>
+              )
+            })}
+            {!visibleRows.length && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-12 text-center text-sm text-[color:var(--portal-muted)]">{filter === 'post_tour' ? 'No completed tours match these filters.' : filter === 'completed' ? 'No completed follow-ups match these filters.' : filter === 'upcoming' ? 'No upcoming follow-ups match these filters.' : 'No matching follow-up leads. Add a task to keep the next step with its lead.'}</div>}
+          </div>
+        </PortalSkeletonTransition>
+      </PortalTableCard>
 
-      {typeof document !== 'undefined' ? createPortal(
-        <div data-portal-fixed-pagination className="fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[#fffdf9]/85 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] backdrop-blur-2xl dark:bg-[#080706]/80 md:hidden" style={{ WebkitBackdropFilter: 'blur(24px)' }}>
-          <span><span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length ? (page - 1) * 25 + 1 : 0}–{Math.min(page * 25, visibleRows.length)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length}</span></span>
-          <PortalPagination currentPage={page} totalPages={totalPages} onPageChange={setCurrentPage} />
-        </div>, document.body,
-      ) : null}
       {selected && <aside className="min-h-[28rem] overflow-y-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 xl:sticky xl:top-0 xl:self-start xl:max-h-[calc(100vh-10rem)]">
         <>
           <div className="flex items-start justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3"><div><h2 className="font-serif text-xl">{selected.full_name}</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">{selected.event_type ?? 'Event not specified'} · {selected.target_date ?? 'Date not set'}</p><span className="mt-2 inline-flex rounded-full bg-[#caa24c]/15 px-3 py-1 text-[11px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">{getStageLabel(selected)}</span></div><button type="button" aria-label="Close lead workspace" onClick={() => { setSelectedId(null); setMoreOpen(false); resetCallDraft() }} className="rounded-lg border border-[color:var(--portal-border)] p-2"><X size={15} /></button></div>
@@ -888,13 +1054,20 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                 </article>
               })}
             </section>}
-            {selectedHistory.length ? <ol className="space-y-3">{selectedHistory.map((item) => <li key={item.id} className="flex gap-3 border-l-2 border-[#caa24c]/50 pl-3"><span className="mt-0.5 text-[#a8792f]">{item.kind === 'call' ? <Phone size={14} /> : item.kind === 'email' ? <Mail size={14} /> : item.kind === 'note' ? <FileText size={14} /> : <Clock3 size={14} />}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><strong className="text-xs">{item.label}</strong><time className="shrink-0 text-[10px] text-[color:var(--portal-muted)]">{item.at ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.at)) : ''}</time></div>{item.detail && <p className="mt-1 whitespace-pre-wrap text-xs text-[color:var(--portal-muted)]">{item.detail}</p>}</div></li>)}</ol> : <p className="text-sm text-[color:var(--portal-muted)]">No calls, emails, notes, or scheduled follow-ups are recorded.</p>}
+            {selectedHistory.length ? <ol className="space-y-3">{selectedHistory.map((item) => <li key={item.id} className="flex gap-3 border-l-2 border-[#caa24c]/50 pl-3"><span className="mt-0.5 text-[#a8792f]">{item.kind === 'call' ? <Phone size={14} /> : item.kind === 'email' ? <Mail size={14} /> : item.kind === 'note' ? <FileText size={14} /> : <Clock3 size={14} />}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><strong className="text-xs">{item.label}</strong><time className="shrink-0 text-[10px] text-[color:var(--portal-muted)]">{item.at ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium' }).format(new Date(item.at)) : ''}</time></div>{item.detail && <p className="mt-1 whitespace-pre-wrap text-xs text-[color:var(--portal-muted)]">{item.detail}</p>}</div></li>)}</ol> : <p className="text-sm text-[color:var(--portal-muted)]">No calls, emails, notes, or scheduled follow-ups are recorded.</p>}
             {historyHasMore && <div className="flex justify-center"><PortalButton size="sm" variant="ghost" onClick={() => void loadHistory(selected.id, historyPage + 1, true).catch((error) => notify({ title: 'Earlier activity could not be loaded', description: error instanceof Error ? error.message : 'Try again.', variant: 'error' }))}>Load earlier activity</PortalButton></div>}
           </div>}
           {moreOpen && <div className="mt-4 rounded-lg border border-[color:var(--portal-border)] p-2"><div className="grid gap-1 text-left">{[['Schedule or reschedule tour', 'event'], ['Send or edit proposal', 'proposals'], ['Add note', 'notes'], ['Change lead status', 'profile'], ['Move to Nurture', 'nurture']].map(([label, action]) => <button key={label} type="button" onClick={() => { if (action === 'event') openLeadWorkspace(selected, 'tour'); else if (action === 'profile') openLeadWorkspace(selected, 'profile'); else if (action === 'proposals') { setDetailTab('proposals'); openLeadWorkspace(selected, 'proposal') } else if (action === 'notes') setDetailTab('notes'); else void moveToNurture(selected.id) }} className="flex min-h-9 items-center rounded-md px-2 text-left text-xs hover:bg-[color:var(--portal-soft)]">{label}</button>)}{sequence?.status === 'active' && <button type="button" onClick={() => setPauseOpen(true)} className="flex min-h-9 items-center rounded-md px-2 text-left text-xs hover:bg-[color:var(--portal-soft)]">Pause Follow-Ups</button>}{sequence?.status === 'paused' && <button type="button" onClick={() => void resumeSequence()} className="flex min-h-9 items-center rounded-md px-2 text-left text-xs hover:bg-[color:var(--portal-soft)]">Resume Follow-Ups</button>}{(sequence?.status === 'active' || sequence?.status === 'paused') && <button type="button" onClick={() => setStopOpen(true)} className="flex min-h-9 items-center rounded-md px-2 text-left text-xs text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/20">Stop Follow-Ups</button>}</div></div>}
         </>
       </aside>}
     </div>
+
+    {typeof document !== 'undefined' ? createPortal(
+      <div data-portal-fixed-pagination className="fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-[55] flex h-[69px] items-center justify-between gap-2 border-t border-[color:var(--portal-border)] bg-[#fffdf9]/85 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] backdrop-blur-2xl dark:bg-[#080706]/80 md:hidden" style={{ WebkitBackdropFilter: 'blur(24px)' }}>
+        <span><span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length ? startIndex + 1 : 0}–{rangeEnd}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{visibleRows.length}</span></span>
+        <PortalPagination currentPage={page} totalPages={totalPages} onPageChange={setCurrentPage} />
+      </div>, document.body,
+    ) : null}
 
     <PortalModal isOpen={adding} onClose={() => setAdding(false)} title="Add Follow-Up" description="Create a manual reminder on the existing lead. This does not send an email or place a call." maxWidth="max-w-lg" zIndex={100}>
       <form onSubmit={saveTask} className="space-y-4"><label className="block text-sm">Lead<PortalSelect value={leadId} onChange={setLeadId} options={leads.filter((lead) => !isLuxorInquiryArchived(lead)).map((lead) => ({ value: lead.id, label: lead.full_name }))} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Type<PortalSelect value={newChannel} onChange={(value) => setNewChannel(value as Channel)} options={[{ value: 'phone', label: 'Phone call' }, { value: 'email', label: 'Email task' }]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Title<input required value={title} onChange={(event) => setTitle(event.target.value)} placeholder={newChannel === 'phone' ? 'Personal call' : 'Follow-up email'} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Due date<PortalDatePicker value={dueDate} onChange={setDueDate} placeholder="Choose date" minDate={today} className="mt-1 w-full [&>button]:h-10 [&>button]:rounded-lg [&>button]:px-3 [&>button]:py-2 [&>button]:normal-case [&>button]:tracking-normal" /></label><label className="block text-sm">Due time (Central)<input required type="time" value={dueTime} onChange={(event) => setDueTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Assigned to<PortalSelect value={assignee} onChange={setAssignee} options={[{ value: '', label: 'Assign to me' }, ...assignees.map((email) => ({ value: email, label: email }))]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm" /></label><div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={() => setAdding(false)}>Cancel</PortalButton><PortalButton type="submit" disabled={!leadId || !dueDate || !dueTime}>Save Follow-Up</PortalButton></div></form>
@@ -911,7 +1084,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     <PortalModal isOpen={Boolean(profileWorkspace)} onClose={() => { void closeLeadWorkspace() }} title={profileWorkspace ? `${leadById.get(profileWorkspace.leadId)?.full_name ?? 'Lead'} · ${profileWorkspace.stage === 'tour' ? 'Tour controls' : profileWorkspace.stage === 'proposal' ? 'Proposal workspace' : 'Lead status'}` : undefined} description="Existing lead tools open here so closing returns to this Follow-Ups workspace." maxWidth="max-w-7xl" zIndex={130}>
       {profileWorkspace && <iframe title={`${leadById.get(profileWorkspace.leadId)?.full_name ?? 'Lead'} workspace`} src={`/portal/leads/${profileWorkspace.leadId}${profileWorkspace.stage === 'profile' ? '' : `?stage=${profileWorkspace.stage}`}`} className="h-[78vh] min-h-[34rem] w-full rounded-lg border border-[color:var(--portal-border)] bg-white" />}
     </PortalModal>
-  </section>
+  </div>
 }
 
 function DetailItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) { return <div className="min-w-0"><div className="flex items-center gap-1.5 text-[10px] text-[color:var(--portal-muted)]">{icon}{label}</div><div className="mt-1 break-words text-xs font-medium">{value}</div></div> }
