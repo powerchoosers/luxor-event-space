@@ -270,16 +270,29 @@ export async function POST(request: NextRequest) {
 
     // 4. Action: CREATE_TASK
     if (action === 'CREATE_TASK') {
-      const { title, description, priority, dueDate, inquiryId } = body as {
+      const { title, description, priority, dueDate } = body as {
         title: string
         description?: string
         priority?: 'low' | 'medium' | 'high'
         dueDate?: string
-        inquiryId?: string
       }
+      const inquiryId = typeof body.inquiryId === 'string' ? body.inquiryId.trim() : ''
 
       if (!title || !title.trim()) {
         return NextResponse.json({ error: 'Task title is required' }, { status: 400 })
+      }
+
+      if (!inquiryId) {
+        return NextResponse.json({ error: 'Choose an existing client before saving this task. Ask Elena to identify the client by name first.' }, { status: 400 })
+      }
+
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(inquiryId)) {
+        return NextResponse.json({ error: 'That client could not be verified. Ask Elena to look up the client by name and try again.' }, { status: 400 })
+      }
+
+      const existingInquiry = await getLuxorInquiry(inquiryId)
+      if (!existingInquiry) {
+        return NextResponse.json({ error: 'That client is no longer available in Luxor. Ask Elena to look up the client by name and try again.' }, { status: 404 })
       }
 
       const [createdTask] = await supabaseRest<Array<{ id: string; title: string }>>('luxor_tasks?select=*', {
@@ -290,7 +303,7 @@ export async function POST(request: NextRequest) {
           description: description ? description.trim() : null,
           priority: priority || 'medium',
           due_date: dueDate || null,
-          inquiry_id: inquiryId || null,
+          inquiry_id: inquiryId,
           status: 'pending',
         }),
       })

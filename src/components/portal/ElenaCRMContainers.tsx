@@ -523,7 +523,8 @@ export function ElenaInvoiceCard({
 
 // --- 4. Task Creator Container ---
 export interface TaskCardPayload {
-  inquiryId?: string
+  inquiryId: string
+  clientName?: string
   title: string
   description?: string
   priority?: 'low' | 'medium' | 'high'
@@ -595,6 +596,9 @@ export function ElenaTaskCard({
       </div>
 
       <div className="p-4 space-y-3">
+        <div className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/5 px-3 py-2 text-xs text-zinc-300">
+          Linked client: <span className="font-semibold text-zinc-100">{payload.clientName || 'Verified Luxor client'}</span>
+        </div>
         <div>
           <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">Task Title</label>
           <input
