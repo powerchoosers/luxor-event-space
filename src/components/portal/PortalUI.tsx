@@ -177,6 +177,7 @@ export function PortalAnimatedTabs<T extends string>({
   className = '',
   buttonClassName = '',
   ariaLabel = 'Portal tabs',
+  variant = 'underline',
 }: {
   tabs: readonly PortalAnimatedTabItem<T>[]
   activeTab: T
@@ -184,7 +185,9 @@ export function PortalAnimatedTabs<T extends string>({
   className?: string
   buttonClassName?: string
   ariaLabel?: string
+  variant?: 'underline' | 'slider'
 }) {
+  const reduceMotion = useReducedMotion()
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const buttonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({})
   const [indicator, setIndicator] = React.useState({ left: 0, width: 0, visible: false })
@@ -243,16 +246,24 @@ export function PortalAnimatedTabs<T extends string>({
     }
   }, [activeTab, tabsSignature])
 
+  const isSlider = variant === 'slider'
+
   return (
-    <nav ref={containerRef} aria-label={ariaLabel} className={`relative inline-flex shrink-0 min-w-max items-stretch gap-5 ${className}`}>
-      <span
-        className="pointer-events-none absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
-        style={{
-          left: indicator.left,
-          width: indicator.width,
-          opacity: indicator.visible ? 1 : 0,
-        }}
-      />
+    <nav
+      ref={containerRef}
+      aria-label={ariaLabel}
+      className={`${isSlider ? 'flex w-full min-w-max items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1' : 'relative inline-flex shrink-0 min-w-max items-stretch gap-5'} ${className}`}
+    >
+      {!isSlider ? (
+        <span
+          className="pointer-events-none absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
+          style={{
+            left: indicator.left,
+            width: indicator.width,
+            opacity: indicator.visible ? 1 : 0,
+          }}
+        />
+      ) : null}
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id
         return (
@@ -263,23 +274,31 @@ export function PortalAnimatedTabs<T extends string>({
             }}
             type="button"
             onClick={() => onTabChange(tab.id)}
-            className={`relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-0 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${
-              isActive
-                ? 'text-[#a8792f]'
-                : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-            } ${buttonClassName}`}
+            className={`${isSlider
+              ? `relative isolate inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:px-4 sm:text-xs ${isActive ? 'text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`
+              : `relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-0 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${isActive ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`} ${buttonClassName}`}
           >
-            {tab.icon}
-            {tab.label}
-            {typeof tab.count === 'number' ? (
-              <span
-                className={`rounded-full px-1.5 py-0.5 tabular-nums font-bold text-[9px] ${
-                  isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'
-                }`}
-              >
-                {tab.count}
-              </span>
+            {isSlider && isActive ? (
+              <motion.span
+                layoutId={`portal-tab-slider-${ariaLabel}`}
+                className="absolute inset-0 rounded-lg bg-[#caa24c]/15"
+                transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
+                aria-hidden="true"
+              />
             ) : null}
+            <span className={isSlider ? 'relative z-10 inline-flex items-center gap-2' : 'contents'}>
+              {tab.icon}
+              {tab.label}
+              {typeof tab.count === 'number' ? (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 tabular-nums font-bold text-[9px] ${
+                    isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              ) : null}
+            </span>
           </button>
         )
       })}
@@ -1422,19 +1441,21 @@ export function PortalSkeletonTransition({
   children,
   className = '',
   overlap = false,
+  animateInitialSkeleton = false,
 }: {
   loading: boolean
   skeleton: React.ReactNode
   children: React.ReactNode
   className?: string
   overlap?: boolean
+  animateInitialSkeleton?: boolean
 }) {
   const reduceMotion = useReducedMotion()
 
   if (overlap) {
     return <div className={`grid min-w-0 ${className}`} aria-busy={loading}>
-      <AnimatePresence initial={false}>
-        {loading && <motion.div key="skeleton" className="col-start-1 row-start-1 z-10 pointer-events-none" initial={false} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }} transition={{ duration: reduceMotion ? 0 : 0.28 }}>{skeleton}</motion.div>}
+      <AnimatePresence initial={animateInitialSkeleton}>
+        {loading && <motion.div key="skeleton" className="col-start-1 row-start-1 z-10 pointer-events-none" initial={animateInitialSkeleton && !reduceMotion ? { opacity: 0.65, filter: 'blur(12px)' } : false} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(12px)' }} transition={{ duration: reduceMotion ? 0 : 0.28, ease: LUXOR_PORTAL_EASE }}>{skeleton}</motion.div>}
       </AnimatePresence>
       {!loading && <motion.div className="col-start-1 row-start-1 min-w-0" initial={reduceMotion ? false : { opacity: 0.65, filter: 'blur(12px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} transition={{ duration: reduceMotion ? 0 : 0.32, ease: LUXOR_PORTAL_EASE }}>{children}</motion.div>}
     </div>

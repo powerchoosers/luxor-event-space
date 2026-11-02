@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState, Suspense } from 'react
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   Mail,
   Plus,
@@ -888,8 +888,8 @@ function MarketingPageContent() {
         </>
       ) : null}
 
-      <div className="mt-1 flex min-h-0 flex-grow flex-col overflow-hidden">
-        <PortalTabTransition activeKey={activeTab} className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="mt-1 flex min-h-0 flex-grow flex-col overflow-visible">
+        <PortalTabTransition activeKey={activeTab} className="flex flex-1 min-h-0 flex-col overflow-visible mt-0">
             {activeTab === 'overview' && (
               <MarketingOverviewTab
                 onTabChange={handleTabChange}
@@ -986,6 +986,7 @@ function MarketingPageContent() {
 
 function MarketingWorkspaceNav({ activeTab, onTabChange }: { activeTab: MarketingTab; onTabChange: (tab: MarketingTab) => void }) {
   const selectedTab = primaryTabFor(activeTab)
+  const reduceMotion = useReducedMotion()
   return (
     <nav aria-label="Marketing sections" className="min-w-0 overflow-x-auto portal-scrollbar pb-1">
       <div className="flex min-w-max items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1">
@@ -997,8 +998,16 @@ function MarketingWorkspaceNav({ activeTab, onTabChange }: { activeTab: Marketin
               type="button"
               onClick={() => onTabChange(tab.id)}
               aria-current={isActive ? 'page' : undefined}
-              className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:px-4 sm:text-xs ${isActive ? 'bg-[#caa24c]/15 text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+              className={`relative isolate inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:px-4 sm:text-xs ${isActive ? 'text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
             >
+              {isActive ? (
+                <motion.span
+                  layoutId="marketing-active-tab-indicator"
+                  className="absolute inset-0 -z-10 rounded-lg bg-[#caa24c]/15"
+                  transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
+                  aria-hidden="true"
+                />
+              ) : null}
               {tab.icon}<span>{tab.label}</span>
             </button>
           )

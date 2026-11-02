@@ -60,6 +60,9 @@ import type { LuxorMailboxPageRequest, LuxorMailboxPageResult } from '@/lib/luxo
 const EmailPdfPreview = dynamic(() => import('@/components/portal/EmailPdfPreview'), { ssr: false })
 const EMAIL_READER_MOBILE_QUERY = '(max-width: 1023px)'
 const EMAIL_READER_SHORT_LANDSCAPE_QUERY = '(max-width: 1100px) and (orientation: landscape) and (max-height: 500px)'
+const subscribeToNoExternalStoreChanges = () => () => undefined
+const getDomParserAvailability = () => typeof DOMParser !== 'undefined'
+const getServerDomParserAvailability = () => false
 
 function subscribeToEmailReaderMobileLayout(callback: () => void) {
   const mediaQuery = window.matchMedia(EMAIL_READER_MOBILE_QUERY)
@@ -1258,6 +1261,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }, [previewAttachment?.url])
 
   useEffect(() => {
+    if (!previewAttachment) return
+    const closeTopmostPreviewOnEscape = (event: KeyboardEvent) => dismissTopmostAttachmentPreviewOnEscape(event, () => setPreviewAttachment(null))
+    window.addEventListener('keydown', closeTopmostPreviewOnEscape, true)
+    return () => window.removeEventListener('keydown', closeTopmostPreviewOnEscape, true)
+  }, [previewAttachment?.url])
+
+  useEffect(() => {
     attachmentPreviewRequestRef.current += 1
     setPreviewAttachment(null)
     setOpeningAttachment(null)
@@ -2384,13 +2394,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         )}
         </AnimatePresence>
 
-        <AnimatePresence>
-          {previewAttachment && (
+        {previewAttachment && typeof document !== 'undefined' ? createPortal(
             <motion.div
-              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+              className="fixed inset-0 z-[300] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
               onClick={closeAttachmentPreview}
             >
               <motion.div
@@ -2431,9 +2439,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                   )}
                 </div>
               </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </motion.div>,
+            document.body,
+          ) : null}
       </div>
     </div>
   </div>
@@ -2647,6 +2655,11 @@ function ThreadMessage({
   const reduceMotion = useReducedMotion()
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [fullEmailOpen, setFullEmailOpen] = useState(false)
+  const quoteCollapseReady = useSyncExternalStore(
+    subscribeToNoExternalStoreChanges,
+    getDomParserAvailability,
+    getServerDomParserAvailability,
+  )
   const [fullEmailSizeState, setFullEmailSizeState] = useState<{ frameKey: string; value: boolean } | null>(null)
   const [emailLayoutState, setEmailLayoutState] = useState<{ frameKey: string; naturalWidth: number; availableWidth: number } | null>(null)
   const [frameHeight, setFrameHeight] = useState(260)
@@ -2688,19 +2701,28 @@ function ThreadMessage({
     () => chat && outgoing ? extractLuxorConversationBody(message.htmlContent) : null,
     [chat, message.htmlContent, outgoing],
   )
-  const conversationHtml = compactLuxorBody && !fullEmailOpen
-    ? compactLuxorBody
-    : message.htmlContent || (message.content ? plainTextToEmailHtml(message.content, !fullEmailOpen) : null)
+  const conversationText = useMemo(
+    () => outgoing ? message.content || '' : stripQuotedEmailTail(message.content || ''),
+    [message.content, outgoing],
+  )
+  const originalEmailHtml = message.htmlContent || (message.content ? plainTextToEmailHtml(message.content, false) : null)
   const collapsedQuoteBody = useMemo(
-    () => !fullEmailOpen && conversationHtml ? collapseLongQuotedEmailContent(conversationHtml) : null,
-    [conversationHtml, fullEmailOpen],
+    () => quoteCollapseReady && !outgoing && message.htmlContent ? collapseLongQuotedEmailContent(message.htmlContent) : null,
+    [message.htmlContent, outgoing, quoteCollapseReady],
+  )
+  const conversationHtml = compactLuxorBody
+    || (message.htmlContent ? collapsedQuoteBody?.collapsedCount ? collapsedQuoteBody.html : message.htmlContent : null)
+    || (conversationText ? plainTextToEmailHtml(conversationText, true) : null)
+  const fullEmailDocument = useMemo(
+    () => buildMessageDocument({ ...message, htmlContent: originalEmailHtml, content: '' }, blockExternalImages, portalTheme, false, true),
+    [message, originalEmailHtml, blockExternalImages, portalTheme],
   )
   const displayedMessage = useMemo(() => ({
     ...message,
-    htmlContent: collapsedQuoteBody?.collapsedCount ? collapsedQuoteBody.html : conversationHtml,
-  }), [message, collapsedQuoteBody, conversationHtml])
+    htmlContent: conversationHtml,
+  }), [message, conversationHtml])
   const html = useMemo(() => buildMessageDocument(displayedMessage, blockExternalImages, portalTheme, chat), [displayedMessage, blockExternalImages, portalTheme, chat])
-  const frameKey = `${messageKey(message)}:${compactLuxorBody && !fullEmailOpen ? 'conversation-body' : 'full-email'}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`
+  const frameKey = `${messageKey(message)}:${compactLuxorBody ? 'conversation-body' : 'message-body'}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`
   const fullEmailSize = fullEmailSizeState?.frameKey === frameKey && fullEmailSizeState.value
   const emailLayout = emailLayoutState?.frameKey === frameKey ? emailLayoutState : null
   const fullEmailFrameWidth = emailLayout
@@ -2958,6 +2980,7 @@ function ThreadMessage({
 
   if (chat) {
     return (
+      <>
       <article
         id={`thread-message-${message.id}`}
         data-message-id={message.id}
@@ -3011,13 +3034,13 @@ function ThreadMessage({
                 </>
               ) : (
                 <div className="min-h-10 whitespace-pre-wrap break-words px-3 py-2 font-sans text-sm leading-6 text-[color:var(--portal-text)] sm:px-4">
-                  {message.content || message.summary || 'No message body available.'}
+                  {conversationText || message.summary || 'No message body available.'}
                 </div>
               )}
-              {compactLuxorBody || message.htmlContent || message.content ? <div className={`px-3 pb-1 pt-2 ${outgoing ? 'text-right' : 'text-left'}`}>
-                <button type="button" onClick={() => setFullEmailOpen((open) => !open)} aria-expanded={fullEmailOpen}
+              {originalEmailHtml || message.content ? <div className={`px-3 pb-1 pt-2 ${outgoing ? 'text-right' : 'text-left'}`}>
+                <button type="button" onClick={() => setFullEmailOpen(true)} aria-haspopup="dialog"
                   className="min-h-9 text-xs font-medium text-[#8c6529] underline decoration-[#caa24c]/50 underline-offset-2 hover:text-[#6f4c1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] dark:text-[#f1d27a]">
-                  {fullEmailOpen ? 'Return to conversation view' : 'View full email'}
+                  View full email
                 </button>
               </div> : null}
               {message.attachments?.length ? (
@@ -3046,6 +3069,59 @@ function ThreadMessage({
           </div>
         </div>
       </article>
+      <PortalModal
+        isOpen={fullEmailOpen}
+        onClose={() => setFullEmailOpen(false)}
+        title="Full email"
+        description="The original message, including its quoted conversation and forwarded content."
+        maxWidth="max-w-5xl"
+        className="h-[min(92dvh,60rem)]"
+        zIndex={90}
+      >
+        <div className="space-y-4">
+          <dl className="grid gap-x-5 gap-y-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-xs sm:grid-cols-[minmax(5rem,auto)_minmax(0,1fr)] sm:p-4">
+            <dt className="font-semibold text-[color:var(--portal-muted)]">Subject</dt>
+            <dd className="min-w-0 break-words font-semibold text-[color:var(--portal-text)]">{decodeHtmlEntities(message.subject) || 'No subject'}</dd>
+            <dt className="font-semibold text-[color:var(--portal-muted)]">From</dt>
+            <dd className="min-w-0 break-all text-[color:var(--portal-text)]">{message.from || 'Unknown sender'}</dd>
+            <dt className="font-semibold text-[color:var(--portal-muted)]">To</dt>
+            <dd className="min-w-0 break-all text-[color:var(--portal-text)]">{message.to || 'Unknown recipient'}</dd>
+            {message.cc ? <><dt className="font-semibold text-[color:var(--portal-muted)]">Cc</dt><dd className="min-w-0 break-all text-[color:var(--portal-text)]">{message.cc}</dd></> : null}
+            <dt className="font-semibold text-[color:var(--portal-muted)]">Date</dt>
+            <dd className="min-w-0 text-[color:var(--portal-text)]"><time dateTime={message.receivedAt || undefined}>{formatEmailDateDetailed(message.receivedAt)}</time></dd>
+          </dl>
+          <section aria-label="Original email body" className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-white">
+            {originalEmailHtml ? <iframe
+              key={`full:${messageKey(message)}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`}
+              srcDoc={fullEmailDocument}
+              title={`${decodeHtmlEntities(message.subject)} — full email`}
+              className="block h-[min(58dvh,44rem)] min-h-64 w-full border-0 bg-white"
+              scrolling="yes"
+              sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+            /> : <p className="whitespace-pre-wrap break-words bg-[color:var(--portal-card)] p-4 text-sm leading-6 text-[color:var(--portal-text)]">No message body available.</p>}
+          </section>
+          {message.attachments?.length ? <section aria-label="Email attachments" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:p-4">
+            <h4 className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]"><Paperclip size={12} /> Attachments ({message.attachments.length})</h4>
+            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+              {message.attachments.map((attachment, index) => {
+                const reference = attachment.attachmentId || attachment.attachmentPath || ''
+                if (isPreviewableEmailImage(attachment)) return <EmailAttachmentImageThumbnail
+                  key={`full-${attachment.filename}-${index}`}
+                  attachment={attachment}
+                  message={message}
+                  onOpen={onOpenAttachment}
+                />
+                return <button key={`full-${attachment.filename}-${index}`} type="button" onClick={() => onOpenAttachment(attachment, message)} disabled={!reference || openingAttachment === reference}
+                  className="group flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 px-2.5 py-2 text-left transition-colors hover:border-[#caa24c]/35 disabled:cursor-wait disabled:opacity-60">
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[color:var(--portal-text)]">{attachment.filename}</span>
+                  {openingAttachment === reference ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} className="shrink-0 text-[color:var(--portal-muted)]" />}
+                </button>
+              })}
+            </div>
+          </section> : null}
+        </div>
+      </PortalModal>
+      </>
     )
   }
 
@@ -3159,6 +3235,13 @@ function EngagementIndicators({ engagement }: { engagement?: EmailMessageItem['e
   )
 }
 
+function dismissTopmostAttachmentPreviewOnEscape(event: KeyboardEvent, onClose: () => void) {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  onClose()
+}
+
 function isPreviewableEmailImage(attachment: EmailAttachment) {
   const mimeType = attachment.mimeType?.split(';')[0].trim().toLowerCase() || ''
   return /^image\/(?:png|jpeg|gif|webp)$/.test(mimeType)
@@ -3229,19 +3312,218 @@ function EmailAttachmentImageThumbnail({
 function collapseLongQuotedEmailContent(html: string) {
   if (typeof DOMParser === 'undefined') return { html, collapsedCount: 0 }
   const parsed = new DOMParser().parseFromString(html, 'text/html')
-  const candidates = Array.from(parsed.body.querySelectorAll('.gmail_quote, .yahoo_quoted, #divRplyFwdMsg, blockquote[type="cite"], blockquote'))
-    .filter((element) => (element.textContent || '').trim().length >= 350)
+  const outlookForward = parsed.body.querySelector<HTMLElement>('#divRplyFwdMsg')
+  let outlookQuoteDetails: HTMLDetailsElement | null = null
+  if (outlookForward && hasAuthoredContentBefore(parsed.body, outlookForward)
+    && hasOutlookHeader(outlookForward.textContent || '')) {
+    outlookQuoteDetails = wrapQuotedHeaderAndSingleFollowup(outlookForward, parsed) || wrapQuotedElement(outlookForward, parsed)
+  }
+
+  const explicitQuotes = Array.from(parsed.body.querySelectorAll('.gmail_quote, .yahoo_quoted, blockquote[type="cite"]'))
+    .filter((element) => !outlookQuoteDetails?.contains(element))
+  const candidates: Element[] = outlookQuoteDetails ? [outlookQuoteDetails] : []
+  candidates.push(...explicitQuotes.filter((element) => hasAuthoredContentBefore(parsed.body, element)))
+  const unwrappedQuoteHeaders = Array.from(parsed.body.querySelectorAll<HTMLElement>('p, div, span'))
+    .filter((element) => isSingleQuoteHeader(element.textContent || '') && hasAuthoredContentBefore(parsed.body, element))
+    .filter((element) => !explicitQuotes.some((quote) => quote.contains(element)))
+    .filter((element) => !Array.from(element.querySelectorAll('p, div, span')).some((child) => isSingleQuoteHeader(child.textContent || '')))
+  unwrappedQuoteHeaders.forEach((header) => {
+    if (candidates.some((quote) => quote.contains(header) || header.contains(quote))) return
+    const followingExplicitQuote = explicitQuotes.some((quote) => Boolean(header.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING))
+    if (followingExplicitQuote) {
+      header.remove()
+      return
+    }
+    const details = wrapQuotedHeaderAndSingleFollowup(header, parsed) || wrapQuotedElement(header, parsed)
+    if (details) candidates.push(details)
+  })
   const outermostCandidates = candidates.filter((element) => !candidates.some((other) => other !== element && other.contains(element)))
   outermostCandidates.forEach((quotedContent) => {
-    const details = parsed.createElement('details')
-    details.style.cssText = 'margin:12px 0;border-left:3px solid #caa24c;padding-left:10px;color:#71717a'
-    const summary = parsed.createElement('summary')
-    summary.textContent = 'Show quoted content'
-    summary.style.cssText = 'min-height:36px;display:flex;align-items:center;cursor:pointer;font:500 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'
+    if (quotedContent.tagName.toLowerCase() === 'details') return
+    const details = createQuotedEmailDetails(parsed)
     quotedContent.parentNode?.insertBefore(details, quotedContent)
-    details.append(summary, quotedContent)
+    details.appendChild(quotedContent)
   })
-  return { html: parsed.body.innerHTML, collapsedCount: outermostCandidates.length }
+  const bodyHtml = parsed.body.innerHTML
+  const headStyles = Array.from(parsed.head.querySelectorAll('style')).map((style) => style.outerHTML).join('')
+  return { html: `${headStyles}${bodyHtml}`, collapsedCount: outermostCandidates.length }
+}
+
+function createQuotedEmailDetails(document: Document) {
+  const details = document.createElement('details')
+  details.style.cssText = 'margin:12px 0;border-left:3px solid #caa24c;padding-left:10px;color:#71717a'
+  const summary = document.createElement('summary')
+  summary.textContent = 'Show quoted content'
+  summary.style.cssText = 'min-height:36px;display:flex;align-items:center;cursor:pointer;font:500 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'
+  details.append(summary)
+  return details
+}
+
+function hasAuthoredContentBefore(root: HTMLElement, target: Element) {
+  const range = root.ownerDocument.createRange()
+  range.selectNodeContents(root)
+  range.setEndBefore(target)
+  return Boolean(range.toString().trim())
+}
+
+function wrapQuotedElement(target: Element, document: Document) {
+  const parent = target.parentNode
+  if (!parent) return null
+  const details = createQuotedEmailDetails(document)
+  parent.insertBefore(details, target)
+  details.appendChild(target)
+  return details
+}
+
+function wrapQuotedHeaderAndSingleFollowup(target: Element, document: Document) {
+  const parent = target.parentNode
+  if (!parent) return null
+  const separators: Node[] = []
+  let contentNode = target.nextSibling
+  while (contentNode && (contentNode.nodeType === Node.TEXT_NODE && !contentNode.textContent?.trim()
+    || contentNode.nodeType === Node.ELEMENT_NODE && (contentNode as Element).tagName.toLowerCase() === 'hr')) {
+    separators.push(contentNode)
+    contentNode = contentNode.nextSibling
+  }
+  if (!contentNode || !hasEmailContent(contentNode) || !hasSingleParagraphContent(contentNode)) return null
+  let following = contentNode.nextSibling
+  while (following) {
+    if (hasEmailContent(following)) return null
+    following = following.nextSibling
+  }
+  const details = createQuotedEmailDetails(document)
+  parent.insertBefore(details, target)
+  details.appendChild(target)
+  separators.forEach((separator) => details.appendChild(separator))
+  details.appendChild(contentNode)
+  return details
+}
+
+function hasEmailContent(node: Node) {
+  if (node.nodeType === Node.TEXT_NODE) return Boolean(node.textContent?.trim())
+  if (node.nodeType !== Node.ELEMENT_NODE) return false
+  const element = node as Element
+  return Boolean(element.textContent?.trim()) || Boolean(element.querySelector('img,table,svg,video,audio,object,iframe'))
+}
+
+function hasSingleParagraphContent(node: Node): boolean {
+  if (node.nodeType === Node.TEXT_NODE) return Boolean(node.textContent?.trim())
+  if (node.nodeType !== Node.ELEMENT_NODE) return false
+  const element = node as Element
+  if (/^(?:TABLE|UL|OL|HR)$/.test(element.tagName) || element.querySelector('br,hr,table,ul,ol')) return false
+  const blockChildren = Array.from(element.children).filter((child) => /^(?:P|DIV|SECTION|ARTICLE|BLOCKQUOTE|PRE)$/.test(child.tagName))
+  if (blockChildren.length > 1) return false
+  if (blockChildren.length === 1) {
+    const block = blockChildren[0]
+    const hasSiblingContent = Array.from(element.childNodes).some((child) => child !== block && hasEmailContent(child))
+    return !hasSiblingContent && hasSingleParagraphContent(block)
+  }
+  return hasEmailContent(element)
+}
+
+function isSingleQuoteHeader(value: string) {
+  const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  return lines.length === 1 && isEmailQuoteHeader(lines[0])
+}
+
+function isEmailQuoteHeader(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return /^(?:On\s+.+\s+wrote:|Begin forwarded message:|-{2,}\s*Forwarded message\s*-{2,})$/i.test(normalized)
+}
+
+function hasOutlookHeader(value: string) {
+  const normalized = value
+    .replace(/(?<=[^\s])(?=(?:From|Sent|Date|To|Subject):)/gi, ' ')
+    .replace(/\s+/g, ' ')
+  return /\bFrom:\s*\S+/i.test(normalized)
+    && /\b(?:Sent|Date):\s*\S+/i.test(normalized)
+    && /\bTo:\s*\S+/i.test(normalized)
+    && /\bSubject:\s*\S+/i.test(normalized)
+}
+
+function stripQuotedEmailTail(value: string) {
+  const lines = value.split(/\r\n|\n|\r/)
+  const hasAuthoredPrefix = (index: number) => lines.slice(0, index).some((line) => {
+    const trimmed = line.trim()
+    return Boolean(trimmed)
+      && !isEmailQuoteHeader(trimmed)
+      && !/^>/.test(trimmed)
+      && !/^(?:From|Sent|Date|To|Subject):/i.test(trimmed)
+  })
+  const headerEndAt = (start: number) => {
+    if (isEmailQuoteHeader(lines[start])) return start
+    for (let end = start + 1; end <= Math.min(lines.length - 1, start + 2); end += 1) {
+      const wrappedHeader = lines.slice(start, end + 1)
+      if (wrappedHeader.some((line) => !line.trim())) break
+      if (isEmailQuoteHeader(wrappedHeader.join(' '))) return end
+    }
+    return -1
+  }
+  const removeQuotedLines = (start: number, endExclusive: number) => {
+    lines.splice(start, endExclusive - start)
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  }
+  const formatPreview = () => lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  const oneUnmarkedQuoteParagraph = (start: number) => {
+    const remainder = lines.slice(start).join('\n').trim()
+    return Boolean(remainder) && !/\n\s*\n/.test(remainder)
+  }
+
+  let changed = false
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!hasAuthoredPrefix(index)) continue
+    const quoteHeaderEnd = headerEndAt(index)
+    if (quoteHeaderEnd < 0) continue
+    let firstContent = quoteHeaderEnd + 1
+    while (firstContent < lines.length && !lines[firstContent].trim()) firstContent += 1
+
+    if (firstContent < lines.length && /^\s*>/.test(lines[firstContent])) {
+      let end = firstContent
+      while (end < lines.length && (/^\s*>/.test(lines[end]) || !lines[end].trim())) end += 1
+      const contentLength = lines.slice(firstContent, end).join('\n').replace(/^\s*>\s?/gm, '').trim().length
+      if (contentLength > 0) {
+        removeQuotedLines(index, end)
+        changed = true
+        index -= 1
+        continue
+      }
+    }
+
+    if (oneUnmarkedQuoteParagraph(quoteHeaderEnd + 1)) {
+      return lines.slice(0, index).join('\n').trimEnd()
+    }
+    // A header followed by multiple unmarked paragraphs has no reliable boundary;
+    // keep the content intact rather than hiding a possible authored continuation.
+    return changed ? formatPreview() : value
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!hasAuthoredPrefix(index) || !/^\s*From:\s*.+/i.test(lines[index])) continue
+    let end = index + 1
+    while (end < Math.min(lines.length, index + 6) && !/^\s*Subject:\s*.+/i.test(lines[end])) end += 1
+    const headerLines = lines.slice(index + 1, end + 1).map((line) => line.trim()).filter(Boolean)
+    const hasOutlookHeaderLines = headerLines.some((line) => /^(?:Sent|Date):\s*.+/i.test(line))
+      && headerLines.some((line) => /^To:\s*.+/i.test(line))
+      && /^\s*Subject:\s*.+/i.test(lines[end] || '')
+    if (!hasOutlookHeaderLines) continue
+    let firstContent = end + 1
+    while (firstContent < lines.length && !lines[firstContent].trim()) firstContent += 1
+    if (firstContent < lines.length && /^\s*>/.test(lines[firstContent])) {
+      let quoteEnd = firstContent
+      while (quoteEnd < lines.length && (/^\s*>/.test(lines[quoteEnd]) || !lines[quoteEnd].trim())) quoteEnd += 1
+      if (lines.slice(firstContent, quoteEnd).join('\n').replace(/^\s*>\s?/gm, '').trim()) {
+        removeQuotedLines(index, quoteEnd)
+        changed = true
+        break
+      }
+    } else if (oneUnmarkedQuoteParagraph(end + 1)) {
+      return lines.slice(0, index).join('\n').trimEnd()
+    } else {
+      return changed ? formatPreview() : value
+    }
+  }
+
+  return changed ? formatPreview() : value
 }
 
 function fixedPixelWidth(value: string | null | undefined) {
@@ -3306,7 +3588,7 @@ function applyIntrinsicEmailTableWidths(root: HTMLElement, document: Document, a
   return maximumWidth
 }
 
-function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean, portalTheme: 'light' | 'dark', chat = false) {
+function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean, portalTheme: 'light' | 'dark', chat = false, scrollableBody = false) {
   const hasHtmlBody = Boolean(message.htmlContent?.trim())
   const adaptHtmlForDarkTheme = hasHtmlBody && portalTheme === 'dark' && !hasDarkEmailSurface(message.htmlContent || '')
   const documentBackground = chat ? 'transparent' : hasHtmlBody ? (adaptHtmlForDarkTheme ? '#f7f8f9' : '#fff') : portalTheme === 'dark' ? '#080706' : '#fbfaf6'
@@ -3325,7 +3607,7 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   const chatFitRules = chat ? '#luxor-email-fit-viewport{position:relative;width:100%;height:auto;overflow:visible}#luxor-email-fit-content{position:absolute;top:0;left:0;width:100%;min-width:0;max-width:none;transform:none!important;overflow:visible}@media(max-width:639px){html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>table:not([data-luxor-wide-table]),html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>div,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>section,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>article,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content table:not([data-luxor-wide-table]){width:100%!important;min-width:0!important;max-width:100%!important;table-layout:auto!important}html:not([data-luxor-full-size="true"]) #luxor-email-fit-content table:not([data-luxor-wide-table]) td,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content table:not([data-luxor-wide-table]) th{max-width:100%!important;overflow-wrap:anywhere!important;word-break:normal!important}html:not([data-luxor-full-size="true"]) #luxor-email-fit-content [data-luxor-table-scroll]{width:100%!important;max-width:100%!important;overflow-x:auto!important;touch-action:pan-x pan-y!important}}' : ''
   const documentContent = chat ? `<div id="luxor-email-fit-viewport"><div id="luxor-email-fit-content">${content}</div></div>` : content
   const chatBodyAttribute = chat ? ' data-luxor-chat="true"' : ''
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}${tableRules}table.luxor-card{border-radius:16px!important;overflow:hidden!important}${cellRules}pre{white-space:pre-wrap;overflow-wrap:anywhere}${chatFitRules}${darkThemeFilter}</style></head><body${chatBodyAttribute}>${documentContent}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:${scrollableBody ? 'auto' : 'hidden'};overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}${tableRules}table.luxor-card{border-radius:16px!important;overflow:hidden!important}${cellRules}pre{white-space:pre-wrap;overflow-wrap:anywhere}${chatFitRules}${darkThemeFilter}</style></head><body${chatBodyAttribute}>${documentContent}</body></html>`
 }
 
 function hasDarkEmailSurface(html: string) {

@@ -1,17 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Planner result shapes vary by section and are validated by the server route. */
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
-  AlertCircle, ArrowRight, CalendarDays, Check, ChevronRight, Clock3, FileText, FolderOpen,
-  LayoutGrid, ListTodo, Loader2, Plus, Search, Trash2, Users, Video, Palette, Pencil,
+  AlertCircle, ArrowRight, CalendarDays, Check, ChevronDown, ChevronRight, Clock3, FileText, FolderOpen,
+  LayoutGrid, ListTodo, Loader2, Menu, Plus, Search, Trash2, Users, Video, Palette, Pencil, X,
 } from 'lucide-react'
 import {
   PortalButton, PortalDatePicker, PortalEmptyState, PortalPageFrame, PortalPageHeader,
-  PortalSelect, PortalStatusBadge,
+  PortalAnimatedTabs, PortalSelect, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition,
 } from '@/components/portal/PortalUI'
 import { EventLayoutDesigner, type EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'
 import { normalizePlannerEventLayout } from '@/lib/luxorPlannerLayout'
@@ -34,6 +36,15 @@ const sections: { id: Section; label: string; icon: typeof CalendarDays }[] = [
   { id: 'vendors', label: 'Vendors', icon: Users },
   { id: 'files', label: 'Files', icon: FolderOpen },
 ]
+const sectionDescriptions: Record<Section, string> = {
+  overview: 'Upcoming events and planning priorities',
+  events: 'Confirmed bookings and event details',
+  'design-library': 'Reusable event layouts and design concepts',
+  tasks: 'Planning tasks and reusable checklists',
+  meetings: 'Client and planning meetings',
+  vendors: 'Reusable vendor directory',
+  files: 'Event files and documents',
+}
 const eventTabs = [
   ['overview','Overview'],['design','Design Studio'],['meetings','Meetings'],['tasks','Tasks'],
   ['vendors','Vendors'],['files','Files & Documents'],['payments','Payments'],['activity','Activity'],
@@ -118,13 +129,16 @@ const fieldsByEntity: Record<Entity, Field[]> = {
 export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName }: { initialSection: Section; bookingId?: string; greetingName?: string }) {
   const router = useRouter()
   const search = useSearchParams()
-  const [section, setSection] = useState<Section>(initialSection)
+  const sectionParam = search.get('section')
+  const selectedSection = sections.find((item) => item.id === sectionParam)?.id ?? initialSection
+  const [section, setSection] = useState<Section>(selectedSection)
   const [workspaceTab, setWorkspaceTab] = useState<string>(search.get('tab') || 'overview')
   const [data, setData] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Record<string, any> | null>(null)
+  const [viewPickerOpen, setViewPickerOpen] = useState(false)
   const [modal, setModal] = useState<Entity | 'upload' | null>(null)
   const [editing, setEditing] = useState<Row | null>(null)
   const [busy, setBusy] = useState(false)
@@ -136,31 +150,44 @@ export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName
   const [layoutBusy, setLayoutBusy] = useState(false)
   const [openBuilderAfterSave, setOpenBuilderAfterSave] = useState(false)
   const [designActionBusyId, setDesignActionBusyId] = useState<string | null>(null)
+  const loadRequestRef = useRef(0)
 
   const load = useCallback(async () => {
+    const requestId = ++loadRequestRef.current
     setLoading(true); setError('')
     try {
       const response = await fetch(`/api/planner?section=${section}${bookingId ? `&bookingId=${encodeURIComponent(bookingId)}` : ''}`, { cache: 'no-store' })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Planner information could not be loaded.')
-      setData(result)
+      if (requestId === loadRequestRef.current) setData(result)
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Planner information could not be loaded.')
-    } finally { setLoading(false) }
+      if (requestId === loadRequestRef.current) setError(loadError instanceof Error ? loadError.message : 'Planner information could not be loaded.')
+    } finally { if (requestId === loadRequestRef.current) setLoading(false) }
   }, [section, bookingId])
 
   useEffect(() => { void load() }, [load])
-  useEffect(() => { setSection(initialSection) }, [initialSection])
+  useEffect(() => { setSection(selectedSection) }, [selectedSection])
   useEffect(() => { setWorkspaceTab(search.get('tab') || 'overview') }, [search])
   useEffect(() => {
+    if (!viewPickerOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setViewPickerOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [viewPickerOpen])
+  useEffect(() => {
     const term = query.trim()
-    if (term.length < 2) { setSearchResults(null); return }
+    setSearchResults(null)
+    if (term.length < 2) return
+    const controller = new AbortController()
+    let active = true
     const timer = window.setTimeout(() => {
-      void fetch(`/api/planner?section=search&q=${encodeURIComponent(term)}`, { cache:'no-store' })
-        .then(async (response) => { const result = await response.json(); if (response.ok) setSearchResults(result) })
-        .catch(() => setSearchResults(null))
+      void fetch(`/api/planner?section=search&q=${encodeURIComponent(term)}`, { cache:'no-store', signal: controller.signal })
+        .then(async (response) => { const result = await response.json(); if (active && response.ok) setSearchResults(result) })
+        .catch(() => { if (active) setSearchResults(null) })
     }, 220)
-    return () => window.clearTimeout(timer)
+    return () => { active = false; controller.abort(); window.clearTimeout(timer) }
   }, [query])
 
   const openForm = (entity: Entity | 'upload', record?: Row, defaults: Record<string, string> = {}) => {
@@ -395,29 +422,175 @@ export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName
     }
   }
 
-  const nav = <nav aria-label="Planner sections" className="portal-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
-    {sections.map((item) => {
-      const Icon = item.icon
-      const href = item.id === 'overview' ? '/portal/planner' : `/portal/planner/${item.id}`
-      const active = section === item.id && !bookingId
-      return <Link key={item.id} href={href} onClick={() => setSection(item.id)} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-bold transition-colors ${active ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#9a712e] dark:text-[#f1d27a]' : 'border-transparent text-[color:var(--portal-muted)] hover:border-[color:var(--portal-border)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}><Icon size={15}/>{item.label}</Link>
-    })}
-    <Link href="/portal/events" className="ml-auto inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/35 bg-[#caa24c] px-4 text-xs font-bold text-[#1a140a] shadow-sm hover:bg-[#d6b35b]"><Plus size={15}/>New Event</Link>
-  </nav>
+  const navigateSection = (nextSection: Section) => {
+    setViewPickerOpen(false)
+    if (nextSection === section) return
+    loadRequestRef.current += 1
+    setLoading(true)
+    setSection(nextSection)
+    const url = new URL(window.location.href)
+    url.searchParams.set('section', nextSection)
+    window.history.pushState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }
+
+  const browseViewsButton = (mobile = false) => (
+    <button
+      type="button"
+      onClick={() => setViewPickerOpen(true)}
+      aria-haspopup="dialog"
+      aria-expanded={viewPickerOpen}
+      aria-label={`Browse views. Currently viewing ${sections.find((item) => item.id === section)?.label || 'Overview'}`}
+      className={`${mobile ? 'flex min-h-16 w-full px-4 py-3' : 'inline-flex min-h-10 px-3.5 py-1.5'} items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45`}
+    >
+      <Menu size={16} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[8px] font-black uppercase leading-none tracking-[0.14em] text-[color:var(--portal-faint)]">Browse views</span>
+        <span className={`mt-0.5 block truncate text-xs font-bold leading-tight ${mobile ? '' : 'max-w-[145px]'}`}>{sections.find((item) => item.id === section)?.label || 'Overview'}</span>
+      </span>
+      <ChevronDown size={15} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
+    </button>
+  )
+
+  const nav = (
+    <>
+      <div className="hidden min-w-0 xl:block">
+        <PortalAnimatedTabs
+          variant="slider"
+          ariaLabel="Planner sections"
+          tabs={sections.map((item) => {
+            const Icon = item.icon
+            return { id: item.id, label: item.label, icon: <Icon size={15} /> }
+          })}
+          activeTab={section}
+          onTabChange={navigateSection}
+          className="w-full"
+        />
+      </div>
+      <div className="md:hidden">{browseViewsButton(true)}</div>
+    </>
+  )
 
   const heading = bookingId ? (text(data.booking?.client_name) || 'Event workspace') : sections.find((item) => item.id === section)?.label || 'Planner'
   const booking = data.booking as Row | undefined
 
   return <PortalPageFrame>
-    <PortalPageHeader icon={<CalendarDays size={23}/>} title={bookingId ? heading : section === 'design-library' ? 'Design Studio' : 'Planner'} description={bookingId ? `${text(booking?.event_type) || 'Event'} · ${displayDate(booking?.event_date)} · ${labelStatus(booking?.status)}` : section === 'design-library' ? 'Build reusable event layouts, save design masters, and apply independent copies to confirmed events.' : 'Manage your events, designs, meetings, vendors, and planning tasks.'} actions={bookingId ? <Link href="/portal/planner/events" className="text-xs font-bold text-[#a17b35] hover:underline">All events</Link> : section==='design-library' ? undefined : <div className="relative w-full sm:w-72"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]"/><input className={inputClass()+' pl-9'} value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search events, clients, vendors, files…" aria-label="Search Planner"/></div>}/>
+    <PortalPageHeader
+      icon={<CalendarDays size={23}/>}
+      title={bookingId ? heading : section === 'design-library' ? 'Design Studio' : 'Planner'}
+      description={bookingId ? `${text(booking?.event_type) || 'Event'} · ${displayDate(booking?.event_date)} · ${labelStatus(booking?.status)}` : section === 'design-library' ? 'Build reusable event layouts, save design masters, and apply independent copies to confirmed events.' : 'Manage your events, designs, meetings, vendors, and planning tasks.'}
+      actions={bookingId ? (
+        <Link href="/portal/planner/events" className="text-xs font-bold text-[#a17b35] hover:underline">All events</Link>
+      ) : (
+        <div className="flex w-full flex-wrap items-center justify-end gap-3 md:w-auto">
+          <div className="hidden md:flex xl:hidden">{browseViewsButton()}</div>
+          <Link href="/portal/events" className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/35 bg-[#caa24c] px-4 text-xs font-bold text-[#1a140a] shadow-sm hover:bg-[#d6b35b]"><Plus size={15}/>New Event</Link>
+        </div>
+      )}
+    />
     {!bookingId ? nav : <nav aria-label="Event planning sections" className="portal-scrollbar flex gap-1 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2">{eventTabs.map(([tab,label]) => <button type="button" key={tab} onClick={()=>{setWorkspaceTab(tab); router.replace(`/portal/planner/event/${bookingId}?tab=${tab}`)}} className={`min-h-10 shrink-0 rounded-xl px-3 text-xs font-bold ${workspaceTab===tab?'bg-[#caa24c]/10 text-[#9a712e] dark:text-[#f1d27a]':'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]'}`}>{label}</button>)}</nav>}
+    {!bookingId && section !== 'design-library' ? (
+      <div className="relative w-full sm:max-w-md">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" aria-hidden="true" />
+        <input className={`${inputClass()} pl-9`} value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search events, clients, vendors, files…" aria-label="Search Planner" />
+      </div>
+    ) : null}
     {!bookingId && section !== 'design-library' && query.trim().length>=2 && searchResults ? <PlannerSearchResults results={searchResults}/> : null}
     {notice ? <div className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 px-4 py-3 text-sm text-[color:var(--portal-text)]" role="status">{notice}</div> : null}
     {error ? <div className="flex items-center gap-3 rounded-xl border border-red-500/25 bg-red-500/5 p-4 text-sm text-[color:var(--portal-text)]"><AlertCircle size={18} className="text-red-500"/><div className="min-w-0 flex-1">{error}</div><PortalButton size="sm" onClick={()=>void load()}>Retry</PortalButton></div> : null}
-    {loading ? <div className="flex min-h-56 items-center justify-center text-sm text-[color:var(--portal-muted)]"><Loader2 size={18} className="mr-2 animate-spin"/>Loading Planner…</div> : bookingId && !booking ? <PortalEmptyState title="Event workspace unavailable" description="Planner workspaces are available for confirmed or completed bookings. Open the Events section to follow the existing booking workflow." icon={<CalendarDays size={22}/>} action={<Link href="/portal/events" className="text-sm font-bold text-[#a17b35]">Open Events</Link>}/> : booking ? renderWorkspace(workspaceTab,data,booking,query,openForm,updateTaskStatus,remove,removeFile,duplicate,openLayoutEditor,importLinkedLayout,layoutBusy,designActionBusyId) : renderSection(section,{...data,greetingName},query,openForm,updateTaskStatus,remove,removeFile,duplicate,openLayoutEditor,designActionBusyId,()=>{setOpenBuilderAfterSave(true);openForm('design',undefined,{design_kind:'template',category:'event_layout'})},()=>{const savedLayout=asRows(data.designs).find((item)=>!item.booking_id&&!item.archived_at&&item.content?.event_layout);if(savedLayout)openLayoutEditor(savedLayout);else{setOpenBuilderAfterSave(true);openForm('design',undefined,{design_kind:'template',category:'event_layout'})}},(id)=>void restoreDesign(id))}
+    <PortalTabTransition activeKey={bookingId ? `${bookingId}:${workspaceTab}` : section} className="min-w-0 flex-1">
+      <PortalSkeletonTransition loading={loading} overlap animateInitialSkeleton skeleton={<PlannerContentSkeleton section={section} workspaceTab={workspaceTab} isWorkspace={Boolean(bookingId)} />}>
+        {bookingId && !booking ? <PortalEmptyState title="Event workspace unavailable" description="Planner workspaces are available for confirmed or completed bookings. Open the Events section to follow the existing booking workflow." icon={<CalendarDays size={22}/>} action={<Link href="/portal/events" className="text-sm font-bold text-[#a17b35]">Open Events</Link>}/> : booking ? renderWorkspace(workspaceTab,data,booking,query,openForm,updateTaskStatus,remove,removeFile,duplicate,openLayoutEditor,importLinkedLayout,layoutBusy,designActionBusyId) : renderSection(section,{...data,greetingName},query,openForm,updateTaskStatus,remove,removeFile,duplicate,openLayoutEditor,designActionBusyId,()=>{setOpenBuilderAfterSave(true);openForm('design',undefined,{design_kind:'template',category:'event_layout'})},()=>{const savedLayout=asRows(data.designs).find((item)=>!item.booking_id&&!item.archived_at&&item.content?.event_layout);if(savedLayout)openLayoutEditor(savedLayout);else{setOpenBuilderAfterSave(true);openForm('design',undefined,{design_kind:'template',category:'event_layout'})}},(id)=>void restoreDesign(id))}
+      </PortalSkeletonTransition>
+    </PortalTabTransition>
+    {!bookingId && typeof document !== 'undefined' ? createPortal(
+      <AnimatePresence initial={false}>
+        {viewPickerOpen ? (
+          <motion.div
+            className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onMouseDown={() => setViewPickerOpen(false)}
+          >
+            <motion.section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="planner-view-menu-title"
+              className="flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+              initial={{ opacity: 0, y: 56, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 40, scale: 0.985 }}
+              transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-5 py-4 backdrop-blur-xl">
+                <div>
+                  <h2 id="planner-view-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse views</h2>
+                  <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a planning view.</p>
+                </div>
+                <button type="button" onClick={() => setViewPickerOpen(false)} aria-label="Close views menu" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+                  <X size={18}/>
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
+                <nav aria-label="Planner views" className="space-y-4">
+                  <section>
+                    <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">Plan & Coordinate</h3>
+                    <div className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] divide-y divide-[color:var(--portal-border)]">
+                      {sections.slice(0, 4).map((item) => {
+                        const Icon = item.icon
+                        const selected = section === item.id
+                        return <button key={item.id} type="button" aria-current={selected ? 'page' : undefined} onClick={() => navigateSection(item.id)} className={`flex min-h-16 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}>
+                          <Icon size={16} className="shrink-0" aria-hidden="true" />
+                          <span className="min-w-0 flex-1"><span className="block text-sm font-bold">{item.label}</span><span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{sectionDescriptions[item.id]}</span></span>
+                          <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                        </button>
+                      })}
+                    </div>
+                  </section>
+                  <section>
+                    <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">People & Documents</h3>
+                    <div className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] divide-y divide-[color:var(--portal-border)]">
+                      {sections.slice(4).map((item) => {
+                        const Icon = item.icon
+                        const selected = section === item.id
+                        return <button key={item.id} type="button" aria-current={selected ? 'page' : undefined} onClick={() => navigateSection(item.id)} className={`flex min-h-16 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}>
+                          <Icon size={16} className="shrink-0" aria-hidden="true" />
+                          <span className="min-w-0 flex-1"><span className="block text-sm font-bold">{item.label}</span><span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{sectionDescriptions[item.id]}</span></span>
+                          <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                        </button>
+                      })}
+                    </div>
+                  </section>
+                </nav>
+              </div>
+            </motion.section>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>,
+      document.body,
+    ) : null}
     {modal ? <RecordModal entity={modal} title={modal==='design'&&form.category==='event_layout'&&!editing?'New Layout Details':form.name || form.title || form.business_name ? `${editing?'Edit':'New'} ${modal.replace('_',' ')}` : `New ${modal.replace('_',' ')}`} form={form} setForm={setForm} fields={modal==='upload'?[]:modal==='design'&&openBuilderAfterSave?fieldsByEntity.design.filter((field)=>['name','category','description','internal_notes'].includes(field.key)):fieldsByEntity[modal]} data={data} bookingId={bookingId} onClose={()=>{setModal(null);setOpenBuilderAfterSave(false)}} onSubmit={save} busy={busy} notice={notice} /> : null}
     {layoutDesign ? <EventLayoutDesigner open onClose={()=>setLayoutDesign(null)} initialLayout={layoutInitial} leadName={text(booking?.client_name)||'Design Studio'} eventType={text(booking?.event_type)} eventDate={text(booking?.event_date)} guestCount={Number(booking?.guest_count)||null} contextMessage={layoutContextMessage} heading={!layoutDesign.booking_id&&!bookingId?'Layout Builder':'Event Layout Designer'} onSave={saveEventLayout}/> : null}
   </PortalPageFrame>
+}
+
+function PlannerContentSkeleton({ section, workspaceTab, isWorkspace }: { section: Section; workspaceTab: string; isWorkspace: boolean }) {
+  const block = (className: string) => <div className={`luxor-skeleton rounded ${className}`} />
+  const panel = (key: number) => <div key={key} className={`${cardClass()} min-h-36 p-4 sm:p-5`}><div className="border-b border-[color:var(--portal-border)] pb-3">{block('h-5 w-36')}</div><div className="mt-5 space-y-3">{block('h-3 w-3/4')}{block('h-3 w-1/2')}</div></div>
+  const overview = isWorkspace ? workspaceTab === 'overview' : section === 'overview'
+  return <div role="status" aria-label="Loading Planner" className="space-y-5">
+    {overview ? <>
+      <div className={`${cardClass()} min-h-36 p-5 sm:p-7`}>{block('h-3 w-36')}{block('mt-4 h-8 w-72 max-w-full')}{block('mt-3 h-3 w-56 max-w-full')}</div>
+      {!isWorkspace ? <div className="grid gap-3 sm:grid-cols-2">{[0, 1].map((key) => <div key={key} className={`${cardClass()} flex min-h-20 items-center gap-4 p-4`}>{block('h-11 w-11 shrink-0 rounded-full')}{block('h-4 w-40')}</div>)}</div> : null}
+      <div className="grid gap-4 xl:grid-cols-2">{[0, 1].map(panel)}</div>
+      {panel(2)}
+    </> : <>
+      <div className={`${cardClass()} p-4 sm:p-5`}><div className="flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3">{block('h-5 w-44')}{block('h-9 w-28')}</div>{section === 'events' || section === 'tasks' ? <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">{[0, 1, 2, 3].map((key) => <div key={key}>{block('h-3 w-20')}{block('mt-2 h-10 w-full')}</div>)}</div> : null}<div className="mt-5 space-y-4">{[0, 1, 2].map((key) => <div key={key} className="flex items-center gap-4 border-b border-[color:var(--portal-border)] pb-4 last:border-0">{block('h-10 w-10 shrink-0 rounded-lg')}<div className="flex-1 space-y-2">{block('h-3 w-40 max-w-full')}{block('h-3 w-64 max-w-full')}</div></div>)}</div></div>
+      {(section === 'tasks' || section === 'design-library') && !isWorkspace ? panel(3) : null}
+    </>}
+  </div>
 }
 
 function renderSection(section: Section, data: Record<string, any>, query: string, openForm: (entity: Entity|'upload', record?: Row, defaults?: Record<string,string>)=>void, updateTaskStatus: (task:Row)=>void, remove:(entity:Entity,id:string)=>void, removeFile:(file:Row)=>void, duplicate:(design:Row,targetBookingId?:string)=>void, openLayoutEditor:(design:Row)=>void, designActionBusyId:string|null, createNewLayout:()=>void, openLayoutBuilder:()=>void, restoreDesign:(id:string)=>void) {

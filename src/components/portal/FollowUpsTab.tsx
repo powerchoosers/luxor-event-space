@@ -236,12 +236,12 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       setEmailActions(emailResult.emailActions)
       setPausedEnrollmentIds(emailResult.pausedEnrollmentIds ?? [])
       setPausedSequenceRecords(emailResult.pausedEnrollments ?? [])
-      if (!assignee && result.assignees[0]) setAssignee(result.assignees[0])
+      setAssignee((current) => current || result.assignees[0] || '')
       await Promise.all(Array.from(expandedRowIdsRef.current, (inquiryId) => loadExpandedCardDetails(inquiryId, 0, false, true)))
     } catch (error) {
       notify({ title: 'Follow-up tasks could not be loaded', description: error instanceof Error ? error.message : 'Try again in a moment.', variant: 'error' })
     } finally { setLoading(false) }
-  }, [assignee, loadExpandedCardDetails, notify])
+  }, [loadExpandedCardDetails, notify])
 
   useEffect(() => { void refresh() }, [refresh])
   useEffect(() => {

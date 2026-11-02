@@ -82,7 +82,7 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
     }
   }
   if (section === 'events' || section === 'overview') {
-      const [bookings, tasks, meetings, designs, templates] = await Promise.all([
+      const [bookings, tasks, meetings, designs, templates, overviewData] = await Promise.all([
       listPlannerBookings(),
       supabaseRestStrict<PlannerRecord[]>(`luxor_planner_tasks?select=*&order=due_date.asc.nullslast&limit=1000${bookingId ? `&booking_id=eq.${escapeFilter(bookingId)}` : ''}`),
       supabaseRestStrict<PlannerRecord[]>(`luxor_planner_meetings?select=*&order=starts_at.asc&limit=500${bookingId ? `&booking_id=eq.${escapeFilter(bookingId)}` : ''}`),
@@ -90,6 +90,12 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
       bookingId
         ? supabaseRestStrict<PlannerRecord[]>('luxor_planner_designs?select=*&design_kind=eq.template&booking_id=is.null&archived_at=is.null&order=updated_at.desc&limit=1000')
         : Promise.resolve([] as PlannerRecord[]),
+      section === 'overview' && !bookingId ? Promise.all([
+        supabaseRestStrict<PlannerRecord[]>('luxor_planner_event_vendors?select=*&status=neq.cancelled&limit=1000'),
+        supabaseRestStrict<PlannerRecord[]>('luxor_planner_files?select=*&event_vendor_id=not.is.null&limit=2000'),
+        supabaseRestStrict<PlannerRecord[]>('luxor_planner_vendors?select=id,business_name&archived_at=is.null&limit=1000'),
+        supabaseRestStrict<PlannerRecord[]>('luxor_planner_files?select=*&design_id=not.is.null&category=neq.design_revision_snapshot&order=created_at.desc&limit=1000'),
+      ]) : Promise.resolve([[], [], [], []] as PlannerRecord[][]),
     ])
     if (bookingId) {
       const booking = bookings.find((row) => row.id === bookingId)
@@ -99,17 +105,13 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
         supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&booking_id=eq.${escapeFilter(bookingId)}&order=created_at.desc&limit=1000`),
       ])
       const assignmentIds = assignments.map((item) => item.id)
-      const attachedFiles = assignmentIds.length
-        ? await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&event_vendor_id=in.(${assignmentIds.map(escapeFilter).join(',')})&order=created_at.desc&limit=1000`)
-        : []
       const eventDesignIds = designs.filter((design) => design.design_kind === 'event_concept').map((design) => design.id)
-      const eventDesignFiles = eventDesignIds.length
-        ? await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=in.(${eventDesignIds.map(escapeFilter).join(',')})&category=neq.design_revision_snapshot&order=created_at.desc&limit=1000`)
-        : []
       const templateIds = templates.map((design) => design.id)
-      const templateFiles = templateIds.length
-        ? await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=in.(${templateIds.map(escapeFilter).join(',')})&category=neq.design_revision_snapshot&order=created_at.desc&limit=1000`)
-        : []
+      const [attachedFiles, eventDesignFiles, templateFiles] = await Promise.all([
+        assignmentIds.length ? supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&event_vendor_id=in.(${assignmentIds.map(escapeFilter).join(',')})&order=created_at.desc&limit=1000`) : Promise.resolve([]),
+        eventDesignIds.length ? supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=in.(${eventDesignIds.map(escapeFilter).join(',')})&category=neq.design_revision_snapshot&order=created_at.desc&limit=1000`) : Promise.resolve([]),
+        templateIds.length ? supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=in.(${templateIds.map(escapeFilter).join(',')})&category=neq.design_revision_snapshot&order=created_at.desc&limit=1000`) : Promise.resolve([]),
+      ])
       const files = [...baseFiles, ...attachedFiles, ...eventDesignFiles]
       const bookingView = booking ? plannerBookingView(booking) : null
       return { booking: bookingView, bookings: bookingView ? [bookingView] : [], tasks, meetings, designs: designs.filter((design) => design.design_kind === 'event_concept'), templates, templateFiles, vendors, assignments, files }
@@ -123,12 +125,7 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
     const bookingMap = new Map(bookings.map((booking) => [booking.id, plannerBookingView(booking)]))
     const overdueTasks = tasks.filter((task) => task.status !== 'completed' && typeof task.due_date === 'string' && task.due_date < todayChicago && isPlannerAttentionEligible(bookingMap.get(String(task.booking_id))?.status))
     const revisionDesigns = designs.filter((design) => design.design_kind === 'event_concept' && design.status === 'revision_requested' && isPlannerAttentionEligible(bookingMap.get(String(design.booking_id))?.status))
-    const [assignments, plannerFiles, vendorRows, designFiles] = section === 'overview' ? await Promise.all([
-      supabaseRestStrict<PlannerRecord[]>('luxor_planner_event_vendors?select=*&status=neq.cancelled&limit=1000'),
-      supabaseRestStrict<PlannerRecord[]>('luxor_planner_files?select=*&event_vendor_id=not.is.null&limit=2000'),
-      supabaseRestStrict<PlannerRecord[]>('luxor_planner_vendors?select=id,business_name&archived_at=is.null&limit=1000'),
-      supabaseRestStrict<PlannerRecord[]>('luxor_planner_files?select=*&design_id=not.is.null&category=neq.design_revision_snapshot&order=created_at.desc&limit=1000'),
-    ]) : [[],[],[],[]]
+    const [assignments, plannerFiles, vendorRows, designFiles] = overviewData
     const vendorById = new Map(vendorRows.map((vendor) => [vendor.id, String(vendor.business_name || 'Vendor')]))
     const vendorAttention = assignments.flatMap((assignment) => {
       const required = Array.isArray(assignment.required_documents) ? assignment.required_documents.filter((item): item is string => typeof item === 'string') : []

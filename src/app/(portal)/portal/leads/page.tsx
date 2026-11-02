@@ -691,8 +691,10 @@ export default function LeadsPage() {
       </div>
 
       {/* Desktop sub-tab navigation (hidden on mobile and tablet/iPad to prevent overflow scrolling) */}
-      <div className="hidden xl:flex portal-scrollbar min-w-0 w-full max-w-full shrink-0 gap-2 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2">
+      <div className="hidden xl:flex portal-scrollbar min-w-0 w-full max-w-full shrink-0 gap-2 overflow-x-auto pb-0">
         <PortalAnimatedTabs
+          variant="slider"
+          ariaLabel="Leads & Clients views"
           tabs={[
           { id: 'dashboard', label: 'Funnel Dashboard', icon: <TrendingUp size={15} /> },
           { id: 'pipeline', label: 'Pipeline Board', icon: <Users size={15} /> },

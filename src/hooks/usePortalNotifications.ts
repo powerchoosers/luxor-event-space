@@ -160,10 +160,26 @@ export function usePortalNotifications() {
       if (shouldFetchEmails) summaryParams.set('emails', '1')
       if (scopes) summaryParams.set('scopes', [...new Set(scopes)].join(','))
       const summaryQuery = summaryParams.size ? `?${summaryParams.toString()}` : ''
-      const summaryResponse = await fetch(`/api/portal/notifications/summary${summaryQuery}`, {
-        headers: { Accept: 'application/json' }, cache: 'no-store',
-      })
-      if (!summaryResponse.ok) throw new Error('Unable to sync portal notifications.')
+      const summaryUrl = `/api/portal/notifications/summary${summaryQuery}`
+      let summaryResponse: Response | undefined
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          summaryResponse = await fetch(summaryUrl, {
+            headers: { Accept: 'application/json' }, cache: 'no-store',
+          })
+          if (attempt === 0 && [500, 502, 503, 504].includes(summaryResponse.status)) {
+            await new Promise((resolve) => window.setTimeout(resolve, 500))
+            continue
+          }
+          break
+        } catch (fetchError) {
+          if (attempt !== 0 || !(fetchError instanceof TypeError)) throw fetchError
+          await new Promise((resolve) => window.setTimeout(resolve, 500))
+        }
+      }
+      if (!summaryResponse?.ok) {
+        throw new Error(summaryResponse?.status === 401 ? 'Your portal session has expired. Please sign in again.' : 'Unable to sync portal notifications.')
+      }
       const summary = await summaryResponse.json() as { sources?: Record<string, { ok: boolean; data: unknown }> }
       const sourceResponse = (name: string) => {
         const source = summary.sources?.[name]
@@ -765,7 +781,7 @@ export function usePortalNotifications() {
       setItems(retained)
       setError(null)
     } catch (err) {
-      console.error('Failed to fetch portal notifications:', err)
+      console.warn('Failed to fetch portal notifications:', err)
       setError(err instanceof Error ? err.message : 'Failed to sync notifications.')
     } finally {
       setLoading(false)
