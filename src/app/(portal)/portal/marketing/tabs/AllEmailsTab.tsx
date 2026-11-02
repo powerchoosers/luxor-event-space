@@ -2307,12 +2307,13 @@ function ThreadMessage({
         const layoutViewport = chat ? document.getElementById('luxor-email-fit-viewport') : null
         const layoutContent = chat ? document.getElementById('luxor-email-fit-content') : null
         if (layoutViewport && layoutContent) {
+          const declaredTableWidth = applyIntrinsicEmailTableWidths(layoutContent, document)
           layoutContent.style.transform = 'none'
           layoutViewport.style.width = '100%'
           layoutContent.style.width = '100%'
           layoutContent.style.minWidth = '0'
           layoutContent.style.maxWidth = 'none'
-          const measuredWidth = Math.max(layoutContent.scrollWidth, Math.ceil(layoutContent.getBoundingClientRect().width), 1)
+          const measuredWidth = Math.max(declaredTableWidth, layoutContent.scrollWidth, Math.ceil(layoutContent.getBoundingClientRect().width), 1)
           // Expanded frames can make responsive descendants report the already-expanded viewport
           // as their scroll width. Keep the fit-mode measurement as the stable intrinsic width.
           const fitModeWidth = emailLayoutState?.frameKey === frameKey ? emailLayoutState.naturalWidth : measuredWidth
@@ -2324,6 +2325,8 @@ function ThreadMessage({
           layoutContent.style.transformOrigin = 'top left'
           layoutContent.style.transform = scale < 0.999 ? `scale(${scale})` : 'none'
           layoutViewport.style.height = `${Math.ceil(naturalHeight * scale)}px`
+          if (document.documentElement) document.documentElement.style.touchAction = fullEmailSize ? 'auto' : 'pan-y'
+          if (document.body) document.body.style.touchAction = fullEmailSize ? 'auto' : 'pan-y'
           setEmailLayoutState((current) => current?.frameKey === frameKey && current.naturalWidth === naturalWidth && current.availableWidth === availableWidth
             ? current : { frameKey, naturalWidth, availableWidth })
         }
@@ -2352,6 +2355,7 @@ function ThreadMessage({
     const scrollContainer = frame.closest<HTMLElement>('[data-email-thread-scroll]')
     if (scrollContainer) {
       let lastTouchY: number | null = null
+      let lastTouchX: number | null = null
       let lastTouchAt = 0
       let touchVelocity = 0
       let momentumFrame = 0
@@ -2398,6 +2402,12 @@ function ThreadMessage({
       }
       const handOffWheel = (event: WheelEvent) => {
         cancelContainerMomentum()
+        if (fullEmailSize && (Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey)) {
+          const horizontalScroll = frame.parentElement
+          if (horizontalScroll) horizontalScroll.scrollLeft += event.shiftKey ? event.deltaY : event.deltaX
+          event.preventDefault()
+          return
+        }
         scrollContainer.scrollTop += event.deltaY
         event.preventDefault()
       }
@@ -2408,10 +2418,16 @@ function ThreadMessage({
         }
         return typeof touch.clientY === 'number' && Number.isFinite(touch.clientY) ? touch.clientY : null
       }
+      const getTouchScreenX = (touch: Touch | undefined) => {
+        if (!touch) return null
+        if (typeof touch.screenX === 'number' && Number.isFinite(touch.screenX)) return touch.screenX
+        return typeof touch.clientX === 'number' && Number.isFinite(touch.clientX) ? touch.clientX : null
+      }
       const beginTouch = (event: TouchEvent) => {
         cancelContainerMomentum()
         touchVelocity = 0
         lastTouchY = event.touches.length === 1 ? getTouchScreenY(event.touches[0]) : null
+        lastTouchX = event.touches.length === 1 ? getTouchScreenX(event.touches[0]) : null
         lastTouchAt = event.timeStamp
       }
       const handOffTouch = (event: TouchEvent) => {
@@ -2421,19 +2437,33 @@ function ThreadMessage({
           return
         }
         const nextTouchY = getTouchScreenY(event.touches[0])
-        if (nextTouchY === null) return
-        if (lastTouchY === null) {
+        const nextTouchX = getTouchScreenX(event.touches[0])
+        if (nextTouchY === null || nextTouchX === null) return
+        if (lastTouchY === null || lastTouchX === null) {
           lastTouchY = nextTouchY
+          lastTouchX = nextTouchX
           lastTouchAt = event.timeStamp
           return
         }
+        const horizontalDelta = lastTouchX - nextTouchX
         const delta = lastTouchY - nextTouchY
+        if (fullEmailSize && Math.abs(horizontalDelta) > Math.abs(delta)) {
+          const horizontalScroll = frame.parentElement
+          if (horizontalScroll) horizontalScroll.scrollLeft += horizontalDelta
+          touchVelocity = 0
+          lastTouchX = nextTouchX
+          lastTouchY = nextTouchY
+          lastTouchAt = event.timeStamp
+          if (event.cancelable) event.preventDefault()
+          return
+        }
         const elapsed = event.timeStamp - lastTouchAt
         scrollContainer.scrollTop += delta
         touchVelocity = elapsed > 0 && elapsed < 160
           ? Math.max(-3, Math.min(3, delta / elapsed))
           : 0
         lastTouchY = nextTouchY
+        lastTouchX = nextTouchX
         lastTouchAt = event.timeStamp
         if (event.cancelable) event.preventDefault()
       }
@@ -2444,6 +2474,7 @@ function ThreadMessage({
       }
       const cancelTouch = () => {
         lastTouchY = null
+        lastTouchX = null
         cancelContainerMomentum()
       }
       const cancelFromContainerInput = () => cancelContainerMomentum()
@@ -2520,7 +2551,7 @@ function ThreadMessage({
                   srcDoc={html}
                   title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
                   ref={cleanupMessageFrame}
-                  className="block max-w-none border-0 bg-transparent touch-pan-y"
+                  className={`block max-w-none border-0 bg-transparent ${fullEmailSize ? 'touch-auto' : 'touch-pan-y'}`}
                   style={{ width: chat && fullEmailSize && emailLayout ? `${fullEmailFrameWidth}px` : '100%', height: frameHeight, opacity: readyFrameKey === frameKey ? 1 : 0, transition: reduceMotion ? 'none' : 'opacity 160ms ease-out' }}
                   scrolling="no"
                   onLoad={(event) => {
@@ -2763,6 +2794,49 @@ function collapseLongQuotedEmailContent(html: string) {
     details.append(summary, quotedContent)
   })
   return { html: parsed.body.innerHTML, collapsedCount: outermostCandidates.length }
+}
+
+function fixedPixelWidth(value: string | null | undefined) {
+  if (!value) return 0
+  const match = value.trim().match(/^(\d+(?:\.\d+)?)(?:px)?$/i)
+  const width = match ? Number(match[1]) : 0
+  return Number.isFinite(width) && width > 0 ? width : 0
+}
+
+function applyIntrinsicEmailTableWidths(root: HTMLElement, document: Document) {
+  const stylesheets = Array.from(document.styleSheets)
+  let maximumWidth = 0
+  root.querySelectorAll('table').forEach((table) => {
+    const previousWidth = fixedPixelWidth(table.getAttribute('data-luxor-fit-width'))
+    if (previousWidth > 0) {
+      maximumWidth = Math.max(maximumWidth, previousWidth)
+      return
+    }
+    const candidates = [fixedPixelWidth(table.getAttribute('width')), fixedPixelWidth(table.style.width)]
+    const visitRules = (rules: CSSRuleList) => {
+      Array.from(rules).forEach((rule) => {
+        const nestedRules = (rule as CSSGroupingRule).cssRules
+        if (nestedRules) {
+          try { visitRules(nestedRules) } catch { /* inaccessible embedded rules are ignored */ }
+        }
+        if (!('selectorText' in rule) || !('style' in rule)) return
+        try {
+          if (table.matches(String(rule.selectorText))) candidates.push(fixedPixelWidth((rule as CSSStyleRule).style.getPropertyValue('width')))
+        } catch { /* unsupported email selectors do not affect the rest of the message */ }
+      })
+    }
+    stylesheets.forEach((sheet) => {
+      try { if (sheet.cssRules) visitRules(sheet.cssRules) } catch { /* cross-origin stylesheets are ignored */ }
+    })
+    const fixedWidth = Math.max(...candidates)
+    if (fixedWidth > 0) {
+      table.style.setProperty('width', `${fixedWidth}px`, 'important')
+      table.style.setProperty('max-width', 'none', 'important')
+      table.setAttribute('data-luxor-fit-width', `${fixedWidth}px`)
+      maximumWidth = Math.max(maximumWidth, fixedWidth)
+    }
+  })
+  return maximumWidth
 }
 
 function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean, portalTheme: 'light' | 'dark', chat = false) {
