@@ -159,27 +159,6 @@ type LuxorBookingExpense = {
     fetchFinanceData()
   }, [])
 
-  const handleUpdateInvoiceStatus = async (id: string, newStatus: string) => {
-    try {
-      const res = await fetch('/api/invoices', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          status: newStatus,
-          paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
-        }),
-      })
-
-      if (!res.ok) throw new Error('Failed to update invoice status.')
-      const updated = await res.json()
-      setInvoices((prev) => prev.map((inv) => (inv.id === id ? updated : inv)))
-    } catch (err) {
-      console.error(err)
-      alert('Error updating status.')
-    }
-  }
-
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!expenseAmount || !expenseDesc) return
@@ -489,17 +468,7 @@ type LuxorBookingExpense = {
                           <PortalStatusBadge status={inv.status} />
                         </td>
                         <td className="px-8 py-5 text-right">
-                          <PortalSelect
-                            value={inv.status}
-                            onChange={(value) => handleUpdateInvoiceStatus(inv.id, value)}
-                            options={[
-                              { value: 'draft', label: 'Draft' },
-                              { value: 'sent', label: 'Sent' },
-                              { value: 'paid', label: 'Mark Paid' },
-                              { value: 'overdue', label: 'Mark Overdue' },
-                              { value: 'cancelled', label: 'Cancel' }
-                            ]}
-                          />
+                          <span className="text-[10px] font-medium text-[color:var(--portal-muted)]">Use send and payment workflows</span>
                         </td>
                       </tr>
                     ))

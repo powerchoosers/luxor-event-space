@@ -24,7 +24,6 @@ const INQUIRY_STATUSES = new Set(['new', 'contacted', 'tour_requested', 'tour_co
 const BOOKING_STATUSES = new Set(['draft', 'tentative', 'confirmed', 'completed', 'cancelled'])
 const CAMPAIGN_STATUSES = new Set(['draft', 'scheduled', 'paused', 'cancelled'])
 const CALL_OUTCOMES = new Set(['', 'connected', 'left_voicemail', 'tour_scheduled', 'follow_up', 'booked', 'not_interested', 'wrong_number'])
-const INVOICE_STATUSES = new Set(['draft', 'sent', 'overdue'])
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,6 +40,9 @@ export async function POST(request: NextRequest) {
     }
     if (!ids.length) return NextResponse.json({ error: 'Select at least one record.' }, { status: 400 })
     if (ids.length > 1000) return NextResponse.json({ error: 'Bulk actions are limited to 1,000 records at a time.' }, { status: 400 })
+    if (resource === 'invoices' && action === 'set_status') {
+      return NextResponse.json({ error: 'Invoice lifecycle status can only change through the send, payment, or audited cancellation workflows.' }, { status: 409 })
+    }
 
     if (resource === 'inquiries' && action !== 'delete') {
       const testRows = await getTestInquiriesById(ids)
@@ -111,9 +113,6 @@ function getUpdates(resource: BulkResource, action: string, value: BulkBody['val
   }
   if (resource === 'marketing_campaigns' && action === 'set_status' && typeof value === 'string' && CAMPAIGN_STATUSES.has(value)) {
     return { status: value, updated_at: new Date().toISOString() }
-  }
-  if (resource === 'invoices' && action === 'set_status' && typeof value === 'string' && INVOICE_STATUSES.has(value)) {
-    return { status: value, paid_at: null, updated_at: new Date().toISOString() }
   }
   return null
 }

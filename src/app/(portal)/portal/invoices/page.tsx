@@ -5,14 +5,13 @@ import {
   FileText,
   Search,
   ExternalLink,
-  ArrowRightLeft,
   Ban,
   Trash2,
   Sparkles
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { LuxorInvoice, LuxorInvoiceStatus, type LuxorBooking, type LuxorPayment, type LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
+import { LuxorInvoice, type LuxorBooking, type LuxorPayment, type LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
 import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
 import {
   PortalPageFrame,
@@ -21,7 +20,6 @@ import {
   PortalStickyThead,
   PortalTableCard,
   PortalStatusBadge,
-  PortalSelect,
   PortalTableSkeleton
 } from '@/components/portal/PortalUI'
 import { MagicCard } from '@/components/ui/magic-card'
@@ -29,19 +27,11 @@ import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import {
   PortalBulkActionDeck,
-  PortalBulkChoiceDialog,
   PortalBulkConfirmDialog,
   PortalBulkHeaderSelector,
   PortalBulkRowSelector,
   usePortalBulkSelection,
 } from '@/components/portal/PortalBulkSelection'
-
-type EditableInvoiceStatus = Exclude<LuxorInvoiceStatus, 'paid' | 'cancelled'>
-const INVOICE_STATUS_OPTIONS: Array<{ value: EditableInvoiceStatus; label: string }> = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'sent', label: 'Sent' },
-  { value: 'overdue', label: 'Overdue' },
-]
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
@@ -59,8 +49,6 @@ export default function InvoicesPage() {
   const bulkSelection = usePortalBulkSelection<string>()
   const [bulkBusy, setBulkBusy] = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
-  const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
-  const [bulkStatus, setBulkStatus] = useState<EditableInvoiceStatus>('sent')
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
   const [voidTarget, setVoidTarget] = useState<LuxorInvoice | null>(null)
   const [voidReason, setVoidReason] = useState('')
@@ -170,27 +158,6 @@ export default function InvoicesPage() {
     fetchInvoices()
   }, [])
 
-  const handleUpdateStatus = async (id: string, newStatus: string) => {
-    try {
-      const res = await fetch('/api/invoices', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          status: newStatus,
-          paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
-        }),
-      })
-
-      if (!res.ok) throw new Error('Failed to update invoice status.')
-      const updated = await res.json()
-      setInvoices((prev) => prev.map((inv) => (inv.id === id ? updated : inv)))
-    } catch (err) {
-      console.error(err)
-      alert('Error updating status.')
-    }
-  }
-
   // Filter invoices
   const filteredInvoices = invoices.filter((inv) => {
     return (
@@ -203,28 +170,6 @@ export default function InvoicesPage() {
   const bulkSelectedCount = bulkSelection.selectedCount(matchingInvoiceIds.length)
   const resolvedSelectedIds = bulkSelection.resolveIds(matchingInvoiceIds)
   const selectedDraftCount = invoices.filter((invoice) => resolvedSelectedIds.includes(invoice.id) && invoice.status === 'draft').length
-
-  const runInvoiceBulkStatus = async (status: EditableInvoiceStatus) => {
-    const ids = bulkSelection.resolveIds(matchingInvoiceIds)
-    if (!ids.length) return
-    setBulkBusy(status)
-    try {
-      const response = await fetch('/api/portal/bulk-actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource: 'invoices', action: 'set_status', ids, value: status }),
-      })
-      const payload = await response.json().catch(() => ({})) as { error?: string }
-      if (!response.ok) throw new Error(payload.error || 'Unable to update invoices.')
-      setInvoices((current) => current.map((invoice) => ids.includes(invoice.id) ? { ...invoice, status, paid_at: null } : invoice))
-      bulkSelection.clear()
-    } catch (bulkError) {
-      alert(bulkError instanceof Error ? bulkError.message : 'Unable to update invoices.')
-      void fetchInvoices()
-    } finally {
-      setBulkBusy(null)
-    }
-  }
 
   const deleteSelectedInvoices = async () => {
     const ids = invoices.filter((invoice) => resolvedSelectedIds.includes(invoice.id) && invoice.status === 'draft').map((invoice) => invoice.id)
@@ -428,17 +373,6 @@ export default function InvoicesPage() {
                           <Ban size={12} /> Cancel
                         </button>
                       ) : null}
-                      <PortalSelect
-                        value={inv.status}
-                        onChange={(value) => handleUpdateStatus(inv.id, value)}
-                        className="w-36"
-                        options={[
-                          { value: 'draft', label: 'Draft' },
-                          { value: 'sent', label: 'Sent' },
-                          { value: 'paid', label: 'Paid' },
-                          { value: 'overdue', label: 'Overdue' },
-                        ]}
-                      />
                     </div>
                   </td>
                 </tr>
@@ -456,27 +390,10 @@ export default function InvoicesPage() {
         noun="invoice"
         onSelectAll={bulkSelection.selectAllMatching}
         onClear={bulkSelection.clear}
-        onAction={(action) => {
-          if (action === 'status') setBulkStatusOpen(true)
-          if (action === 'delete') setConfirmBulkDelete(true)
-        }}
+        onAction={(action) => { if (action === 'delete') setConfirmBulkDelete(true) }}
         actions={[
-          { id: 'status', label: 'Change status', icon: <ArrowRightLeft size={13} /> },
           { id: 'delete', label: 'Delete drafts', icon: <Trash2 size={13} />, tone: 'danger', disabled: selectedDraftCount === 0 },
         ]}
-      />
-      <PortalBulkChoiceDialog
-        open={bulkStatusOpen}
-        title="Change invoice status"
-        description="Paid is intentionally excluded. Payments must be recorded through the payment workflow."
-        label="New status"
-        value={bulkStatus}
-        options={INVOICE_STATUS_OPTIONS}
-        confirmLabel="Update invoices"
-        busy={Boolean(bulkBusy)}
-        onValueChange={(value) => setBulkStatus(value as EditableInvoiceStatus)}
-        onConfirm={() => { setBulkStatusOpen(false); void runInvoiceBulkStatus(bulkStatus) }}
-        onClose={() => setBulkStatusOpen(false)}
       />
       <PortalBulkConfirmDialog
         open={confirmBulkDelete}

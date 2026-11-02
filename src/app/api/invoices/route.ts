@@ -16,7 +16,7 @@ import { getActiveLuxorSignatureRequestByBooking, getLatestLuxorSignatureRequest
 import { createNote } from '@/lib/luxorNotesServer'
 import { getLuxorLeadEventForInquiry } from '@/lib/luxorLeadEventsServer'
 import { luxorCalendarDate, proposalValidThrough, proposalExpirationInstant } from '@/lib/luxorProposalTerms'
-import type { LuxorInvoice, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorProposalContext } from '@/lib/luxorInquiryTypes'
+import type { LuxorInvoice, LuxorInvoiceLineItem, LuxorProposalContext } from '@/lib/luxorInquiryTypes'
 import { sameDayBookingRequiresRevision } from '@/lib/luxorSameDayBooking'
 import { assertLuxorSameDayRevisionSafe } from '@/lib/luxorSameDayBookingServer'
 import { normalizeLuxorProposalPackageTierId } from '@/lib/luxorProposalPackages'
@@ -237,8 +237,6 @@ type InvoiceRouteUpdates = Parameters<typeof updateInvoice>[1] & {
   event_type?: string | null
   description?: string | null
 }
-
-const INVOICE_STATUSES = new Set<LuxorInvoiceStatus>(['draft', 'sent', 'paid', 'overdue'])
 
 async function calculateServerProposal(selection: LuxorProposalSelection, existing?: LuxorInvoice): Promise<ServerCalculatedProposal> {
   const originalCreatedAt = await resolveLuxorOriginalProposalCreatedAt(existing)
@@ -663,6 +661,12 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'Invoice id is required.' }, { status: 400 })
     }
+    if (body.status === 'cancelled') {
+      return NextResponse.json({ error: 'Use the audited cancellation action for eligible sent invoices.' }, { status: 409 })
+    }
+    if (body.status !== undefined || body.paid_at !== undefined) {
+      return NextResponse.json({ error: 'Invoice lifecycle status and paid dates can only be changed through the send, payment, or audited cancellation workflows.' }, { status: 409 })
+    }
 
     const existing = await getInvoice(id)
     if (!existing) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
@@ -716,11 +720,6 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updates: InvoiceRouteUpdates = {}
-    if (body.status === 'cancelled') {
-      return NextResponse.json({ error: 'Use the audited cancellation action for eligible sent invoices.' }, { status: 409 })
-    }
-    if (typeof body.status === 'string' && INVOICE_STATUSES.has(body.status as LuxorInvoiceStatus)) updates.status = body.status as LuxorInvoiceStatus
-    if (body.paid_at === null || typeof body.paid_at === 'string') updates.paid_at = body.paid_at
     if (body.due_date === null || typeof body.due_date === 'string') updates.due_date = body.due_date
     if (body.notes === null || typeof body.notes === 'string') updates.notes = body.notes
     if (body.event_type === null || typeof body.event_type === 'string') updates.event_type = body.event_type
