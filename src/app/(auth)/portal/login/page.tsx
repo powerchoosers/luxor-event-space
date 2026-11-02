@@ -13,11 +13,13 @@ type LoginPageProps = {
 export default async function PortalLoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams
   const error = params?.error
-  const message = error === 'unauthorized'
-    ? 'That account is not approved for the Luxor owner portal.'
-    : error
-      ? 'The portal could not complete sign-in. Check your email and password and try again.'
-      : null
+  const message = error === 'session-expired'
+    ? 'Your session has ended. Please log in again.'
+    : error === 'unauthorized'
+      ? 'That account is not approved for the Luxor owner portal.'
+      : error
+        ? 'The portal could not complete sign-in. Check your email and password and try again.'
+        : null
 
   return (
     <main className="relative grid min-h-screen overflow-hidden bg-[#050505] text-[#f7efe3] lg:grid-cols-[0.95fr_1.05fr]">

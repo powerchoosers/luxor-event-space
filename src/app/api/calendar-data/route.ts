@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const session = await getLuxorPortalSession()
     if (!session) {
-      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+      return NextResponse.json({ error: 'Please log in again to continue.' }, { status: 401 })
     }
 
     const [tours, slots, bookings, tasks, invoiceResult] = await Promise.all([

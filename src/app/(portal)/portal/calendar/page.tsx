@@ -97,6 +97,10 @@ export default function CalendarPage() {
       if (!initialLoadComplete.current) setLoading(true)
       setError(null)
       const response = await fetch('/api/calendar-data')
+      if (response.status === 401) {
+        window.location.replace('/portal/login?error=session-expired')
+        return false
+      }
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Failed to load calendar.')
       setData(payload)
