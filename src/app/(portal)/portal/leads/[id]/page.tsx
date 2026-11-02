@@ -3705,7 +3705,11 @@ export default function LeadDetailPage({
     const invoiceId = invoiceToDelete.id
     try {
       setDeletingInvoiceId(invoiceId)
-      const response = await fetch(`/api/invoices/${invoiceId}`, { method: 'DELETE' })
+      const response = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmDraftDelete: true }),
+      })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'The invoice could not be deleted.')
       setInvoices((current) => current.filter((invoice) => invoice.id !== invoiceId))
@@ -9286,9 +9290,9 @@ export default function LeadDetailPage({
                       {['deposit', 'final_balance', 'security_deposit'].includes(inv.invoice_kind || '') ? <button type="button" onClick={() => handleSendAiInvoiceReminder(inv)} disabled={inv.status === 'draft' || sendingReminderId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0 || !reminderDueDate} title={inv.status === 'draft' ? 'Finalize & Send the invoice before sending reminders.' : !reminderDueDate ? 'A saved payment due date is required before a reminder can be sent.' : `Payment due ${formatDisplayDate(reminderDueDate)}`} className="inline-flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-40 cursor-pointer">
                         <Sparkles size={12} /> {sendingReminderId === inv.id ? 'Sending AI Email...' : reminderDueDate ? `Send reminder · Due ${formatDisplayDate(reminderDueDate)}` : 'Set due date to remind'}
                       </button> : null}
-                      <button type="button" onClick={() => setInvoiceToDelete(inv)} disabled={getInvoicePaidTotal(inv.id) > 0 || inv.status === 'paid'} className="inline-flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-35 dark:text-red-300">
-                        <Trash2 size={12} /> Delete
-                      </button>
+                      {inv.status === 'draft' ? <button type="button" onClick={() => setInvoiceToDelete(inv)} disabled={getInvoicePaidTotal(inv.id) > 0} className="inline-flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-35 dark:text-red-300">
+                        <Trash2 size={12} /> Delete draft
+                      </button> : null}
                     </div>
                   </div>
                 })}
@@ -9672,13 +9676,13 @@ export default function LeadDetailPage({
             <div className="flex items-start gap-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-700 dark:text-red-300"><Trash2 size={18} /></div>
               <div>
-                <h3 className="text-sm font-black text-[color:var(--portal-text)]">Delete this invoice?</h3>
-                <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">This permanently removes <span className="font-semibold text-[color:var(--portal-text)]">{invoiceToDelete.description || `invoice ${invoiceToDelete.id.slice(0, 8).toUpperCase()}`}</span>, its saved PDF, and any unused Stripe payment link. Paid invoices cannot be deleted.</p>
+                <h3 className="text-sm font-black text-[color:var(--portal-text)]">Delete this draft?</h3>
+                <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">This permanently removes <span className="font-semibold text-[color:var(--portal-text)]">{invoiceToDelete.description || `invoice ${invoiceToDelete.id.slice(0, 8).toUpperCase()}`}</span> and its saved PDF. Only an unissued draft with no linked payment, booking, signature, or send history can be deleted.</p>
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" onClick={() => setInvoiceToDelete(null)} disabled={Boolean(deletingInvoiceId)} className="rounded-lg border border-[color:var(--portal-border)] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] disabled:opacity-40">Keep invoice</button>
-              <button type="button" onClick={() => void handleDeleteInvoice()} disabled={Boolean(deletingInvoiceId)} className="rounded-lg bg-red-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-red-700 disabled:opacity-40">{deletingInvoiceId ? 'Deleting...' : 'Delete invoice'}</button>
+              <button type="button" onClick={() => void handleDeleteInvoice()} disabled={Boolean(deletingInvoiceId)} className="rounded-lg bg-red-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-red-700 disabled:opacity-40">{deletingInvoiceId ? 'Deleting...' : 'Delete draft'}</button>
             </div>
           </div>
         ) : null}

@@ -24,7 +24,7 @@ const INQUIRY_STATUSES = new Set(['new', 'contacted', 'tour_requested', 'tour_co
 const BOOKING_STATUSES = new Set(['draft', 'tentative', 'confirmed', 'completed', 'cancelled'])
 const CAMPAIGN_STATUSES = new Set(['draft', 'scheduled', 'paused', 'cancelled'])
 const CALL_OUTCOMES = new Set(['', 'connected', 'left_voicemail', 'tour_scheduled', 'follow_up', 'booked', 'not_interested', 'wrong_number'])
-const INVOICE_STATUSES = new Set(['draft', 'sent', 'overdue', 'cancelled'])
+const INVOICE_STATUSES = new Set(['draft', 'sent', 'overdue'])
 
 export async function POST(request: NextRequest) {
   try {

@@ -237,7 +237,7 @@ type InvoiceRouteUpdates = Parameters<typeof updateInvoice>[1] & {
   description?: string | null
 }
 
-const INVOICE_STATUSES = new Set<LuxorInvoiceStatus>(['draft', 'sent', 'paid', 'overdue', 'cancelled'])
+const INVOICE_STATUSES = new Set<LuxorInvoiceStatus>(['draft', 'sent', 'paid', 'overdue'])
 
 async function calculateServerProposal(selection: LuxorProposalSelection, existing?: LuxorInvoice): Promise<ServerCalculatedProposal> {
   const originalCreatedAt = await resolveLuxorOriginalProposalCreatedAt(existing)
@@ -700,6 +700,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updates: InvoiceRouteUpdates = {}
+    if (body.status === 'cancelled') {
+      return NextResponse.json({ error: 'Use the audited cancellation action for eligible sent invoices.' }, { status: 409 })
+    }
     if (typeof body.status === 'string' && INVOICE_STATUSES.has(body.status as LuxorInvoiceStatus)) updates.status = body.status as LuxorInvoiceStatus
     if (body.paid_at === null || typeof body.paid_at === 'string') updates.paid_at = body.paid_at
     if (body.due_date === null || typeof body.due_date === 'string') updates.due_date = body.due_date

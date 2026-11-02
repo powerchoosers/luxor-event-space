@@ -37,7 +37,7 @@ export async function buildLuxorPaymentReceiptPdf(input: {
   const { payment, booking, inquiry, invoice } = input
   if (payment.status !== 'paid') throw new Error('A receipt can only be created for a confirmed paid transaction.')
   const pdf = await PDFDocument.create()
-  const receivedAt = new Date(payment.paid_at || payment.created_at)
+  const receivedAt = new Date(payment.received_date ? `${payment.received_date}T12:00:00Z` : payment.paid_at || payment.created_at)
   pdf.setCreationDate(receivedAt)
   pdf.setModificationDate(receivedAt)
   pdf.setProducer('Luxor at Las Palmas Events')
@@ -58,7 +58,7 @@ export async function buildLuxorPaymentReceiptPdf(input: {
   draw('PAYMENT RECEIPT', 54, 704, 23, serif, ink)
   page.drawLine({ start: { x: 54, y: 688 }, end: { x: 558, y: 688 }, thickness: 1, color: gold })
   draw(`Receipt ${payment.id.slice(0, 8).toUpperCase()}`, 54, 659, 12, bold)
-  draw(`Received ${new Date(payment.paid_at || payment.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`, 54, 638, 10, regular, muted)
+  draw(`Received ${payment.received_date || new Date(payment.paid_at || payment.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' })}`, 54, 638, 10, regular, muted)
   page.drawRectangle({ x: 54, y: 548, width: 504, height: 66, color: pale })
   draw(money(Number(payment.amount || 0)), 72, 574, 25, serif, ink)
   draw('AMOUNT RECEIVED', 72, 558, 8, bold, muted)

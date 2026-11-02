@@ -6,6 +6,7 @@ import {
   Search,
   ExternalLink,
   ArrowRightLeft,
+  Ban,
   Trash2,
   Sparkles
 } from 'lucide-react'
@@ -34,12 +35,11 @@ import {
   usePortalBulkSelection,
 } from '@/components/portal/PortalBulkSelection'
 
-type EditableInvoiceStatus = Exclude<LuxorInvoiceStatus, 'paid'>
+type EditableInvoiceStatus = Exclude<LuxorInvoiceStatus, 'paid' | 'cancelled'>
 const INVOICE_STATUS_OPTIONS: Array<{ value: EditableInvoiceStatus; label: string }> = [
   { value: 'draft', label: 'Draft' },
   { value: 'sent', label: 'Sent' },
   { value: 'overdue', label: 'Overdue' },
-  { value: 'cancelled', label: 'Cancelled' },
 ]
 
 export default function InvoicesPage() {
@@ -53,6 +53,9 @@ export default function InvoicesPage() {
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
   const [bulkStatus, setBulkStatus] = useState<EditableInvoiceStatus>('sent')
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
+  const [voidTarget, setVoidTarget] = useState<LuxorInvoice | null>(null)
+  const [voidReason, setVoidReason] = useState('')
+  const [voidBusy, setVoidBusy] = useState(false)
 
   const handleSendAiReminder = async (invoiceId: string) => {
     try {
@@ -125,6 +128,8 @@ export default function InvoicesPage() {
   })
   const matchingInvoiceIds = useMemo(() => filteredInvoices.map((invoice) => invoice.id), [filteredInvoices])
   const bulkSelectedCount = bulkSelection.selectedCount(matchingInvoiceIds.length)
+  const resolvedSelectedIds = bulkSelection.resolveIds(matchingInvoiceIds)
+  const selectedDraftCount = invoices.filter((invoice) => resolvedSelectedIds.includes(invoice.id) && invoice.status === 'draft').length
 
   const runInvoiceBulkStatus = async (status: EditableInvoiceStatus) => {
     const ids = bulkSelection.resolveIds(matchingInvoiceIds)
@@ -149,17 +154,19 @@ export default function InvoicesPage() {
   }
 
   const deleteSelectedInvoices = async () => {
-    const ids = bulkSelection.resolveIds(matchingInvoiceIds)
+    const ids = invoices.filter((invoice) => resolvedSelectedIds.includes(invoice.id) && invoice.status === 'draft').map((invoice) => invoice.id)
     if (!ids.length) return
     setBulkBusy('delete')
     const deletedIds: string[] = []
     const blockedMessages: string[] = []
+    const cleanupMessages: string[] = []
     for (const id of ids) {
       try {
-        const response = await fetch(`/api/invoices/${id}`, { method: 'DELETE' })
-        const payload = await response.json().catch(() => ({})) as { error?: string }
+        const response = await fetch(`/api/invoices/${id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmDraftDelete: true }) })
+        const payload = await response.json().catch(() => ({})) as { error?: string; storageCleanupPending?: boolean; message?: string }
         if (!response.ok) throw new Error(payload.error || `Invoice ${id.slice(0, 8)} could not be deleted.`)
         deletedIds.push(id)
+        if (payload.storageCleanupPending && payload.message) cleanupMessages.push(payload.message)
       } catch (deleteError) {
         blockedMessages.push(deleteError instanceof Error ? deleteError.message : `Invoice ${id.slice(0, 8)} could not be deleted.`)
       }
@@ -168,7 +175,29 @@ export default function InvoicesPage() {
     bulkSelection.clear()
     setConfirmBulkDelete(false)
     setBulkBusy(null)
-    if (blockedMessages.length) alert(`${deletedIds.length} invoice${deletedIds.length === 1 ? '' : 's'} deleted. ${blockedMessages.length} kept:\n${blockedMessages.join('\n')}`)
+    if (blockedMessages.length) alert(`${deletedIds.length} draft${deletedIds.length === 1 ? '' : 's'} deleted. ${blockedMessages.length} kept:\n${blockedMessages.join('\n')}`)
+    if (cleanupMessages.length) alert(cleanupMessages.join('\n'))
+  }
+
+  const voidInvoice = async () => {
+    if (!voidTarget || voidReason.trim().length < 8) return
+    setVoidBusy(true)
+    try {
+      const response = await fetch(`/api/invoices/${encodeURIComponent(voidTarget.id)}/void`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmVoid: true, reason: voidReason.trim() }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; status?: string }
+      if (!response.ok) throw new Error(payload.error || 'Invoice could not be cancelled.')
+      setInvoices((current) => current.map((invoice) => invoice.id === voidTarget.id ? { ...invoice, status: 'cancelled' } : invoice))
+      setVoidTarget(null)
+      setVoidReason('')
+    } catch (voidError) {
+      alert(voidError instanceof Error ? voidError.message : 'Invoice could not be cancelled.')
+      void fetchInvoices()
+    } finally {
+      setVoidBusy(false)
+    }
   }
 
   // Computations
@@ -309,6 +338,12 @@ export default function InvoicesPage() {
                           <Sparkles size={11} /> {sendingReminderId === inv.id ? 'Sending...' : 'AI Remind'}
                         </button>
                       ) : null}
+                      {['sent', 'overdue'].includes(inv.status) && inv.proposal_sent_at && !inv.proposal_accepted_at && !inv.booking_id && !inv.paid_at
+                        && !inv.payment_requested_at && !inv.stripe_checkout_session_id && !inv.stripe_checkout_url ? (
+                        <button type="button" onClick={() => { setVoidTarget(inv); setVoidReason('') }} className="inline-flex items-center gap-1 rounded-lg border border-rose-500/25 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-rose-700 hover:bg-rose-500/10 dark:text-rose-300" aria-label={`Cancel invoice ${inv.id.slice(0, 8)}`}>
+                          <Ban size={12} /> Cancel
+                        </button>
+                      ) : null}
                       <PortalSelect
                         value={inv.status}
                         onChange={(value) => handleUpdateStatus(inv.id, value)}
@@ -318,7 +353,6 @@ export default function InvoicesPage() {
                           { value: 'sent', label: 'Sent' },
                           { value: 'paid', label: 'Paid' },
                           { value: 'overdue', label: 'Overdue' },
-                          { value: 'cancelled', label: 'Cancelled' },
                         ]}
                       />
                     </div>
@@ -344,7 +378,7 @@ export default function InvoicesPage() {
         }}
         actions={[
           { id: 'status', label: 'Change status', icon: <ArrowRightLeft size={13} /> },
-          { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
+          { id: 'delete', label: 'Delete drafts', icon: <Trash2 size={13} />, tone: 'danger', disabled: selectedDraftCount === 0 },
         ]}
       />
       <PortalBulkChoiceDialog
@@ -362,13 +396,25 @@ export default function InvoicesPage() {
       />
       <PortalBulkConfirmDialog
         open={confirmBulkDelete}
-        title={`Delete ${bulkSelectedCount} selected invoice${bulkSelectedCount === 1 ? '' : 's'}?`}
-        description="Draft, sent, overdue, and cancelled invoices can be permanently deleted. Paid invoices are protected and will be kept because they are part of the payment record. Open Stripe checkout sessions are expired before deletion."
-        confirmLabel="Delete eligible invoices"
+        title={`Delete ${selectedDraftCount} selected draft${selectedDraftCount === 1 ? '' : 's'}?`}
+        description={`Only never-issued draft invoices with no payment, booking, child invoice, or payment request can be deleted. ${bulkSelectedCount - selectedDraftCount} selected non-draft invoice${bulkSelectedCount - selectedDraftCount === 1 ? ' will' : 's will'} be left unchanged. Deletion is recorded in the audit history.`}
+        confirmLabel="Delete eligible drafts"
         busy={bulkBusy === 'delete'}
         onClose={() => setConfirmBulkDelete(false)}
         onConfirm={() => void deleteSelectedInvoices()}
       />
+      {voidTarget ? <div className="fixed inset-0 z-[120] grid place-items-center bg-black/45 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !voidBusy) setVoidTarget(null) }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="void-invoice-title" className="w-full max-w-lg rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-2xl">
+          <h2 id="void-invoice-title" className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Cancel sent invoice?</h2>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">This records a cancellation in the financial audit history. Paid, accepted, booked, or payment-request invoices cannot be cancelled here. No refund or customer email will be created.</p>
+          <label className="mt-5 block text-xs font-semibold text-[color:var(--portal-text)]" htmlFor="void-invoice-reason">Reason for cancellation</label>
+          <textarea id="void-invoice-reason" value={voidReason} onChange={(event) => setVoidReason(event.target.value)} maxLength={1000} rows={3} className="mt-2 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]" placeholder="Enter at least 8 characters" />
+          <div className="mt-5 flex justify-end gap-3">
+            <button type="button" disabled={voidBusy} onClick={() => setVoidTarget(null)} className="rounded-lg border border-[color:var(--portal-border)] px-4 py-2 text-sm font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Keep invoice</button>
+            <button type="button" disabled={voidBusy || voidReason.trim().length < 8} onClick={() => void voidInvoice()} className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{voidBusy ? 'Recording…' : 'Confirm cancellation'}</button>
+          </div>
+        </section>
+      </div> : null}
     </PortalPageFrame>
   )
 }

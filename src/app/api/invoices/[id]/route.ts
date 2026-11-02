@@ -1,44 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Stripe from 'stripe'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { deleteInvoice, getInvoice, listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
-import { deleteLuxorDocumentsByInvoice } from '@/lib/luxorDocumentsServer'
-import { supabaseRest } from '@/lib/supabaseRestServer'
-import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
+import { deleteUnissuedDraftInvoice, removeDeletedDraftInvoiceFiles } from '@/lib/luxorInvoiceLifecycleServer'
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getLuxorPortalSession()
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
-
+    const member = await getLuxorPortalMember(session.email)
+    if (!member || member.status !== 'active' || !['owner', 'admin'].includes(member.role) || !memberCan(member, 'finances')) {
+      return NextResponse.json({ error: 'Owner or administrator finance access is required.' }, { status: 403 })
+    }
     const { id } = await params
-    const invoice = await getInvoice(id)
-    if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
-    const receipt = await supabaseRest<Array<{ id: string }>>(`luxor_payments?select=id&invoice_id=eq.${encodeURIComponent(id)}&metadata->>receipt_received=eq.true&limit=1`)
-    const master = invoice.parent_invoice_id ? await getInvoice(invoice.parent_invoice_id) : invoice
-    if (receipt.length || (sameDayBookingPromotion(master) && (master?.price_locked_at || master?.proposal_accepted_at))) return NextResponse.json({ error: 'Received-payment and published same-day price records must be preserved. Reconcile the receipt or issue an appropriate revision.' }, { status: 409 })
-
-    const paidPayments = await listPaidPaymentsByInvoice(id)
-    if (paidPayments.length > 0 || invoice.status === 'paid') {
-      return NextResponse.json({ error: 'Paid invoices cannot be deleted because they are part of the payment record.' }, { status: 409 })
+    if (!UUID.test(id)) return NextResponse.json({ error: 'A valid invoice ID is required.' }, { status: 400 })
+    const body = await request.json().catch(() => ({})) as { confirmDraftDelete?: unknown }
+    if (body.confirmDraftDelete !== true) {
+      return NextResponse.json({ error: 'Explicit confirmation is required to delete a draft invoice.' }, { status: 400 })
     }
 
-    const secretKey = process.env.STRIPE_SECRET_KEY
-    if (secretKey) {
-      const stripe = new Stripe(secretKey)
-      const sessions = await stripe.checkout.sessions.list({ limit: 100 })
-      const matchingOpenSessions = sessions.data.filter((checkout) =>
-        checkout.status === 'open' &&
-        (checkout.client_reference_id === id || checkout.metadata?.invoice_id === id)
-      )
-      await Promise.all(matchingOpenSessions.map((checkout) => stripe.checkout.sessions.expire(checkout.id)))
+    const deleted = await deleteUnissuedDraftInvoice(id, session.email)
+    if (!deleted?.deleted) return NextResponse.json({ error: 'Draft invoice could not be deleted.' }, { status: 409 })
+    let cleanupPending = false
+    try {
+      cleanupPending = (await removeDeletedDraftInvoiceFiles(deleted.storage_paths || [])).length > 0
+    } catch (cleanupError) {
+      cleanupPending = true
+      console.error('[invoice-delete-draft-storage-cleanup] failed', { message: cleanupError instanceof Error ? cleanupError.message : String(cleanupError) })
     }
-
-    await deleteLuxorDocumentsByInvoice(id)
-    await deleteInvoice(id)
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      storageCleanupPending: cleanupPending,
+      message: cleanupPending ? 'Draft invoice deleted. Some private PDF files need storage cleanup.' : undefined,
+    })
   } catch (error) {
-    console.error('[invoice-delete] failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to delete invoice.' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Failed to delete draft invoice.'
+    const status = /not found/i.test(message) ? 404 : /only never-issued|linked financial|changed while|draft invoice/i.test(message) ? 409 : 500
+    console.error('[invoice-delete-draft] failed', { message })
+    return NextResponse.json({ error: message }, { status })
   }
 }

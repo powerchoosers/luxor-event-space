@@ -811,6 +811,8 @@ export type LuxorPayment = {
   status: LuxorPaymentStatus
   payment_method: string | null
   paid_at: string | null
+  /** Calendar date used for receipt display after an audited manual correction. */
+  received_date?: string | null
   processor: string | null
   processor_reference: string | null
   notes: string | null

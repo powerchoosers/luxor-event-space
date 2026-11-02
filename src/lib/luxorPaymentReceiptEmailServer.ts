@@ -72,9 +72,11 @@ export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Pro
   const receiptNumber = payment.id.slice(0, 8).toUpperCase()
   const subject = `Payment Receipt – ${eventName === 'your event' ? `Receipt ${receiptNumber}` : eventName}`
   const firstName = (inquiry?.full_name || booking?.client_name || 'there').trim().split(/\s+/)[0] || 'there'
-  const receivedAt = payment.paid_at || payment.created_at
+  const receivedAt = payment.received_date
+    ? new Date(`${payment.received_date}T12:00:00.000Z`).toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'UTC' })
+    : payment.paid_at || payment.created_at
   const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(payment.amount || 0))
-  const receivedDate = new Date(receivedAt).toLocaleDateString('en-US', { dateStyle: 'long' })
+  const receivedDate = payment.received_date || new Date(receivedAt).toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'America/Chicago' })
   const message = [
     `Hi ${firstName},`,
     '',
@@ -92,7 +94,7 @@ export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Pro
   const html = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#fffdfa;color:#211b17;border:1px solid #ded6ca"><div style="padding:20px 24px;background:#101010;color:#d1ad61;font-family:Georgia,serif;letter-spacing:.12em">LUXOR AT LAS PALMAS EVENTS</div><div style="padding:28px 24px"><h1 style="margin:0 0 20px;color:#1b1713;font-family:Georgia,serif;font-size:24px">Payment received</h1><p>Hi ${escapeHtml(firstName)},</p><p>Thank you for your payment! We’ve successfully received <strong>${escapeHtml(amount)}</strong> for ${escapeHtml(eventName)}.</p><p>Your payment receipt is attached to this email for your records.</p><p>Thank you for choosing Luxor at Las Palmas Events. We’re looking forward to helping make your event special.</p><p style="margin-top:24px">Best regards,<br />Luxor at Las Palmas Events</p><p style="margin-top:24px;padding-top:14px;border-top:1px solid #e7dfd4;color:#756a5d;font-size:12px">Receipt ${receiptNumber} · Received ${escapeHtml(receivedDate)} · ${escapeHtml(payment.payment_method || 'Payment method not recorded')}</p></div></div>`
   const fingerprintSource = {
     payment: {
-      id: payment.id, status: payment.status, amount: payment.amount, paid_at: payment.paid_at,
+      id: payment.id, status: payment.status, amount: payment.amount, paid_at: payment.paid_at, received_date: payment.received_date,
       created_at: payment.created_at, payment_method: payment.payment_method,
       processor_reference: payment.processor_reference, invoice_id: payment.invoice_id,
       booking_id: payment.booking_id, inquiry_id: payment.inquiry_id,
