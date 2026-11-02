@@ -17,6 +17,7 @@ import {
   ReceiptText,
 } from 'lucide-react'
 import type { LuxorBooking, LuxorEmailJob, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
+import { installmentPaidAmount, isBookingPaymentMilestone, paidOnInvoice, paymentReminderJobsForEvent } from '@/lib/luxorPaymentDashboardModel'
 import { PortalSelect } from '@/components/portal/PortalUI'
 
 type PaymentKind = 'deposit' | 'final' | 'security_deposit'
@@ -32,6 +33,8 @@ type Props = {
   installments: LuxorPaymentInstallment[]
   reminderJobs: LuxorEmailJob[]
   paymentLoadError?: string | null
+  paymentInstallmentLoadError?: string | null
+  paymentReminderLoadError?: string | null
   onRecordPayment: (booking: LuxorBooking, kind: PaymentKind) => Promise<void>
   onViewInvoice: (invoice: LuxorInvoice) => void
   onRequestInvoicePayment: (invoice: LuxorInvoice) => void
@@ -109,6 +112,8 @@ export function LeadPaymentsDashboard({
   installments,
   reminderJobs,
   paymentLoadError,
+  paymentInstallmentLoadError,
+  paymentReminderLoadError,
   onRecordPayment,
   onViewInvoice,
   onRequestInvoicePayment,
@@ -141,11 +146,12 @@ export function LeadPaymentsDashboard({
   const securityAmount = Number(securityInvoice?.total || booking?.security_deposit_amount || 0)
   const securityStatus = booking?.security_deposit_status || (securityPaid >= securityAmount && securityAmount > 0 ? 'held' : 'due')
   const securityReceived = securityPaid >= securityAmount || ['refunded', 'retained'].includes(securityStatus)
-  const nextReminder = reminderJobs
-    .filter((job) => paymentReminderKinds.has(job.job_type) && job.status === 'queued' && Date.parse(job.scheduled_for) > Date.now())
+  const eventReminderJobs = useMemo(() => paymentReminderJobsForEvent(reminderJobs, booking?.id, new Set(invoices.map((invoice) => invoice.id))), [booking?.id, invoices, reminderJobs])
+  const nextReminder = eventReminderJobs
+    .filter((job) => job.status === 'queued' && Date.parse(job.scheduled_for) > Date.now())
     .sort((left, right) => Date.parse(left.scheduled_for) - Date.parse(right.scheduled_for))[0]
   const timelineInstallments = useMemo(() => [...installments]
-    .filter((installment) => installment.status !== 'void')
+    .filter((installment) => installment.status !== 'void' && !isBookingPaymentMilestone(installment))
     .sort((left, right) => left.installment_order - right.installment_order), [installments])
   const categorizedPayments = useMemo(() => uniquePayments.map((payment) => ({ payment, invoice: invoiceById.get(payment.invoice_id || '') })), [invoiceById, uniquePayments])
 
@@ -173,7 +179,7 @@ export function LeadPaymentsDashboard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <p className="inline-flex items-center gap-2 text-sm text-[#755b39]" aria-live="polite">
             <CalendarDays size={16} className="shrink-0 text-[#ae8138]" />
-            {nextReminder ? <>Next payment reminder: <strong className="font-semibold">{formatDate(nextReminder.scheduled_for)}</strong></> : 'No upcoming reminders'}
+            {paymentReminderLoadError ? 'Reminder schedule unavailable' : nextReminder ? <>Next payment reminder: <strong className="font-semibold">{formatDate(nextReminder.scheduled_for)}</strong></> : 'No upcoming reminders'}
           </p>
           <button type="button" onClick={() => { setRecordKind('deposit'); setRecordOpen(true) }} disabled={!booking || Boolean(paymentLoadError)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#b88737] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#9d6c25] disabled:cursor-not-allowed disabled:opacity-50">
             <CircleDollarSign size={17} /> Record Payment
@@ -212,18 +218,9 @@ export function LeadPaymentsDashboard({
             </div>
             <div className="flex items-center gap-3 py-2"><span className="z-10 h-2 w-2 rounded-full bg-[#c29448]" /><p className="flex flex-1 items-center gap-3 text-[10px] font-bold uppercase tracking-[0.15em] text-[#a6772b]">Monthly payments<span className="h-px flex-1 bg-[#d8c6ac]" /></p></div>
             {timelineInstallments.map((installment) => {
-              const allocatedPaid = categorizedPayments.reduce((sum, { payment }) => {
-                if (payment.status !== 'paid') return sum
-                const allocations = payment.metadata?.installment_allocations
-                if (!Array.isArray(allocations)) return sum
-                return sum + allocations.reduce((rowSum: number, allocation) => {
-                  if (!allocation || typeof allocation !== 'object') return rowSum
-                  const value = allocation as Record<string, unknown>
-                  return value.installment_id === installment.id ? rowSum + Number(value.amount || 0) : rowSum
-                }, 0)
-              }, 0)
+              const allocatedPaid = installmentPaidAmount(installment, uniquePayments)
               const due = Number(installment.amount || 0)
-              const isPaid = due > 0 && allocatedPaid >= due
+              const isPaid = due > 0 && (allocatedPaid >= due || installment.status === 'paid')
               const isPartial = allocatedPaid > 0 && !isPaid
               const overdue = !isPaid && installment.due_at && Date.parse(installment.due_at) < Date.now()
               const amountText = isPartial ? `${formatMoney(allocatedPaid)} / ${formatMoney(due)}` : !allocatedPaid && installment.due_at && Date.parse(installment.due_at) <= Date.now() ? `${formatMoney(0)} / ${formatMoney(due)}` : formatMoney(due)
@@ -234,7 +231,7 @@ export function LeadPaymentsDashboard({
                 <div className="text-right"><p className="font-semibold tabular-nums">{amountText}</p><span className={`text-[10px] font-bold uppercase tracking-wide ${isPaid ? 'text-emerald-700' : overdue ? 'text-rose-700' : isPartial ? 'text-amber-700' : 'text-[#a6772b]'}`}>{status}</span></div>
               </div>
             })}
-            {timelineInstallments.length === 0 ? <p className="py-3 pl-10 text-sm text-[#78685a]">No installment schedule is saved for this event.</p> : null}
+            {paymentInstallmentLoadError ? <p role="alert" className="py-3 pl-10 text-sm text-amber-800">{paymentInstallmentLoadError}</p> : timelineInstallments.length === 0 ? <p className="py-3 pl-10 text-sm text-[#78685a]">No installment schedule is saved for this event.</p> : null}
             {securityAmount > 0 ? <>
               <div className="flex items-center gap-3 py-2"><span className="z-10 h-2 w-2 rounded-full bg-[#c29448]" /><p className="flex flex-1 items-center gap-3 text-[10px] font-bold uppercase tracking-[0.15em] text-[#a6772b]">Refundable security deposit<span className="h-px flex-1 bg-[#d8c6ac]" /></p></div>
               <div className="relative grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 py-3">
@@ -258,9 +255,12 @@ export function LeadPaymentsDashboard({
             {([['history', 'Payment History'], ['invoices', 'Invoices'], ['receipts', 'Receipts'], ['reminders', 'Reminder History']] as const).map(([key, label]) => <button key={key} id={`payment-record-tab-${key}`} type="button" role="tab" aria-selected={activeTab === key} aria-controls={`payment-record-panel-${key}`} onClick={() => setActiveTab(key)} className={`min-h-10 rounded-xl border px-3 py-2 text-xs font-semibold transition ${activeTab === key ? 'border-[#b88737] bg-[#b88737] text-white shadow-sm' : 'border-[#eadfcf] bg-[#fffdf9] text-[#624d35] hover:border-[#c9a66e]'}`}>{label}</button>)}
           </div>
           <div id={`payment-record-panel-${activeTab}`} role="tabpanel" aria-labelledby={`payment-record-tab-${activeTab}`} className="mt-4">
-            {activeTab === 'history' ? <div className="overflow-x-auto rounded-xl border border-[#eee5dc]"><table className="w-full min-w-[680px] border-collapse text-left text-xs"><thead className="bg-[#faf5ee] text-[10px] uppercase tracking-wide text-[#78685a]"><tr>{['Date', 'Description', 'Amount', 'Method', 'Applied To', 'Receipt'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#f1eae2]">{categorizedPayments.length ? categorizedPayments.map(({ payment, invoice }) => <tr key={payment.id}><td className="whitespace-nowrap px-3 py-3">{formatDate(payment.paid_at || payment.created_at)}</td><td className="px-3 py-3 font-medium">{paymentDescription(payment, invoice)}{payment.status !== 'paid' ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-amber-800">{payment.status}</span> : null}</td><td className="whitespace-nowrap px-3 py-3 font-semibold tabular-nums">{formatMoney(Number(payment.amount || 0))}</td><td className="px-3 py-3">{payment.payment_method || 'Not recorded'}</td><td className="px-3 py-3">{appliedTo(payment, invoice)}</td><td className="px-3 py-3">{payment.status === 'paid' ? <div className="flex items-center gap-2"><button type="button" onClick={() => setSelectedPayment(payment)} className="inline-flex items-center gap-1 text-[#91651f] hover:underline"><Eye size={14} /> View</button><a href={`/api/payments/${encodeURIComponent(payment.id)}/receipt`} className="text-[#91651f] hover:underline">Download</a></div> : <span className="text-[#988979]">—</span>}</td></tr>) : <tr><td colSpan={6} className="px-3 py-8 text-center text-[#78685a]">No payment transactions are recorded for this event.</td></tr>}</tbody></table></div> : null}
+            {activeTab === 'history' ? <div>
+              <div className="space-y-2 sm:hidden">{categorizedPayments.length ? categorizedPayments.map(({ payment, invoice }) => <article key={payment.id} className="rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-3 text-xs"><div className="flex justify-between gap-3"><strong>{paymentDescription(payment, invoice)}</strong><strong className="tabular-nums">{formatMoney(Number(payment.amount || 0))}</strong></div><p className="mt-1 text-[#78685a]">{formatDate(payment.paid_at || payment.created_at)} · {payment.payment_method || 'Not recorded'} · {appliedTo(payment, invoice)}</p>{payment.status !== 'paid' ? <p className="mt-1 font-semibold capitalize text-amber-800">{payment.status}</p> : <div className="mt-2 flex gap-4"><button type="button" onClick={() => setSelectedPayment(payment)} className="text-[#91651f]">View</button><a href={`/api/payments/${encodeURIComponent(payment.id)}/receipt`} className="text-[#91651f]">Download</a></div>}</article>) : <p className="rounded-xl border border-dashed border-[#e7d6be] p-6 text-center text-sm text-[#78685a]">No payment transactions are recorded for this event.</p>}</div>
+              <div className="hidden overflow-x-auto rounded-xl border border-[#eee5dc] sm:block"><table className="w-full border-collapse text-left text-xs"><thead className="bg-[#faf5ee] text-[10px] uppercase tracking-wide text-[#78685a]"><tr>{['Date', 'Description', 'Amount', 'Method', 'Applied To', 'Receipt'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#f1eae2]">{categorizedPayments.length ? categorizedPayments.map(({ payment, invoice }) => <tr key={payment.id}><td className="whitespace-nowrap px-3 py-3">{formatDate(payment.paid_at || payment.created_at)}</td><td className="px-3 py-3 font-medium">{paymentDescription(payment, invoice)}{payment.status !== 'paid' ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-amber-800">{payment.status}</span> : null}</td><td className="whitespace-nowrap px-3 py-3 font-semibold tabular-nums">{formatMoney(Number(payment.amount || 0))}</td><td className="px-3 py-3">{payment.payment_method || 'Not recorded'}</td><td className="px-3 py-3">{appliedTo(payment, invoice)}</td><td className="px-3 py-3">{payment.status === 'paid' ? <div className="flex items-center gap-2"><button type="button" onClick={() => setSelectedPayment(payment)} className="inline-flex items-center gap-1 text-[#91651f] hover:underline"><Eye size={14} /> View</button><a href={`/api/payments/${encodeURIComponent(payment.id)}/receipt`} className="text-[#91651f] hover:underline">Download</a></div> : <span className="text-[#988979]">—</span>}</td></tr>) : <tr><td colSpan={6} className="px-3 py-8 text-center text-[#78685a]">No payment transactions are recorded for this event.</td></tr>}</tbody></table></div>
+            </div> : null}
             {activeTab === 'invoices' ? <div className="space-y-3">{invoices.length ? invoices.map((invoice) => {
-              const invoicePaid = round(uniquePayments.filter((payment) => payment.invoice_id === invoice.id && payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0))
+              const invoicePaid = paidOnInvoice(invoice, invoices, uniquePayments)
               const total = Number(invoice.total || 0)
               const balance = Math.max(0, round(total - invoicePaid))
               const dueAt = invoice.due_date
@@ -271,7 +271,10 @@ export function LeadPaymentsDashboard({
               const invoice = invoiceById.get(payment.invoice_id || '')
               return <article key={payment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-4"><div className="flex min-w-0 items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#fbf1e4] text-[#af7c2a]"><ReceiptText size={17} /></span><div className="min-w-0"><p className="font-semibold">Receipt {payment.id.slice(0, 8).toUpperCase()}</p><p className="mt-1 text-xs text-[#78685a]">{formatDate(payment.paid_at || payment.created_at)} · {payment.payment_method || 'Method not recorded'} · {appliedTo(payment, invoice)}</p><p className="mt-1 text-[11px] text-[#78685a]">{leadName}{invoice?.event_type ? ` · ${invoice.event_type}` : ''}{payment.processor_reference ? ` · Ref ${payment.processor_reference}` : ''}</p></div></div><div className="flex items-center gap-3"><strong className="tabular-nums">{formatMoney(Number(payment.amount || 0))}</strong><button type="button" onClick={() => setSelectedPayment(payment)} className="inline-flex items-center gap-1 text-xs font-semibold text-[#91651f]"><Eye size={14} /> View</button><a href={`/api/payments/${encodeURIComponent(payment.id)}/receipt`} className="text-xs font-semibold text-[#91651f] hover:underline">Download</a></div></article>
             }) : <p className="rounded-xl border border-dashed border-[#e7d6be] p-8 text-center text-sm text-[#78685a]">Receipts appear here after an actual payment has been recorded.</p>}</div> : null}
-            {activeTab === 'reminders' ? <div className="overflow-x-auto rounded-xl border border-[#eee5dc]"><table className="w-full min-w-[680px] border-collapse text-left text-xs"><thead className="bg-[#faf5ee] text-[10px] uppercase tracking-wide text-[#78685a]"><tr>{['Date', 'Related obligation', 'Amount due', 'Recipient', 'Channel', 'Type', 'Status'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#f1eae2]">{reminderJobs.filter((job) => paymentReminderKinds.has(job.job_type)).length ? reminderJobs.filter((job) => paymentReminderKinds.has(job.job_type)).map((job) => <tr key={job.id}><td className="whitespace-nowrap px-3 py-3">{formatDate(job.sent_at || job.scheduled_for || job.created_at)}</td><td className="px-3 py-3">{String(job.metadata?.obligation_label || job.metadata?.invoice_id || 'Payment reminder')}</td><td className="px-3 py-3 tabular-nums">{typeof job.metadata?.amount_due === 'number' ? formatMoney(job.metadata.amount_due) : '—'}</td><td className="px-3 py-3">{job.recipient_email || leadEmail || '—'}</td><td className="px-3 py-3">Email</td><td className="px-3 py-3">{job.job_type.replaceAll('_', ' ')}</td><td className="px-3 py-3"><span className={`font-semibold capitalize ${job.status === 'failed' ? 'text-rose-700' : job.status === 'sent' ? 'text-emerald-700' : job.status === 'cancelled' ? 'text-[#78685a]' : 'text-[#9b6d21]'}`}>{job.status === 'queued' ? 'Scheduled' : job.status === 'sent' ? 'Sent' : job.status}</span>{job.last_error ? <p className="mt-1 max-w-48 text-[10px] text-rose-700">{job.last_error}</p> : null}<details className="mt-1"><summary className="cursor-pointer text-[10px] text-[#91651f]">View message</summary><p className="mt-2 max-w-xl whitespace-pre-wrap text-[10px] leading-4 text-[#78685a]">{job.subject}{'\n'}{job.body}</p></details></td></tr>) : <tr><td colSpan={7} className="px-3 py-8 text-center text-[#78685a]">No payment reminders are recorded for this client.</td></tr>}</tbody></table></div> : null}
+            {activeTab === 'reminders' ? <div>{paymentReminderLoadError ? <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{paymentReminderLoadError}</p> : eventReminderJobs.length ? <>
+              <div className="space-y-2 sm:hidden">{eventReminderJobs.map((job) => <article key={job.id} className="rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-3 text-xs"><div className="flex justify-between gap-3"><strong>{String(job.metadata?.obligation_label || job.metadata?.invoice_id || 'Payment reminder')}</strong><span className="font-semibold capitalize">{job.status === 'queued' ? 'Scheduled' : job.status}</span></div><p className="mt-1 text-[#78685a]">{formatDate(job.sent_at || job.scheduled_for || job.created_at)} · Email · {job.job_type.replaceAll('_', ' ')}</p><p className="mt-1 break-all text-[#78685a]">To {job.recipient_email || leadEmail || '—'} · {typeof job.metadata?.amount_due === 'number' ? formatMoney(job.metadata.amount_due) : 'amount not recorded'}</p>{job.last_error ? <p className="mt-1 text-rose-700">{job.last_error}</p> : null}<details className="mt-2"><summary className="cursor-pointer text-[#91651f]">View message</summary><p className="mt-2 whitespace-pre-wrap text-[10px] leading-4 text-[#78685a]">{job.subject}{'\n'}{job.body}</p></details></article>)}</div>
+              <div className="hidden overflow-x-auto rounded-xl border border-[#eee5dc] sm:block"><table className="w-full border-collapse text-left text-xs"><thead className="bg-[#faf5ee] text-[10px] uppercase tracking-wide text-[#78685a]"><tr>{['Date', 'Related obligation', 'Amount due', 'Recipient', 'Channel', 'Type', 'Status'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#f1eae2]">{eventReminderJobs.map((job) => <tr key={job.id}><td className="whitespace-nowrap px-3 py-3">{formatDate(job.sent_at || job.scheduled_for || job.created_at)}</td><td className="px-3 py-3">{String(job.metadata?.obligation_label || job.metadata?.invoice_id || 'Payment reminder')}</td><td className="px-3 py-3 tabular-nums">{typeof job.metadata?.amount_due === 'number' ? formatMoney(job.metadata.amount_due) : '—'}</td><td className="px-3 py-3">{job.recipient_email || leadEmail || '—'}</td><td className="px-3 py-3">Email</td><td className="px-3 py-3">{job.job_type.replaceAll('_', ' ')}</td><td className="px-3 py-3"><span className={`font-semibold capitalize ${job.status === 'failed' ? 'text-rose-700' : job.status === 'sent' ? 'text-emerald-700' : job.status === 'cancelled' ? 'text-[#78685a]' : 'text-[#9b6d21]'}`}>{job.status === 'queued' ? 'Scheduled' : job.status === 'sent' ? 'Sent' : job.status}</span>{job.last_error ? <p className="mt-1 max-w-48 text-[10px] text-rose-700">{job.last_error}</p> : null}<details className="mt-1"><summary className="cursor-pointer text-[10px] text-[#91651f]">View message</summary><p className="mt-2 max-w-xl whitespace-pre-wrap text-[10px] text-[#78685a]">{job.subject}{'\n'}{job.body}</p></details></td></tr>)}</tbody></table></div>
+            </> : <p className="rounded-xl border border-dashed border-[#e7d6be] p-8 text-center text-sm text-[#78685a]">No payment reminders are recorded for this event.</p>}</div> : null}
           </div>
         </div> : null}
       </section>

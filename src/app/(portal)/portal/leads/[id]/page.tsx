@@ -499,6 +499,8 @@ export default function LeadDetailPage({
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [paymentLoadError, setPaymentLoadError] = useState<string | null>(null)
   const [paymentInstallments, setPaymentInstallments] = useState<LuxorPaymentInstallment[]>([])
+  const [paymentInstallmentLoadError, setPaymentInstallmentLoadError] = useState<string | null>(null)
+  const [paymentReminderLoadError, setPaymentReminderLoadError] = useState<string | null>(null)
   const [paymentInstallmentRefresh, setPaymentInstallmentRefresh] = useState(0)
   const [tourEmailJobs, setTourEmailJobs] = useState<LuxorEmailJob[]>([])
   const [correctEmailResendOptions, setCorrectEmailResendOptions] = useState<CorrectEmailResendOption[]>([])
@@ -1068,12 +1070,19 @@ export default function LeadDetailPage({
     const bookingId = paymentDashboardBooking?.id
     if (!bookingId) {
       setPaymentInstallments([])
+      setPaymentInstallmentLoadError(null)
       return () => { cancelled = true }
     }
+    setPaymentInstallmentLoadError(null)
     void fetch(`/api/portal/payment-installments?bookingId=${encodeURIComponent(bookingId)}`)
-      .then((response) => response.ok ? response.json() as Promise<LuxorPaymentInstallment[]> : [])
-      .then((rows) => { if (!cancelled) setPaymentInstallments(Array.isArray(rows) ? rows : []) })
-      .catch(() => { if (!cancelled) setPaymentInstallments([]) })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Payment schedule could not be verified.')
+        const result: unknown = await response.json()
+        if (!Array.isArray(result)) throw new Error('Payment schedule could not be verified.')
+        return result as LuxorPaymentInstallment[]
+      })
+      .then((rows) => { if (!cancelled) { setPaymentInstallments(rows); setPaymentInstallmentLoadError(null) } })
+      .catch(() => { if (!cancelled) { setPaymentInstallments([]); setPaymentInstallmentLoadError('Payment schedule could not be verified. Refresh before relying on installment balances.') } })
     return () => { cancelled = true }
   }, [paymentDashboardBooking?.id, paymentInstallmentRefresh])
   const lifecycleBooking = currentProposalInvoice ? currentProposalBooking : latestBooking
@@ -1853,8 +1862,12 @@ export default function LeadDetailPage({
           })
           .catch(() => null),
         fetch(`/api/tour-actions?inquiryId=${id}`)
-          .then(async (res) => res.ok ? ((await res.json()).jobs || []) : [])
-          .catch(() => []),
+          .then(async (res) => {
+            if (!res.ok) return { jobs: [], unavailable: true }
+            const payload = await res.json()
+            return Array.isArray(payload.jobs) ? { jobs: payload.jobs as LuxorEmailJob[], unavailable: false } : { jobs: [], unavailable: true }
+          })
+          .catch(() => ({ jobs: [], unavailable: true })),
         fetch(`/api/twilio/calls?inquiryId=${id}&limit=100`, { cache: 'no-store' })
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
@@ -1894,7 +1907,8 @@ export default function LeadDetailPage({
       setBookings(nextBookings)
       setPaymentLoadError(paymentsData === null ? 'Payment records could not be verified. Refresh before collecting another payment or confirming a date.' : null)
       setPayments(paymentsData || [])
-      setTourEmailJobs(tourJobsData)
+      setTourEmailJobs(tourJobsData.jobs)
+      setPaymentReminderLoadError(tourJobsData.unavailable ? 'Reminder history could not be verified. Refresh to check scheduled reminders.' : null)
       void fetch(`/api/leads/${encodeURIComponent(id)}/correct-email-resend`, { cache: 'no-store' })
         .then(async (response) => response.ok ? response.json() : { options: [] })
         .then((payload) => {
@@ -1905,7 +1919,7 @@ export default function LeadDetailPage({
           setCorrectEmailResendOptions([])
           setCorrectEmailResendSuggestedId(null)
         })
-      const preparedResend = (tourJobsData as LuxorEmailJob[])
+      const preparedResend = (tourJobsData.jobs as LuxorEmailJob[])
         .filter((job) => {
           const metadata = job.metadata as Record<string, unknown> | null
           const prepared = metadata?.prepared_tour_email_resend === true || metadata?.awaiting_owner_confirmation === true
@@ -4026,7 +4040,7 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final' | 'security_deposit', receivedMethod?: 'cash' | 'zelle' | 'check', timingEvidence?: SameDayReceiptEvidence) => {
+  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final' | 'security_deposit', receivedMethod?: 'cash' | 'zelle' | 'check', timingEvidence?: SameDayReceiptEvidence, propagateError = false) => {
     const master = invoices.find(invoice => invoice.id === booking.invoice_id)
     if (paymentKind === 'deposit' && sameDayBookingPromotion(master)?.coverage_amount && !timingEvidence) { setSameDayReceipt({ booking, method: receivedMethod }); return }
     const preferredMethod = receivedMethod || ((booking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'manual').toLowerCase()
@@ -4079,6 +4093,7 @@ export default function LeadDetailPage({
       })
     } catch (err) {
       console.error(err)
+      if (propagateError) throw err
       notify({ title: 'Payment not recorded', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
     } finally {
       setUpdatingStatus(false)
@@ -9229,7 +9244,9 @@ export default function LeadDetailPage({
                 installments={paymentInstallments}
                 reminderJobs={tourEmailJobs}
                 paymentLoadError={paymentLoadError}
-                onRecordPayment={(booking, kind) => handleRecordManualPayment(booking, kind)}
+                paymentInstallmentLoadError={paymentInstallmentLoadError}
+                paymentReminderLoadError={paymentReminderLoadError}
+                onRecordPayment={(booking, kind) => handleRecordManualPayment(booking, kind, undefined, undefined, true)}
                 onViewInvoice={setPdfPreviewInvoice}
                 onRequestInvoicePayment={openPaymentRequest}
               />
