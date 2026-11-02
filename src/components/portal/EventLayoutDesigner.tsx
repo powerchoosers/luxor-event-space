@@ -57,6 +57,7 @@ type Props = {
   open: boolean
   onClose: () => void
   initialLayout?: EventLayoutDocument | null
+  heading?: string
   leadName: string
   eventType?: string | null
   eventDate?: string | null
@@ -280,6 +281,7 @@ function EventLayoutDesignerComponent({
   open,
   onClose,
   initialLayout,
+  heading = 'Event Layout Designer',
   leadName,
   eventType,
   eventDate,
@@ -585,7 +587,7 @@ function EventLayoutDesignerComponent({
               </span>
             </div>
             <h1 className="truncate font-serif text-lg font-bold tracking-tight text-[color:var(--portal-text)] sm:text-2xl">
-              Event Layout Designer
+              {heading}
             </h1>
             <p className="hidden text-[11px] text-[color:var(--portal-muted)] sm:block">
               Arrange the hall, estimate guest seating, and save the architectural floor plan.

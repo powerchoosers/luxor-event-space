@@ -81,11 +81,14 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
     }
   }
   if (section === 'events' || section === 'overview') {
-      const [bookings, tasks, meetings, designs] = await Promise.all([
+      const [bookings, tasks, meetings, designs, templates] = await Promise.all([
       listPlannerBookings(),
       supabaseRestStrict<PlannerRecord[]>(`luxor_planner_tasks?select=*&order=due_date.asc.nullslast&limit=1000${bookingId ? `&booking_id=eq.${escapeFilter(bookingId)}` : ''}`),
       supabaseRestStrict<PlannerRecord[]>(`luxor_planner_meetings?select=*&order=starts_at.asc&limit=500${bookingId ? `&booking_id=eq.${escapeFilter(bookingId)}` : ''}`),
       supabaseRestStrict<PlannerRecord[]>(`luxor_planner_designs?select=*&archived_at=is.null&order=updated_at.desc&limit=300${bookingId ? `&booking_id=eq.${escapeFilter(bookingId)}` : ''}`),
+      bookingId
+        ? supabaseRestStrict<PlannerRecord[]>('luxor_planner_designs?select=*&design_kind=eq.template&booking_id=is.null&archived_at=is.null&order=updated_at.desc&limit=1000')
+        : Promise.resolve([] as PlannerRecord[]),
     ])
     if (bookingId) {
       const booking = bookings.find((row) => row.id === bookingId)
@@ -98,13 +101,17 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
       const attachedFiles = assignmentIds.length
         ? await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&event_vendor_id=in.(${assignmentIds.map(escapeFilter).join(',')})&order=created_at.desc&limit=1000`)
         : []
-      const designIds = designs.filter((design) => design.design_kind === 'event_concept').map((design) => design.id)
-      const designFiles = designIds.length
-        ? await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=in.(${designIds.map(escapeFilter).join(',')})&category=neq.design_revision_snapshot&order=created_at.desc&limit=1000`)
+      const eventDesignIds = designs.filter((design) => design.design_kind === 'event_concept').map((design) => design.id)
+      const eventDesignFiles = eventDesignIds.length
+        ? await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=in.(${eventDesignIds.map(escapeFilter).join(',')})&category=neq.design_revision_snapshot&order=created_at.desc&limit=1000`)
         : []
-      const files = [...baseFiles, ...attachedFiles, ...designFiles]
+      const templateIds = templates.map((design) => design.id)
+      const templateFiles = templateIds.length
+        ? await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=in.(${templateIds.map(escapeFilter).join(',')})&category=neq.design_revision_snapshot&order=created_at.desc&limit=1000`)
+        : []
+      const files = [...baseFiles, ...attachedFiles, ...eventDesignFiles]
       const bookingView = booking ? plannerBookingView(booking) : null
-      return { booking: bookingView, bookings: bookingView ? [bookingView] : [], tasks, meetings, designs: designs.filter((design) => design.design_kind === 'event_concept'), vendors, assignments, files }
+      return { booking: bookingView, bookings: bookingView ? [bookingView] : [], tasks, meetings, designs: designs.filter((design) => design.design_kind === 'event_concept'), templates, templateFiles, vendors, assignments, files }
     }
     const eventHistory = bookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed')
     const todayChicago = luxorPlannerDateKey()
@@ -177,11 +184,18 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
   }
   if (section === 'design-library') {
     const [designs, bookings, files] = await Promise.all([
-      supabaseRestStrict<PlannerRecord[]>(`luxor_planner_designs?select=*&order=updated_at.desc&limit=1000${bookingId ? `&booking_id=eq.${escapeFilter(bookingId)}` : '&booking_id=is.null&archived_at=is.null'}`),
+      // Preserve every legacy unlinked design record in the gallery. Older
+      // Planner versions did not consistently mark reusable designs as
+      // `template`; the gallery can still edit, archive, or copy them forward.
+      supabaseRestStrict<PlannerRecord[]>(`luxor_planner_designs?select=*&booking_id=is.null&order=updated_at.desc&limit=1000`),
       listPlannerBookings(),
-      supabaseRestStrict<PlannerRecord[]>('luxor_planner_files?select=*&design_id=not.is.null&category=neq.design_revision_snapshot&order=created_at.desc&limit=2000'),
+      Promise.resolve([] as PlannerRecord[]),
     ])
-    return { designs, bookings: bookings.map(plannerBookingView), files }
+    const designIds = designs.map((design) => design.id)
+    const designFiles = designIds.length
+      ? await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=in.(${designIds.map(escapeFilter).join(',')})&category=neq.design_revision_snapshot&order=created_at.desc&limit=2000`)
+      : files
+    return { designs, bookings: bookings.map(plannerBookingView), files: designFiles }
   }
   if (section === 'vendors') {
     const [vendors, assignments, bookings, files] = await Promise.all([
@@ -365,5 +379,23 @@ export async function commitPlannerDesignRevision(input: {
     })
   } catch (error) {
     throw new PlannerMutationOutcomeUnknownError('Planner design commit outcome is unknown.', error)
+  }
+}
+
+export async function publishPlannerDesignCopy(design: Record<string, unknown>, files: Record<string, unknown>[]) {
+  try {
+    return await supabaseRestStrict<{
+      published: boolean
+      design?: PlannerRecord
+      files?: PlannerRecord[]
+    }>('rpc/luxor_planner_publish_design_copy', {
+      method: 'POST',
+      body: JSON.stringify({ p_design: design, p_files: files }),
+    })
+  } catch (error) {
+    // A timeout can arrive after Postgres committed. The caller must retain
+    // the staged private storage objects unless the transaction is confirmed
+    // to have failed, since published rows may already reference them.
+    throw new PlannerMutationOutcomeUnknownError('Planner design copy publication outcome is unknown.', error)
   }
 }

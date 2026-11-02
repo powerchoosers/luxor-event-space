@@ -10,6 +10,7 @@ import {
   getPlannerRecord,
   listPlannerChecklistItems,
   listPlannerSection,
+  publishPlannerDesignCopy,
   savePlannerRecord,
   snapshotPlannerDesignAssets,
   PlannerMutationOutcomeUnknownError,
@@ -138,7 +139,9 @@ function cleanRecord(entity: Entity, value: Body, email: string, id?: string) {
   if (entity === 'design') {
     const name = str(value.name, 160)
     const kind = value.design_kind === 'template' ? 'template' : 'event_concept'
-    if (!name || (kind === 'event_concept' && !str(value.booking_id, 80))) throw new Error('Design name and event are required.')
+    // Older unlinked event_concept rows are retained as master designs. They
+    // may be edited in place, but new event concepts still require an event.
+    if (!name || (kind === 'event_concept' && !str(value.booking_id, 80) && !id)) throw new Error('Design name and event are required.')
     const status = ['draft','ready_to_present','presented','revision_requested','approved'].includes(String(value.status)) ? value.status : 'draft'
     const palette = Array.isArray(value.palette) ? value.palette.slice(0, 12) : []
     const content = object(value.content) ? value.content : {}
@@ -186,6 +189,16 @@ export async function POST(request: NextRequest) {
     if ('response' in access) return access.response
     const body: unknown = await request.json()
     if (!object(body) || typeof body.entity !== 'string') return NextResponse.json({ error: 'Invalid Planner record.' }, { status: 400 })
+    if (body.entity === 'restore_design') {
+      const id = str(body.id, 80)
+      if (!id) return NextResponse.json({ error: 'Choose an archived design to restore.' }, { status: 400 })
+      const design = await getPlannerDesign(id)
+      if (!design) return NextResponse.json({ error: 'Design not found.' }, { status: 404 })
+      if (!design.archived_at) return NextResponse.json({ error: 'This design is already active.' }, { status: 409 })
+      const restored = await savePlannerRecord('luxor_planner_designs', { archived_at: null, updated_at: new Date().toISOString() }, id)
+      if (!restored) return NextResponse.json({ error: 'Design could not be restored.' }, { status: 500 })
+      return NextResponse.json({ design: restored })
+    }
     if (body.entity === 'duplicate_design') {
       const sourceId = str(body.source_id, 80)
       if (!sourceId) return NextResponse.json({ error: 'Choose a design to copy.' }, { status: 400 })
@@ -198,9 +211,16 @@ export async function POST(request: NextRequest) {
       if (targetBookingId && (!targetBooking || targetBooking.status !== 'confirmed')) return NextResponse.json({ error: 'Only a confirmed booking can receive an event concept.' }, { status: 409 })
       const sourceContent = object(source.content) ? source.content : {}
       const copiedContent = contentWithoutHistory(sourceContent)
-      const newDesign = await savePlannerRecord('luxor_planner_designs', {
+      const sourceRevision = Number(source.revision || 1)
+      const sourceFiles = await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=eq.${encodeURIComponent(sourceId)}&category=neq.design_revision_snapshot&order=created_at.asc`)
+      const storageUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (sourceFiles.length && (!storageUrl || !serviceKey)) throw new Error('Private Planner file storage is not configured.')
+      const now = new Date().toISOString()
+      const newDesign: Record<string, unknown> = {
+        id: crypto.randomUUID(),
         booking_id: asTemplate ? null : targetBookingId,
-        source_template_id: source.design_kind === 'template' ? source.id : source.source_template_id || null,
+        source_template_id: source.design_kind === 'template' || (!source.booking_id && !source.source_template_id) ? source.id : source.source_template_id || null,
         design_kind: asTemplate ? 'template' : 'event_concept',
         category: source.category,
         name: `${String(source.name)} copy`.slice(0, 160),
@@ -213,21 +233,16 @@ export async function POST(request: NextRequest) {
         content: copiedContent,
         internal_notes: source.internal_notes,
         status: 'draft', revision: 1, approved_revision: null, approved_at: null,
-        created_by: access.session.email, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      })
-      if (!newDesign) return NextResponse.json({ error: 'Design copy could not be created.' }, { status: 500 })
+        archived_at: null, created_by: access.session.email, created_at: now, updated_at: now,
+      }
 
       const copiedObjects: string[] = []
-      const copiedMetadata: string[] = []
+      const copiedFiles: Record<string, unknown>[] = []
       let url = ''
       let key = ''
       try {
-        const sourceFiles = await supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=eq.${encodeURIComponent(sourceId)}&category=neq.design_revision_snapshot&order=created_at.asc`)
-        const storageUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
-        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-        if (!storageUrl || !serviceKey) throw new Error('Private Planner file storage is not configured.')
-        url = storageUrl.replace(/\/$/, '')
-        key = serviceKey
+        url = (storageUrl || '').replace(/\/$/, '')
+        key = serviceKey || ''
         for (const sourceFile of sourceFiles) {
           const sourceObject = await fetch(`${url}/storage/v1/object/luxor-planner-files/${String(sourceFile.storage_path)}`, { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: 'no-store' })
           if (!sourceObject.ok) throw new Error('A source design attachment could not be read.')
@@ -240,24 +255,54 @@ export async function POST(request: NextRequest) {
           })
           if (!stored.ok) throw new Error('A design attachment could not be copied.')
           copiedObjects.push(path)
-          const [savedFile] = await supabaseRestStrict<PlannerRecord[]>('luxor_planner_files?select=*', {
-            method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
-              booking_id: null, vendor_id: null, design_id: newDesign.id, event_vendor_id: null,
-              category: sourceFile.category, title: sourceFile.title, file_name: fileName, storage_path: path,
-              content_type: sourceFile.content_type, size_bytes: sourceFile.size_bytes, expires_at: sourceFile.expires_at,
-              internal_only: true, uploaded_by: access.session.email, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-            }),
+          copiedFiles.push({
+            id: fileId, booking_id: null, vendor_id: null, design_id: newDesign.id, event_vendor_id: null,
+            category: sourceFile.category, title: sourceFile.title, file_name: fileName, storage_path: path,
+            content_type: sourceFile.content_type, size_bytes: sourceFile.size_bytes, expires_at: sourceFile.expires_at,
+            internal_only: true, uploaded_by: access.session.email, created_at: now, updated_at: now,
           })
-          if (!savedFile) throw new Error('Copied design attachment metadata could not be saved.')
-          copiedMetadata.push(savedFile.id)
         }
+        // The design row revision advances for every supported content or
+        // attachment mutation. Recheck both the revision and exact file set
+        // after bytes are copied so a concurrent edit cannot produce a mixed
+        // content/assets copy. Any conflict below discards only this new copy.
+        const [latestSource, latestFiles] = await Promise.all([
+          getPlannerDesign(sourceId),
+          supabaseRestStrict<PlannerRecord[]>(`luxor_planner_files?select=*&design_id=eq.${encodeURIComponent(sourceId)}&category=neq.design_revision_snapshot&order=created_at.asc`),
+        ])
+        const sourceFileStamp = (rows: PlannerRecord[]) => JSON.stringify(rows.map((file) => ({
+          id:file.id,storage_path:file.storage_path,content_type:file.content_type,size_bytes:file.size_bytes,
+          title:file.title,file_name:file.file_name,category:file.category,expires_at:file.expires_at,internal_only:file.internal_only,
+        })))
+        const changed = !latestSource || latestSource.archived_at || Number(latestSource.revision || 1) !== sourceRevision
+          || JSON.stringify(contentWithoutHistory(object(latestSource.content) ? latestSource.content : {})) !== JSON.stringify(copiedContent)
+          || sourceFileStamp(latestFiles) !== sourceFileStamp(sourceFiles)
+        if (changed) {
+          const error = new Error('The source design changed during copying; no copy was saved. Reopen it and try again.')
+          error.name = 'PlannerDesignSourceChangedError'
+          throw error
+        }
+        // Storage remains private and has no file metadata until this one
+        // database transaction publishes the design and every copied asset.
+        // Other portal sessions cannot list, edit, or share a partial copy.
+        const publication = await publishPlannerDesignCopy(newDesign, copiedFiles)
+        if (!publication.published || !publication.design) {
+          const error = new Error('The design copy could not be published.')
+          error.name = 'PlannerDesignCopyPublicationRejectedError'
+          throw error
+        }
+        return NextResponse.json({ design: publication.design, copiedFiles: publication.files?.length ?? copiedFiles.length }, { status: 201 })
       } catch (copyError) {
-        if (copiedMetadata.length) await supabaseRestStrict<unknown>(`luxor_planner_files?id=in.(${copiedMetadata.map(encodeURIComponent).join(',')})`, { method: 'DELETE' }).catch(() => undefined)
+        if (copyError instanceof PlannerMutationOutcomeUnknownError) {
+          // A late commit may already reference these paths. Keep all staged
+          // bytes on an unknown outcome; private orphans are safer than loss.
+          return NextResponse.json({ error: 'The copy may have completed, but its result was not confirmed. Reload Design Studio before retrying.' }, { status: 503 })
+        }
         if (url && key) await Promise.all(copiedObjects.map((path) => fetch(`${url}/storage/v1/object/luxor-planner-files/${path}`, { method: 'DELETE', headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: 'no-store' }).catch(() => undefined)))
-        await deletePlannerRecord('luxor_planner_designs', String(newDesign.id)).catch(() => undefined)
+        if (copyError instanceof Error && copyError.name === 'PlannerDesignSourceChangedError') return NextResponse.json({ error: copyError.message }, { status: 409 })
+        if (copyError instanceof Error && copyError.name === 'PlannerDesignCopyPublicationRejectedError') return NextResponse.json({ error: copyError.message }, { status: 409 })
         throw copyError
       }
-      return NextResponse.json({ design: newDesign, copiedFiles: copiedMetadata.length }, { status: 201 })
     }
     if (body.entity === 'apply_checklist') {
       const bookingId = str(body.booking_id, 80)
