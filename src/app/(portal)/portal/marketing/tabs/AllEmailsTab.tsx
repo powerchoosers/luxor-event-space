@@ -2312,7 +2312,11 @@ function ThreadMessage({
           layoutContent.style.width = '100%'
           layoutContent.style.minWidth = '0'
           layoutContent.style.maxWidth = 'none'
-          const naturalWidth = Math.max(layoutContent.scrollWidth, Math.ceil(layoutContent.getBoundingClientRect().width), 1)
+          const measuredWidth = Math.max(layoutContent.scrollWidth, Math.ceil(layoutContent.getBoundingClientRect().width), 1)
+          // Expanded frames can make responsive descendants report the already-expanded viewport
+          // as their scroll width. Keep the fit-mode measurement as the stable intrinsic width.
+          const fitModeWidth = emailLayoutState?.frameKey === frameKey ? emailLayoutState.naturalWidth : measuredWidth
+          const naturalWidth = fullEmailSize ? fitModeWidth : measuredWidth
           const naturalHeight = Math.max(layoutContent.scrollHeight, Math.ceil(layoutContent.getBoundingClientRect().height), 1)
           const availableWidth = Math.max(1, frame.parentElement?.clientWidth || frame.clientWidth)
           const availableContentWidth = Math.max(1, availableWidth - 32)
