@@ -10,7 +10,7 @@ import { getLuxorPublicEmailDeliveryStatus, type LuxorPublicEmailDeliveryStatus 
 import { sendLuxorResendEmail } from './luxorResendMailServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 
-type NoticeKind = 'agreement_client' | 'agreement_owner' | 'paid_invoice'
+type NoticeKind = 'agreement_client' | 'agreement_owner' | 'paid_invoice' | 'payment_receipt'
 type PdfReference = { path: string; filename: string; sha256: string; size: number }
 type NoticeSnapshot = {
   version: 1; key: string; kind: NoticeKind; provider: LuxorMailProvider
@@ -27,7 +27,7 @@ function noticeId(key: string) {
 function snapshotOf(job: LuxorEmailJob): NoticeSnapshot {
   const snapshot = job.metadata?.transactionalNotice as NoticeSnapshot | undefined
   if (job.job_type !== 'transactional_notice' || !snapshot || snapshot.version !== 1
-    || !['agreement_client', 'agreement_owner', 'paid_invoice'].includes(snapshot.kind)
+    || !['agreement_client', 'agreement_owner', 'paid_invoice', 'payment_receipt'].includes(snapshot.kind)
     || !snapshot.key || noticeId(snapshot.key) !== job.id
     || !['resend', 'zoho'].includes(snapshot.provider)
     || !luxorMailAddress(snapshot.recipient) || snapshot.recipient !== job.recipient_email
@@ -49,7 +49,7 @@ export async function queueLuxorTransactionalNotice(input: {
   pdf: Uint8Array; filename: string; scheduledFor: string
   legacyAutomationKey?: string
 }) {
-  if (!['agreement_client', 'agreement_owner', 'paid_invoice'].includes(input.kind)
+  if (!['agreement_client', 'agreement_owner', 'paid_invoice', 'payment_receipt'].includes(input.kind)
     || !/^[a-zA-Z0-9_-]{1,200}$/.test(input.sourceId)
     || [input.inquiryId, input.bookingId, input.signatureRequestId].some(value => value && !UUID.test(value))
     || !Number.isFinite(Date.parse(input.scheduledFor))) throw new Error('Invalid transactional notice identity.')

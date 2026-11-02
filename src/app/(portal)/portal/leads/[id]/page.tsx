@@ -1081,7 +1081,7 @@ export default function LeadDetailPage({
         if (!Array.isArray(result)) throw new Error('Payment schedule could not be verified.')
         return result as LuxorPaymentInstallment[]
       })
-      .then((rows) => { if (!cancelled) { setPaymentInstallments(rows); setPaymentInstallmentLoadError(null) } })
+      .then((rows) => { if (!cancelled) { setPaymentInstallments(Array.isArray(rows) ? rows : []); setPaymentInstallmentLoadError(null) } })
       .catch(() => { if (!cancelled) { setPaymentInstallments([]); setPaymentInstallmentLoadError('Payment schedule could not be verified. Refresh before relying on installment balances.') } })
     return () => { cancelled = true }
   }, [paymentDashboardBooking?.id, paymentInstallmentRefresh])
@@ -1865,7 +1865,9 @@ export default function LeadDetailPage({
           .then(async (res) => {
             if (!res.ok) return { jobs: [], unavailable: true }
             const payload = await res.json()
-            return Array.isArray(payload.jobs) ? { jobs: payload.jobs as LuxorEmailJob[], unavailable: false } : { jobs: [], unavailable: true }
+            return Array.isArray(payload.jobs)
+              ? { jobs: payload.jobs, unavailable: false }
+              : { jobs: [], unavailable: true }
           })
           .catch(() => ({ jobs: [], unavailable: true })),
         fetch(`/api/twilio/calls?inquiryId=${id}&limit=100`, { cache: 'no-store' })
@@ -4040,7 +4042,7 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final' | 'security_deposit', receivedMethod?: 'cash' | 'zelle' | 'check', timingEvidence?: SameDayReceiptEvidence, propagateError = false) => {
+  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final' | 'security_deposit', receivedMethod?: 'cash' | 'zelle' | 'check', timingEvidence?: SameDayReceiptEvidence, propagateError = false, emailReceipt = false) => {
     const master = invoices.find(invoice => invoice.id === booking.invoice_id)
     if (paymentKind === 'deposit' && sameDayBookingPromotion(master)?.coverage_amount && !timingEvidence) { setSameDayReceipt({ booking, method: receivedMethod }); return }
     const preferredMethod = receivedMethod || ((booking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'manual').toLowerCase()
@@ -4059,7 +4061,7 @@ export default function LeadDetailPage({
       const paymentPayload = await paymentRes.json().catch(() => ({})) as {
         error?: string
         alreadyPaid?: boolean
-        payment?: { amount?: number }
+        payment?: { id?: string; amount?: number }
         invoice?: LuxorInvoice
         reviewRequired?: boolean
         message?: string
@@ -4081,6 +4083,12 @@ export default function LeadDetailPage({
         })
         return
       }
+      if (emailReceipt && paymentPayload.payment?.id) {
+        const receiptEmail = await fetch(`/api/payments/${encodeURIComponent(paymentPayload.payment.id)}/receipt/email`, { method: 'POST' })
+        const receiptResult = await receiptEmail.json().catch(() => ({})) as { error?: string; job?: LuxorEmailJob }
+        if (!receiptEmail.ok) throw new Error(`Payment recorded, but the receipt email was not queued: ${receiptResult.error || 'review the receipt email status before retrying.'}`)
+        if (receiptResult.job) setTourEmailJobs((current) => [...current.filter((job) => job.id !== receiptResult.job!.id), receiptResult.job!])
+      }
       const amount = Number(paymentPayload.payment?.amount || paymentPayload.invoice?.total || 0)
       notify({
         title: paymentKind === 'deposit' ? 'Initial payment recorded' : paymentKind === 'security_deposit' ? 'Security deposit recorded' : 'Final event balance recorded',
@@ -4093,8 +4101,48 @@ export default function LeadDetailPage({
       })
     } catch (err) {
       console.error(err)
+      const message = err instanceof Error ? err.message : 'Please try again.'
       if (propagateError) throw err
-      notify({ title: 'Payment not recorded', description: err instanceof Error ? err.message : 'Please try again.', variant: 'error' })
+      notify({ title: message.startsWith('Payment recorded,') ? 'Payment saved; email needs attention' : 'Payment not recorded', description: message, variant: 'error' })
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  const handleRecordManualInstallmentPayment = async (booking: LuxorBooking, input: {
+    installmentId: string; amount: number; paidOn: string; paymentMethod: string; reference: string; notes: string; idempotencyKey: string; emailReceipt: boolean
+  }) => {
+    try {
+      setUpdatingStatus(true)
+      const response = await fetch('/api/payments/manual-installment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: booking.id,
+          installmentId: input.installmentId,
+          amount: input.amount,
+          paidOn: input.paidOn,
+          paymentMethod: input.paymentMethod,
+          reference: input.reference,
+          notes: input.notes,
+          idempotencyKey: input.idempotencyKey,
+        }),
+      })
+      const result = await response.json().catch(() => ({})) as { error?: string; payment?: { id?: string; amount?: number }; replayed?: boolean }
+      if (!response.ok) throw new Error(result.error || 'Installment payment could not be recorded.')
+      await fetchAllData(false)
+      setPaymentInstallmentRefresh((revision) => revision + 1)
+      if (input.emailReceipt && result.payment?.id) {
+        const receiptResponse = await fetch(`/api/payments/${encodeURIComponent(result.payment.id)}/receipt/email`, { method: 'POST' })
+        const receiptResult = await receiptResponse.json().catch(() => ({})) as { error?: string; job?: LuxorEmailJob }
+        if (!receiptResponse.ok) throw new Error(`Payment recorded, but the receipt email was not queued: ${receiptResult.error || 'review the receipt email status before retrying.'}`)
+        if (receiptResult.job) setTourEmailJobs((current) => [...current.filter((job) => job.id !== receiptResult.job!.id), receiptResult.job!])
+      }
+      notify({
+        title: result.replayed ? 'Payment already recorded' : 'Installment payment recorded',
+        description: `${formatMoney(Number(result.payment?.amount || input.amount))} received for the selected installment.`,
+        variant: 'success',
+      })
     } finally {
       setUpdatingStatus(false)
     }
@@ -9246,7 +9294,8 @@ export default function LeadDetailPage({
                 paymentLoadError={paymentLoadError}
                 paymentInstallmentLoadError={paymentInstallmentLoadError}
                 paymentReminderLoadError={paymentReminderLoadError}
-                onRecordPayment={(booking, kind) => handleRecordManualPayment(booking, kind, undefined, undefined, true)}
+                onRecordPayment={(booking, kind, emailReceipt) => handleRecordManualPayment(booking, kind, undefined, undefined, true, emailReceipt)}
+                onRecordInstallmentPayment={handleRecordManualInstallmentPayment}
                 onViewInvoice={setPdfPreviewInvoice}
                 onRequestInvoicePayment={openPaymentRequest}
               />

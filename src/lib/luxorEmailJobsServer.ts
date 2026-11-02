@@ -8,7 +8,7 @@ import { LuxorBooking, LuxorEmailJob, LuxorEmailJobKind, LuxorInquiry, LuxorPaym
 import { supabaseRest } from './supabaseRestServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { buildAiTailoredInvoiceReminderEmail } from './luxorLifecycleEmailsServer'
-import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
+import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listInvoicesByBooking, listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
 import { isLuxorOfferExpired } from './luxorOffer'
 import { createLuxorPostContractCheckout, prepareLuxorDepositPaymentLink } from './luxorStripeCheckoutServer'
 import { getLuxorBooking } from './luxorBookingsServer'
@@ -20,6 +20,11 @@ import { luxorTestEmailAcceptedPatch, sendLuxorTestEmail } from './luxorTestEmai
 import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
 import { processDueLuxorCustomWorkflowOrchestration } from './luxorCustomWorkflowRuntimeServer'
 import { cleanBrochureFollowUpEmailSnapshot, customerFacingFollowUpTitle, isBrochureFollowUpEmailSnapshot } from './luxorFollowUpEmailContent'
+import { areLuxorFinalPaymentRemindersEnabled } from './luxorPaymentRemindersServer'
+import { listLuxorPaymentInstallments } from './luxorPaymentInstallmentsServer'
+import { installmentReminderMilestone, isBookingPaymentMilestone, isLuxorReminderDaytime } from './luxorPaymentDashboardModel'
+import { luxorCalendarDate, validCalendarDate } from './luxorProposalTerms'
+import { zonedTourDateTimeToUtc } from './luxorTourPlanningServer'
 
 const PUBLIC_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -869,6 +874,7 @@ const POST_CONTRACT_PAYMENT_REMINDER_TYPES = new Set<LuxorEmailJobKind>([
   'final_payment_request',
   'final_payment_reminder',
   'sixty_day_payment_reminder',
+  'installment_payment_reminder',
 ])
 
 /**
@@ -880,6 +886,11 @@ const POST_CONTRACT_PAYMENT_REMINDER_TYPES = new Set<LuxorEmailJobKind>([
 async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<LuxorEmailJob | null> {
   if (!POST_CONTRACT_PAYMENT_REMINDER_TYPES.has(job.job_type)) return job
   const metadata = job.metadata && typeof job.metadata === 'object' ? job.metadata : {}
+  if (job.job_type === 'installment_payment_reminder') return prepareInstallmentPaymentReminder(job, metadata)
+  if (typeof metadata.milestone === 'string' && !(await areLuxorFinalPaymentRemindersEnabled())) {
+    await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: 'Automated final-payment reminders were paused in Marketing settings.' })
+    return null
+  }
   const invoiceId = typeof metadata.invoice_id === 'string' ? metadata.invoice_id : null
   if (!invoiceId) return job
 
@@ -946,6 +957,94 @@ async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<L
   else delete refreshedMetadata.checkout_session_id
   await updateLuxorEmailJob(job.id, { subject: email.subject, body: email.body, metadata: refreshedMetadata })
   return { ...job, subject: email.subject, body: email.body, metadata: refreshedMetadata }
+}
+
+function installmentPaidAmount(installment: { id: string; amount: number; status: string; metadata?: Record<string, unknown> }, payments: LuxorPayment[]) {
+  const allocated = payments.reduce((sum, payment) => {
+    if (payment.status !== 'paid' || !Array.isArray(payment.metadata?.installment_allocations)) return sum
+    return sum + payment.metadata.installment_allocations.reduce((amount, item) => {
+      if (!item || typeof item !== 'object') return amount
+      const allocation = item as Record<string, unknown>
+      return allocation.installment_id === installment.id && Number(allocation.amount) > 0 ? amount + Number(allocation.amount) : amount
+    }, 0)
+  }, 0)
+  const total = Math.max(0, Number(installment.amount) || 0)
+  const legacy = installment.status === 'paid' ? total : installment.status === 'partial' ? Math.max(0, Number(installment.metadata?.paid_amount) || 0) : 0
+  return Math.min(total, Math.max(allocated, legacy))
+}
+
+async function listPaidPaymentsForBooking(bookingId: string) {
+  const invoices = await listInvoicesByBooking(bookingId)
+  const payments = await Promise.all(invoices.map((invoice) => listPaidPaymentsByInvoice(invoice.id).catch(() => [])))
+  return [...new Map(payments.flat().map((payment) => [payment.id, payment])).values()]
+}
+
+async function finalBalanceRemaining(bookingId: string) {
+  const invoice = await getInvoiceByBookingAndKind(bookingId, 'final_balance')
+  if (!invoice) return null
+  const payments = await listPaidPaymentsByInvoice(invoice.id)
+  return Math.max(0, Math.round((Number(invoice.total || 0) - payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)) * 100) / 100)
+}
+
+function installmentReminderContent(inquiry: LuxorInquiry, installment: { label: string; amount: number; due_at: string | null }, remaining: number, overdue: boolean) {
+  const label = installment.label || 'Scheduled payment'
+  const dueDate = installment.due_at?.slice(0, 10) || 'the date shown in your payment plan'
+  const subject = overdue ? `Payment follow-up: ${label}` : `Upcoming payment reminder: ${label}`
+  const html = renderLuxorSystemEmail({
+    eyebrow: 'Payment plan reminder',
+    title: overdue ? 'A scheduled payment is still due' : 'An upcoming payment is on your plan',
+    greeting: `Hi ${escapeHtml(inquiry.full_name.trim().split(/\s+/)[0] || 'there')},`,
+    bodyHtml: `<p style="margin:0">${overdue ? 'Our records show this scheduled payment still has a balance.' : 'This is a reminder about an upcoming payment in your event plan.'} If you have already paid, please reply so we can update our records.</p>`,
+    details: [
+      { label: 'Payment', value: escapeHtml(label) },
+      { label: 'Remaining amount', value: escapeHtml(remaining.toLocaleString('en-US', { style: 'currency', currency: 'USD' })) },
+      { label: 'Due date', value: escapeHtml(dueDate) },
+    ],
+    note: 'Questions or changes? Reply to this email and the Luxor team will help.',
+    theme: 'brand',
+  })
+  return { subject, body: html }
+}
+
+async function prepareInstallmentPaymentReminder(job: LuxorEmailJob, metadata: Record<string, unknown>): Promise<LuxorEmailJob | null> {
+  const pause = async (message: string) => {
+    await updateLuxorEmailJob(job.id, { status: 'cancelled', last_error: message })
+    return null
+  }
+  if (process.env.LUXOR_PAYMENT_INSTALLMENT_REMINDERS_READY !== 'true' || !(await areLuxorFinalPaymentRemindersEnabled())) {
+    return pause('Installment payment reminders are paused or not enabled for this environment.')
+  }
+  const installmentId = typeof metadata.installment_id === 'string' ? metadata.installment_id : ''
+  const milestone = metadata.milestone === 'installment_7_days_before' || metadata.milestone === 'installment_1_day_overdue' ? metadata.milestone : null
+  if (!installmentId || !milestone) return pause('Installment reminder metadata is incomplete.')
+  const bookingId = job.booking_id || ''
+  const booking = bookingId ? await getLuxorBooking(bookingId) : null
+  if (!booking || !['tentative', 'confirmed'].includes(booking.status) || booking.contract_status !== 'signed' || !booking.invoice_id || !booking.metadata?.deposit_paid_at) {
+    return pause('The booking is no longer eligible for payment reminders.')
+  }
+  const masterInvoice = await getInvoice(booking.invoice_id)
+  if (!masterInvoice || masterInvoice.invoice_kind !== 'event') return pause('The event invoice is unavailable.')
+  const invoiceRemaining = await finalBalanceRemaining(booking.id)
+  if (invoiceRemaining === null) return pause('The approved final-balance invoice is unavailable.')
+  if (invoiceRemaining === 0) return pause('The final-balance invoice is fully paid.')
+  const inquiry = job.inquiry_id ? await getLuxorInquiry(job.inquiry_id) : null
+  if (!inquiry?.email || inquiry.id !== booking.inquiry_id || inquiry.status === 'closed_lost' || inquiry.archived_at || inquiry.is_test === true || inquiry.email.toLowerCase() !== job.recipient_email.toLowerCase()) {
+    return pause('The inquiry is no longer eligible for payment reminders.')
+  }
+  const installment = (await listLuxorPaymentInstallments(booking.id)).find((row) => row.id === installmentId)
+  if (!installment || installment.invoice_id !== booking.invoice_id || installment.status === 'void' || isBookingPaymentMilestone(installment)) {
+    return pause('The installment is no longer an active payment obligation.')
+  }
+  const dueDate = installment.due_at?.slice(0, 10) || ''
+  if (!validCalendarDate(dueDate)) return pause('The installment due date is unavailable.')
+  const payments = await listPaidPaymentsForBooking(booking.id)
+  const paid = installmentPaidAmount(installment, payments)
+  const remaining = Math.max(0, Math.round((Number(installment.amount) - paid) * 100) / 100)
+  if (remaining <= 0 || installment.status === 'paid') return pause('The installment has already been paid.')
+  const email = installmentReminderContent(inquiry, installment, remaining, milestone === 'installment_1_day_overdue')
+  const refreshed = { ...metadata, balance_due: remaining, amount_due: remaining, due_date: dueDate }
+  await updateLuxorEmailJob(job.id, { subject: email.subject, body: email.body, metadata: refreshed })
+  return { ...job, subject: email.subject, body: email.body, metadata: refreshed }
 }
 
 export async function processLuxorEmailJobs(
@@ -1425,6 +1524,10 @@ export async function processLuxorEmailJobs(
 // hard-coded number of days before the event.
 export async function queueUpcoming60DayInvoiceReminders() {
   try {
+    if (!(await areLuxorFinalPaymentRemindersEnabled())) return
+    await queueInstallmentPaymentReminders().catch((error) => {
+      console.warn('queueInstallmentPaymentReminders error:', error instanceof Error ? error.message : error)
+    })
     const activeBookings = await supabaseRest<LuxorBooking[]>('luxor_bookings?select=*&status=in.(tentative,confirmed)')
 
     if (!Array.isArray(activeBookings) || !activeBookings.length) return
@@ -1516,6 +1619,62 @@ export async function queueUpcoming60DayInvoiceReminders() {
     }
   } catch (error) {
     console.error('queueUpcoming60DayInvoiceReminders error:', error instanceof Error ? error.message : error)
+  }
+}
+
+async function queueInstallmentPaymentReminders() {
+  if (process.env.LUXOR_PAYMENT_INSTALLMENT_ALLOCATIONS_READY !== 'true'
+    || process.env.LUXOR_PAYMENT_INSTALLMENT_REMINDERS_READY !== 'true') return
+  const now = new Date()
+  if (!isLuxorReminderDaytime(now)) return
+  const today = luxorCalendarDate(now)
+  const activeBookings = await supabaseRest<LuxorBooking[]>('luxor_bookings?select=*&status=in.(tentative,confirmed)&contract_status=eq.signed&limit=1000')
+  for (const booking of activeBookings) {
+    if (!booking.inquiry_id || !booking.invoice_id || !booking.metadata?.deposit_paid_at) continue
+    const [inquiry] = await supabaseRest<LuxorInquiry[]>(`luxor_inquiries?select=*&id=eq.${encodeURIComponent(booking.inquiry_id)}&limit=1`)
+    if (!inquiry?.email || inquiry.status === 'closed_lost' || inquiry.archived_at || inquiry.is_test === true) continue
+    const [installments, bookingPayments, invoiceRemaining, masterInvoice] = await Promise.all([
+      listLuxorPaymentInstallments(booking.id),
+      listPaidPaymentsForBooking(booking.id),
+      finalBalanceRemaining(booking.id),
+      getInvoice(booking.invoice_id),
+    ])
+    if (!masterInvoice || masterInvoice.invoice_kind !== 'event' || invoiceRemaining === null || invoiceRemaining === 0) continue
+    for (const installment of installments) {
+      if (!installment.invoice_id || installment.invoice_id !== booking.invoice_id || installment.status === 'void' || installment.status === 'paid'
+        || isBookingPaymentMilestone(installment)) continue
+      const dueDate = installment.due_at?.slice(0, 10) || ''
+      if (!validCalendarDate(dueDate)) continue
+      const milestone = installmentReminderMilestone(dueDate, today)
+      if (!milestone) continue
+      const paid = installmentPaidAmount(installment, bookingPayments)
+      const remaining = Math.max(0, Math.round((Number(installment.amount) - paid) * 100) / 100)
+      if (remaining <= 0) continue
+      const email = installmentReminderContent(inquiry, installment, remaining, milestone === 'installment_1_day_overdue')
+      const safeDaytime = zonedTourDateTimeToUtc(today, '10:00').toISOString()
+      await createUniqueLuxorEmailJob({
+        inquiryId: inquiry.id,
+        bookingId: booking.id,
+        jobType: 'installment_payment_reminder',
+        recipientEmail: inquiry.email,
+        subject: email.subject,
+        body: email.body,
+        scheduledFor: safeDaytime,
+        automationKey: `installment:${booking.id}:${installment.id}:${milestone}`,
+        metadata: {
+          automation_key: `installment:${booking.id}:${installment.id}:${milestone}`,
+          milestone,
+          invoice_id: installment.invoice_id,
+          installment_id: installment.id,
+          installment_order: installment.installment_order,
+          obligation_label: installment.label,
+          balance_due: remaining,
+          amount_due: remaining,
+          due_date: dueDate,
+          timezone: 'America/Chicago',
+        },
+      })
+    }
   }
 }
 

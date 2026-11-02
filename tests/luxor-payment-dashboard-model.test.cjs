@@ -19,7 +19,7 @@ const loaded = new Module(sourcePath, module)
 loaded.filename = sourcePath
 loaded.paths = Module._nodeModulePaths(path.dirname(sourcePath))
 loaded._compile(compiled, sourcePath)
-const { installmentPaidAmount, isBookingPaymentMilestone, paidOnInvoice, paymentReminderJobsForEvent } = loaded.exports
+const { installmentPaidAmount, installmentReminderMilestone, isBookingPaymentMilestone, isLuxorReminderDaytime, paidOnInvoice, paymentReminderJobsForEvent } = loaded.exports
 
 const bookingPayment = { id: 'booking-row', label: 'Booking Payment', installment_order: 1, amount: 750, status: 'paid', metadata: {}, due_at: '2026-11-01', paid_at: '2026-11-01' }
 const monthly = { id: 'monthly-row', label: 'Payment 2 — Venue Services', installment_order: 2, amount: 750, status: 'scheduled', metadata: {}, due_at: '2026-12-01', paid_at: null }
@@ -28,6 +28,17 @@ const payment = (id, invoiceId, amount, metadata = {}) => ({ id, invoice_id: inv
 test('booking payment schedule row is not repeated in monthly milestones', () => {
   assert.equal(isBookingPaymentMilestone(bookingPayment), true)
   assert.equal(isBookingPaymentMilestone(monthly), false)
+})
+
+test('installment reminders use only the confirmed dates and daytime sending window', () => {
+  assert.equal(installmentReminderMilestone('2026-12-08', '2026-12-01'), 'installment_7_days_before')
+  assert.equal(installmentReminderMilestone('2026-12-08', '2026-12-09'), 'installment_1_day_overdue')
+  assert.equal(installmentReminderMilestone('2026-12-08', '2026-12-08'), null)
+  assert.equal(installmentReminderMilestone('2026-12-08', '2026-12-10'), null)
+  assert.equal(installmentReminderMilestone('bad-date', '2026-12-01'), null)
+  assert.equal(isLuxorReminderDaytime(new Date('2026-12-01T16:00:00.000Z')), true)
+  assert.equal(isLuxorReminderDaytime(new Date('2026-07-01T15:00:00.000Z')), true)
+  assert.equal(isLuxorReminderDaytime(new Date('2026-12-01T17:00:00.000Z')), false)
 })
 
 test('installment paid amount reconciles allocation and canonical legacy status', () => {
@@ -59,9 +70,10 @@ test('reminder history only includes the selected event and payment reminder kin
   const job = (id, type, bookingId, invoiceId) => ({ id, job_type: type, booking_id: bookingId, metadata: { invoice_id: invoiceId } })
   const rows = paymentReminderJobsForEvent([
     job('same-booking', 'final_payment_reminder', 'booking-1', null),
+    job('installment', 'installment_payment_reminder', 'booking-1', 'invoice-1'),
     job('same-invoice', 'unpaid_invoice_reminder', null, 'invoice-1'),
     job('other-event', 'final_payment_reminder', 'booking-2', 'invoice-2'),
     job('tour', 'tour_reminder', 'booking-1', 'invoice-1'),
   ], 'booking-1', new Set(['invoice-1']))
-  assert.deepEqual(rows.map((row) => row.id).sort(), ['same-booking', 'same-invoice'])
+  assert.deepEqual(rows.map((row) => row.id).sort(), ['installment', 'same-booking', 'same-invoice'])
 })

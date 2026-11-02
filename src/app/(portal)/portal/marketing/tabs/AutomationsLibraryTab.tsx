@@ -20,6 +20,7 @@ import type { CustomWorkflowDefinition, CustomWorkflowStatus } from '@/lib/luxor
 type LibraryResponse = {
   workflows: AutomationLibraryEntry[]
   systemManaged: AutomationLibraryEntry
+  paymentReminders: AutomationLibraryEntry
   totals: AutomationLibraryTotals
   error?: string
 }
@@ -68,7 +69,7 @@ export function AutomationsLibraryTab() {
       const response = await fetch('/api/marketing/automations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ automationKey: entry.kind === 'system' ? 'tour_notifications' : entry.id, enabled: !entry.enabled }),
+        body: JSON.stringify({ automationKey: entry.id === 'system:payment-reminders' ? 'payment_reminders' : entry.kind === 'system' ? 'tour_notifications' : entry.id, enabled: !entry.enabled }),
       })
       const payload = await response.json().catch(() => ({})) as { enabled?: boolean; error?: string; status?: AutomationStatus }
       if (!response.ok) throw new Error(payload.error || 'Automation setting could not be saved.')
@@ -77,7 +78,7 @@ export function AutomationsLibraryTab() {
         const update = (item: AutomationLibraryEntry) => item.id === entry.id
           ? { ...item, enabled: payload.enabled === true, ...(payload.status ? { status: payload.status } : {}) }
           : item
-        return { ...current, workflows: current.workflows.map(update), systemManaged: update(current.systemManaged) }
+        return { ...current, workflows: current.workflows.map(update), systemManaged: update(current.systemManaged), paymentReminders: update(current.paymentReminders) }
       })
     } catch (error) {
       setAutomationControlError(error instanceof Error ? error.message : 'Automation setting could not be saved.')
@@ -95,7 +96,7 @@ export function AutomationsLibraryTab() {
       .then(async (response) => {
         const payload = await response.json().catch(() => ({})) as LibraryResponse
         if (!response.ok) throw new Error(payload.error || 'The automation library could not load.')
-        if (!Array.isArray(payload.workflows) || !payload.systemManaged || !payload.totals) {
+        if (!Array.isArray(payload.workflows) || !payload.systemManaged || !payload.paymentReminders || !payload.totals) {
           throw new Error('The automation library returned incomplete data. Try again.')
         }
         setData(payload)
@@ -130,7 +131,7 @@ export function AutomationsLibraryTab() {
     return () => controller.abort()
   }, [customRetryVersion])
 
-  const entries = React.useMemo(() => data ? [...data.workflows, data.systemManaged] : [], [data])
+  const entries = React.useMemo(() => data ? [...data.workflows, data.systemManaged, data.paymentReminders] : [], [data])
   const visibleEntries = React.useMemo(
     () => filterAutomationLibrary(entries, search, status),
     [entries, search, status],
@@ -158,7 +159,7 @@ export function AutomationsLibraryTab() {
 
       {loading && data ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing saved workflow data…</p> : null}
       {automationControlError ? <p role="alert" className="rounded-lg border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs text-[color:var(--portal-muted)]">{automationControlError}</p> : null}
-      {data && [...data.workflows, data.systemManaged].some((entry) => entry.canToggle === false) ? <p role="note" className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-muted)]">Switches are read-only in this local preview. Use the deployed portal to change live automation.</p> : null}
+      {data && [...data.workflows, data.systemManaged, data.paymentReminders].some((entry) => entry.canToggle === false) ? <p role="note" className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-muted)]">Some controls are unavailable in this environment or need their settings installed. Use the deployed portal after setup to change live automation.</p> : null}
 
       {/* Pre-built Workflows / Templates Library */}
       <section aria-labelledby="prebuilt-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6 space-y-4">
@@ -334,6 +335,13 @@ export function AutomationsLibraryTab() {
             onSetEnabled={() => void setAutomationEnabled(data.systemManaged)}
             saving={savingAutomationId === data.systemManaged.id}
           />
+          <AutomationEntryCard
+            entry={data.paymentReminders}
+            expanded={openEntryId === data.paymentReminders.id}
+            onToggle={() => setOpenEntryId((current) => current === data.paymentReminders.id ? null : data.paymentReminders.id)}
+            onSetEnabled={() => void setAutomationEnabled(data.paymentReminders)}
+            saving={savingAutomationId === data.paymentReminders.id}
+          />
         </>
       ) : visibleEntries.length === 0 ? (
         <section className="rounded-2xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-5 py-8 text-center">
@@ -427,7 +435,7 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
             </button>
           </div>
           <Link
-            href={`/portal/marketing/automations/${entry.kind === 'system' ? 'tour-notifications' : encodeURIComponent(entry.id)}`}
+            href={`/portal/marketing/automations/${entry.id === 'system:payment-reminders' ? 'payment-reminders' : entry.kind === 'system' ? 'tour-notifications' : encodeURIComponent(entry.id)}`}
             className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
           >
             View details
@@ -550,6 +558,8 @@ function formatChannel(channel: string) {
 }
 
 function formatStepTiming(entry: AutomationLibraryEntry, key: string, delayDays: number | null) {
+  const configuredTiming = entry.steps.find((step) => step.key === key)?.timing
+  if (configuredTiming) return configuredTiming
   if (delayDays !== null) return delayDays === 0 ? 'At enrollment' : `${delayDays} day${delayDays === 1 ? '' : 's'} after enrollment`
   if (entry.kind === 'system' && key === 'confirmation') return 'When tour is scheduled'
   if (entry.kind === 'system' && key === 'reminder_24') return '24 hours before tour'

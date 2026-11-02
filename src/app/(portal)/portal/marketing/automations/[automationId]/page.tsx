@@ -10,6 +10,7 @@ import type { AutomationLibraryEntry, AutomationLibraryTotals, AutomationStatus 
 type LibraryResponse = {
   workflows: AutomationLibraryEntry[]
   systemManaged: AutomationLibraryEntry
+  paymentReminders: AutomationLibraryEntry
   totals: AutomationLibraryTotals
 }
 
@@ -90,7 +91,20 @@ type TourDetail = {
   behavior: string[]
 }
 
-type DetailResponse = SavedDetail | TourDetail
+type PaymentReminderDetail = {
+  kind: 'payment-reminders'
+  name: string
+  status: 'active' | 'paused' | 'unknown'
+  installed: boolean
+  enabled: boolean
+  trigger: string
+  updatedAt: null
+  activity: { queuedMilestones: number | null; sentMilestones: number | null }
+  schedule: Array<{ key: string; name: string; timing: string }>
+  behavior: string[]
+}
+
+type DetailResponse = SavedDetail | TourDetail | PaymentReminderDetail
 
 const EMPTY_DRAFT: ContentDraft = {
   name: '',
@@ -139,7 +153,7 @@ function statusLabel(status: AutomationStatus) {
 export default function AutomationDetailPage() {
   const params = useParams<{ automationId: string }>()
   const routeId = String(params.automationId || '')
-  const libraryId = routeId === 'tour-notifications' ? 'system:tour-notifications' : routeId
+  const libraryId = routeId === 'tour-notifications' ? 'system:tour-notifications' : routeId === 'payment-reminders' ? 'system:payment-reminders' : routeId
   const [entry, setEntry] = React.useState<AutomationLibraryEntry | null>(null)
   const [detail, setDetail] = React.useState<DetailResponse | null>(null)
   const [selectedStepKey, setSelectedStepKey] = React.useState('')
@@ -168,10 +182,10 @@ export default function AutomationDetailPage() {
     if (!libraryResponse.ok || !Array.isArray(libraryPayload.workflows) || !libraryPayload.systemManaged) {
       throw new Error(libraryPayload.error || 'The automation library could not load. Try again.')
     }
-    const libraryEntry = [...libraryPayload.workflows, libraryPayload.systemManaged].find((item) => item.id === libraryId) || null
+    const libraryEntry = [...libraryPayload.workflows, libraryPayload.systemManaged, libraryPayload.paymentReminders].find((item) => item.id === libraryId) || null
     if (!libraryEntry) throw new Error('This automation is no longer in the library. Return to the library and refresh it.')
 
-    if (routeId !== 'brochure_lead' && routeId !== 'tour-notifications') {
+    if (routeId !== 'brochure_lead' && routeId !== 'tour-notifications' && routeId !== 'payment-reminders') {
       return { libraryEntry, detail: null, detailError: null }
     }
 
@@ -295,7 +309,7 @@ export default function AutomationDetailPage() {
       const response = await fetch('/api/marketing/automations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ automationKey: entry.kind === 'system' ? 'tour_notifications' : entry.id, enabled: !entry.enabled }),
+        body: JSON.stringify({ automationKey: entry.id === 'system:payment-reminders' ? 'payment_reminders' : entry.kind === 'system' ? 'tour_notifications' : entry.id, enabled: !entry.enabled }),
       })
       const payload = await response.json().catch(() => ({})) as { enabled?: boolean; status?: AutomationStatus; error?: string }
       if (!response.ok) throw new Error(payload.error || 'Automation setting could not be saved.')
@@ -460,7 +474,7 @@ export default function AutomationDetailPage() {
               <RefreshCw size={14} aria-hidden="true" />Refresh
             </button>
           </div>
-          {entry ? <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-[color:var(--portal-muted)]"><span><span className="font-bold text-[color:var(--portal-text)]">Trigger:</span> {entry.trigger}</span><span><span className="font-bold text-[color:var(--portal-text)]">Channels:</span> {detail?.kind === 'system' ? 'Email + calendar + SMS when eligible' : entry.channelSummary}</span><span><span className="font-bold text-[color:var(--portal-text)]">Steps:</span> {detail?.kind === 'system' ? `${detail.emailSteps.length} email notices + ${detail.smsSteps.length} SMS notices` : entry.stepsCount === null ? 'Unavailable' : `${entry.stepsCount} configured`}</span><span><span className="font-bold text-[color:var(--portal-text)]">Updated:</span> {detail?.updatedAt ? formatDate(detail.updatedAt) : entry.updatedAt ? formatDate(entry.updatedAt) : entry.kind === 'system' ? 'Code-managed; no shared template timestamp' : 'Unavailable'}</span></div> : null}
+          {entry ? <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-[color:var(--portal-muted)]"><span><span className="font-bold text-[color:var(--portal-text)]">Trigger:</span> {entry.trigger}</span><span><span className="font-bold text-[color:var(--portal-text)]">Channels:</span> {detail?.kind === 'system' ? 'Email + calendar + SMS when eligible' : entry.channelSummary}</span><span><span className="font-bold text-[color:var(--portal-text)]">Steps:</span> {detail?.kind === 'system' ? `${detail.emailSteps.length} email notices + ${detail.smsSteps.length} SMS notices` : detail?.kind === 'payment-reminders' ? `${detail.schedule.length} reminder rules` : entry.stepsCount === null ? 'Unavailable' : `${entry.stepsCount} configured`}</span><span><span className="font-bold text-[color:var(--portal-text)]">Updated:</span> {detail?.updatedAt ? formatDate(detail.updatedAt) : entry.updatedAt ? formatDate(entry.updatedAt) : entry.kind === 'system' ? 'Code-managed; no shared template timestamp' : 'Unavailable'}</span></div> : null}
         </div>
 
         {loadError ? <Notice tone="error" title="Automation data could not load." body={loadError} action={<button type="button" onClick={handleRefresh} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 font-semibold">Try again</button>} /> : null}
@@ -495,7 +509,7 @@ export default function AutomationDetailPage() {
             onToggleApplyToQueued={toggleApplyToQueued}
             onReviewQueuedCopies={reviewQueuedCopies}
           />
-        ) : detail?.kind === 'system' ? <TourNotificationDetail detail={detail} /> : entry ? <UnknownWorkflowDetail entry={entry} /> : null}
+        ) : detail?.kind === 'system' ? <TourNotificationDetail detail={detail} /> : detail?.kind === 'payment-reminders' ? <PaymentReminderDetailView detail={detail} /> : entry ? <UnknownWorkflowDetail entry={entry} /> : null}
       </div>
     </PortalPageFrame>
   )
@@ -645,6 +659,24 @@ function TourNotificationDetail({ detail }: { detail: TourDetail }) {
       </div>
     </>
   )
+}
+
+function PaymentReminderDetailView({ detail }: { detail: PaymentReminderDetail }) {
+  return <>
+    <section aria-label="Payment reminder activity" className="grid grid-cols-2 border-y border-[color:var(--portal-border)] sm:grid-cols-3">
+      <Metric label="Queued reminders" value={metricLabel(detail.activity.queuedMilestones)} />
+      <Metric label="Sent reminders" value={metricLabel(detail.activity.sentMilestones)} />
+      <Metric label="Time zone" value="America/Chicago" />
+    </section>
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,.75fr)]">
+      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+        <div className="border-b border-[color:var(--portal-border)] px-4 py-4 sm:px-5"><h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Payment reminder schedule</h2><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Final-balance reminders retain their existing date windows. Installment reminders follow the confirmed two-message cadence.</p></div>
+        <ol className="divide-y divide-[color:var(--portal-border)]">{detail.schedule.map((step, index) => <li key={step.key} className="flex gap-3 px-4 py-4 sm:px-5"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[color:var(--portal-border)] text-[10px] font-bold tabular-nums text-[color:var(--portal-muted)]">{index + 1}</span><div><p className="text-sm font-semibold text-[color:var(--portal-text)]">{step.name}</p><p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">{step.timing}</p></div></li>)}</ol>
+        <div className="border-t border-[color:var(--portal-border)] px-4 py-4 sm:px-5"><h3 className="text-xs font-bold text-[color:var(--portal-text)]">Delivery and stop rules</h3><ul className="mt-2 space-y-2 text-xs leading-5 text-[color:var(--portal-muted)]">{detail.behavior.map((rule) => <li key={rule} className="flex gap-2"><span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#a8792f]" />{rule}</li>)}</ul></div>
+      </section>
+      <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5"><h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Schedule availability</h2><p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{detail.installed ? detail.enabled ? 'The shared payment reminder setting is on.' : 'The shared payment reminder setting is paused.' : 'The settings migration is not installed in this environment.'}</p><p className="mt-3 text-xs leading-5 text-[color:var(--portal-muted)]">Installment reminders remain behind the reviewed allocation migration and the server scheduling feature gate. Turning this automation on does not bypass those deployment gates.</p></section>
+    </div>
+  </>
 }
 
 function UnknownWorkflowDetail({ entry }: { entry: AutomationLibraryEntry }) {

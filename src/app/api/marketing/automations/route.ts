@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorFollowUpSetup, isLuxorBrochureFollowUpSendingEnabled } from '@/lib/luxorFollowUpsServer'
 import { cancelQueuedLuxorTourNotifications } from '@/lib/luxorTourNotificationsServer'
+import { cancelQueuedLuxorFinalPaymentMilestones } from '@/lib/luxorPaymentRemindersServer'
 import { requireCustomWorkflowOperator, CustomWorkflowServiceError } from '@/lib/luxorCustomWorkflowsServer'
 import { supabaseRest, supabaseRestCount } from '@/lib/supabaseRestServer'
 import { canControlLiveLuxorAutomations } from '@/lib/luxorAutomationEnvironment'
@@ -166,16 +167,58 @@ function buildTourNotifications(sentCount: number | null, enabled: boolean): Aut
   }
 }
 
+function buildFinalPaymentReminders(input: {
+  enabled: boolean
+  installed: boolean
+  canToggle: boolean
+  queuedCount: number | null
+  sentCount: number | null
+}): AutomationLibraryEntry {
+  const status = input.installed ? input.enabled ? 'active' : 'paused' : 'unknown'
+  return {
+    id: 'system:payment-reminders',
+    name: 'Payment reminders',
+    kind: 'system',
+    status,
+    enabled: input.enabled,
+    canToggle: input.canToggle && input.installed,
+    canEnable: input.canToggle && input.installed,
+    controlReason: !input.installed
+      ? 'Settings controls are not installed yet; the existing scheduler retains its current behavior.'
+      : input.canToggle ? null : 'Switches are disabled in this local preview; use the deployed portal to change live automation.',
+    statusNote: null,
+    description: 'Manages final-balance reminders and the confirmed two-message installment reminder schedule through the existing server-side email queue.',
+    trigger: 'Signed booking with an unpaid final balance or scheduled installment',
+    channelSummary: 'Email',
+    stepsCount: 6,
+    steps: [
+      { key: 'payment_request', name: 'Payment request window', channel: 'email', delayDays: null, active: true, usesExistingDelivery: true, timing: '15–30 days before the configured final-payment due date' },
+      { key: '14_days', name: 'Two-week reminder window', channel: 'email', delayDays: null, active: true, usesExistingDelivery: true, timing: '8–14 days before the configured final-payment due date' },
+      { key: '7_days', name: 'One-week reminder window', channel: 'email', delayDays: null, active: true, usesExistingDelivery: true, timing: '3–7 days before the configured final-payment due date' },
+      { key: 'due_date', name: 'Due-date follow-up window', channel: 'email', delayDays: null, active: true, usesExistingDelivery: true, timing: '2 days before through 7 days after the configured final-payment due date' },
+      { key: 'installment_7_days_before', name: 'Installment reminder', channel: 'email', delayDays: null, active: true, usesExistingDelivery: true, timing: '7 calendar days before installment due date, America/Chicago daytime' },
+      { key: 'installment_1_day_overdue', name: 'Unpaid installment follow-up', channel: 'email', delayDays: null, active: true, usesExistingDelivery: true, timing: '1 calendar day after due date if unpaid, America/Chicago daytime' },
+    ],
+    activeEnrollmentCount: null,
+    sentMessageCount: input.sentCount,
+    sentMessageLabel: 'Milestone emails sent',
+    updatedAt: null,
+    summaryNote: input.enabled
+      ? `Final-balance reminder windows stay unchanged. ${input.queuedCount === null ? 'Queued milestone count is unavailable.' : `${input.queuedCount.toLocaleString()} queued final-payment milestone email${input.queuedCount === 1 ? '' : 's'}.`} Installments use one reminder 7 calendar days before due and one follow-up the next day only if unpaid; no due-date email or repeated overdue reminders. Installment scheduling stays behind its production feature gate.`
+      : 'The payment reminder automation is paused. Queued final-payment milestone emails are cancelled; installment scheduling also remains gated. Manual invoice reminders and already-sent messages are unchanged.',
+  }
+}
+
 export async function GET() {
   if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
 
   try {
     const [totalSavedWorkflows, templateTotal] = await Promise.all([
-      supabaseRestCount('luxor_follow_up_automations?select=automation_key&automation_key=neq.tour_notifications'),
+      supabaseRestCount('luxor_follow_up_automations?select=automation_key&automation_key=not.in.(tour_notifications,payment_reminders)'),
       supabaseRestCount('luxor_follow_up_templates?select=automation_key'),
     ])
     const [automationRows, templateRows] = await Promise.all([
-      readAllRows<SavedAutomationRow>('luxor_follow_up_automations?select=automation_key,name,enabled,send_approved,timing_configured,timezone,updated_at&automation_key=neq.tour_notifications&order=name.asc', totalSavedWorkflows),
+      readAllRows<SavedAutomationRow>('luxor_follow_up_automations?select=automation_key,name,enabled,send_approved,timing_configured,timezone,updated_at&automation_key=not.in.(tour_notifications,payment_reminders)&order=name.asc', totalSavedWorkflows),
       readAllRows<SavedTemplateRow>('luxor_follow_up_templates?select=automation_key,step_key,sort_order,channel,delay_days,name,active,uses_existing_delivery,updated_at&order=sort_order.asc', templateTotal),
     ])
 
@@ -190,11 +233,14 @@ export async function GET() {
     const runtimeGateEnabled = process.env.LUXOR_FOLLOW_UP_SENDS_ENABLED === 'true'
     const [tourNotificationAutomation] = await supabaseRest<Array<{ enabled: boolean }>>('luxor_follow_up_automations?select=enabled&automation_key=eq.tour_notifications&limit=1')
     const tourNotificationsEnabled = tourNotificationAutomation?.enabled !== false
+    const [paymentReminderAutomation] = await supabaseRest<Array<{ enabled: boolean }>>('luxor_follow_up_automations?select=enabled&automation_key=eq.payment_reminders&limit=1')
 
-    const [activeEnrollmentCount, sentFollowUpCount, sentTourCount] = await Promise.all([
+    const [activeEnrollmentCount, sentFollowUpCount, sentTourCount, queuedPaymentMilestones, sentPaymentMilestones] = await Promise.all([
       safeCount('luxor_follow_up_enrollments?select=id,luxor_inquiries!inner(is_test)&automation_key=eq.brochure_lead&status=eq.active&luxor_inquiries.is_test=eq.false'),
       safeCount('luxor_email_jobs?select=id,luxor_inquiries!inner(is_test)&job_type=eq.marketing_campaign&automation_enrollment_id=not.is.null&metadata->>automation_key=eq.brochure_lead&status=eq.sent&test_run_id=is.null&luxor_inquiries.is_test=eq.false'),
       safeCount('luxor_email_jobs?select=id,luxor_inquiries!inner(is_test)&job_type=in.(tour_confirmation,tour_reminder)&tour_revision_id=not.is.null&status=eq.sent&test_run_id=is.null&luxor_inquiries.is_test=eq.false'),
+      safeCount('luxor_email_jobs?select=id&job_type=in.(final_payment_request,final_payment_reminder,installment_payment_reminder)&metadata->>milestone=not.is.null&status=eq.queued&test_run_id=is.null'),
+      safeCount('luxor_email_jobs?select=id&job_type=in.(final_payment_request,final_payment_reminder,installment_payment_reminder)&metadata->>milestone=not.is.null&status=eq.sent&test_run_id=is.null'),
     ])
 
     const workflows = automationRows.filter((automation) => automation.automation_key !== 'tour_notifications').map((automation) => buildSavedEntry(
@@ -208,8 +254,15 @@ export async function GET() {
     ))
     const totals = summarizeSavedAutomations(workflows, totalSavedWorkflows)
     const systemManaged = buildTourNotifications(sentTourCount, tourNotificationsEnabled)
+    const paymentReminders = buildFinalPaymentReminders({
+      enabled: paymentReminderAutomation?.enabled !== false,
+      installed: Boolean(paymentReminderAutomation),
+      canToggle: canControlLiveLuxorAutomations(),
+      queuedCount: queuedPaymentMilestones,
+      sentCount: sentPaymentMilestones,
+    })
 
-    return NextResponse.json({ workflows, systemManaged, totals }, {
+    return NextResponse.json({ workflows, systemManaged, paymentReminders, totals }, {
       headers: { 'Cache-Control': 'no-store' },
     })
   } catch {
@@ -257,6 +310,20 @@ export async function PATCH(request: NextRequest) {
       )
       if (!updated) return NextResponse.json({ error: 'Tour notification controls are not installed. Refresh after the automation update is deployed.' }, { status: 409 })
       if (!body.enabled) await cancelQueuedLuxorTourNotifications()
+      return NextResponse.json({ automationKey, enabled: updated.enabled }, { headers: { 'Cache-Control': 'no-store' } })
+    }
+
+    if (automationKey === 'payment_reminders') {
+      const [current] = await supabaseRest<SavedAutomationRow[]>(
+        'luxor_follow_up_automations?automation_key=eq.payment_reminders&select=automation_key,name,enabled,send_approved,timing_configured,timezone,updated_at',
+      )
+      if (!current) return NextResponse.json({ error: 'Payment reminder controls are not installed. Refresh after the automation update is deployed.' }, { status: 409 })
+      const [updated] = await supabaseRest<SavedAutomationRow[]>(
+        'luxor_follow_up_automations?automation_key=eq.payment_reminders&select=automation_key,name,enabled,send_approved,timing_configured,timezone,updated_at',
+        { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ enabled: body.enabled, updated_at: new Date().toISOString() }) },
+      )
+      if (!updated) return NextResponse.json({ error: 'Payment reminder settings changed. Refresh the automation list.' }, { status: 409 })
+      if (!body.enabled) await cancelQueuedLuxorFinalPaymentMilestones()
       return NextResponse.json({ automationKey, enabled: updated.enabled }, { headers: { 'Cache-Control': 'no-store' } })
     }
 

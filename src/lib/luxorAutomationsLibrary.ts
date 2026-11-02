@@ -8,6 +8,7 @@ export type AutomationLibraryStep = {
   delayDays: number | null
   active: boolean | null
   usesExistingDelivery: boolean
+  timing?: string
 }
 
 export type AutomationLibraryEntry = {

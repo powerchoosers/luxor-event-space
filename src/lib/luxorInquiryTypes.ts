@@ -855,6 +855,7 @@ export type LuxorEmailJobKind =
   | 'sixty_day_payment_reminder'
   | 'final_payment_request'
   | 'final_payment_reminder'
+  | 'installment_payment_reminder'
   | 'event_details_reminder'
   | 'event_day_reminder'
   | 'post_event_follow_up'

@@ -65,6 +65,13 @@ function loadRoute() {
         return state.sendsConfigured
       },
     },
+    '@/lib/luxorTourNotificationsServer': { cancelQueuedLuxorTourNotifications: async () => undefined },
+    '@/lib/luxorPaymentRemindersServer': { cancelQueuedLuxorFinalPaymentMilestones: async () => undefined },
+    '@/lib/luxorCustomWorkflowsServer': {
+      requireCustomWorkflowOperator: async () => undefined,
+      CustomWorkflowServiceError: class CustomWorkflowServiceError extends Error { constructor(message, status = 403) { super(message); this.status = status } },
+    },
+    '@/lib/luxorAutomationEnvironment': { canControlLiveLuxorAutomations: () => false },
     '@/lib/supabaseRestServer': {
       supabaseRest: async (query, init = {}) => {
         state.restCalls.push({ query, method: (init.method || 'GET').toUpperCase() })

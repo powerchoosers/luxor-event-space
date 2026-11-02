@@ -20,6 +20,21 @@ export function isBookingPaymentMilestone(installment: LuxorPaymentInstallment) 
   return installment.installment_order === 1 && installment.label.trim().toLowerCase() === 'booking payment'
 }
 
+export function installmentReminderMilestone(dueDate: string, todayInChicago: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || !/^\d{4}-\d{2}-\d{2}$/.test(todayInChicago)) return null
+  const date = new Date(`${dueDate}T12:00:00.000Z`)
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== dueDate) return null
+  date.setUTCDate(date.getUTCDate() - 7)
+  if (date.toISOString().slice(0, 10) === todayInChicago) return 'installment_7_days_before' as const
+  date.setUTCDate(date.getUTCDate() + 8)
+  if (date.toISOString().slice(0, 10) === todayInChicago) return 'installment_1_day_overdue' as const
+  return null
+}
+
+export function isLuxorReminderDaytime(now: Date) {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: '2-digit', hourCycle: 'h23' }).format(now) === '10'
+}
+
 export function installmentPaidAmount(installment: LuxorPaymentInstallment, payments: LuxorPayment[]) {
   const allocated = payments.reduce((sum, payment) => {
     if (payment.status !== 'paid') return sum
@@ -48,7 +63,7 @@ export function paidOnInvoice(invoice: LuxorInvoice, invoices: LuxorInvoice[], p
 }
 
 export function paymentReminderJobsForEvent(jobs: LuxorEmailJob[], bookingId: string | null | undefined, invoiceIds: Set<string>) {
-  const kinds = new Set(['unpaid_invoice_reminder', 'sixty_day_payment_reminder', 'final_payment_reminder', 'proposal_payment_reminder'])
+  const kinds = new Set(['unpaid_invoice_reminder', 'sixty_day_payment_reminder', 'final_payment_request', 'final_payment_reminder', 'installment_payment_reminder', 'proposal_payment_reminder'])
   return jobs.filter((job) => kinds.has(job.job_type)
     && ((Boolean(bookingId) && job.booking_id === bookingId) || (typeof job.metadata?.invoice_id === 'string' && invoiceIds.has(job.metadata.invoice_id))))
 }

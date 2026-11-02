@@ -12,6 +12,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:custom-workflows": "node --test tests/custom-workflow-authorization.test.cjs",
+    "test:payments-dashboard": "node --test tests/luxor-payment-dashboard-model.test.cjs tests/luxor-manual-installment-route.test.cjs",
     "test:follow-ups": "node --test tests/follow-ups-*.test.cjs tests/notes-route.test.cjs",
     "test:automations-library": "node --test tests/marketing-automations-library.test.cjs",
     "test:inquiry-consent": "node --test tests/inquiry-consent.test.cjs",
