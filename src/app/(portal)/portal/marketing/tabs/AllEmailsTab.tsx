@@ -426,6 +426,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [readerMenuOpen, setReaderMenuOpen] = useState(false)
   const [openingAttachment, setOpeningAttachment] = useState<string | null>(null)
   const [previewAttachment, setPreviewAttachment] = useState<(EmailAttachment & { url: string; mimeType: string }) | null>(null)
+  const attachmentPreviewRequestRef = useRef(0)
 
   // Star state is loaded from the server-side, per-portal-user mapping table.
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set())
@@ -1138,13 +1139,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     window.print()
   }
 
-  const openAttachmentPreview = async (attachment: EmailAttachment, message: EmailMessageItem, existingUrl?: string) => {
+  const openAttachmentPreview = async (attachment: EmailAttachment, message: EmailMessageItem) => {
     const reference = attachment.attachmentId || attachment.attachmentPath
     if (!reference) return
-    if (existingUrl && /^blob:https?:/i.test(existingUrl)) {
-      setPreviewAttachment({ ...attachment, mimeType: attachment.mimeType || 'image/jpeg', url: existingUrl })
-      return
-    }
+    const requestId = ++attachmentPreviewRequestRef.current
     setOpeningAttachment(reference)
     try {
       const params = new URLSearchParams({
@@ -1158,20 +1156,31 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       const contentType = response.headers.get('content-type') || attachment.mimeType || 'application/octet-stream'
       const bytes = await response.arrayBuffer()
       const url = URL.createObjectURL(new Blob([bytes], { type: contentType }))
-      setPreviewAttachment({ ...attachment, mimeType: contentType, url })
+      if (requestId === attachmentPreviewRequestRef.current) setPreviewAttachment({ ...attachment, mimeType: contentType, url })
+      else URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error opening email attachment:', error)
     } finally {
-      setOpeningAttachment(null)
+      if (requestId === attachmentPreviewRequestRef.current) setOpeningAttachment(null)
     }
   }
 
   const closeAttachmentPreview = () => {
-    setPreviewAttachment((current) => {
-      if (current?.url) URL.revokeObjectURL(current.url)
-      return null
-    })
+    setPreviewAttachment(null)
   }
+
+  useEffect(() => {
+    const previewUrl = previewAttachment?.url
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewAttachment?.url])
+
+  useEffect(() => {
+    attachmentPreviewRequestRef.current += 1
+    setPreviewAttachment(null)
+    setOpeningAttachment(null)
+  }, [messageDetail?.id])
 
   useEffect(() => {
     if (!readerMenuOpen) return
@@ -2215,7 +2224,7 @@ function ThreadMessage({
   viewMode: 'html' | 'text'
   blockExternalImages: boolean
   inquiryByEmail: Map<string, LuxorInquiry>
-  onOpenAttachment: (attachment: EmailAttachment, message: EmailMessageItem, imageUrl?: string) => void
+  onOpenAttachment: (attachment: EmailAttachment, message: EmailMessageItem) => void
   openingAttachment: string | null
 }) {
   const reduceMotion = useReducedMotion()
@@ -2258,10 +2267,18 @@ function ThreadMessage({
     () => chat && outgoing ? extractLuxorConversationBody(message.htmlContent) : null,
     [chat, message.htmlContent, outgoing],
   )
-  const displayedMessage = compactLuxorBody && !fullEmailOpen
-    ? { ...message, htmlContent: compactLuxorBody }
-    : message
-  const html = useMemo(() => buildMessageDocument(displayedMessage, blockExternalImages, portalTheme), [displayedMessage, blockExternalImages, portalTheme])
+  const conversationHtml = compactLuxorBody && !fullEmailOpen
+    ? compactLuxorBody
+    : message.htmlContent || (message.content ? plainTextToEmailHtml(message.content, !fullEmailOpen) : null)
+  const collapsedQuoteBody = useMemo(
+    () => !fullEmailOpen && conversationHtml ? collapseLongQuotedEmailContent(conversationHtml) : null,
+    [conversationHtml, fullEmailOpen],
+  )
+  const displayedMessage = useMemo(() => ({
+    ...message,
+    htmlContent: collapsedQuoteBody?.collapsedCount ? collapsedQuoteBody.html : conversationHtml,
+  }), [message, collapsedQuoteBody, conversationHtml])
+  const html = useMemo(() => buildMessageDocument(displayedMessage, blockExternalImages, portalTheme, chat), [displayedMessage, blockExternalImages, portalTheme, chat])
   const frameKey = `${messageKey(message)}:${compactLuxorBody && !fullEmailOpen ? 'conversation-body' : 'full-email'}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`
   const ccLabel = message.cc ? mailboxLabel(message.cc, inquiryByEmail, '') : ''
 
@@ -2465,7 +2482,7 @@ function ThreadMessage({
                   {message.content || message.summary || 'No message body available.'}
                 </div>
               )}
-              {compactLuxorBody ? <div className={`px-3 pb-1 pt-2 ${outgoing ? 'text-right' : 'text-left'}`}>
+              {compactLuxorBody || message.htmlContent || message.content ? <div className={`px-3 pb-1 pt-2 ${outgoing ? 'text-right' : 'text-left'}`}>
                 <button type="button" onClick={() => setFullEmailOpen((open) => !open)} aria-expanded={fullEmailOpen}
                   className="min-h-9 text-xs font-medium text-[#8c6529] underline decoration-[#caa24c]/50 underline-offset-2 hover:text-[#6f4c1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] dark:text-[#f1d27a]">
                   {fullEmailOpen ? 'Return to conversation view' : 'View full email'}
@@ -2619,7 +2636,7 @@ function EmailAttachmentImageThumbnail({
 }: {
   attachment: EmailAttachment
   message: EmailMessageItem
-  onOpen: (attachment: EmailAttachment, message: EmailMessageItem, imageUrl?: string) => void
+  onOpen: (attachment: EmailAttachment, message: EmailMessageItem) => void
 }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [imageMimeType, setImageMimeType] = useState<string>('image/jpeg')
@@ -2656,7 +2673,7 @@ function EmailAttachmentImageThumbnail({
   }, [attachment.attachmentId, attachment.attachmentPath, attachment.filename, attachment.mimeType, message.folderId, message.id])
 
   if (imageUrl) return (
-    <button type="button" onClick={() => onOpen({ ...attachment, mimeType: imageMimeType }, message, imageUrl)} aria-label={`Preview image: ${attachment.filename}`}
+    <button type="button" onClick={() => onOpen({ ...attachment, mimeType: imageMimeType }, message)} aria-label={`Preview image: ${attachment.filename}`}
       className="group relative block max-w-full overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
       <img src={imageUrl} alt={attachment.filename} className="block max-h-44 max-w-full object-contain sm:max-h-56" />
       <span className="block max-w-64 truncate border-t border-[color:var(--portal-border)] px-2.5 py-1.5 text-left text-[10px] text-[color:var(--portal-muted)]">{attachment.filename}</span>
@@ -2673,16 +2690,34 @@ function EmailAttachmentImageThumbnail({
   )
 }
 
-function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean, portalTheme: 'light' | 'dark') {
+function collapseLongQuotedEmailContent(html: string) {
+  if (typeof DOMParser === 'undefined') return { html, collapsedCount: 0 }
+  const parsed = new DOMParser().parseFromString(html, 'text/html')
+  const candidates = Array.from(parsed.body.querySelectorAll('.gmail_quote, .yahoo_quoted, #divRplyFwdMsg, blockquote[type="cite"], blockquote'))
+    .filter((element) => (element.textContent || '').trim().length >= 350)
+  const outermostCandidates = candidates.filter((element) => !candidates.some((other) => other !== element && other.contains(element)))
+  outermostCandidates.forEach((quotedContent) => {
+    const details = parsed.createElement('details')
+    details.style.cssText = 'margin:12px 0;border-left:3px solid #caa24c;padding-left:10px;color:#71717a'
+    const summary = parsed.createElement('summary')
+    summary.textContent = 'Show quoted content'
+    summary.style.cssText = 'min-height:36px;display:flex;align-items:center;cursor:pointer;font:500 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'
+    quotedContent.parentNode?.insertBefore(details, quotedContent)
+    details.append(summary, quotedContent)
+  })
+  return { html: parsed.body.innerHTML, collapsedCount: outermostCandidates.length }
+}
+
+function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean, portalTheme: 'light' | 'dark', chat = false) {
   const hasHtmlBody = Boolean(message.htmlContent?.trim())
   const adaptHtmlForDarkTheme = hasHtmlBody && portalTheme === 'dark' && !hasDarkEmailSurface(message.htmlContent || '')
-  const documentBackground = hasHtmlBody ? (adaptHtmlForDarkTheme ? '#f7f8f9' : '#fff') : portalTheme === 'dark' ? '#080706' : '#fbfaf6'
+  const documentBackground = chat ? 'transparent' : hasHtmlBody ? (adaptHtmlForDarkTheme ? '#f7f8f9' : '#fff') : portalTheme === 'dark' ? '#080706' : '#fbfaf6'
   const textColor = !hasHtmlBody && portalTheme === 'dark' ? '#f5f2ea' : '#18181b'
   const darkThemeFilter = adaptHtmlForDarkTheme
     ? 'html{filter:invert(1) hue-rotate(180deg)}img,svg,video{filter:invert(1) hue-rotate(180deg)}'
     : ''
   const messageContent = message.htmlContent
-    || (message.content ? plainTextToEmailHtml(message.content) : `<p>${escapeHtml(message.summary || 'No message body available.')}</p>`)
+    || (message.content ? plainTextToEmailHtml(message.content, true) : `<p>${escapeHtml(message.summary || 'No message body available.')}</p>`)
   let content = stripTrackingPixels(messageContent)
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
@@ -2787,6 +2822,27 @@ function escapeHtml(str: string) {
     .replace(/"/g, '&quot;')
 }
 
-function plainTextToEmailHtml(str: string) {
-  return escapeHtml(str).replace(/\r\n?|\n/g, '<br>')
+function plainTextToEmailHtml(str: string, collapseQuotes = false) {
+  if (!collapseQuotes) return escapeHtml(str).replace(/\r\n?|\n/g, '<br>')
+  const lines = (str || '').split(/\r\n?|\n/)
+  const html: string[] = []
+  for (let index = 0; index < lines.length;) {
+    if (!/^\s*&gt;/.test(escapeHtml(lines[index]))) {
+      html.push(escapeHtml(lines[index]).replace(/\s{2,}/g, (spaces) => '&nbsp;'.repeat(spaces.length - 1) + ' '))
+      index += 1
+      if (index < lines.length) html.push('<br>')
+      continue
+    }
+    const quoted: string[] = []
+    while (index < lines.length && /^\s*&gt;/.test(escapeHtml(lines[index]))) {
+      quoted.push(escapeHtml(lines[index]))
+      index += 1
+    }
+    const quotedHtml = quoted.join('<br>')
+    if (quoted.join('').length >= 350) {
+      html.push(`<details style="margin:12px 0;border-left:3px solid #caa24c;padding-left:10px;color:#71717a"><summary style="min-height:36px;display:flex;align-items:center;cursor:pointer;font:500 12px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">Show quoted content</summary>${quotedHtml}</details>`)
+    } else html.push(quotedHtml)
+    if (index < lines.length) html.push('<br>')
+  }
+  return html.join('')
 }
