@@ -4,6 +4,7 @@ import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { listLuxorBookingsWithPayments } from '@/lib/luxorBookingsServer'
 import type { LuxorBookingWithPayments } from '@/lib/luxorBookingsServer'
 import { luxorPlannerDateKey } from '@/lib/luxorPlannerDates'
+import { isPlannerAttentionEligible } from '@/lib/luxorPlannerProgress'
 
 export type PlannerSection = 'overview' | 'events' | 'tasks' | 'meetings' | 'design-library' | 'vendors' | 'files' | 'search'
 export type PlannerRecord = Record<string, unknown> & { id: string }
@@ -120,8 +121,8 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
     const now = new Date().toISOString()
     const nextMeeting = meetings.find((meeting) => meeting.status === 'scheduled' && String(meeting.starts_at) >= now) ?? null
     const bookingMap = new Map(bookings.map((booking) => [booking.id, plannerBookingView(booking)]))
-    const overdueTasks = tasks.filter((task) => task.status !== 'completed' && typeof task.due_date === 'string' && task.due_date < todayChicago)
-    const revisionDesigns = designs.filter((design) => design.design_kind === 'event_concept' && design.status === 'revision_requested')
+    const overdueTasks = tasks.filter((task) => task.status !== 'completed' && typeof task.due_date === 'string' && task.due_date < todayChicago && isPlannerAttentionEligible(bookingMap.get(String(task.booking_id))?.status))
+    const revisionDesigns = designs.filter((design) => design.design_kind === 'event_concept' && design.status === 'revision_requested' && isPlannerAttentionEligible(bookingMap.get(String(design.booking_id))?.status))
     const [assignments, plannerFiles, vendorRows, designFiles] = section === 'overview' ? await Promise.all([
       supabaseRestStrict<PlannerRecord[]>('luxor_planner_event_vendors?select=*&status=neq.cancelled&limit=1000'),
       supabaseRestStrict<PlannerRecord[]>('luxor_planner_files?select=*&event_vendor_id=not.is.null&limit=2000'),
@@ -132,7 +133,7 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
     const vendorAttention = assignments.flatMap((assignment) => {
       const required = Array.isArray(assignment.required_documents) ? assignment.required_documents.filter((item): item is string => typeof item === 'string') : []
       const booking = bookingMap.get(String(assignment.booking_id))
-      if (!booking) return []
+      if (!booking || !isPlannerAttentionEligible(booking.status, assignment.status)) return []
       return required.flatMap((requirement) => {
         const matching = plannerFiles.filter((candidate) => candidate.event_vendor_id === assignment.id && plannerDocumentMatches(candidate, requirement))
         const validFile = matching.find((candidate) => typeof candidate.expires_at !== 'string' || candidate.expires_at >= todayChicago)
@@ -145,7 +146,7 @@ export async function listPlannerSection(section: PlannerSection, bookingId?: st
       ...overdueTasks.map((task) => ({ id: task.id, type: 'task', title: String(task.title), booking: bookingMap.get(String(task.booking_id)), dueDate: task.due_date })),
       ...revisionDesigns.map((design) => ({ id: design.id, type: 'design', title: `${String(design.name)} needs revisions`, booking: bookingMap.get(String(design.booking_id)), dueDate: null })),
       ...vendorAttention,
-    ].filter((item) => item.booking)
+    ].filter((item) => item.booking && isPlannerAttentionEligible(item.booking.status))
     const attention = allAttention.slice(0, 5)
     const events = eventHistory.sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''))
     return {
