@@ -2355,26 +2355,26 @@ function ThreadMessage({
         const layoutViewport = chat ? document.getElementById('luxor-email-fit-viewport') : null
         const layoutContent = chat ? document.getElementById('luxor-email-fit-content') : null
         if (layoutViewport && layoutContent) {
-          const declaredTableWidth = applyIntrinsicEmailTableWidths(layoutContent, document)
+          const availableWidth = Math.max(1, frame.parentElement?.clientWidth || frame.clientWidth)
+          const availableContentWidth = Math.max(1, availableWidth - 32)
+          const declaredTableWidth = applyIntrinsicEmailTableWidths(layoutContent, document, availableContentWidth)
           layoutContent.style.transform = 'none'
           layoutViewport.style.width = '100%'
           layoutContent.style.width = '100%'
           layoutContent.style.minWidth = '0'
           layoutContent.style.maxWidth = 'none'
-          const measuredWidth = Math.max(declaredTableWidth, layoutContent.scrollWidth, Math.ceil(layoutContent.getBoundingClientRect().width), 1)
+          const measuredWidth = Math.max(layoutContent.scrollWidth, Math.ceil(layoutContent.getBoundingClientRect().width), 1)
           // Expanded frames can make responsive descendants report the already-expanded viewport
           // as their scroll width. Keep the fit-mode measurement as the stable intrinsic width.
           const fitModeWidth = emailLayoutState?.frameKey === frameKey ? emailLayoutState.naturalWidth : measuredWidth
-          const naturalWidth = fullEmailSize ? fitModeWidth : measuredWidth
+          const naturalWidth = fullEmailSize ? Math.max(fitModeWidth, declaredTableWidth) : Math.max(measuredWidth, declaredTableWidth)
           const naturalHeight = Math.max(layoutContent.scrollHeight, Math.ceil(layoutContent.getBoundingClientRect().height), 1)
-          const availableWidth = Math.max(1, frame.parentElement?.clientWidth || frame.clientWidth)
-          const availableContentWidth = Math.max(1, availableWidth - 32)
-          const scale = fullEmailSize ? 1 : Math.min(1, availableContentWidth / naturalWidth)
-          layoutContent.style.transformOrigin = 'top left'
-          layoutContent.style.transform = scale < 0.999 ? `scale(${scale})` : 'none'
-          layoutViewport.style.height = `${Math.ceil(naturalHeight * scale)}px`
-          if (document.documentElement) document.documentElement.style.touchAction = fullEmailSize ? 'auto' : 'pan-y'
-          if (document.body) document.body.style.touchAction = fullEmailSize ? 'auto' : 'pan-y'
+          layoutViewport.style.height = `${naturalHeight}px`
+          if (document.documentElement) {
+            document.documentElement.style.touchAction = 'pan-y'
+            document.documentElement.dataset.luxorFullSize = fullEmailSize ? 'true' : 'false'
+          }
+          if (document.body) document.body.style.touchAction = 'pan-y'
           setEmailLayoutState((current) => current?.frameKey === frameKey && current.naturalWidth === naturalWidth && current.availableWidth === availableWidth
             ? current : { frameKey, naturalWidth, availableWidth })
         }
@@ -2450,6 +2450,12 @@ function ThreadMessage({
       }
       const handOffWheel = (event: WheelEvent) => {
         cancelContainerMomentum()
+        const tableScroll = (event.target as Element | null)?.closest?.<HTMLElement>('[data-luxor-table-scroll]')
+        if (tableScroll && (Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey)) {
+          tableScroll.scrollLeft += event.shiftKey ? event.deltaY : event.deltaX
+          event.preventDefault()
+          return
+        }
         if (fullEmailSize && (Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey)) {
           const horizontalScroll = frame.parentElement
           if (horizontalScroll) horizontalScroll.scrollLeft += event.shiftKey ? event.deltaY : event.deltaX
@@ -2495,6 +2501,16 @@ function ThreadMessage({
         }
         const horizontalDelta = lastTouchX - nextTouchX
         const delta = lastTouchY - nextTouchY
+        const tableScroll = (event.target as Element | null)?.closest?.<HTMLElement>('[data-luxor-table-scroll]')
+        if (tableScroll && Math.abs(horizontalDelta) > Math.abs(delta)) {
+          tableScroll.scrollLeft += horizontalDelta
+          touchVelocity = 0
+          lastTouchX = nextTouchX
+          lastTouchY = nextTouchY
+          lastTouchAt = event.timeStamp
+          if (event.cancelable) event.preventDefault()
+          return
+        }
         if (fullEmailSize && Math.abs(horizontalDelta) > Math.abs(delta)) {
           const horizontalScroll = frame.parentElement
           if (horizontalScroll) horizontalScroll.scrollLeft += horizontalDelta
@@ -2851,7 +2867,7 @@ function fixedPixelWidth(value: string | null | undefined) {
   return Number.isFinite(width) && width > 0 ? width : 0
 }
 
-function applyIntrinsicEmailTableWidths(root: HTMLElement, document: Document) {
+function applyIntrinsicEmailTableWidths(root: HTMLElement, document: Document, availableWidth: number) {
   const stylesheets = Array.from(document.styleSheets)
   let maximumWidth = 0
   root.querySelectorAll('table').forEach((table) => {
@@ -2860,6 +2876,13 @@ function applyIntrinsicEmailTableWidths(root: HTMLElement, document: Document) {
       maximumWidth = Math.max(maximumWidth, previousWidth)
       return
     }
+    const hasDirectHeader = Array.from(table.querySelectorAll('th')).some((cell) => cell.closest('table') === table)
+    const hasTableSemantics = table.getAttribute('role') === 'table' || table.getAttribute('role') === 'grid' || table.hasAttribute('aria-label')
+    const isPresentationTable = table.getAttribute('role') === 'presentation' || table.getAttribute('role') === 'none'
+    const rows = Array.from(table.querySelectorAll('tr')).filter((row) => row.closest('table') === table)
+    const hasDenseRows = !isPresentationTable && rows.length >= 3 && rows.some((row) => row.children.length >= 3)
+    if (!hasDirectHeader && !hasTableSemantics && !hasDenseRows) return
+
     const candidates = [fixedPixelWidth(table.getAttribute('width')), fixedPixelWidth(table.style.width)]
     const visitRules = (rules: CSSRuleList) => {
       Array.from(rules).forEach((rule) => {
@@ -2876,12 +2899,21 @@ function applyIntrinsicEmailTableWidths(root: HTMLElement, document: Document) {
     stylesheets.forEach((sheet) => {
       try { if (sheet.cssRules) visitRules(sheet.cssRules) } catch { /* cross-origin stylesheets are ignored */ }
     })
-    const fixedWidth = Math.max(...candidates)
-    if (fixedWidth > 0) {
+    const fixedWidth = Math.max(...candidates, Math.ceil(table.scrollWidth), Math.ceil(table.getBoundingClientRect().width))
+    if (fixedWidth > availableWidth + 8) {
       table.style.setProperty('width', `${fixedWidth}px`, 'important')
       table.style.setProperty('max-width', 'none', 'important')
+      table.setAttribute('data-luxor-wide-table', 'true')
       table.setAttribute('data-luxor-fit-width', `${fixedWidth}px`)
       maximumWidth = Math.max(maximumWidth, fixedWidth)
+
+      if (!table.parentElement?.hasAttribute('data-luxor-table-scroll')) {
+        const scrollWrapper = document.createElement('div')
+        scrollWrapper.setAttribute('data-luxor-table-scroll', 'true')
+        scrollWrapper.style.cssText = 'width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;'
+        table.parentNode?.insertBefore(scrollWrapper, table)
+        scrollWrapper.appendChild(table)
+      }
     }
   })
   return maximumWidth
@@ -2903,7 +2935,7 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   }
   const tableRules = chat ? 'table{max-width:none!important}' : 'table{max-width:100%!important}table[width]{width:100%!important}'
   const cellRules = chat ? 'td,th{max-width:none!important;overflow-wrap:normal!important;word-break:normal!important}' : 'td,th{max-width:100%;overflow-wrap:anywhere;word-break:break-word}'
-  const chatFitRules = chat ? '#luxor-email-fit-viewport{position:relative;width:100%;height:auto;overflow:visible}#luxor-email-fit-content{position:absolute;top:0;left:0;width:100%;min-width:0;max-width:none;transform-origin:top left;overflow:visible}' : ''
+  const chatFitRules = chat ? '#luxor-email-fit-viewport{position:relative;width:100%;height:auto;overflow:visible}#luxor-email-fit-content{position:absolute;top:0;left:0;width:100%;min-width:0;max-width:none;transform:none!important;overflow:visible}@media(max-width:639px){html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>table:not([data-luxor-wide-table]),html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>div,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>section,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>article,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content table:not([data-luxor-wide-table]){width:100%!important;min-width:0!important;max-width:100%!important;table-layout:auto!important}html:not([data-luxor-full-size="true"]) #luxor-email-fit-content td,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content th{max-width:100%!important;overflow-wrap:anywhere!important;word-break:normal!important}html:not([data-luxor-full-size="true"]) #luxor-email-fit-content [data-luxor-table-scroll]{width:100%!important;max-width:100%!important;overflow-x:auto!important;touch-action:pan-x pan-y!important}}' : ''
   const documentContent = chat ? `<div id="luxor-email-fit-viewport"><div id="luxor-email-fit-content">${content}</div></div>` : content
   const chatBodyAttribute = chat ? ' data-luxor-chat="true"' : ''
   return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}${tableRules}table.luxor-card{border-radius:16px!important;overflow:hidden!important}${cellRules}pre{white-space:pre-wrap;overflow-wrap:anywhere}${chatFitRules}${darkThemeFilter}</style></head><body${chatBodyAttribute}>${documentContent}</body></html>`
