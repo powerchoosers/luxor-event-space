@@ -2230,12 +2230,16 @@ function ThreadMessage({
   const reduceMotion = useReducedMotion()
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [fullEmailOpen, setFullEmailOpen] = useState(false)
+  const [fullEmailSizeState, setFullEmailSizeState] = useState<{ frameKey: string; value: boolean } | null>(null)
+  const [emailLayoutState, setEmailLayoutState] = useState<{ frameKey: string; naturalWidth: number; availableWidth: number } | null>(null)
   const [frameHeight, setFrameHeight] = useState(260)
   const [readyFrameKey, setReadyFrameKey] = useState<string | null>(null)
+  const frameElementRef = useRef<HTMLIFrameElement | null>(null)
   const frameObserverRef = useRef<ResizeObserver | null>(null)
   const frameResizeRequestRef = useRef<number>(0)
   const frameInteractionCleanupRef = useRef<(() => void) | null>(null)
   const cleanupMessageFrame = useCallback((frame: HTMLIFrameElement | null) => {
+    frameElementRef.current = frame
     if (frame) return
     frameObserverRef.current?.disconnect()
     frameObserverRef.current = null
@@ -2280,7 +2284,13 @@ function ThreadMessage({
   }), [message, collapsedQuoteBody, conversationHtml])
   const html = useMemo(() => buildMessageDocument(displayedMessage, blockExternalImages, portalTheme, chat), [displayedMessage, blockExternalImages, portalTheme, chat])
   const frameKey = `${messageKey(message)}:${compactLuxorBody && !fullEmailOpen ? 'conversation-body' : 'full-email'}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`
+  const fullEmailSize = fullEmailSizeState?.frameKey === frameKey && fullEmailSizeState.value
+  const emailLayout = emailLayoutState?.frameKey === frameKey ? emailLayoutState : null
+  const fullEmailFrameWidth = emailLayout
+    ? Math.max(emailLayout.naturalWidth + (emailLayout.naturalWidth + 32 >= 640 ? 40 : 32), emailLayout.availableWidth)
+    : 0
   const ccLabel = message.cc ? mailboxLabel(message.cc, inquiryByEmail, '') : ''
+  const resizeFrameRef = useRef<(frame: HTMLIFrameElement) => void>(() => undefined)
 
   const resizeFrame = (frame: HTMLIFrameElement) => {
     const document = frame.contentDocument
@@ -2294,6 +2304,25 @@ function ThreadMessage({
       if (frameResizeRequestRef.current) return
       frameResizeRequestRef.current = window.requestAnimationFrame(() => {
         frameResizeRequestRef.current = 0
+        const layoutViewport = chat ? document.getElementById('luxor-email-fit-viewport') : null
+        const layoutContent = chat ? document.getElementById('luxor-email-fit-content') : null
+        if (layoutViewport && layoutContent) {
+          layoutContent.style.transform = 'none'
+          layoutViewport.style.width = '100%'
+          layoutContent.style.width = '100%'
+          layoutContent.style.minWidth = '0'
+          layoutContent.style.maxWidth = 'none'
+          const naturalWidth = Math.max(layoutContent.scrollWidth, Math.ceil(layoutContent.getBoundingClientRect().width), 1)
+          const naturalHeight = Math.max(layoutContent.scrollHeight, Math.ceil(layoutContent.getBoundingClientRect().height), 1)
+          const availableWidth = Math.max(1, frame.parentElement?.clientWidth || frame.clientWidth)
+          const availableContentWidth = Math.max(1, availableWidth - 32)
+          const scale = fullEmailSize ? 1 : Math.min(1, availableContentWidth / naturalWidth)
+          layoutContent.style.transformOrigin = 'top left'
+          layoutContent.style.transform = scale < 0.999 ? `scale(${scale})` : 'none'
+          layoutViewport.style.height = `${Math.ceil(naturalHeight * scale)}px`
+          setEmailLayoutState((current) => current?.frameKey === frameKey && current.naturalWidth === naturalWidth && current.availableWidth === availableWidth
+            ? current : { frameKey, naturalWidth, availableWidth })
+        }
         const bodyHeight = document.body
           ? Math.max(document.body.scrollHeight, Math.ceil(document.body.getBoundingClientRect().height))
           : 0
@@ -2438,6 +2467,20 @@ function ThreadMessage({
     }
   }
 
+  useEffect(() => {
+    resizeFrameRef.current = resizeFrame
+  }, [resizeFrame])
+
+  useEffect(() => {
+    const frame = frameElementRef.current
+    if (!chat || !frame || !emailLayout) return
+    frame.style.width = fullEmailSize ? `${fullEmailFrameWidth}px` : '100%'
+    frameResizeRequestRef.current = window.requestAnimationFrame(() => {
+      frameResizeRequestRef.current = 0
+      resizeFrameRef.current(frame)
+    })
+  }, [chat, emailLayout, fullEmailSize])
+
   useEffect(() => () => {
     frameObserverRef.current?.disconnect()
     if (frameResizeRequestRef.current) window.cancelAnimationFrame(frameResizeRequestRef.current)
@@ -2460,13 +2503,21 @@ function ThreadMessage({
               ? 'rounded-br-md border-[#caa24c]/30 bg-[#fbf3df] text-[#34291b] dark:border-[#caa24c]/25 dark:bg-[#725b2f]/25 dark:text-[color:var(--portal-text)]'
               : 'rounded-bl-md border-[color:var(--portal-border)] bg-[#f4f1ed] text-[color:var(--portal-text)] dark:bg-[color:var(--portal-soft)]'}`}>
               {viewMode === 'html' ? (
+                <>
+                {emailLayout && emailLayout.naturalWidth > emailLayout.availableWidth + 8 ? <div className="flex items-center justify-end px-3 pt-1">
+                  <button type="button" onClick={() => setFullEmailSizeState((current) => ({ frameKey, value: current?.frameKey === frameKey ? !current.value : true }))} aria-pressed={fullEmailSize}
+                    className="min-h-9 rounded-md px-2 text-xs font-medium text-[#8c6529] underline decoration-[#caa24c]/50 underline-offset-2 hover:text-[#6f4c1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] dark:text-[#f1d27a]">
+                    {fullEmailSize ? 'Fit email to screen' : 'View email at full size'}
+                  </button>
+                </div> : null}
+                <div className="min-w-0 max-w-full overflow-x-auto">
                 <iframe
                   key={frameKey}
                   srcDoc={html}
                   title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
                   ref={cleanupMessageFrame}
-                  className="block w-full max-w-full border-0 bg-transparent touch-pan-y"
-                  style={{ height: frameHeight, opacity: readyFrameKey === frameKey ? 1 : 0, transition: reduceMotion ? 'none' : 'opacity 160ms ease-out' }}
+                  className="block max-w-none border-0 bg-transparent touch-pan-y"
+                  style={{ width: chat && fullEmailSize && emailLayout ? `${fullEmailFrameWidth}px` : '100%', height: frameHeight, opacity: readyFrameKey === frameKey ? 1 : 0, transition: reduceMotion ? 'none' : 'opacity 160ms ease-out' }}
                   scrolling="no"
                   onLoad={(event) => {
                     const frame = event.currentTarget
@@ -2477,6 +2528,8 @@ function ThreadMessage({
                   }}
                   sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
                 />
+                </div>
+                </>
               ) : (
                 <div className="min-h-10 whitespace-pre-wrap break-words px-3 py-2 font-sans text-sm leading-6 text-[color:var(--portal-text)] sm:px-4">
                   {message.content || message.summary || 'No message body available.'}
@@ -2722,7 +2775,12 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%!important}table[width]{width:100%!important}table.luxor-card{border-radius:16px!important;overflow:hidden!important}td,th{max-width:100%;overflow-wrap:anywhere;word-break:break-word}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
+  const tableRules = chat ? 'table{max-width:none!important}' : 'table{max-width:100%!important}table[width]{width:100%!important}'
+  const cellRules = chat ? 'td,th{max-width:none!important;overflow-wrap:normal!important;word-break:normal!important}' : 'td,th{max-width:100%;overflow-wrap:anywhere;word-break:break-word}'
+  const chatFitRules = chat ? '#luxor-email-fit-viewport{position:relative;width:100%;height:auto;overflow:visible}#luxor-email-fit-content{position:absolute;top:0;left:0;width:100%;min-width:0;max-width:none;transform-origin:top left;overflow:visible}' : ''
+  const documentContent = chat ? `<div id="luxor-email-fit-viewport"><div id="luxor-email-fit-content">${content}</div></div>` : content
+  const chatBodyAttribute = chat ? ' data-luxor-chat="true"' : ''
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}${tableRules}table.luxor-card{border-radius:16px!important;overflow:hidden!important}${cellRules}pre{white-space:pre-wrap;overflow-wrap:anywhere}${chatFitRules}${darkThemeFilter}</style></head><body${chatBodyAttribute}>${documentContent}</body></html>`
 }
 
 function hasDarkEmailSurface(html: string) {
