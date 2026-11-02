@@ -14,6 +14,7 @@ interface EmailRichTextEditorProps {
   readOnly?: boolean
   hideToolbar?: boolean
   focusMode?: boolean
+  compact?: boolean
   bodyClassName?: string
   onReadOnlyBodyClick?: () => void
   onReadOnlyCommand?: (command: string) => void
@@ -33,6 +34,7 @@ export function EmailRichTextEditor({
   readOnly = false,
   hideToolbar = false,
   focusMode = false,
+  compact = false,
   bodyClassName = '',
   onReadOnlyBodyClick,
   onReadOnlyCommand,
@@ -61,7 +63,7 @@ export function EmailRichTextEditor({
     const frame = window.requestAnimationFrame(() => {
       const editor = editorRef.current
       if (!editor) return
-      editor.focus({ preventScroll: focusMode })
+      editor.focus({ preventScroll: focusMode || compact })
       const selection = window.getSelection()
       if (selection) {
         const range = document.createRange()
@@ -90,7 +92,7 @@ export function EmailRichTextEditor({
       if (initialCommand) onInitialCommandApplied?.()
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [autoFocus, readOnly, focusMode, initialCommand, onInitialCommandApplied, syncValue])
+  }, [autoFocus, readOnly, focusMode, compact, initialCommand, onInitialCommandApplied, syncValue])
 
   const saveSelection = () => {
     const selection = window.getSelection()
@@ -134,7 +136,7 @@ export function EmailRichTextEditor({
   }
 
   return (
-    <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] focus-within:border-[#caa24c]/55 ${focusMode ? 'rounded-none border-0 focus-within:border-0' : ''} ${className}`}>
+    <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] focus-within:border-[#caa24c]/55 ${focusMode || compact ? 'rounded-none border-0 focus-within:border-0' : ''} ${className}`}>
       {!hideToolbar && <div role="toolbar" aria-label="Email formatting" className="flex min-h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/65 px-1.5">
         <FormatButton label="Bold" icon={<Bold size={15} />} onClick={() => runCommand('bold')} />
         <FormatButton label="Italic" icon={<Italic size={15} />} onClick={() => runCommand('italic')} />
@@ -157,7 +159,7 @@ export function EmailRichTextEditor({
           <ImageIcon size={15} />
         </button>
       </div>}
-      <div className={`relative flex min-h-0 flex-1 flex-col ${focusMode ? 'bg-[color:var(--portal-bg)]' : ''}`}>
+      <div className={`relative flex min-h-0 flex-1 flex-col ${focusMode || compact ? 'bg-[color:var(--portal-bg)]' : ''}`}>
         <div
           ref={editorRef}
           role={readOnly ? (onReadOnlyBodyClick ? 'button' : 'presentation') : 'textbox'}
@@ -169,7 +171,7 @@ export function EmailRichTextEditor({
           tabIndex={readOnly ? (onReadOnlyBodyClick ? 0 : -1) : undefined}
           onInput={readOnly ? undefined : syncValue}
           onBlur={readOnly ? undefined : syncValue}
-          onFocus={readOnly || focusMode ? undefined : (event) => event.currentTarget.scrollIntoView({ block: 'nearest' })}
+          onFocus={readOnly || focusMode || compact ? undefined : (event) => event.currentTarget.scrollIntoView({ block: 'nearest' })}
           onClick={readOnly ? onReadOnlyBodyClick : undefined}
           onKeyDown={readOnly && onReadOnlyBodyClick ? (event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -177,10 +179,29 @@ export function EmailRichTextEditor({
               onReadOnlyBodyClick()
             }
           } : undefined}
-          className={`flex-1 overflow-y-auto overscroll-contain px-3 py-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none [overflow-wrap:anywhere] sm:px-4 sm:py-4 ${focusMode ? 'min-h-0 bg-[color:var(--portal-bg)] px-4 py-5 text-[18px] leading-8 sm:px-5 sm:py-6' : 'min-h-[11rem] bg-[color:var(--portal-bg)]'} ${readOnly ? 'cursor-pointer' : ''} ${bodyClassName}`}
-          style={{ scrollMarginBlock: focusMode ? '1rem' : '5rem', WebkitOverflowScrolling: 'touch' }}
+          className={`flex-1 overflow-y-auto overscroll-contain text-[color:var(--portal-text)] outline-none [overflow-wrap:anywhere] ${
+            compact
+              ? 'min-h-0 bg-[color:var(--portal-bg)] px-3 py-2.5 text-[15px] sm:text-base leading-relaxed'
+              : focusMode
+                ? 'min-h-0 bg-[color:var(--portal-bg)] px-4 py-5 text-[18px] leading-8 sm:px-5 sm:py-6'
+                : 'min-h-[11rem] bg-[color:var(--portal-bg)] px-3 py-3 text-sm leading-relaxed sm:px-4 sm:py-4'
+          } ${readOnly ? 'cursor-pointer' : ''} ${bodyClassName}`}
+          style={{ scrollMarginBlock: focusMode || compact ? '1rem' : '5rem', WebkitOverflowScrolling: 'touch' }}
         />
-        {EMPTY_EDITOR_HTML.test(value) && <div aria-hidden="true" className={`pointer-events-none absolute text-sm leading-relaxed text-[color:var(--portal-faint)] ${focusMode ? 'left-4 top-5 px-4 text-[18px] leading-8 sm:left-5 sm:top-6 sm:px-5' : 'left-3 top-3 sm:left-4 sm:top-4'}`}>{placeholder}</div>}
+        {EMPTY_EDITOR_HTML.test(value) && (
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute text-[color:var(--portal-faint)] ${
+              compact
+                ? 'left-3 top-2.5 text-[15px] sm:text-base leading-relaxed'
+                : focusMode
+                  ? 'left-4 top-5 text-[18px] leading-8 sm:left-5 sm:top-6'
+                  : 'left-3 top-3 text-sm leading-relaxed sm:left-4 sm:top-4'
+            }`}
+          >
+            {placeholder}
+          </div>
+        )}
       </div>
       <AnimatePresence>
         {assetPickerOpen && (

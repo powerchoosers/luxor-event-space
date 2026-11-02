@@ -27,7 +27,12 @@ type ToastContextValue = {
   dismiss: (id: string) => void
 }
 
-const ToastContext = createContext<ToastContextValue | null>(null)
+const noopToastContext: ToastContextValue = {
+  notify: () => '',
+  dismiss: () => {},
+}
+
+const ToastContext = createContext<ToastContextValue>(noopToastContext)
 
 const variantStyles: Record<ToastVariant, { icon: ReactNode; className: string; labelClassName: string }> = {
   info: {
@@ -154,8 +159,5 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast() {
   const context = useContext(ToastContext)
-  if (!context) {
-    throw new Error('useToast must be used inside ToastProvider.')
-  }
-  return context
+  return context || noopToastContext
 }
