@@ -292,9 +292,9 @@ set search_path = ''
 as $$
 declare
   v_invoice public.luxor_invoices;
+  v_existing_payment public.luxor_payments;
   v_paid numeric(12,2);
 begin
-  if new.status <> 'paid' or new.invoice_id is null then return new; end if;
   if tg_op = 'UPDATE'
     and new.status is not distinct from old.status
     and new.amount is not distinct from old.amount
@@ -303,6 +303,32 @@ begin
   end if;
 
   perform pg_advisory_xact_lock(2147483000,400);
+  -- INSERT ... ON CONFLICT invokes BEFORE INSERT before PostgreSQL resolves the
+  -- conflicting row. Recognize exact stable-transaction retries before adding
+  -- NEW.amount to the invoice total; reject reuse of a processor/reference
+  -- pair with different financial details.
+  if tg_op = 'INSERT' and new.processor is not null and new.processor_reference is not null then
+    select * into v_existing_payment from public.luxor_payments
+      where processor = new.processor and processor_reference = new.processor_reference
+      for update;
+    if found then
+      if v_existing_payment.invoice_id is distinct from new.invoice_id
+        or v_existing_payment.booking_id is distinct from new.booking_id
+        or v_existing_payment.amount is distinct from new.amount
+        or v_existing_payment.payment_method is distinct from new.payment_method then
+        raise exception 'This payment transaction reference was already used with different financial details.' using errcode = '23505';
+      end if;
+      if v_existing_payment.status = 'paid' then
+        if new.status is distinct from 'paid' or v_existing_payment.paid_at is distinct from new.paid_at then
+          raise exception 'This paid transaction reference was already used with different payment details.' using errcode = '23505';
+        end if;
+        -- Exact paid retry: allow ON CONFLICT to resolve to the same ledger row
+        -- without charging its amount against the invoice a second time.
+        return new;
+      end if;
+    end if;
+  end if;
+  if new.status <> 'paid' or new.invoice_id is null then return new; end if;
   select * into v_invoice from public.luxor_invoices where id = new.invoice_id for update;
   if not found or v_invoice.invoice_kind <> 'final_balance' then return new; end if;
 
