@@ -20,7 +20,8 @@ import {
   CalendarDays as CalendarEdit,
 } from 'lucide-react'
 import type { LuxorBooking, LuxorEmailJob, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
-import { eventCreditForPayment as paymentMoneyForEvent, hasOverdueInstallment, installmentDisplayState, installmentPaidAmount, installmentsForInvoiceStatus, isBookingPaymentMilestone, isCalendarDateDueInChicago, isCalendarDateBeforeChicagoToday, paidOnInvoice } from '@/lib/luxorPaymentDashboardModel'
+import { getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
+import { eventCreditForPayment as paymentMoneyForEvent, getInvoiceCollectionDisplayState, installmentDisplayState, installmentPaidAmount, isBookingPaymentMilestone, isCalendarDateDueInChicago, paymentDisplayReceivedDate } from '@/lib/luxorPaymentDashboardModel'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 
 const PaymentReceiptPdfPreview = dynamic(() => import('./PaymentReceiptPdfPreview'), {
@@ -176,6 +177,10 @@ export function LeadPaymentsDashboard({
   const invoiceById = useMemo(() => new Map(invoices.map((invoice) => [invoice.id, invoice])), [invoices])
   const uniquePayments = useMemo(() => Array.from(new Map(payments.map((payment) => [payment.id, payment])).values())
     .sort((left, right) => Date.parse(right.received_date || right.paid_at || right.created_at) - Date.parse(left.received_date || left.paid_at || left.created_at)), [payments])
+  const invoiceFinancialSummary = useMemo(
+    () => getLuxorInvoiceFinancialSummary(invoices, uniquePayments, new Set(), new Set(), installments),
+    [invoices, uniquePayments, installments],
+  )
   const paidTotal = useMemo(() => round(uniquePayments.reduce((total, payment) => total + paymentMoneyForEvent(payment, invoiceById.get(payment.invoice_id || '')), 0)), [invoiceById, uniquePayments])
   const eventPrice = Math.max(0, round(Number(eventInvoice?.total || booking?.contract_total || 0)))
   const remaining = Math.max(0, round(eventPrice - paidTotal))
@@ -237,7 +242,7 @@ export function LeadPaymentsDashboard({
     .filter(isFutureQueuedReminder)
     .sort((left, right) => Date.parse(left.scheduled_for) - Date.parse(right.scheduled_for))[0]
   const categorizedPayments = useMemo(() => uniquePayments.map((payment) => ({ payment, invoice: invoiceById.get(payment.invoice_id || '') })), [invoiceById, uniquePayments])
-  const displayReceivedDate = (payment: LuxorPayment) => receivedDateOverrides[payment.id] || payment.received_date || payment.paid_at || payment.created_at
+  const displayReceivedDate = (payment: LuxorPayment) => paymentDisplayReceivedDate(payment, receivedDateOverrides[payment.id])
   const selectedInstallment = timelineInstallments.find((item) => item.id === recordInstallmentId) || timelineInstallments[0]
   const selectedInstallmentRemaining = selectedInstallment
     ? Math.max(0, round(Number(selectedInstallment.amount || 0) - installmentPaidAmount(selectedInstallment, uniquePayments)))
@@ -428,7 +433,7 @@ export function LeadPaymentsDashboard({
           <div className="relative ml-2 space-y-1 before:absolute before:bottom-3 before:left-[11px] before:top-4 before:w-px before:bg-[#d8c6ac]">
             <div className="relative grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 py-3">
               <span className={`z-10 grid h-6 w-6 place-items-center rounded-full ${lastDeposit ? 'bg-emerald-600 text-white' : 'border-2 border-[#c7b69d] bg-white text-[#8b7a67]'}`}>{lastDeposit ? <Check size={14} /> : <Clock3 size={15} />}</span>
-              <div className="min-w-0"><p className="font-semibold">Booking Deposit</p><p className="text-xs text-[#78685a]">{lastDeposit ? `Received ${formatDate(lastDeposit.paid_at || lastDeposit.created_at)}` : 'No received booking deposit recorded'}</p></div>
+              <div className="min-w-0"><p className="font-semibold">Booking Deposit</p><p className="text-xs text-[#78685a]">{lastDeposit ? `Received ${formatDate(displayReceivedDate(lastDeposit))}` : 'No received booking deposit recorded'}</p></div>
               <div className="text-right"><p className="font-semibold tabular-nums">{formatMoney(scheduledDepositPaid)}</p><span className={`text-[10px] font-bold uppercase tracking-wide ${lastDeposit ? 'text-emerald-700' : 'text-[#8b7a67]'}`}>{lastDeposit ? 'Paid' : 'Pending'}</span></div>
             </div>
             <div className="flex items-center gap-3 py-2"><span className="z-10 h-2 w-2 rounded-full bg-[#c29448]" /><p className="flex flex-1 items-center gap-3 text-[10px] font-bold uppercase tracking-[0.15em] text-[#a6772b]">Monthly payments<span className="h-px flex-1 bg-[#d8c6ac]" /></p></div>
@@ -473,19 +478,15 @@ export function LeadPaymentsDashboard({
               <div className="hidden overflow-x-auto rounded-xl border border-[#eee5dc] sm:block"><table className="w-full border-collapse text-left text-xs"><thead className="bg-[#faf5ee] text-[10px] uppercase tracking-wide text-[#78685a]"><tr>{['Date', 'Description', 'Amount', 'Method', 'Applied To', 'Receipt'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#f1eae2]">{categorizedPayments.length ? categorizedPayments.map(({ payment, invoice }) => <tr key={payment.id}><td className="whitespace-nowrap px-3 py-3">{formatDate(displayReceivedDate(payment))}</td><td className="px-3 py-3 font-medium">{paymentDescription(payment, invoice)}{payment.status !== 'paid' ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-amber-800">{payment.status}</span> : null}</td><td className="whitespace-nowrap px-3 py-3 font-semibold tabular-nums">{formatMoney(Number(payment.amount || 0))}</td><td className="px-3 py-3">{payment.payment_method || 'Not recorded'}</td><td className="px-3 py-3">{appliedTo(payment, invoice)}</td><td className="px-3 py-3">{payment.status === 'paid' ? <div className="flex items-center gap-2"><button type="button" onClick={() => setSelectedPayment(payment)} className="inline-flex items-center gap-1 text-[#91651f] hover:underline"><Eye size={14} /> View</button><a href={`/api/payments/${encodeURIComponent(payment.id)}/receipt`} className="text-[#91651f] hover:underline">Download</a>{payment.processor === 'manual' ? <button type="button" onClick={() => { void openReceivedDateCorrection(payment) }} className="text-[#91651f] hover:underline">Correct date</button> : null}</div> : <span className="text-[#988979]">—</span>}</td></tr>) : <tr><td colSpan={6} className="px-3 py-8 text-center text-sm text-[#78685a]">No payment transactions are recorded for this event.</td></tr>}</tbody></table></div>
             </div> : null}
             {activeTab === 'invoices' ? <div className="space-y-3">{invoices.length ? invoices.map((invoice) => {
-              const invoicePaid = paidOnInvoice(invoice, invoices, uniquePayments)
-              const total = Number(invoice.total || 0)
-              const balance = Math.max(0, round(total - invoicePaid))
+              const collection = getInvoiceCollectionDisplayState(invoice, invoices, uniquePayments, installments, new Date(), invoiceFinancialSummary)
+              const invoicePaid = collection.paidAmount
+              const total = collection.collectionStatus ? collection.totalDue : Number(invoice.total || 0)
+              const balance = collection.balanceDue
               const dueAt = invoice.due_date
-              const invoiceSchedule = installmentsForInvoiceStatus(invoice, installments)
-              const scheduleControlsOverdue = invoiceSchedule.length > 0
-              const overdueBySchedule = hasOverdueInstallment(invoiceSchedule, uniquePayments)
-              const overdueByInvoice = invoice.payment_requested_at && isCalendarDateBeforeChicagoToday(dueAt)
-              const isOverdue = balance > 0 && invoice.status !== 'draft' && (scheduleControlsOverdue ? overdueBySchedule : overdueByInvoice)
-              const status = invoice.status === 'cancelled' ? 'Cancelled' : balance <= 0 && invoicePaid > 0 ? 'Paid' : invoice.status === 'draft' ? 'Draft' : isOverdue ? 'Overdue' : invoicePaid > 0 ? 'Partially paid' : invoice.status === 'paid' ? 'Needs reconciliation' : 'Open'
+              const lifecycleStatus = invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)
               const supportsPaymentRequest = invoice.invoice_kind === 'deposit' || invoice.invoice_kind === 'final_balance' || invoice.invoice_kind === 'security_deposit'
               const canRequestPayment = balance > 0 && supportsPaymentRequest && invoice.status !== 'draft' && invoice.status !== 'cancelled' && invoice.status !== 'paid'
-              return <article key={invoice.id} className="grid gap-3 rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-4 md:grid-cols-[1fr_auto] md:items-center"><div className="min-w-0"><p className="font-semibold">{invoice.description || `${invoice.invoice_kind || 'Event'} invoice`}</p><p className="mt-1 text-xs text-[#78685a]">Invoice {invoice.id.slice(0, 8).toUpperCase()} · Issued {formatDate(invoice.created_at)} · Due {formatDate(dueAt)}</p><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs"><span>Total <strong>{formatMoney(total)}</strong></span><span>Paid <strong>{formatMoney(invoicePaid)}</strong></span><span>Outstanding <strong>{formatMoney(balance)}</strong></span><span className="font-semibold text-[#91651f]">{status}</span></div></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onViewInvoice(invoice)} className="rounded-lg border border-[#e7d6be] px-3 py-2 text-xs font-semibold text-[#624d35]">View</button><a href={`/api/invoices/${encodeURIComponent(invoice.id)}/pdf`} className="rounded-lg border border-[#e7d6be] px-3 py-2 text-xs font-semibold text-[#624d35]">Download</a>{canRequestPayment ? <button type="button" onClick={() => onRequestInvoicePayment(invoice)} className="rounded-lg bg-[#b88737] px-3 py-2 text-xs font-semibold text-white">Payment request</button> : null}</div></article>
+              return <article key={invoice.id} className="grid gap-3 rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-4 md:grid-cols-[1fr_auto] md:items-center"><div className="min-w-0"><p className="font-semibold">{invoice.description || `${invoice.invoice_kind || 'Event'} invoice`}</p><p className="mt-1 text-xs text-[#78685a]">Invoice {invoice.id.slice(0, 8).toUpperCase()} · Issued {formatDate(invoice.created_at)} · Due {formatDate(dueAt)}</p><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs"><span>Total <strong>{formatMoney(total)}</strong></span><span>Paid <strong>{formatMoney(invoicePaid)}</strong></span><span>Outstanding <strong>{formatMoney(balance)}</strong></span></div><div className="mt-2 flex flex-wrap items-center gap-2"><span aria-label={`Stored lifecycle status: ${lifecycleStatus}`} className="rounded-full border border-[#eadfcf] bg-[#faf5ee] px-2.5 py-1 text-[10px] font-semibold text-[#624d35]">Stored lifecycle: {lifecycleStatus}</span>{collection.collectionStatus ? <span aria-label={`Collection status: ${collection.collectionStatus}`} className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2.5 py-1 text-[10px] font-semibold text-[#8b6424]">Collection: {collection.collectionStatus}</span> : null}</div></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onViewInvoice(invoice)} className="rounded-lg border border-[#e7d6be] px-3 py-2 text-xs font-semibold text-[#624d35]">View</button><a href={`/api/invoices/${encodeURIComponent(invoice.id)}/pdf`} className="rounded-lg border border-[#e7d6be] px-3 py-2 text-xs font-semibold text-[#624d35]">Download</a>{canRequestPayment ? <button type="button" onClick={() => onRequestInvoicePayment(invoice)} className="rounded-lg bg-[#b88737] px-3 py-2 text-xs font-semibold text-white">Payment request</button> : null}</div></article>
             }) : <p className="rounded-xl border border-dashed border-[#e7d6be] p-8 text-center text-sm text-[#78685a]">No invoices are associated with this event.</p>}</div> : null}
             {activeTab === 'receipts' ? <div className="space-y-2">{receiptEmailMessage ? <p role="status" className="rounded-lg bg-[#faf5ee] p-3 text-xs text-[#624d35]">{receiptEmailMessage}</p> : null}{paidPayments.length ? paidPayments.map((payment) => {
               const invoice = invoiceById.get(payment.invoice_id || '')

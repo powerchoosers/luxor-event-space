@@ -13,6 +13,7 @@ import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { LuxorInvoice, type LuxorBooking, type LuxorPayment, type LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
 import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
+import { getInvoiceCollectionDisplayState } from '@/lib/luxorPaymentDashboardModel'
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -300,8 +301,8 @@ export default function InvoicesPage() {
               <th className="px-6 py-5">Client Portfolio</th>
               <th className="px-6 py-5">Value (USD)</th>
               <th className="px-6 py-5">Date Summary</th>
-              <th className="px-6 py-5">Fulfillment</th>
-              <th className="px-8 py-5 text-right">Lifecycle status</th>
+              <th className="px-6 py-5">Stored lifecycle / collection</th>
+              <th className="px-8 py-5 text-right">Actions</th>
             </tr>
           </PortalStickyThead>
           <tbody className="divide-y divide-[color:var(--portal-border)]/50">
@@ -353,7 +354,14 @@ export default function InvoicesPage() {
                     </div>
                   </td>
                   <td className="px-6 py-6">
-                    <PortalStatusBadge status={inv.status} />
+                    <div className="flex flex-col items-start gap-1.5">
+                      <span className="text-[9px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Stored lifecycle</span>
+                      <PortalStatusBadge status={inv.status} />
+                      {financeVerified && !financeRows.testInvoiceIds.has(inv.id.toLowerCase()) ? (() => {
+                        const collection = getInvoiceCollectionDisplayState(inv, invoices, payments, installments, new Date(), financialSummary || undefined)
+                        return collection.collectionStatus ? <span aria-label={`Collection status: ${collection.collectionStatus}`} className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2.5 py-1 text-[10px] font-semibold text-[#8b6424]">Collection: {collection.collectionStatus}</span> : null
+                      })() : null}
+                    </div>
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex items-center justify-end gap-2">

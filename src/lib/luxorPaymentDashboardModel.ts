@@ -31,6 +31,10 @@ export function eventCreditForPayment(payment: LuxorPayment, invoice?: LuxorInvo
   return roundMoney(amount)
 }
 
+export function paymentDisplayReceivedDate(payment: Pick<LuxorPayment, 'received_date' | 'paid_at' | 'created_at'>, override?: string | null) {
+  return override || payment.received_date || payment.paid_at || payment.created_at
+}
+
 export function isBookingPaymentMilestone(installment: LuxorPaymentInstallment) {
   return installment.installment_order === 1 && installment.label.trim().toLowerCase() === 'booking payment'
 }
@@ -185,6 +189,89 @@ export function paidOnInvoice(invoice: LuxorInvoice, invoices: LuxorInvoice[], p
   const invoiceById = new Map(invoices.map((item) => [item.id, item]))
   return roundMoney(payments.filter((payment) => payment.status === 'paid' && payment.invoice_id && relatedIds.has(payment.invoice_id))
     .reduce((sum, payment) => sum + (invoice.invoice_kind === 'event' ? eventCreditForPayment(payment, invoiceById.get(payment.invoice_id || '')) : Number(payment.amount) || 0), 0))
+}
+
+export function refundableSecurityAmount(invoice: LuxorInvoice) {
+  return roundMoney((Array.isArray(invoice.line_items) ? invoice.line_items : []).reduce((sum, item) => {
+    const isSecurity = item.paymentBucket === 'security_deposit'
+      || item.category === 'Security Deposit'
+      || /refundable\s+security\s+deposit/i.test(item.description || '')
+    return isSecurity ? sum + Number(item.total || 0) : sum
+  }, 0))
+}
+
+/** The accepted event-service obligation, excluding a refundable deposit. */
+export function invoiceEventObligation(invoice: LuxorInvoice) {
+  const context = invoice.proposal_context as Record<string, unknown> | null | undefined
+  const scopedLuxorAmount = Number(context?.luxor_services_total)
+  if (context?.payment_collection_scope === 'luxor_services_only' && Number.isFinite(scopedLuxorAmount)) {
+    return roundMoney(Math.max(0, scopedLuxorAmount))
+  }
+  return roundMoney(Math.max(0, Number(invoice.total || 0) - refundableSecurityAmount(invoice)))
+}
+
+export type InvoiceCollectionStatus = 'Open' | 'Partially paid' | 'Paid' | 'Overdue' | 'Needs reconciliation'
+
+/**
+ * Derive a collection label without changing the invoice's persisted lifecycle status.
+ * Only an accepted, current event proposal (or a child invoice linked to one) creates
+ * an obligation. Saved installment remainders control overdue state when available.
+ */
+export function getInvoiceCollectionDisplayState(
+  invoice: LuxorInvoice,
+  invoices: LuxorInvoice[],
+  payments: LuxorPayment[],
+  installments: LuxorPaymentInstallment[],
+  now = new Date(),
+  financialSummary?: { acceptedInvoiceRows?: Array<{ invoice: Pick<LuxorInvoice, 'id'>; eventObligation: number; received: number; overdue: number }> },
+) {
+  const empty = { paidAmount: 0, totalDue: 0, balanceDue: 0, collectionStatus: null as InvoiceCollectionStatus | null }
+  if (invoice.status === 'draft' || invoice.status === 'cancelled' || invoice.offer_status === 'withdrawn') return empty
+
+  const byId = new Map(invoices.map((item) => [item.id, item]))
+  let root = invoice
+  const visited = new Set<string>()
+  while (root.parent_invoice_id) {
+    if (visited.has(root.id)) return empty
+    visited.add(root.id)
+    const parent = byId.get(root.parent_invoice_id)
+    if (!parent) return empty
+    root = parent
+  }
+  if (visited.has(root.id)) return empty
+
+  const isInvoiceEventMaster = !invoice.parent_invoice_id && (!invoice.invoice_kind || invoice.invoice_kind === 'event')
+  const rootIsEventMaster = !root.parent_invoice_id && (!root.invoice_kind || root.invoice_kind === 'event')
+  const historicalPaidAmount = paidOnInvoice(invoice, invoices, payments)
+  if (!rootIsEventMaster || !root.proposal_accepted_at || root.status === 'draft' || root.status === 'cancelled' || root.offer_status === 'withdrawn') return empty
+
+  // Historical accepted proposal versions remain visible in the table but no longer
+  // represent the current receivable once a later accepted version supersedes them.
+  const superseded = invoices.some((candidate) => candidate.supersedes_invoice_id === root.id
+    && Boolean(candidate.proposal_accepted_at)
+    && candidate.status !== 'draft' && candidate.status !== 'cancelled'
+    && candidate.offer_status !== 'withdrawn')
+  if (superseded) return { ...empty, paidAmount: historicalPaidAmount }
+
+  const masterRow = isInvoiceEventMaster
+    ? financialSummary?.acceptedInvoiceRows?.find((row) => row.invoice.id === invoice.id)
+    : undefined
+  const paidAmount = masterRow?.received ?? historicalPaidAmount
+  const total = isInvoiceEventMaster ? masterRow?.eventObligation ?? invoiceEventObligation(invoice) : Math.max(0, Number(invoice.total || 0))
+  const balanceDue = Math.max(0, Math.round((total - paidAmount + Number.EPSILON) * 100) / 100)
+  if (total <= 0) return empty
+
+  const schedule = isInvoiceEventMaster ? installmentsForInvoiceStatus(invoice, installments) : []
+  const overdueBySchedule = masterRow ? masterRow.overdue > 0 : schedule.length > 0 && hasOverdueInstallment(schedule, payments, now)
+  const overdueByInvoice = Boolean(invoice.payment_requested_at && isCalendarDateBeforeChicagoToday(invoice.due_date, now))
+  const isOverdue = balanceDue > 0.005 && (masterRow ? overdueBySchedule : schedule.length > 0 ? overdueBySchedule : overdueByInvoice)
+  const collectionStatus: InvoiceCollectionStatus = balanceDue <= 0.005
+    ? paidAmount > 0 ? 'Paid' : 'Open'
+    : isOverdue ? 'Overdue'
+      : paidAmount > 0 ? 'Partially paid'
+        : invoice.status === 'paid' ? 'Needs reconciliation' : 'Open'
+
+  return { paidAmount, totalDue: total, balanceDue, collectionStatus }
 }
 
 export function paymentReminderJobsForEvent(jobs: LuxorEmailJob[], bookingId: string | null | undefined, invoiceIds: Set<string>) {

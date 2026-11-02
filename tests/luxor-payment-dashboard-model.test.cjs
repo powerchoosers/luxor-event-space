@@ -19,7 +19,7 @@ const loaded = new Module(sourcePath, module)
 loaded.filename = sourcePath
 loaded.paths = Module._nodeModulePaths(path.dirname(sourcePath))
 loaded._compile(compiled, sourcePath)
-const { installmentPaidAmount, installmentReminderAutomationKey, installmentReminderMilestone, installmentReminderWindowIsCurrent, isBookingPaymentMilestone, isFinalPaymentMilestone, isLuxorReminderDaytime, paidOnInvoice, paymentReminderJobsForEvent } = loaded.exports
+const { getInvoiceCollectionDisplayState, installmentPaidAmount, installmentReminderAutomationKey, installmentReminderMilestone, installmentReminderWindowIsCurrent, isBookingPaymentMilestone, isFinalPaymentMilestone, isLuxorReminderDaytime, paidOnInvoice, paymentDisplayReceivedDate, paymentReminderJobsForEvent } = loaded.exports
 
 const bookingPayment = { id: 'booking-row', label: 'Booking Payment', installment_order: 1, amount: 750, status: 'paid', metadata: {}, due_at: '2026-11-01', paid_at: '2026-11-01' }
 const monthly = { id: 'monthly-row', label: 'Payment 2 — Venue Services', installment_order: 2, amount: 750, status: 'scheduled', metadata: {}, due_at: '2026-12-01', paid_at: null }
@@ -28,6 +28,65 @@ const payment = (id, invoiceId, amount, metadata = {}) => ({ id, invoice_id: inv
 test('booking payment schedule row is not repeated in monthly milestones', () => {
   assert.equal(isBookingPaymentMilestone(bookingPayment), true)
   assert.equal(isBookingPaymentMilestone(monthly), false)
+})
+
+test('invoice collection state is shared, keeps stored lifecycle separate, and uses saved overdue remainder', () => {
+  const acceptedMaster = {
+    id: 'accepted-master', status: 'sent', invoice_kind: 'event', proposal_accepted_at: '2026-10-01T12:00:00Z',
+    total: 1961.49, line_items: [], due_date: '2026-12-01', payment_requested_at: '2026-10-01T12:00:00Z',
+  }
+  const depositChild = { id: 'deposit-child', status: 'sent', invoice_kind: 'deposit', parent_invoice_id: acceptedMaster.id, total: 500 }
+  const invoices = [acceptedMaster, depositChild]
+  const payment = {
+    id: 'receipt-500', invoice_id: depositChild.id, amount: 500, status: 'paid',
+    metadata: { installment_allocations: [{ installment_id: 'booking-installment', amount: 500 }] },
+  }
+  const installment = {
+    id: 'booking-installment', invoice_id: acceptedMaster.id, booking_id: 'booking', label: 'Booking Payment',
+    installment_order: 1, amount: 1000, status: 'scheduled', due_at: '2026-10-13T12:00:00Z', metadata: {},
+  }
+  const now = new Date('2026-11-02T18:00:00Z')
+  const invoiceScreen = getInvoiceCollectionDisplayState(acceptedMaster, invoices, [payment], [installment], now)
+  const leadPaymentsScreen = getInvoiceCollectionDisplayState(acceptedMaster, invoices, [payment], [installment], now)
+
+  assert.equal(acceptedMaster.status, 'sent')
+  assert.equal(invoiceScreen.collectionStatus, 'Overdue')
+  assert.deepEqual(leadPaymentsScreen, invoiceScreen)
+  assert.equal(invoiceScreen.paidAmount, 500)
+  assert.equal(invoiceScreen.totalDue, 1961.49)
+  assert.equal(invoiceScreen.balanceDue, 1461.49)
+})
+
+test('draft, cancelled, unaccepted, and superseded invoices do not create collection obligations', () => {
+  const draft = { id: 'draft', status: 'draft', invoice_kind: 'event', total: 1000 }
+  const cancelled = { id: 'cancelled', status: 'cancelled', invoice_kind: 'event', total: 1000, proposal_accepted_at: '2026-10-01' }
+  const unaccepted = { id: 'unaccepted', status: 'sent', invoice_kind: 'event', total: 1000 }
+  const prior = { id: 'prior', status: 'sent', invoice_kind: 'event', total: 1000, proposal_accepted_at: '2026-10-01' }
+  const replacement = { id: 'replacement', status: 'sent', invoice_kind: 'event', total: 1100, proposal_accepted_at: '2026-10-02', supersedes_invoice_id: prior.id }
+  assert.equal(getInvoiceCollectionDisplayState(draft, [draft], [], [], new Date('2026-11-02T18:00:00Z')).collectionStatus, null)
+  assert.equal(getInvoiceCollectionDisplayState(cancelled, [cancelled], [], [], new Date('2026-11-02T18:00:00Z')).collectionStatus, null)
+  assert.equal(getInvoiceCollectionDisplayState(unaccepted, [unaccepted], [], [], new Date('2026-11-02T18:00:00Z')).collectionStatus, null)
+  assert.equal(getInvoiceCollectionDisplayState(prior, [prior, replacement], [], [], new Date('2026-11-02T18:00:00Z')).collectionStatus, null)
+})
+
+test('Invoices and Lead Payments both render lifecycle and collection labels through the shared model', () => {
+  const invoicesPage = fs.readFileSync(path.join(repo, 'src/app/(portal)/portal/invoices/page.tsx'), 'utf8')
+  const leadPaymentsPage = fs.readFileSync(path.join(repo, 'src/components/portal/LeadPaymentsDashboard.tsx'), 'utf8')
+  for (const source of [invoicesPage, leadPaymentsPage]) {
+    assert.match(source, /getInvoiceCollectionDisplayState/)
+    assert.match(source, /Stored lifecycle/)
+    assert.match(source, /Collection:/)
+  }
+})
+
+test('payment display received date prefers corrected date-only value and falls back to paid or created timestamp', () => {
+  const corrected = { received_date: '2026-10-31', paid_at: '2026-11-01T12:00:00Z', created_at: '2026-11-02T12:00:00Z' }
+  assert.equal(paymentDisplayReceivedDate(corrected), '2026-10-31')
+  assert.equal(paymentDisplayReceivedDate({ received_date: null, paid_at: '2026-11-01T12:00:00Z', created_at: '2026-11-02T12:00:00Z' }), '2026-11-01T12:00:00Z')
+  assert.equal(paymentDisplayReceivedDate({ received_date: null, paid_at: null, created_at: '2026-11-02T12:00:00Z' }), '2026-11-02T12:00:00Z')
+  assert.equal(paymentDisplayReceivedDate(corrected, '2026-10-30'), '2026-10-30')
+  const source = fs.readFileSync(path.join(repo, 'src/components/portal/LeadPaymentsDashboard.tsx'), 'utf8')
+  assert.match(source, /Received \$\{formatDate\(displayReceivedDate\(lastDeposit\)\)\}/)
 })
 
 test('final payment installment remains on the existing final-balance reminder cadence', () => {

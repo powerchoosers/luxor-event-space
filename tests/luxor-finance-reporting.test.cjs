@@ -18,7 +18,7 @@ dashboardLoaded._compile(ts.transpileModule(require('node:fs').readFileSync(dash
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   fileName: dashboardPath,
 }).outputText, dashboardPath)
-const { attachLuxorBookingPaymentTotals } = dashboardLoaded.exports
+const { attachLuxorBookingPaymentTotals, getInvoiceCollectionDisplayState } = dashboardLoaded.exports
 Module._load = function(request, parent, isMain) {
   if (parent?.filename === sourcePath && request === './luxorAvailability') return {
     isLuxorTestAvailabilityBooking: (booking) => booking.is_test === true || booking.inquiry_id === 'permanent-test' || booking.metadata?.is_test_record === true,
@@ -184,6 +184,24 @@ test('receipt on a superseded accepted master is credited to its unique replacem
   assert.equal(summary.eventPaymentsReceived, 200)
   assert.equal(summary.unallocatedPayments, 0)
   assert.equal(summary.outstandingEventReceivable, 1000)
+  const replacementState = getInvoiceCollectionDisplayState(replacement, [predecessor, replacement], [payment('old-receipt', 200, {}, { invoice_id: 'old-master' })], [], new Date('2026-11-02T18:00:00Z'), summary)
+  assert.equal(replacementState.paidAmount, 200)
+  assert.equal(replacementState.balanceDue, 1000)
+  assert.equal(replacementState.collectionStatus, 'Partially paid')
+})
+
+test('replacement master does not inherit an old invoice due date when its saved installment is future', () => {
+  const predecessor = invoice('expired-master', { proposal_accepted_at: '2025-01-01T00:00:00Z', total: 1000, due_date: '2026-10-01', payment_requested_at: '2026-09-01T00:00:00Z' })
+  const replacement = invoice('current-master', { total: 1200, supersedes_invoice_id: predecessor.id, due_date: '2026-10-01', payment_requested_at: '2026-09-01T00:00:00Z' })
+  const futureInstallment = installment('current-future', 500, '2026-12-01', { invoice_id: replacement.id })
+  const receipt = payment('predecessor-receipt', 200, {}, { invoice_id: predecessor.id })
+  const invoices = [predecessor, replacement]
+  const summary = getLuxorInvoiceFinancialSummary(invoices, [receipt], new Set(), new Set(), [futureInstallment], new Date('2026-11-02T18:00:00Z'))
+  const state = getInvoiceCollectionDisplayState(replacement, invoices, [receipt], [futureInstallment], new Date('2026-11-02T18:00:00Z'), summary)
+  assert.equal(summary.overdueEventReceivable, 0)
+  assert.equal(state.paidAmount, 200)
+  assert.equal(state.balanceDue, 1000)
+  assert.equal(state.collectionStatus, 'Partially paid')
 })
 
 test('payment on a child of a superseded master resolves through its parent chain', () => {
@@ -194,6 +212,32 @@ test('payment on a child of a superseded master resolves through its parent chai
   assert.equal(summary.eventPaymentsReceived, 100)
   assert.equal(summary.unallocatedPayments, 0)
   assert.equal(summary.outstandingEventReceivable, 1100)
+  const historicalChildState = getInvoiceCollectionDisplayState(child, [predecessor, child, replacement], [payment('old-child-receipt', 100, {}, { invoice_id: 'old-child', booking_id: null })], [], new Date('2026-11-02T18:00:00Z'), summary)
+  assert.equal(historicalChildState.paidAmount, 100)
+  assert.equal(historicalChildState.collectionStatus, null)
+})
+
+test('master, deposit, security-deposit, and final-balance collection statuses use their own obligations', () => {
+  const master = invoice('event-master', { total: 3756.28, status: 'sent', booking_id: 'collection-booking' })
+  const eventDeposit = { ...invoice('event-deposit', { proposal_accepted_at: null, total: 500, status: 'sent', booking_id: 'collection-booking' }), parent_invoice_id: master.id, invoice_kind: 'deposit' }
+  const securityDeposit = { ...invoice('security-child', { proposal_accepted_at: null, total: 750, status: 'sent', booking_id: 'collection-booking' }), parent_invoice_id: master.id, invoice_kind: 'security_deposit' }
+  const finalBalance = { ...invoice('final-child', { proposal_accepted_at: null, total: 3256.28, status: 'sent', booking_id: 'collection-booking' }), parent_invoice_id: master.id, invoice_kind: 'final_balance' }
+  const invoices = [master, eventDeposit, securityDeposit, finalBalance]
+  const receipts = [
+    payment('event-receipt', 500, {}, { invoice_id: eventDeposit.id, booking_id: 'collection-booking' }),
+    payment('security-receipt', 750, { payment_kind: 'security_deposit' }, { invoice_id: securityDeposit.id, booking_id: 'collection-booking' }),
+  ]
+  const summary = getLuxorInvoiceFinancialSummary(invoices, receipts)
+  const now = new Date('2026-11-02T18:00:00Z')
+  const states = [master, eventDeposit, securityDeposit, finalBalance].map((row) => getInvoiceCollectionDisplayState(row, invoices, receipts, [], now, summary))
+
+  assert.deepEqual(states.map((state) => [state.totalDue, state.paidAmount, state.balanceDue, state.collectionStatus]), [
+    [3756.28, 500, 3256.28, 'Partially paid'],
+    [500, 500, 0, 'Paid'],
+    [750, 750, 0, 'Paid'],
+    [3256.28, 0, 3256.28, 'Open'],
+  ])
+  assert.equal(summary.securityDepositsHeld, 750)
 })
 
 test('branching supersession history leaves predecessor payment unallocated', () => {

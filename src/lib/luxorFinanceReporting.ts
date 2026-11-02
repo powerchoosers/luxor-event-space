@@ -1,7 +1,7 @@
 import { isLuxorTestAvailabilityBooking } from './luxorAvailability'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment } from './luxorInquiryTypes'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from './luxorTestLeadPolicy'
-import { installmentDisplayState } from './luxorPaymentDashboardModel'
+import { installmentDisplayState, invoiceEventObligation, refundableSecurityAmount } from './luxorPaymentDashboardModel'
 
 export type LuxorFinanceExpense = {
   booking_id: string | null
@@ -11,6 +11,7 @@ export type LuxorFinanceExpense = {
 
 export type LuxorInvoiceFinancialSummary = {
   acceptedInvoices: LuxorInvoice[]
+  acceptedInvoiceRows: Array<{ invoice: LuxorInvoice; eventObligation: number; received: number; outstanding: number; overdue: number }>
   eventPaymentRows: Array<{ amount: number; paid_at: string | null }>
   unallocatedPaymentRows: Array<{ amount: number; paid_at: string | null; reason: string }>
   knownPaidCashTotal: number
@@ -26,15 +27,6 @@ export type LuxorInvoiceFinancialSummary = {
 
 function money(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
-}
-
-function refundableSecurityAmount(invoice: LuxorInvoice) {
-  return money((Array.isArray(invoice.line_items) ? invoice.line_items : []).reduce((sum, item) => {
-    const isSecurity = item.paymentBucket === 'security_deposit'
-      || item.category === 'Security Deposit'
-      || /refundable\s+security\s+deposit/i.test(item.description || '')
-    return isSecurity ? sum + Number(item.total || 0) : sum
-  }, 0))
 }
 
 function paymentIsSecurityDeposit(payment: LuxorPayment, invoice?: LuxorInvoice) {
@@ -218,26 +210,29 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
   }
 
   const acceptedAmounts = acceptedInvoices.map((invoice) => {
-    const context = invoice.proposal_context as Record<string, unknown> | null | undefined
-    const scopedLuxorAmount = Number(context?.luxor_services_total)
-    // New scoped proposals preserve the managed amount in the accepted
-    // snapshot. Legacy proposals retain their complete locked event amount.
-    const eventObligation = context?.payment_collection_scope === 'luxor_services_only'
-      && Number.isFinite(scopedLuxorAmount)
-      ? money(Math.max(0, scopedLuxorAmount))
-      : money(Math.max(0, Number(invoice.total || 0) - refundableSecurityAmount(invoice)))
-    return { invoice, eventObligation, received: eventReceiptsByMaster.get(invoice.id) || 0 }
+    const eventObligation = invoiceEventObligation(invoice)
+    const received = eventReceiptsByMaster.get(invoice.id) || 0
+    return { invoice, eventObligation, received, outstanding: money(Math.max(0, eventObligation - received)) }
   })
   const outstandingEventReceivable = money(acceptedAmounts.reduce((sum, row) => sum + Math.max(0, row.eventObligation - row.received), 0))
-  const acceptedBookingIds = new Set(acceptedInvoices.map((invoice) => invoice.booking_id).filter((id): id is string => Boolean(id)))
+  const overdueByMaster = new Map<string, number>()
   const overdueEventReceivable = money(installments.reduce((sum, installment) => {
-    if (installment.status === 'void' || !acceptedBookingIds.has(installment.booking_id) || installment.metadata?.payment_bucket === 'security_deposit') return sum
+    if (installment.status === 'void' || installment.metadata?.payment_bucket === 'security_deposit') return sum
+    const masterId = bookingMasterIds.get(installment.booking_id)
+    if (!masterId) return sum
     const state = installmentDisplayState(installment, payments, now)
-    return sum + (state.isOverdue ? state.amountDue - state.credited : 0)
+    const remainder = state.isOverdue ? money(state.amountDue - state.credited) : 0
+    if (remainder > 0) overdueByMaster.set(masterId, money((overdueByMaster.get(masterId) || 0) + remainder))
+    return sum + remainder
   }, 0))
+  const acceptedInvoiceRows = acceptedAmounts.map((row) => ({
+    ...row,
+    overdue: overdueByMaster.get(row.invoice.id) || 0,
+  }))
 
   return {
     acceptedInvoices,
+    acceptedInvoiceRows,
     eventPaymentRows,
     unallocatedPaymentRows,
     knownPaidCashTotal,
