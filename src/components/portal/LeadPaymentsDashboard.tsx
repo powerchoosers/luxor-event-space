@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   CalendarDays,
@@ -17,13 +17,15 @@ import {
   ReceiptText,
 } from 'lucide-react'
 import type { LuxorBooking, LuxorEmailJob, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
-import { eventCreditForPayment as paymentMoneyForEvent, installmentPaidAmount, isBookingPaymentMilestone, paidOnInvoice, paymentReminderJobsForEvent } from '@/lib/luxorPaymentDashboardModel'
+import { eventCreditForPayment as paymentMoneyForEvent, installmentPaidAmount, isBookingPaymentMilestone, paidOnInvoice } from '@/lib/luxorPaymentDashboardModel'
 import { PortalSelect } from '@/components/portal/PortalUI'
 
 type PaymentKind = 'deposit' | 'final' | 'security_deposit' | 'installment'
 type ExistingPaymentKind = Exclude<PaymentKind, 'installment'>
 type ManualInstallmentInput = { installmentId: string; amount: number; paidOn: string; paymentMethod: string; reference: string; notes: string; idempotencyKey: string; emailReceipt: boolean }
 type FinancialTab = 'history' | 'invoices' | 'receipts' | 'reminders'
+type ReceiptPreview = { recipient: string; subject: string; message: string; filename: string; receiptNumber: string; eventName: string; fingerprint: string; pdfSha256: string; pdfUrl: string }
+type PaymentEmailHistoryJob = LuxorEmailJob & { delivery?: { status: 'sent' | 'pending' | 'delivered' | 'opened' | 'failed' | 'cancelled'; sentAt: string | null; deliveredAt: string | null; openedAt: string | null; providerError: string | null; retryAvailable?: boolean } }
 
 type Props = {
   leadName: string
@@ -33,10 +35,8 @@ type Props = {
   invoices: LuxorInvoice[]
   payments: LuxorPayment[]
   installments: LuxorPaymentInstallment[]
-  reminderJobs: LuxorEmailJob[]
   paymentLoadError?: string | null
   paymentInstallmentLoadError?: string | null
-  paymentReminderLoadError?: string | null
   onRecordPayment: (booking: LuxorBooking, kind: ExistingPaymentKind, emailReceipt?: boolean) => Promise<void>
   onRecordInstallmentPayment: (booking: LuxorBooking, input: ManualInstallmentInput) => Promise<void>
   onViewInvoice: (invoice: LuxorInvoice) => void
@@ -51,7 +51,25 @@ const formatDate = (value?: string | null) => {
   const parsed = new Date(value.length === 10 ? `${value}T12:00:00` : value)
   return Number.isFinite(parsed.getTime()) ? parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Date not set'
 }
+const formatDateTime = (value?: string | null) => {
+  if (!value) return 'Not recorded'
+  const parsed = new Date(value)
+  return Number.isFinite(parsed.getTime()) ? parsed.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not recorded'
+}
 const round = (value: number) => Math.round(value * 100) / 100
+const PAYMENT_REMINDER_TYPES = new Set(['unpaid_invoice_reminder', 'sixty_day_payment_reminder', 'final_payment_request', 'final_payment_reminder', 'installment_payment_reminder', 'proposal_payment_reminder'])
+const paymentEmailStatus = (job: PaymentEmailHistoryJob | LuxorEmailJob) => {
+  const delivery = (job as PaymentEmailHistoryJob).delivery
+  if (delivery?.status === 'opened') return 'Opened signal'
+  if (delivery?.status === 'delivered') return 'Delivered'
+  if (delivery?.status === 'sent') return 'Sent'
+  if (delivery?.status === 'failed') return 'Failed'
+  if (job.status === 'sent') return 'Sent'
+  if (job.status === 'failed') return 'Failed'
+  if (job.status === 'cancelled') return 'Canceled'
+  if (job.status === 'queued' && Date.parse(job.scheduled_for) > Date.now()) return 'Scheduled'
+  return 'Pending'
+}
 const daysBefore = (value?: string | null, days = 0) => {
   if (!value) return null
   const parsed = new Date(`${value.slice(0, 10)}T12:00:00`)
@@ -99,10 +117,8 @@ export function LeadPaymentsDashboard({
   invoices,
   payments,
   installments,
-  reminderJobs,
   paymentLoadError,
   paymentInstallmentLoadError,
-  paymentReminderLoadError,
   onRecordPayment,
   onRecordInstallmentPayment,
   onViewInvoice,
@@ -124,6 +140,15 @@ export function LeadPaymentsDashboard({
   const [emailingReceiptId, setEmailingReceiptId] = useState<string | null>(null)
   const [receiptEmailMessage, setReceiptEmailMessage] = useState<string | null>(null)
   const [receiptEmailOverrides, setReceiptEmailOverrides] = useState<Record<string, LuxorEmailJob>>({})
+  const [receiptPreviewPayment, setReceiptPreviewPayment] = useState<LuxorPayment | null>(null)
+  const [receiptPreview, setReceiptPreview] = useState<ReceiptPreview | null>(null)
+  const [receiptPreviewError, setReceiptPreviewError] = useState<string | null>(null)
+  const [receiptPreviewLoading, setReceiptPreviewLoading] = useState(false)
+  const [paymentEmailJobs, setPaymentEmailJobs] = useState<PaymentEmailHistoryJob[]>([])
+  const [reminderHistoryError, setReminderHistoryError] = useState<string | null>(null)
+  const [reminderHistoryLoading, setReminderHistoryLoading] = useState(false)
+  const [retryingReminderId, setRetryingReminderId] = useState<string | null>(null)
+  const [reminderActionMessage, setReminderActionMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<LuxorPayment | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -154,9 +179,42 @@ export function LeadPaymentsDashboard({
       // from the actual deposit transaction, so do not display it twice.
       && !isBookingPaymentMilestone(installment))
     .sort((left, right) => left.installment_order - right.installment_order), [installments])
-  const eventReminderJobs = useMemo(() => paymentReminderJobsForEvent(reminderJobs, booking?.id, new Set(invoices.map((invoice) => invoice.id))), [booking?.id, invoices, reminderJobs])
+  const refreshPaymentEmailJobs = useCallback(async () => {
+    if (!booking?.id || !booking.inquiry_id) {
+      setPaymentEmailJobs([])
+      setReminderHistoryError(null)
+      return
+    }
+    setReminderHistoryLoading(true)
+    try {
+      const response = await fetch(`/api/payments/reminders?bookingId=${encodeURIComponent(booking.id)}&inquiryId=${encodeURIComponent(booking.inquiry_id)}`, { cache: 'no-store' })
+      const result = await response.json().catch(() => ({})) as { jobs?: PaymentEmailHistoryJob[]; error?: string }
+      if (!response.ok || !Array.isArray(result.jobs)) throw new Error(result.error || 'Payment reminder history could not be verified.')
+      setPaymentEmailJobs(result.jobs)
+      setReminderHistoryError(null)
+    } catch (caught) {
+      setReminderHistoryError(caught instanceof Error ? caught.message : 'Payment reminder history could not be verified.')
+    } finally {
+      setReminderHistoryLoading(false)
+    }
+  }, [booking?.id, booking?.inquiry_id])
+  useEffect(() => { void refreshPaymentEmailJobs() }, [refreshPaymentEmailJobs])
+  useEffect(() => {
+    if (!booking?.id || (activeTab !== 'reminders' && activeTab !== 'receipts')) return
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refreshPaymentEmailJobs() }, 15_000)
+    return () => window.clearInterval(timer)
+  }, [activeTab, booking?.id, refreshPaymentEmailJobs])
+  const eventReminderJobs = useMemo(() => paymentEmailJobs.filter((job) => PAYMENT_REMINDER_TYPES.has(job.job_type)), [paymentEmailJobs])
+  const isFutureQueuedReminder = (job: PaymentEmailHistoryJob) => job.status === 'queued'
+    && Date.parse(job.scheduled_for) > Date.now() && !['sent', 'delivered', 'opened', 'failed'].includes(job.delivery?.status || '')
+  const upcomingReminderJobs = eventReminderJobs.filter(isFutureQueuedReminder).sort((left, right) => Date.parse(left.scheduled_for) - Date.parse(right.scheduled_for))
+  const historyReminderJobs = eventReminderJobs.filter((job) => !isFutureQueuedReminder(job)).sort((left, right) => {
+    const leftTime = Math.max(...[left.delivery?.openedAt, left.delivery?.deliveredAt, left.sent_at, left.updated_at, left.created_at].filter((value): value is string => Boolean(value)).map((value) => Date.parse(value)))
+    const rightTime = Math.max(...[right.delivery?.openedAt, right.delivery?.deliveredAt, right.sent_at, right.updated_at, right.created_at].filter((value): value is string => Boolean(value)).map((value) => Date.parse(value)))
+    return rightTime - leftTime
+  })
   const nextReminder = eventReminderJobs
-    .filter((job) => job.status === 'queued' && Date.parse(job.scheduled_for) > Date.now())
+    .filter(isFutureQueuedReminder)
     .sort((left, right) => Date.parse(left.scheduled_for) - Date.parse(right.scheduled_for))[0]
   const categorizedPayments = useMemo(() => uniquePayments.map((payment) => ({ payment, invoice: invoiceById.get(payment.invoice_id || '') })), [invoiceById, uniquePayments])
   const selectedInstallment = timelineInstallments.find((item) => item.id === recordInstallmentId) || timelineInstallments[0]
@@ -197,16 +255,41 @@ export function LeadPaymentsDashboard({
     }
   }
 
-  const emailReceipt = async (payment: LuxorPayment) => {
+  const openReceiptPreview = async (payment: LuxorPayment) => {
+    setReceiptPreviewPayment(payment)
+    setReceiptPreview(null)
+    setReceiptPreviewError(null)
+    setReceiptPreviewLoading(true)
+    try {
+      const response = await fetch(`/api/payments/${encodeURIComponent(payment.id)}/receipt/email`, { cache: 'no-store' })
+      const result = await response.json().catch(() => ({})) as ReceiptPreview & { error?: string }
+      if (!response.ok || !result.fingerprint || !result.pdfSha256 || !result.pdfUrl) throw new Error(result.error || 'Receipt preview could not be prepared.')
+      setReceiptPreview(result)
+    } catch (caught) {
+      setReceiptPreviewError(caught instanceof Error ? caught.message : 'Receipt preview could not be prepared.')
+    } finally {
+      setReceiptPreviewLoading(false)
+    }
+  }
+
+  const emailReceipt = async (payment: LuxorPayment, retry = false) => {
+    if (!receiptPreview || receiptPreviewPayment?.id !== payment.id) {
+      setReceiptEmailMessage('Open the receipt preview before sending so the email and PDF can be verified together.')
+      return
+    }
     setEmailingReceiptId(payment.id)
     setReceiptEmailMessage(null)
     try {
-      const response = await fetch(`/api/payments/${encodeURIComponent(payment.id)}/receipt/email`, { method: 'POST' })
-      const result = await response.json().catch(() => ({})) as { error?: string; job?: LuxorEmailJob }
+      const response = await fetch(`/api/payments/${encodeURIComponent(payment.id)}/receipt/email`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fingerprint: receiptPreview.fingerprint, pdfSha256: receiptPreview.pdfSha256, retry }),
+      })
+      const result = await response.json().catch(() => ({})) as { error?: string; job?: LuxorEmailJob; state?: string }
       if (!response.ok) throw new Error(result.error || 'Receipt email could not be queued.')
       if (result.job) setReceiptEmailOverrides((current) => ({ ...current, [payment.id]: result.job! }))
-      const state = result.job?.status === 'sent' ? 'sent' : result.job?.status === 'failed' ? 'failed' : 'queued'
-      setReceiptEmailMessage(state === 'sent' ? 'Receipt email was already sent.' : state === 'failed' ? 'Receipt email remains failed and needs review.' : 'Receipt email queued. Delivery will be shown in Reminder History when available.')
+      const state = result.state || result.job?.status
+      setReceiptEmailMessage(state === 'sent' ? 'Receipt email was accepted by the provider.' : state === 'failed' || state === 'cancelled' ? result.job?.last_error || `Receipt email ${state}. Review its status before taking action.` : state === 'pending' ? 'Receipt email is pending provider confirmation.' : 'Receipt email queued. It has not been marked sent; status will update after provider acceptance.')
+      await refreshPaymentEmailJobs()
     } catch (caught) {
       setReceiptEmailMessage(caught instanceof Error ? caught.message : 'Receipt email could not be queued.')
     } finally {
@@ -214,8 +297,32 @@ export function LeadPaymentsDashboard({
     }
   }
 
+  const retryReminder = async (job: PaymentEmailHistoryJob) => {
+    setRetryingReminderId(job.id)
+    setReminderActionMessage(null)
+    try {
+      const response = await fetch('/api/payments/reminders/retry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: job.id }),
+      })
+      const result = await response.json().catch(() => ({})) as { error?: string }
+      if (!response.ok) throw new Error(result.error || 'Reminder could not be retried safely.')
+      setReminderActionMessage('Reminder queued for the approved send window. It has not been marked sent.')
+      await refreshPaymentEmailJobs()
+    } catch (caught) {
+      setReminderActionMessage(caught instanceof Error ? caught.message : 'Reminder could not be retried safely.')
+    } finally {
+      setRetryingReminderId(null)
+    }
+  }
+
   const scheduledDepositPaid = categorizedPayments.filter(({ payment, invoice }) => paymentKind(payment, invoice) === 'deposit').reduce((sum, { payment, invoice }) => sum + paymentMoneyForEvent(payment, invoice), 0)
   const lastDeposit = categorizedPayments.find(({ payment, invoice }) => paymentKind(payment, invoice) === 'deposit' && payment.status === 'paid')?.payment
+  const previewReceiptJob = receiptPreviewPayment
+    ? receiptEmailOverrides[receiptPreviewPayment.id] || paymentEmailJobs.find((job) => {
+      const notice = job.metadata?.transactionalNotice && typeof job.metadata.transactionalNotice === 'object' ? job.metadata.transactionalNotice as Record<string, unknown> : null
+      return notice?.key === `payment_receipt/${receiptPreviewPayment.id}`
+    })
+    : undefined
 
   return (
     <section className="space-y-5 rounded-2xl border border-[#eadfcf] bg-[#fffdfa] p-4 text-[#332b25] shadow-sm sm:p-6" aria-label="Payments">
@@ -224,7 +331,7 @@ export function LeadPaymentsDashboard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <p className="inline-flex items-center gap-2 text-sm text-[#755b39]" aria-live="polite">
             <CalendarDays size={16} className="shrink-0 text-[#ae8138]" />
-            {paymentReminderLoadError ? 'Reminder schedule unavailable' : nextReminder ? <>Next payment reminder: <strong className="font-semibold">{formatDate(nextReminder.scheduled_for)}</strong></> : 'No upcoming reminders'}
+            {reminderHistoryError ? 'Reminder schedule unavailable' : reminderHistoryLoading && !paymentEmailJobs.length ? 'Loading payment reminders…' : nextReminder ? <>Next payment reminder: <strong className="font-semibold">{formatDate(nextReminder.scheduled_for)}</strong></> : 'No upcoming reminders'}
           </p>
           <button type="button" onClick={() => { setRecordKind('deposit'); setRecordOpen(true) }} disabled={!booking || Boolean(paymentLoadError)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#b88737] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#9d6c25] disabled:cursor-not-allowed disabled:opacity-50">
             <CircleDollarSign size={17} /> Record Payment
@@ -322,14 +429,29 @@ export function LeadPaymentsDashboard({
             }) : <p className="rounded-xl border border-dashed border-[#e7d6be] p-8 text-center text-sm text-[#78685a]">No invoices are associated with this event.</p>}</div> : null}
             {activeTab === 'receipts' ? <div className="space-y-2">{receiptEmailMessage ? <p role="status" className="rounded-lg bg-[#faf5ee] p-3 text-xs text-[#624d35]">{receiptEmailMessage}</p> : null}{paidPayments.length ? paidPayments.map((payment) => {
               const invoice = invoiceById.get(payment.invoice_id || '')
-              const savedEmailJob = receiptEmailOverrides[payment.id] || reminderJobs.find((job) => {
+              const savedEmailJob = receiptEmailOverrides[payment.id] || paymentEmailJobs.find((job) => {
                 const notice = job.metadata?.transactionalNotice && typeof job.metadata.transactionalNotice === 'object' ? job.metadata.transactionalNotice as Record<string, unknown> : null
                 return notice?.key === `payment_receipt/${payment.id}`
               })
-              const emailNoticeTerminal = savedEmailJob?.status === 'sent' || savedEmailJob?.status === 'failed' || savedEmailJob?.status === 'cancelled'
-              return <article key={payment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-4"><div className="flex min-w-0 items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#fbf1e4] text-[#af7c2a]"><ReceiptText size={17} /></span><div className="min-w-0"><p className="font-semibold">Receipt {payment.id.slice(0, 8).toUpperCase()}</p><p className="mt-1 text-xs text-[#78685a]">{formatDate(payment.paid_at || payment.created_at)} · {payment.payment_method || 'Method not recorded'} · {appliedTo(payment, invoice)}</p><p className="mt-1 text-[11px] text-[#78685a]">{leadName}{invoice?.event_type ? ` · ${invoice.event_type}` : ''}{payment.processor_reference ? ` · Ref ${payment.processor_reference}` : ''}</p>{savedEmailJob ? <p className={`mt-1 text-[11px] font-semibold ${savedEmailJob.status === 'failed' ? 'text-rose-700' : savedEmailJob.status === 'sent' ? 'text-emerald-700' : 'text-[#91651f]'}`}>Receipt email: {savedEmailJob.status === 'queued' ? 'Scheduled' : savedEmailJob.status === 'sent' ? 'Sent' : savedEmailJob.status}{savedEmailJob.last_error ? ` · ${savedEmailJob.last_error}` : ''}</p> : null}</div></div><div className="flex flex-wrap items-center gap-3"><strong className="tabular-nums">{formatMoney(Number(payment.amount || 0))}</strong><button type="button" onClick={() => setSelectedPayment(payment)} className="inline-flex items-center gap-1 text-xs font-semibold text-[#91651f]"><Eye size={14} /> View</button><a href={`/api/payments/${encodeURIComponent(payment.id)}/receipt`} className="text-xs font-semibold text-[#91651f] hover:underline">Download</a>{leadEmail ? <button type="button" onClick={() => void emailReceipt(payment)} disabled={emailingReceiptId === payment.id || savedEmailJob?.status === 'queued' || savedEmailJob?.status === 'sending' || Boolean(emailNoticeTerminal)} className="text-xs font-semibold text-[#91651f] disabled:opacity-50">{emailingReceiptId === payment.id ? 'Queueing…' : savedEmailJob?.status === 'failed' || savedEmailJob?.status === 'cancelled' ? 'Email needs review' : 'Email receipt'}</button> : null}</div></article>
+              const emailStatus = savedEmailJob ? paymentEmailStatus(savedEmailJob as PaymentEmailHistoryJob) : null
+              return <article key={payment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-4"><div className="flex min-w-0 items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#fbf1e4] text-[#af7c2a]"><ReceiptText size={17} /></span><div className="min-w-0"><p className="font-semibold">Receipt {payment.id.slice(0, 8).toUpperCase()}</p><p className="mt-1 text-xs text-[#78685a]">{formatDate(payment.paid_at || payment.created_at)} · {payment.payment_method || 'Method not recorded'} · {appliedTo(payment, invoice)}</p><p className="mt-1 text-[11px] text-[#78685a]">{leadName}{invoice?.event_type ? ` · ${invoice.event_type}` : ''}{payment.processor_reference ? ` · Ref ${payment.processor_reference}` : ''}</p>{savedEmailJob ? <p className={`mt-1 text-[11px] font-semibold ${emailStatus === 'Failed' ? 'text-rose-700' : emailStatus === 'Sent' || emailStatus === 'Delivered' || emailStatus === 'Opened signal' ? 'text-emerald-700' : 'text-[#91651f]'}`}>Receipt email: {emailStatus}{savedEmailJob.last_error ? ` · ${savedEmailJob.last_error}` : ''}</p> : null}</div></div><div className="flex flex-wrap items-center gap-3"><strong className="tabular-nums">{formatMoney(Number(payment.amount || 0))}</strong><button type="button" onClick={() => void openReceiptPreview(payment)} className="inline-flex items-center gap-1 text-xs font-semibold text-[#91651f]"><Eye size={14} /> Preview &amp; send</button><a href={`/api/payments/${encodeURIComponent(payment.id)}/receipt`} className="text-xs font-semibold text-[#91651f] hover:underline">Download</a></div></article>
             }) : <p className="rounded-xl border border-dashed border-[#e7d6be] p-8 text-center text-sm text-[#78685a]">Receipts appear here after an actual payment has been recorded.</p>}</div> : null}
-            {activeTab === 'reminders' ? <div>{paymentReminderLoadError ? <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{paymentReminderLoadError}</p> : eventReminderJobs.length ? <div className="space-y-2">{eventReminderJobs.map((job) => <article key={job.id} className="rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-3 text-xs sm:hidden"><div className="flex justify-between gap-3"><strong>{String(job.metadata?.obligation_label || job.metadata?.invoice_id || 'Payment reminder')}</strong><span className="font-semibold capitalize">{job.status === 'queued' ? 'Scheduled' : job.status}</span></div><p className="mt-1 text-[#78685a]">{formatDate(job.sent_at || job.scheduled_for || job.created_at)} · Email · {job.job_type.replaceAll('_', ' ')}</p><p className="mt-1 break-all text-[#78685a]">To {job.recipient_email || leadEmail || '—'} · {typeof job.metadata?.amount_due === 'number' ? formatMoney(job.metadata.amount_due) : 'amount not recorded'}</p>{job.last_error ? <p className="mt-1 text-rose-700">{job.last_error}</p> : null}<details className="mt-2"><summary className="cursor-pointer text-[#91651f]">View message</summary><p className="mt-2 whitespace-pre-wrap text-[10px] leading-4 text-[#78685a]">{job.subject}{'\n'}{job.body}</p></details></article>)}<div className="hidden overflow-x-auto rounded-xl border border-[#eee5dc] sm:block"><table className="w-full border-collapse text-left text-xs"><thead className="bg-[#faf5ee] text-[10px] uppercase tracking-wide text-[#78685a]"><tr>{['Date', 'Related obligation', 'Amount due', 'Recipient', 'Channel', 'Type', 'Status'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#f1eae2]">{eventReminderJobs.map((job) => <tr key={job.id}><td className="whitespace-nowrap px-3 py-3">{formatDate(job.sent_at || job.scheduled_for || job.created_at)}</td><td className="px-3 py-3">{String(job.metadata?.obligation_label || job.metadata?.invoice_id || 'Payment reminder')}</td><td className="px-3 py-3 tabular-nums">{typeof job.metadata?.amount_due === 'number' ? formatMoney(job.metadata.amount_due) : '—'}</td><td className="px-3 py-3">{job.recipient_email || leadEmail || '—'}</td><td className="px-3 py-3">Email</td><td className="px-3 py-3">{job.job_type.replaceAll('_', ' ')}</td><td className="px-3 py-3"><span className={`font-semibold capitalize ${job.status === 'failed' ? 'text-rose-700' : job.status === 'sent' ? 'text-emerald-700' : job.status === 'cancelled' ? 'text-[#78685a]' : 'text-[#9b6d21]'}`}>{job.status === 'queued' ? 'Scheduled' : job.status === 'sent' ? 'Sent' : job.status}</span>{job.last_error ? <p className="mt-1 max-w-48 text-[10px] text-rose-700">{job.last_error}</p> : null}<details className="mt-1"><summary className="cursor-pointer text-[10px] text-[#91651f]">View message</summary><p className="mt-2 max-w-xl whitespace-pre-wrap text-[10px] leading-4 text-[#78685a]">{job.subject}{'\n'}{job.body}</p></details></td></tr>)}</tbody></table></div></div> : <p className="rounded-xl border border-dashed border-[#e7d6be] p-8 text-center text-sm text-[#78685a]">No payment reminders are recorded for this event.</p>}</div> : null}
+            {activeTab === 'reminders' ? <div className="space-y-4">
+              {reminderHistoryError ? <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{reminderHistoryError}</p> : null}
+              {reminderActionMessage ? <p role="status" className="rounded-lg bg-[#faf5ee] p-3 text-xs text-[#624d35]">{reminderActionMessage}</p> : null}
+              {!reminderHistoryError && eventReminderJobs.length ? <>
+                {upcomingReminderJobs.length ? <section aria-label="Upcoming reminders"><h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#9b6d21]">Upcoming</h3><div className="space-y-2">{upcomingReminderJobs.map((job) => <article key={job.id} className="rounded-xl border border-[#eadfcf] bg-[#fffdf9] p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><p className="font-semibold">{job.subject || 'Payment reminder'}</p><p className="mt-1 text-xs text-[#78685a]">{String(job.metadata?.obligation_label || job.metadata?.invoice_id || 'Payment obligation')} · {formatMoney(Number(job.metadata?.amount_due ?? job.metadata?.balance_due ?? 0))} due</p><p className="mt-1 text-xs text-[#78685a]">Due {formatDate(typeof job.metadata?.due_date === 'string' ? job.metadata.due_date : null)} · To {job.recipient_email || 'Recipient not recorded'}</p></div><span className="rounded-full bg-[#fbf1e4] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[#91651f]">{paymentEmailStatus(job)}</span></div><dl className="mt-3 grid gap-x-4 gap-y-1 text-[11px] text-[#78685a] sm:grid-cols-2"><div>Scheduled: {formatDateTime(job.scheduled_for)}</div><div>Created: {formatDateTime(job.created_at)}</div></dl><details className="mt-3"><summary className="cursor-pointer text-[11px] font-semibold text-[#91651f]">View message</summary><p className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-[#78685a]">{job.body}</p></details></article>)}</div></section> : null}
+                {historyReminderJobs.length ? <section aria-label="Reminder history"><h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#78685a]">Activity · newest first</h3><div className="space-y-2">{historyReminderJobs.map((job) => {
+                  const delivery = job.delivery
+                  const status = paymentEmailStatus(job)
+                  const errorText = delivery?.providerError || job.last_error
+                  const retryAvailable = job.job_type === 'installment_payment_reminder' && job.status === 'failed' && job.metadata?.retry_available === true
+                  return <article key={job.id} className="rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><p className="font-semibold">{job.subject || 'Payment reminder'}</p><p className="mt-1 text-xs text-[#78685a]">{String(job.metadata?.obligation_label || job.metadata?.invoice_id || 'Payment obligation')} · {formatMoney(Number(job.metadata?.amount_due ?? job.metadata?.balance_due ?? 0))} due</p><p className="mt-1 text-xs text-[#78685a]">Due {formatDate(typeof job.metadata?.due_date === 'string' ? job.metadata.due_date : null)} · To {job.recipient_email || 'Recipient not recorded'}</p></div><span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${status === 'Failed' ? 'bg-rose-50 text-rose-700' : status === 'Sent' || status === 'Delivered' || status === 'Opened signal' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#fbf1e4] text-[#91651f]'}`}>{status}</span></div><dl className="mt-3 grid gap-x-4 gap-y-1 text-[11px] text-[#78685a] sm:grid-cols-2"><div>Created: {formatDateTime(job.created_at)}</div><div>Scheduled: {formatDateTime(job.scheduled_for)}</div>{job.sent_at || delivery?.sentAt ? <div>Accepted by provider: {formatDateTime(job.sent_at || delivery?.sentAt)}</div> : null}{delivery?.deliveredAt ? <div>Delivered: {formatDateTime(delivery.deliveredAt)}</div> : null}{delivery?.openedAt ? <div>Opened signal: {formatDateTime(delivery.openedAt)}</div> : null}</dl>{delivery?.openedAt ? <p className="mt-2 text-[10px] text-[#78685a]">Open tracking is a provider signal and does not prove a person read the email.</p> : null}{errorText ? <p className="mt-2 text-xs text-rose-700">{errorText}</p> : null}<div className="mt-3 flex flex-wrap items-center gap-3"><details><summary className="cursor-pointer text-[11px] font-semibold text-[#91651f]">View message</summary><p className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-[#78685a]">{job.body}</p></details>{retryAvailable ? <button type="button" onClick={() => void retryReminder(job)} disabled={retryingReminderId === job.id} className="rounded-lg border border-[#e7d6be] px-3 py-2 text-[11px] font-semibold text-[#624d35] disabled:opacity-50">{retryingReminderId === job.id ? 'Retrying…' : 'Retry reminder'}</button> : null}</div></article>
+                })}</div></section> : null}
+              </> : null}
+              {!reminderHistoryError && !reminderHistoryLoading && !eventReminderJobs.length ? <p className="rounded-xl border border-dashed border-[#e7d6be] p-8 text-center text-sm text-[#78685a]">No payment reminders are recorded for this event.</p> : null}
+              {reminderHistoryLoading && !eventReminderJobs.length ? <p className="rounded-xl border border-dashed border-[#e7d6be] p-6 text-center text-sm text-[#78685a]">Loading reminder history…</p> : null}
+            </div> : null}
           </div>
         </div> : null}
       </section>
@@ -355,6 +477,7 @@ export function LeadPaymentsDashboard({
       </div></div> : null}
 
       {selectedPayment ? <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedPayment(null) }}><div role="dialog" aria-modal="true" aria-labelledby="payment-receipt-title" className="w-full max-w-md rounded-t-2xl border border-[#eadfcf] bg-[#fffdfa] p-5 shadow-xl sm:rounded-2xl"><div className="flex items-start gap-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-[#fbf1e4] text-[#af7c2a]"><ReceiptText size={19} /></span><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#a6772b]">Recorded transaction</p><h3 id="payment-receipt-title" className="mt-1 font-serif text-xl font-semibold">Receipt {selectedPayment.id.slice(0, 8).toUpperCase()}</h3></div></div><dl className="mt-4 space-y-2 rounded-xl bg-[#faf5ee] p-4 text-sm"><div className="flex justify-between gap-4"><dt>Date</dt><dd className="text-right">{formatDate(selectedPayment.paid_at || selectedPayment.created_at)}</dd></div><div className="flex justify-between gap-4"><dt>Amount received</dt><dd className="font-semibold tabular-nums">{formatMoney(Number(selectedPayment.amount || 0))}</dd></div><div className="flex justify-between gap-4"><dt>Method</dt><dd>{selectedPayment.payment_method || 'Not recorded'}</dd></div><div className="flex justify-between gap-4"><dt>Applied to</dt><dd className="text-right">{appliedTo(selectedPayment, invoiceById.get(selectedPayment.invoice_id || ''))}</dd></div><div className="flex justify-between gap-4"><dt>Client</dt><dd className="text-right">{leadName}</dd></div></dl><p className="mt-3 break-all text-[10px] text-[#78685a]">Transaction reference: {selectedPayment.processor_reference || selectedPayment.id}</p><button type="button" onClick={() => setSelectedPayment(null)} className="mt-4 min-h-11 w-full rounded-xl bg-[#b88737] text-sm font-semibold text-white">Close</button></div></div> : null}
+      {receiptPreviewPayment ? <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !emailingReceiptId) { setReceiptPreviewPayment(null); setReceiptPreview(null) } }}><div role="dialog" aria-modal="true" aria-labelledby="receipt-email-preview-title" className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-2xl border border-[#caa24c]/30 bg-[#f7f3ec] text-[#231f1a] shadow-2xl sm:rounded-2xl"><div className="flex items-start justify-between gap-4 border-b border-[#caa24c]/20 bg-[#101010] px-5 py-4 text-[#f5eee2]"><div><p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#caa24c]">Luxor at Las Palmas Events</p><h3 id="receipt-email-preview-title" className="mt-1 font-serif text-xl font-semibold">Receipt email preview</h3><p className="mt-1 text-xs text-[#d7c29a]">Review the message and the exact receipt PDF before sending.</p></div><button type="button" onClick={() => { if (!emailingReceiptId) { setReceiptPreviewPayment(null); setReceiptPreview(null) } }} aria-label="Close receipt preview" className="rounded-lg px-3 py-2 text-xl text-[#d7c29a] hover:bg-white/10">×</button></div><div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">{receiptPreviewLoading ? <p className="rounded-xl border border-[#e7d6be] bg-white p-6 text-sm text-[#78685a]">Preparing the receipt email and PDF…</p> : null}{receiptPreviewError ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{receiptPreviewError}</p> : null}{receiptPreview ? <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"><section className="overflow-hidden rounded-xl border border-[#ded6ca] bg-[#fffdfa] shadow-sm"><div className="space-y-2 border-b border-[#e7dfd4] bg-[#fbf8f2] p-4 text-xs"><p><span className="inline-block w-16 font-semibold text-[#78685a]">To</span><span className="break-all">{receiptPreview.recipient}</span></p><p><span className="inline-block w-16 font-semibold text-[#78685a]">Subject</span>{receiptPreview.subject}</p><p><span className="inline-block w-16 font-semibold text-[#78685a]">Attachment</span>{receiptPreview.filename}</p></div><div className="whitespace-pre-wrap p-5 text-sm leading-6 text-[#332b25]">{receiptPreview.message}</div></section><section className="overflow-hidden rounded-xl border border-[#ded6ca] bg-white shadow-sm"><div className="flex items-center justify-between gap-3 border-b border-[#e7dfd4] bg-[#101010] px-4 py-3 text-xs text-[#f7efe3]"><span className="font-semibold text-[#d7b866]">Attached receipt · {receiptPreview.receiptNumber}</span><a href={receiptPreview.pdfUrl.replace('disposition=inline', 'disposition=attachment')} className="text-[#e1c881] underline">Download</a></div><iframe title={`PDF receipt ${receiptPreview.receiptNumber}`} src={receiptPreview.pdfUrl} className="h-[42vh] min-h-[320px] w-full bg-white sm:h-[56vh]" /></section></div> : null}</div><div className="flex flex-col gap-2 border-t border-[#e7dfd4] bg-[#fffdfa] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5"><p className="text-xs text-[#78685a]">{receiptEmailMessage || (previewReceiptJob ? `Receipt email status: ${paymentEmailStatus(previewReceiptJob as PaymentEmailHistoryJob)}.` : 'The PDF preview and outgoing attachment use the same server-generated receipt.')}</p><div className="flex flex-col-reverse gap-2 sm:flex-row"><button type="button" onClick={() => { if (!emailingReceiptId) { setReceiptPreviewPayment(null); setReceiptPreview(null) } }} disabled={Boolean(emailingReceiptId)} className="min-h-11 rounded-xl border border-[#e7d6be] px-4 text-sm font-semibold text-[#624d35]">Close</button><button type="button" onClick={() => void emailReceipt(receiptPreviewPayment, previewReceiptJob?.status === 'failed')} disabled={!receiptPreview || receiptPreviewLoading || Boolean(receiptPreviewError) || emailingReceiptId === receiptPreviewPayment.id || previewReceiptJob?.status === 'queued' || previewReceiptJob?.status === 'sending' || previewReceiptJob?.status === 'sent' || previewReceiptJob?.status === 'cancelled' || !leadEmail} className="min-h-11 rounded-xl bg-[#b88737] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{emailingReceiptId === receiptPreviewPayment.id ? 'Queueing…' : previewReceiptJob?.status === 'sent' ? 'Already sent' : previewReceiptJob?.status === 'cancelled' ? 'Receipt email canceled' : previewReceiptJob?.status === 'queued' || previewReceiptJob?.status === 'sending' ? 'Pending provider acceptance' : previewReceiptJob?.status === 'failed' ? 'Retry receipt email' : 'Send Receipt'}</button></div></div></div></div> : null}
     </section>
   )
 }

@@ -1472,7 +1472,12 @@ export async function processLuxorEmailJobs(
       const notice = job.metadata?.transactionalNotice as { provider?: string } | undefined
       const retryNotice = job.job_type === 'transactional_notice' && Number(job.attempts || 0) < 3 && notice?.provider === 'resend'
       const retry = retryCalendar || retryAlert || retryNotice
+      const retrySafeReminder = job.job_type === 'installment_payment_reminder' && !providerAttemptStarted && !providerAccepted
+      const nextMetadata = job.job_type === 'installment_payment_reminder'
+        ? { ...job.metadata, paymentReminderRetrySafe: retrySafeReminder }
+        : undefined
       await updateLuxorEmailJob(job.id, { status: retry ? 'queued' : 'failed', last_error: message,
+        ...(nextMetadata ? { metadata: nextMetadata } : {}),
         ...(retry ? { scheduled_for: new Date(Date.now() + 60_000 * 2 ** Number(job.attempts || 0)).toISOString() } : {}) })
       if (job.test_run_id) {
         await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(job.id)}`, {
@@ -1632,7 +1637,6 @@ async function queueInstallmentPaymentReminders() {
   if (process.env.LUXOR_PAYMENT_INSTALLMENT_ALLOCATIONS_READY !== 'true'
     || process.env.LUXOR_PAYMENT_INSTALLMENT_REMINDERS_READY !== 'true') return
   const now = new Date()
-  if (!isLuxorReminderDaytime(now)) return
   const today = luxorCalendarDate(now)
   const activeBookings = await supabaseRest<LuxorBooking[]>('luxor_bookings?select=*&status=in.(tentative,confirmed)&contract_status=eq.signed&limit=1000')
   for (const booking of activeBookings) {
@@ -1645,44 +1649,79 @@ async function queueInstallmentPaymentReminders() {
       finalBalanceRemaining(booking.id),
       getInvoice(booking.invoice_id),
     ])
-    if (!masterInvoice || masterInvoice.invoice_kind !== 'event' || invoiceRemaining === null || invoiceRemaining === 0) continue
+    if (!masterInvoice || masterInvoice.invoice_kind !== 'event' || invoiceRemaining === null) continue
+    const byId = new Map(installments.map((row) => [row.id, row]))
+    const queued = await supabaseRest<LuxorEmailJob[]>(`luxor_email_jobs?select=*&booking_id=eq.${encodeURIComponent(booking.id)}&job_type=eq.installment_payment_reminder&status=eq.queued&test_run_id=is.null&order=created_at.desc&limit=500`)
+    for (const job of queued) {
+      const installmentId = typeof job.metadata?.installment_id === 'string' ? job.metadata.installment_id : ''
+      const installment = byId.get(installmentId)
+      const dueDate = installment?.due_at?.slice(0, 10) || ''
+      const milestone = typeof job.metadata?.milestone === 'string' ? job.metadata.milestone : ''
+      const offset = milestone === 'installment_7_days_before' ? -7 : milestone === 'installment_1_day_overdue' ? 1 : null
+      const scheduledLocalDate = offset === null ? '' : addLuxorCalendarDays(dueDate, offset)
+      const paid = installment ? installmentPaidAmount(installment, bookingPayments) : 0
+      const remaining = installment ? Math.max(0, Math.round((Number(installment.amount) - paid) * 100) / 100) : 0
+      const obsolete = invoiceRemaining === 0 || !installment || installment.status === 'void' || installment.status === 'paid' || remaining <= 0
+        || !validCalendarDate(dueDate) || job.metadata?.due_date !== dueDate || !scheduledLocalDate
+        || scheduledLocalDate < today || (scheduledLocalDate === today && !isLuxorReminderDaytime(now))
+      if (!obsolete) continue
+      const reason = invoiceRemaining === 0 || remaining <= 0 ? 'Canceled because this payment obligation is fully paid.'
+        : 'Canceled because this installment schedule changed or its approved send window passed.'
+      await supabaseRest(`luxor_email_jobs?id=eq.${encodeURIComponent(job.id)}&status=eq.queued&updated_at=eq.${encodeURIComponent(job.updated_at)}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'cancelled', last_error: reason, updated_at: now.toISOString() }),
+      })
+    }
+    if (invoiceRemaining === 0) continue
     for (const installment of installments) {
       if (!installment.invoice_id || installment.invoice_id !== booking.invoice_id || installment.status === 'void' || installment.status === 'paid'
         || isBookingPaymentMilestone(installment) || isFinalPaymentMilestone(installment)) continue
       const dueDate = installment.due_at?.slice(0, 10) || ''
       if (!validCalendarDate(dueDate)) continue
-      const milestone = installmentReminderMilestone(dueDate, today)
-      if (!milestone) continue
       const paid = installmentPaidAmount(installment, bookingPayments)
       const remaining = Math.max(0, Math.round((Number(installment.amount) - paid) * 100) / 100)
       if (remaining <= 0) continue
-      const email = installmentReminderContent(inquiry, installment, remaining, milestone === 'installment_1_day_overdue')
-      const safeDaytime = zonedTourDateTimeToUtc(today, '10:00').toISOString()
-      const automationKey = installmentReminderAutomationKey(booking.id, installment.id, dueDate, milestone)
-      await createUniqueLuxorEmailJob({
-        inquiryId: inquiry.id,
-        bookingId: booking.id,
-        jobType: 'installment_payment_reminder',
-        recipientEmail: inquiry.email,
-        subject: email.subject,
-        body: email.body,
-        scheduledFor: safeDaytime,
-        automationKey,
-        metadata: {
-          automation_key: automationKey,
-          milestone,
-          invoice_id: installment.invoice_id,
-          installment_id: installment.id,
-          installment_order: installment.installment_order,
-          obligation_label: installment.label,
-          balance_due: remaining,
-          amount_due: remaining,
-          due_date: dueDate,
-          timezone: 'America/Chicago',
-        },
-      })
+      for (const planned of [
+        { milestone: 'installment_7_days_before', offset: -7, overdue: false },
+        { milestone: 'installment_1_day_overdue', offset: 1, overdue: true },
+      ] as const) {
+        const scheduledLocalDate = addLuxorCalendarDays(dueDate, planned.offset)
+        if (!scheduledLocalDate || scheduledLocalDate < today
+          || (scheduledLocalDate === today && !isLuxorReminderDaytime(now))) continue
+        const scheduledFor = zonedTourDateTimeToUtc(scheduledLocalDate, '10:00').toISOString()
+        const email = installmentReminderContent(inquiry, installment, remaining, planned.overdue)
+        const automationKey = installmentReminderAutomationKey(booking.id, installment.id, dueDate, planned.milestone)
+        await createUniqueLuxorEmailJob({
+          inquiryId: inquiry.id,
+          bookingId: booking.id,
+          jobType: 'installment_payment_reminder',
+          recipientEmail: inquiry.email,
+          subject: email.subject,
+          body: email.body,
+          scheduledFor,
+          automationKey,
+          metadata: {
+            automation_key: automationKey,
+            milestone: planned.milestone,
+            invoice_id: installment.invoice_id,
+            installment_id: installment.id,
+            installment_order: installment.installment_order,
+            obligation_label: installment.label,
+            balance_due: remaining,
+            amount_due: remaining,
+            due_date: dueDate,
+            timezone: 'America/Chicago',
+          },
+        })
+      }
     }
   }
+}
+
+function addLuxorCalendarDays(dateValue: string, offset: number) {
+  if (!validCalendarDate(dateValue)) return ''
+  const date = new Date(`${dateValue}T12:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + offset)
+  return date.toISOString().slice(0, 10)
 }
 
 // Supabase Cron runs this worker every minute. Keeping the default at one job

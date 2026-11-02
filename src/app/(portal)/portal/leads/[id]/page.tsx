@@ -500,7 +500,6 @@ export default function LeadDetailPage({
   const [paymentLoadError, setPaymentLoadError] = useState<string | null>(null)
   const [paymentInstallments, setPaymentInstallments] = useState<LuxorPaymentInstallment[]>([])
   const [paymentInstallmentLoadError, setPaymentInstallmentLoadError] = useState<string | null>(null)
-  const [paymentReminderLoadError, setPaymentReminderLoadError] = useState<string | null>(null)
   const [paymentInstallmentRefresh, setPaymentInstallmentRefresh] = useState(0)
   const [tourEmailJobs, setTourEmailJobs] = useState<LuxorEmailJob[]>([])
   const [correctEmailResendOptions, setCorrectEmailResendOptions] = useState<CorrectEmailResendOption[]>([])
@@ -1910,7 +1909,6 @@ export default function LeadDetailPage({
       setPaymentLoadError(paymentsData === null ? 'Payment records could not be verified. Refresh before collecting another payment or confirming a date.' : null)
       setPayments(paymentsData || [])
       setTourEmailJobs(tourJobsData.jobs)
-      setPaymentReminderLoadError(tourJobsData.unavailable ? 'Reminder history could not be verified. Refresh to check scheduled reminders.' : null)
       void fetch(`/api/leads/${encodeURIComponent(id)}/correct-email-resend`, { cache: 'no-store' })
         .then(async (response) => response.ok ? response.json() : { options: [] })
         .then((payload) => {
@@ -9290,10 +9288,8 @@ export default function LeadDetailPage({
                 invoices={eventInvoices}
                 payments={eventPayments}
                 installments={paymentInstallments}
-                reminderJobs={tourEmailJobs}
                 paymentLoadError={paymentLoadError}
                 paymentInstallmentLoadError={paymentInstallmentLoadError}
-                paymentReminderLoadError={paymentReminderLoadError}
                 onRecordPayment={(booking, kind, emailReceipt) => handleRecordManualPayment(booking, kind, undefined, undefined, true, emailReceipt)}
                 onRecordInstallmentPayment={handleRecordManualInstallmentPayment}
                 onViewInvoice={setPdfPreviewInvoice}

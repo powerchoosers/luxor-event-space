@@ -37,6 +37,11 @@ export async function buildLuxorPaymentReceiptPdf(input: {
   const { payment, booking, inquiry, invoice } = input
   if (payment.status !== 'paid') throw new Error('A receipt can only be created for a confirmed paid transaction.')
   const pdf = await PDFDocument.create()
+  const receivedAt = new Date(payment.paid_at || payment.created_at)
+  pdf.setCreationDate(receivedAt)
+  pdf.setModificationDate(receivedAt)
+  pdf.setProducer('Luxor at Las Palmas Events')
+  pdf.setCreator('Luxor at Las Palmas Events')
   const page = pdf.addPage([612, 792])
   const regular = await pdf.embedFont(StandardFonts.Helvetica)
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)

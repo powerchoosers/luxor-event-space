@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { supabaseRest } from '@/lib/supabaseRestServer'
-import { getLuxorBooking } from '@/lib/luxorBookingsServer'
-import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { getInvoice } from '@/lib/luxorInvoicesServer'
-import { buildLuxorPaymentReceiptPdf } from '@/lib/luxorPaymentReceiptPdf'
-import type { LuxorPayment } from '@/lib/luxorInquiryTypes'
+import { getLuxorPaymentReceiptEmailContext } from '@/lib/luxorPaymentReceiptEmailServer'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getLuxorPortalSession()
@@ -13,25 +8,27 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const { id } = await params
-    const [payment] = await supabaseRest<LuxorPayment[]>(`luxor_payments?select=*&id=eq.${encodeURIComponent(id)}&limit=1`)
-    if (!payment) return NextResponse.json({ error: 'Payment record not found.' }, { status: 404 })
-    if (payment.status !== 'paid') return NextResponse.json({ error: 'A receipt can only be created for a confirmed paid transaction.' }, { status: 409 })
-
-    const [booking, inquiry, invoice] = await Promise.all([
-      payment.booking_id ? getLuxorBooking(payment.booking_id) : Promise.resolve(null),
-      payment.inquiry_id ? getLuxorInquiry(payment.inquiry_id) : Promise.resolve(null),
-      payment.invoice_id ? getInvoice(payment.invoice_id) : Promise.resolve(null),
-    ])
-    const bytes = await buildLuxorPaymentReceiptPdf({ payment, booking, inquiry, invoice })
+    const context = await getLuxorPaymentReceiptEmailContext(id)
+    const expectedFingerprint = request.nextUrl.searchParams.get('fingerprint')
+    const expectedPdfSha256 = request.nextUrl.searchParams.get('pdfSha256')
+    if ((expectedFingerprint && expectedFingerprint !== context.fingerprint)
+      || (expectedPdfSha256 && expectedPdfSha256 !== context.pdfSha256)) {
+      return NextResponse.json({ error: 'The receipt changed after preview. Reopen the preview before sending.' }, { status: 409 })
+    }
     const disposition = request.nextUrl.searchParams.get('disposition') === 'inline' ? 'inline' : 'attachment'
-    return new NextResponse(bytes, {
+    return new NextResponse(Buffer.from(context.pdf), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `${disposition}; filename="Luxor-Receipt-${payment.id.slice(0, 8).toUpperCase()}.pdf"`,
+        'Content-Disposition': `${disposition}; filename="${context.filename}"`,
         'Cache-Control': 'private, no-store',
+        'X-Luxor-Receipt-SHA256': context.pdfSha256,
+        'X-Luxor-Receipt-Fingerprint': context.fingerprint,
       },
     })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Receipt could not be created.' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Receipt could not be created.'
+    const status = message === 'Payment record not found.' ? 404
+      : message.includes('confirmed paid transaction') || message.includes('client email') ? 409 : 500
+    return NextResponse.json({ error: message }, { status })
   }
 }
