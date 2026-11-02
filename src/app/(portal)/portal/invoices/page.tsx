@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   FileText,
   Search,
@@ -12,7 +12,8 @@ import {
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { LuxorInvoice, LuxorInvoiceStatus } from '@/lib/luxorInquiryTypes'
+import { LuxorInvoice, LuxorInvoiceStatus, type LuxorBooking, type LuxorPayment, type LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
+import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
 import {
   PortalPageFrame,
   PortalPageHeader,
@@ -44,6 +45,14 @@ const INVOICE_STATUS_OPTIONS: Array<{ value: EditableInvoiceStatus; label: strin
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
+  const [payments, setPayments] = useState<LuxorPayment[]>([])
+  const [bookings, setBookings] = useState<LuxorBooking[]>([])
+  const [installments, setInstallments] = useState<LuxorPaymentInstallment[]>([])
+  const [verifiedTestInquiryIds, setVerifiedTestInquiryIds] = useState<ReadonlySet<string>>(new Set())
+  const [verifiedTestBookingIds, setVerifiedTestBookingIds] = useState<ReadonlySet<string>>(new Set())
+  const [financeVerified, setFinanceVerified] = useState(false)
+  const [financeLoading, setFinanceLoading] = useState(true)
+  const [financeError, setFinanceError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -56,6 +65,7 @@ export default function InvoicesPage() {
   const [voidTarget, setVoidTarget] = useState<LuxorInvoice | null>(null)
   const [voidReason, setVoidReason] = useState('')
   const [voidBusy, setVoidBusy] = useState(false)
+  const refreshGeneration = useRef(0)
 
   const handleSendAiReminder = async (invoiceId: string) => {
     try {
@@ -78,18 +88,81 @@ export default function InvoicesPage() {
   }
 
   const fetchInvoices = async () => {
+    const generation = ++refreshGeneration.current
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch('/api/invoices')
+      setFinanceLoading(true)
+      setFinanceError(null)
+      setFinanceVerified(false)
+      const res = await fetch('/api/invoices?strictMetrics=1')
       if (!res.ok) throw new Error('Failed to load invoices.')
-      const data = await res.json()
-      setInvoices(data)
+      const invoiceData = await res.json()
+      if (!Array.isArray(invoiceData)) throw new Error('Invoice records could not be verified.')
+      if (generation !== refreshGeneration.current) return
+      setInvoices(invoiceData)
+
+      try {
+        const [paymentResponse, bookingResponse, installmentResponse] = await Promise.all([
+          fetch('/api/payments'),
+          fetch('/api/bookings?strictMetrics=1&financeRowsOnly=1'),
+          fetch('/api/portal/payment-installments?strictMetrics=1'),
+        ])
+        if (!paymentResponse.ok || !bookingResponse.ok || !installmentResponse.ok) throw new Error('Financial records could not be fully verified.')
+        const [paymentData, bookingData, installmentData] = await Promise.all([paymentResponse.json(), bookingResponse.json(), installmentResponse.json()])
+        if (![paymentData, bookingData, installmentData].every(Array.isArray)) throw new Error('Financial records could not be fully verified.')
+        const knownBookingIds = new Set(bookingData.map((booking: LuxorBooking) => booking.id).filter((id: unknown): id is string => typeof id === 'string'))
+        const inquiryIds = [...new Set([
+          ...invoiceData.map((invoice: LuxorInvoice) => invoice.inquiry_id),
+          ...bookingData.map((booking: LuxorBooking) => booking.inquiry_id),
+          ...paymentData.map((payment: LuxorPayment) => payment.inquiry_id),
+        ].filter((id): id is string => typeof id === 'string' && Boolean(id)))]
+        const bookingIds = [...new Set([
+          ...invoiceData.map((invoice: LuxorInvoice) => invoice.booking_id),
+          ...paymentData.map((payment: LuxorPayment) => payment.booking_id),
+        ].filter((id): id is string => typeof id === 'string' && Boolean(id) && !knownBookingIds.has(id)))]
+        const testInquiryIds = new Set<string>()
+        const testBookingIds = new Set<string>()
+        for (let offset = 0; offset < Math.max(inquiryIds.length, bookingIds.length); offset += 1000) {
+          const inquiryBatch = inquiryIds.slice(offset, offset + 1000)
+          const bookingBatch = bookingIds.slice(offset, offset + 1000)
+          const classificationResponse = await fetch('/api/portal/test-inquiry-classification', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inquiryIds: inquiryBatch, bookingIds: bookingBatch }),
+          })
+          if (!classificationResponse.ok) throw new Error('Verified test classification is unavailable.')
+          const classification = await classificationResponse.json() as { testInquiryIds?: unknown; testBookingIds?: unknown; unresolvedBookingIds?: unknown }
+          const requestedInquiryIds = new Set(inquiryBatch.map((id) => id.toLowerCase()))
+          const requestedBookingIds = new Set(bookingBatch.map((id) => id.toLowerCase()))
+          if (!Array.isArray(classification.testInquiryIds)
+            || !classification.testInquiryIds.every((id) => typeof id === 'string' && requestedInquiryIds.has(id.toLowerCase()))
+            || !Array.isArray(classification.testBookingIds)
+            || !classification.testBookingIds.every((id) => typeof id === 'string' && requestedBookingIds.has(id.toLowerCase()))
+            || !Array.isArray(classification.unresolvedBookingIds)
+            || classification.unresolvedBookingIds.length > 0) throw new Error('Verified test classification is unavailable.')
+          classification.testInquiryIds.forEach((id: string) => testInquiryIds.add(id.toLowerCase()))
+          classification.testBookingIds.forEach((id: string) => testBookingIds.add(id.toLowerCase()))
+        }
+        if (generation !== refreshGeneration.current) return
+        setPayments(paymentData)
+        setBookings(bookingData)
+        setInstallments(installmentData)
+        setVerifiedTestInquiryIds(testInquiryIds)
+        setVerifiedTestBookingIds(testBookingIds)
+        setFinanceVerified(true)
+      } catch (financeLoadError) {
+        if (generation !== refreshGeneration.current) return
+        setFinanceError(financeLoadError instanceof Error ? financeLoadError.message : 'Financial summary could not be verified.')
+      }
     } catch (err) {
+      if (generation !== refreshGeneration.current) return
       console.error(err)
       setError(err instanceof Error ? err.message : 'Failed to fetch invoices.')
     } finally {
-      setLoading(false)
+      if (generation === refreshGeneration.current) {
+        setLoading(false)
+        setFinanceLoading(false)
+      }
     }
   }
 
@@ -200,15 +273,17 @@ export default function InvoicesPage() {
     }
   }
 
-  // Computations
-  const paidInvoices = invoices.filter((inv) => inv.status === 'paid')
-  const netRevenue = paidInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
-
-  const outstandingInvoices = invoices.filter((inv) => inv.status === 'sent' || inv.status === 'overdue')
-  const outstandingAR = outstandingInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
-
-  const overdueInvoices = invoices.filter((inv) => inv.status === 'overdue')
-  const overdueAR = overdueInvoices.reduce((acc, inv) => acc + Number(inv.total), 0)
+  const financeRows = useMemo(() => getLuxorBusinessFinanceRows({
+    invoices,
+    bookings,
+    expenses: [],
+    testInquiryIds: verifiedTestInquiryIds,
+    testBookingIds: verifiedTestBookingIds,
+  }), [invoices, bookings, verifiedTestInquiryIds, verifiedTestBookingIds])
+  const financialSummary = useMemo(() => financeVerified
+    ? getLuxorInvoiceFinancialSummary(invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, installments, new Date(), financeRows.testInvoiceIds)
+    : null,
+  [financeVerified, invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, financeRows.testInvoiceIds, installments])
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
@@ -222,30 +297,39 @@ export default function InvoicesPage() {
         }
       />
 
-      {/* Financial Health Summary */}
+      {financeError && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-[color:var(--portal-muted)]">Financial summary is unavailable because all linked records could not be verified: {financeError}</p>}
+      {financialSummary?.refundReconciliationRequired && <p role="status" className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs leading-relaxed text-[color:var(--portal-muted)]">Refund-status rows ({financialSummary.refundRecordCount}, ${financialSummary.refundRecordAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} recorded gross) are shown separately. Their stored amounts do not establish whether they are original receipts marked refunded or separate refund events. Financial figures are unreconciled and use paid-status records only until matched to the payment source.</p>}
+
+      {/* Shared read-only Finance summary */}
       <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-3 lg:gap-6">
         <StatsPanel
-          label="Net Revenue Paid"
-          value={`$${netRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          trend={`${paidInvoices.length} paid`}
+          label="Event Payments Recorded"
+          value={financialSummary ? `$${financialSummary.eventPaymentsReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
+          trend={financialSummary ? `${financialSummary.eventPaymentRows.length} payment rows` : 'Verified records required'}
           highlight
-          gaugePercent={netRevenue + outstandingAR > 0 ? (netRevenue / (netRevenue + outstandingAR)) * 100 : 100}
+          gaugePercent={financialSummary && financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.eventPaymentsReceived / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0}
         />
         <StatsPanel
-          label="Outstanding A/R"
-          value={`$${outstandingAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          trend={`${outstandingInvoices.length} unpaid`}
-          isNegative={outstandingAR > 0}
-          progress={netRevenue + outstandingAR > 0 ? (outstandingAR / (netRevenue + outstandingAR)) * 100 : 0}
+          label="Accepted Event Balance Outstanding"
+          value={financialSummary ? `$${financialSummary.outstandingEventReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
+          trend={financialSummary ? `${financialSummary.acceptedInvoices.length} accepted proposals` : 'Verified records required'}
+          isNegative={Boolean(financialSummary?.outstandingEventReceivable)}
+          progress={financialSummary && financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.outstandingEventReceivable / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0}
         />
         <StatsPanel
-          label="Overdue Receivables"
-          value={`$${overdueAR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          trend={`${overdueInvoices.length} overdue`}
-          isNegative={overdueAR > 0}
-          progress={outstandingAR > 0 ? (overdueAR / outstandingAR) * 100 : 0}
+          label="Overdue Installment Remainder"
+          value={financialSummary ? `$${financialSummary.overdueEventReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
+          trend="Past due in Chicago time"
+          isNegative={Boolean(financialSummary?.overdueEventReceivable)}
+          progress={financialSummary && financialSummary.outstandingEventReceivable > 0 ? (financialSummary.overdueEventReceivable / financialSummary.outstandingEventReceivable) * 100 : 0}
         />
       </div>
+      <div className="grid shrink-0 grid-cols-1 gap-3 text-xs sm:grid-cols-3">
+        <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3"><span className="text-[color:var(--portal-muted)]">Known paid cash</span><strong className="ml-2 tabular-nums text-[color:var(--portal-text)]">{financialSummary ? `$${financialSummary.knownPaidCashTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</strong></div>
+        <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3"><span className="text-[color:var(--portal-muted)]">Refundable security deposits held</span><strong className="ml-2 tabular-nums text-[color:var(--portal-text)]">{financialSummary ? `$${financialSummary.securityDepositsHeld.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</strong></div>
+        <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3"><span className="text-[color:var(--portal-muted)]">Unallocated payments</span><strong className="ml-2 tabular-nums text-[color:var(--portal-text)]">{financialSummary ? `$${financialSummary.unallocatedPayments.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · ${financialSummary.unallocatedPaymentRows.length} rows` : '—'}</strong></div>
+      </div>
+      {financialSummary && financialSummary.unallocatedPaymentRows.length > 0 && <p role="status" className="shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed text-[color:var(--portal-muted)]">These paid-status transactions remain in known paid cash but cannot be assigned to event payments or refundable security deposits. Reconcile their invoice links or saved allocations.</p>}
 
       <PortalTableCard
         controls={

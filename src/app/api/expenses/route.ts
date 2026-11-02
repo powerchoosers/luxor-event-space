@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestCount, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 
@@ -28,11 +28,24 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const bookingId = searchParams.get('bookingId')
 
-    let path = 'luxor_booking_expenses?select=*&order=incurred_on.desc,created_at.desc'
+    let path = 'luxor_booking_expenses?select=*&order=incurred_on.desc,created_at.desc,id.asc'
     if (bookingId) {
-      path = `luxor_booking_expenses?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=incurred_on.desc,created_at.desc`
+      path = `luxor_booking_expenses?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=incurred_on.desc,created_at.desc,id.asc`
     }
 
+    if (searchParams.get('strictMetrics') === '1' && !bookingId) {
+      const expected = await supabaseRestCount(path)
+      const expenses: LuxorBookingExpense[] = []
+      for (let offset = 0; offset < expected; offset += 500) {
+        const page = await supabaseRestStrict<LuxorBookingExpense[]>(`${path}&limit=500&offset=${offset}`)
+        expenses.push(...page)
+        if (page.length < Math.min(500, expected - offset)) throw new Error('Expense records could not be fully verified.')
+      }
+      if (expenses.length !== expected || new Set(expenses.map((expense) => expense.id)).size !== expected || await supabaseRestCount(path) !== expected) {
+        throw new Error('Expense records changed while loading. Please refresh.')
+      }
+      return NextResponse.json(expenses)
+    }
     const expenses = await (searchParams.get('strictMetrics') === '1' ? supabaseRestStrict : supabaseRest)(path)
     return NextResponse.json(expenses)
   } catch (error) {

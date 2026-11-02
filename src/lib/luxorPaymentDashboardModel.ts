@@ -1,6 +1,21 @@
 import type { LuxorEmailJob, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment } from './luxorInquiryTypes'
+import type { LuxorBooking } from './luxorInquiryTypes'
 
 const roundMoney = (amount: number) => Math.round(amount * 100) / 100
+
+/** Preserve the /api/bookings event-page payload contract when enriching rows with payment totals. */
+export function attachLuxorBookingPaymentTotals<TBooking extends LuxorBooking>(bookings: TBooking[], payments: LuxorPayment[]) {
+  return bookings.map((booking) => {
+    const bookingPayments = payments.filter((payment) => payment.booking_id === booking.id)
+    const paidTotal = bookingPayments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+    return {
+      ...booking,
+      payments: bookingPayments,
+      paid_total: paidTotal,
+      balance_due: Math.max(Number(booking.contract_total || 0) - paidTotal, 0),
+    }
+  })
+}
 
 export function eventCreditForPayment(payment: LuxorPayment, invoice?: LuxorInvoice) {
   if (payment.status !== 'paid') return 0

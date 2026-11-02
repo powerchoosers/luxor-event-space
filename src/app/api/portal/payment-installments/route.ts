@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { supabaseRest } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestCount, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
 import { getLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
@@ -27,7 +27,18 @@ export async function GET(request: NextRequest) {
   const session = await getLuxorPortalSession()
   if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
   const bookingId = request.nextUrl.searchParams.get('bookingId')
-  const path = bookingId ? `luxor_payment_installments?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=installment_order.asc` : 'luxor_payment_installments?select=*&order=due_at.asc'
+  const path = bookingId ? `luxor_payment_installments?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&order=installment_order.asc,id.asc` : 'luxor_payment_installments?select=*&order=due_at.asc,id.asc'
+  if (request.nextUrl.searchParams.get('strictMetrics') === '1' && !bookingId) {
+    const expected = await supabaseRestCount(path)
+    const rows: LuxorPaymentInstallment[] = []
+    for (let offset = 0; offset < expected; offset += 500) {
+      const page = await supabaseRestStrict<LuxorPaymentInstallment[]>(`${path}&limit=500&offset=${offset}`)
+      rows.push(...page)
+      if (page.length < Math.min(500, expected - offset)) throw new Error('Payment schedule records could not be fully verified.')
+    }
+    if (rows.length !== expected || new Set(rows.map((item) => item.id)).size !== expected || await supabaseRestCount(path) !== expected) throw new Error('Payment schedule records changed while loading. Please refresh.')
+    return NextResponse.json(rows)
+  }
   return NextResponse.json(await supabaseRest<LuxorPaymentInstallment[]>(path))
 }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseRestCount, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { createHash } from 'node:crypto'
 import { listInvoices, listInvoicesByInquiry, createInvoice, getInvoice, isLuxorProposalHistoryReady, updateLuxorProposalAndRecordEditActivity, updateInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
@@ -390,6 +391,21 @@ export async function GET(request: NextRequest) {
 
     if (inquiryId) {
       const invoices = await listInvoicesByInquiry(inquiryId)
+      return NextResponse.json(invoices)
+    }
+
+    if (searchParams.get('strictMetrics') === '1') {
+      const path = 'luxor_invoices?select=*&order=created_at.desc,id.asc'
+      const expected = await supabaseRestCount(path)
+      const invoices: LuxorInvoice[] = []
+      for (let offset = 0; offset < expected; offset += 500) {
+        const page = await supabaseRestStrict<LuxorInvoice[]>(`${path}&limit=500&offset=${offset}`)
+        invoices.push(...page)
+        if (page.length < Math.min(500, expected - offset)) throw new Error('Invoice records could not be fully verified.')
+      }
+      if (invoices.length !== expected || new Set(invoices.map((invoice) => invoice.id)).size !== expected || await supabaseRestCount(path) !== expected) {
+        throw new Error('Invoice records changed while loading. Please refresh.')
+      }
       return NextResponse.json(invoices)
     }
 

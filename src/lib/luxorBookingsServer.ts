@@ -1,11 +1,12 @@
 import 'server-only'
 
 import { LuxorBooking, LuxorBookingStatus, LuxorContractStatus, LuxorPayment, LuxorBookingExpense } from './luxorInquiryTypes'
-import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
+import { supabaseRest, supabaseRestCount, supabaseRestStrict } from './supabaseRestServer'
 import { isWeekdayCustomRentalContext } from './luxorWeekdayRental'
 import { assertLuxorProductionSideEffectsAllowed } from './luxorTestLeadServer'
 import { luxorAvailabilityConflicts } from './luxorAvailability'
 import { annotateLuxorReviewAvailability } from './luxorAvailabilityReviewServer'
+import { attachLuxorBookingPaymentTotals } from './luxorPaymentDashboardModel'
 
 export type LuxorBookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -14,8 +15,22 @@ export type LuxorBookingWithPayments = LuxorBooking & {
 }
 
 export async function listLuxorBookings(limit = 1000, strict = false) {
+  if (strict) {
+    const path = 'luxor_bookings?select=*&order=event_date.asc,created_at.desc,id.asc'
+    const expected = await supabaseRestCount(path)
+    const rows: LuxorBooking[] = []
+    for (let offset = 0; offset < expected; offset += 500) {
+      const page = await supabaseRestStrict<LuxorBooking[]>(`${path}&limit=500&offset=${offset}`)
+      rows.push(...page)
+      if (page.length < Math.min(500, expected - offset)) throw new Error('Booking records could not be fully verified.')
+    }
+    if (rows.length !== expected || new Set(rows.map((booking) => booking.id)).size !== expected || await supabaseRestCount(path) !== expected) {
+      throw new Error('Booking records changed while loading. Please refresh.')
+    }
+    return rows
+  }
   return (strict ? supabaseRestStrict<LuxorBooking[]> : supabaseRest<LuxorBooking[]>)(
-    `luxor_bookings?select=*&order=event_date.asc,created_at.desc&limit=${encodeURIComponent(limit)}`,
+    `luxor_bookings?select=*&order=event_date.asc,created_at.desc,id.asc&limit=${encodeURIComponent(limit)}`,
   )
 }
 
@@ -94,26 +109,31 @@ export async function listLuxorBookingsWithPayments(limit = 1000, strict = false
   const bookings = await listLuxorBookings(limit, strict)
   if (bookings.length === 0) return []
 
-  const ids = bookings.map((booking) => booking.id).join(',')
-  const paymentPath = `luxor_payments?select=*&booking_id=in.(${ids})&order=created_at.desc`
-  const payments = strict
-    ? await supabaseRestStrict<LuxorPayment[]>(paymentPath)
-    : await supabaseRest<LuxorPayment[]>(paymentPath).catch(() => [])
-
-  return bookings.map((booking) => {
-    const bookingPayments = payments.filter((payment) => payment.booking_id === booking.id)
-    const paidTotal = bookingPayments
-      .filter((payment) => payment.status === 'paid')
-      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
-    const contractTotal = Number(booking.contract_total || 0)
-
-    return {
-      ...booking,
-      payments: bookingPayments,
-      paid_total: paidTotal,
-      balance_due: Math.max(contractTotal - paidTotal, 0),
+  let payments: LuxorPayment[]
+  if (strict) {
+    payments = []
+    for (let start = 0; start < bookings.length; start += 100) {
+      const ids = bookings.slice(start, start + 100).map((booking) => encodeURIComponent(booking.id)).join(',')
+      const paymentPath = `luxor_payments?select=*&booking_id=in.(${ids})&order=created_at.desc,id.asc`
+      const expected = await supabaseRestCount(paymentPath)
+      const batch: LuxorPayment[] = []
+      for (let offset = 0; offset < expected; offset += 500) {
+        const page = await supabaseRestStrict<LuxorPayment[]>(`${paymentPath}&limit=500&offset=${offset}`)
+        batch.push(...page)
+        if (page.length < Math.min(500, expected - offset)) throw new Error('Booking payment records could not be fully verified.')
+      }
+      if (batch.length !== expected || new Set(batch.map((payment) => payment.id)).size !== expected || await supabaseRestCount(paymentPath) !== expected) {
+        throw new Error('Booking payment records changed while loading. Please refresh.')
+      }
+      payments.push(...batch)
     }
-  })
+  } else {
+    const ids = bookings.map((booking) => encodeURIComponent(booking.id)).join(',')
+    const paymentPath = `luxor_payments?select=*&booking_id=in.(${ids})&order=created_at.desc,id.asc`
+    payments = await supabaseRest<LuxorPayment[]>(paymentPath).catch(() => [])
+  }
+
+  return attachLuxorBookingPaymentTotals(bookings, payments)
 }
 
 export type LuxorBookingCreateInput = Partial<LuxorBooking> & { client_name: string }

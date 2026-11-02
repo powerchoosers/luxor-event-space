@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useMemo, useDeferredValue, useRef } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import {
@@ -35,7 +35,8 @@ import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment } from '@/lib/luxorInquiryTypes'
-import { getLuxorBusinessFinanceRows } from '@/lib/luxorFinanceReporting'
+import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
+import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary, getLuxorRecordedFinanceExpenses } from '@/lib/luxorFinanceReporting'
 
 type BookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -48,6 +49,8 @@ type Tab = 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports'
 export default function FinancesPage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
+  const [payments, setPayments] = useState<LuxorPayment[]>([])
+  const [installments, setInstallments] = useState<LuxorPaymentInstallment[]>([])
   const [bookings, setBookings] = useState<BookingWithPayments[]>([])
   const [verifiedTestInquiryIds, setVerifiedTestInquiryIds] = useState<ReadonlySet<string>>(new Set())
   const [verifiedTestBookingIds, setVerifiedTestBookingIds] = useState<ReadonlySet<string>>(new Set())
@@ -85,49 +88,63 @@ type LuxorBookingExpense = {
       setLoading(true)
       setError(null)
       setTestClassificationVerified(false)
-      const [invRes, bookRes, expRes] = await Promise.all([
-        fetch('/api/invoices'),
-        fetch('/api/bookings?strictMetrics=1'),
-        fetch('/api/expenses?strictMetrics=1')
+      const [invRes, bookRes, expRes, paymentRes, installmentRes] = await Promise.all([
+        fetch('/api/invoices?strictMetrics=1'),
+        fetch('/api/bookings?strictMetrics=1&financeRowsOnly=1'),
+        fetch('/api/expenses?strictMetrics=1'),
+        fetch('/api/payments'),
+        fetch('/api/portal/payment-installments?strictMetrics=1'),
       ])
 
-      if (!invRes.ok || !bookRes.ok || !expRes.ok) throw new Error('Failed to load financial records.')
+      if (!invRes.ok || !bookRes.ok || !expRes.ok || !paymentRes.ok || !installmentRes.ok) throw new Error('Failed to load financial records.')
 
-      const [invData, bookData, expData] = await Promise.all([
+      const [invData, bookData, expData, paymentData, installmentData] = await Promise.all([
         invRes.json(),
         bookRes.json(),
-        expRes.json()
+        expRes.json(),
+        paymentRes.json(),
+        installmentRes.json(),
       ])
 
-      if (!Array.isArray(invData) || !Array.isArray(bookData) || !Array.isArray(expData)) throw new Error('Financial records could not be verified.')
+      if (!Array.isArray(invData) || !Array.isArray(bookData) || !Array.isArray(expData) || !Array.isArray(paymentData) || !Array.isArray(installmentData)) throw new Error('Financial records could not be verified.')
       if (generation !== refreshGeneration.current) return
       setInvoices(invData)
+      setPayments(paymentData)
       setBookings(bookData)
       setExpenses(expData)
+      setInstallments(installmentData)
 
-      const inquiryIds = [...new Set([...invData, ...bookData].map((record) => record.inquiry_id).filter((id): id is string => typeof id === 'string' && Boolean(id)))]
+      const inquiryIds = [...new Set([...invData, ...bookData, ...paymentData].map((record) => record.inquiry_id).filter((id): id is string => typeof id === 'string' && Boolean(id)))]
       const knownBookingIds = new Set(bookData.map((booking) => booking.id).filter((id): id is string => typeof id === 'string'))
-      const bookingIds = [...new Set([...invData, ...expData].map((record) => record.booking_id).filter((id): id is string => typeof id === 'string' && Boolean(id) && !knownBookingIds.has(id)))]
-      const classificationResponse = await fetch('/api/portal/test-inquiry-classification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryIds, bookingIds }),
-      })
-      if (!classificationResponse.ok) throw new Error('Verified test classification is unavailable; business metrics are hidden.')
-      const classification = await classificationResponse.json() as { testInquiryIds?: unknown; testBookingIds?: unknown; unresolvedBookingIds?: unknown }
-      const requestedInquiryIds = new Set(inquiryIds.map((id) => id.toLowerCase()))
-      const requestedBookingIds = new Set(bookingIds.map((id) => id.toLowerCase()))
-      if (!Array.isArray(classification.testInquiryIds)
-        || !classification.testInquiryIds.every((id) => typeof id === 'string' && requestedInquiryIds.has(id.toLowerCase()))
-        || !Array.isArray(classification.testBookingIds)
-        || !classification.testBookingIds.every((id) => typeof id === 'string' && requestedBookingIds.has(id.toLowerCase()))
-        || !Array.isArray(classification.unresolvedBookingIds)
-        || classification.unresolvedBookingIds.length > 0) {
-        throw new Error('Verified test classification is unavailable; business metrics are hidden.')
+      const bookingIds = [...new Set([...invData, ...expData, ...paymentData].map((record) => record.booking_id).filter((id): id is string => typeof id === 'string' && Boolean(id) && !knownBookingIds.has(id)))]
+      const classifiedInquiryIds = new Set<string>()
+      const classifiedBookingIds = new Set<string>()
+      for (let offset = 0; offset < Math.max(inquiryIds.length, bookingIds.length); offset += 1000) {
+        const inquiryBatch = inquiryIds.slice(offset, offset + 1000)
+        const bookingBatch = bookingIds.slice(offset, offset + 1000)
+        const classificationResponse = await fetch('/api/portal/test-inquiry-classification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inquiryIds: inquiryBatch, bookingIds: bookingBatch }),
+        })
+        if (!classificationResponse.ok) throw new Error('Verified test classification is unavailable; business metrics are hidden.')
+        const classification = await classificationResponse.json() as { testInquiryIds?: unknown; testBookingIds?: unknown; unresolvedBookingIds?: unknown }
+        const requestedInquiryIds = new Set(inquiryBatch.map((id) => id.toLowerCase()))
+        const requestedBookingIds = new Set(bookingBatch.map((id) => id.toLowerCase()))
+        if (!Array.isArray(classification.testInquiryIds)
+          || !classification.testInquiryIds.every((id) => typeof id === 'string' && requestedInquiryIds.has(id.toLowerCase()))
+          || !Array.isArray(classification.testBookingIds)
+          || !classification.testBookingIds.every((id) => typeof id === 'string' && requestedBookingIds.has(id.toLowerCase()))
+          || !Array.isArray(classification.unresolvedBookingIds)
+          || classification.unresolvedBookingIds.length > 0) {
+          throw new Error('Verified test classification is unavailable; business metrics are hidden.')
+        }
+        classification.testInquiryIds.forEach((id: string) => classifiedInquiryIds.add(id.toLowerCase()))
+        classification.testBookingIds.forEach((id: string) => classifiedBookingIds.add(id.toLowerCase()))
       }
       if (generation !== refreshGeneration.current) return
-      setVerifiedTestInquiryIds(new Set(classification.testInquiryIds.map((id) => id.toLowerCase())))
-      setVerifiedTestBookingIds(new Set(classification.testBookingIds.map((id) => id.toLowerCase())))
+      setVerifiedTestInquiryIds(classifiedInquiryIds)
+      setVerifiedTestBookingIds(classifiedBookingIds)
       setTestClassificationVerified(true)
     } catch (err) {
       if (generation !== refreshGeneration.current) return
@@ -192,56 +209,29 @@ type LuxorBookingExpense = {
   }
 
   // Financial Calculations (Memoized for high performance)
-  const { invoices: businessInvoices, bookings: businessBookings, expenses: businessExpenses } = useMemo(() => getLuxorBusinessFinanceRows({
+  const businessRows = useMemo(() => getLuxorBusinessFinanceRows({
     invoices,
     bookings,
     expenses,
     testInquiryIds: verifiedTestInquiryIds,
     testBookingIds: verifiedTestBookingIds,
   }), [invoices, bookings, expenses, verifiedTestInquiryIds, verifiedTestBookingIds])
+  const { invoices: businessInvoices, expenses: businessExpenses } = businessRows
+  const recordedBusinessExpenses = useMemo(() => getLuxorRecordedFinanceExpenses(businessExpenses), [businessExpenses])
 
-  const paidInvoices = useMemo(() => businessInvoices.filter((inv) => inv.status === 'paid'), [businessInvoices])
-  const netRevenue = useMemo(() => paidInvoices.reduce((acc, inv) => acc + Number(inv.total), 0), [paidInvoices])
-
-  const outstandingInvoices = useMemo(() => businessInvoices.filter((inv) => inv.status === 'sent' || inv.status === 'overdue'), [businessInvoices])
-  const outstandingAR = useMemo(() => outstandingInvoices.reduce((acc, inv) => acc + Number(inv.total), 0), [outstandingInvoices])
-
-  const overdueInvoices = useMemo(() => businessInvoices.filter((inv) => inv.status === 'overdue'), [businessInvoices])
-  const overdueAR = useMemo(() => overdueInvoices.reduce((acc, inv) => acc + Number(inv.total), 0), [overdueInvoices])
-  const unpaidRetainers = useMemo(() => businessBookings.reduce((sum, booking) => sum + Math.max(Number(booking.deposit_required || 0) - Number(booking.paid_total || 0), 0), 0), [businessBookings])
-
-  const totalExpenses = useMemo(() => businessExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0), [businessExpenses])
-  const monthlyProfit = useMemo(() => Math.max(netRevenue - totalExpenses, 0), [netRevenue, totalExpenses])
+  const financeSummary = useMemo(() => getLuxorInvoiceFinancialSummary(invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, installments, new Date(), businessRows.testInvoiceIds), [invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, installments])
+  const netRevenue = financeSummary.eventPaymentsReceived
+  const outstandingAR = financeSummary.outstandingEventReceivable
+  const overdueAR = financeSummary.overdueEventReceivable
+  const totalExpenses = useMemo(() => recordedBusinessExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0), [recordedBusinessExpenses])
+  const monthlyProfit = useMemo(() => netRevenue - totalExpenses, [netRevenue, totalExpenses])
 
   // Payments extraction
-  interface RenderPayment {
-    id: string
-    amount: number
-    status: string
-    payment_method: string | null
-    paid_at: string | null
-    notes: string | null
-  }
-
-  const bookingPayments: RenderPayment[] = useMemo(() => bookings.flatMap((b) => b.payments || []).map(p => ({
-    id: p.id,
-    amount: Number(p.amount),
-    status: p.status,
-    payment_method: p.payment_method,
-    paid_at: p.paid_at,
-    notes: p.notes
-  })), [bookings])
-
-  const invoicePayments: RenderPayment[] = invoices.filter(i => i.status === 'paid').map(i => ({
-    id: `inv-${i.id}`,
-    amount: Number(i.total),
-    status: 'paid',
-    payment_method: 'Recorded invoice payment',
-    paid_at: i.paid_at || i.updated_at,
-    notes: `Invoice: ${i.client_name}`
-  }))
-
-  const allPayments = bookingPayments.concat(invoicePayments)
+  const allPayments = payments.filter((payment) => payment.status === 'paid' || payment.status === 'refunded')
+    .filter((payment) => payment.metadata?.is_test_record !== true)
+    .filter((payment) => !(payment.booking_id && businessRows.testBookingIds.has(payment.booking_id.toLowerCase())))
+    .filter((payment) => !(payment.inquiry_id && businessRows.testInquiryIds.has(payment.inquiry_id.toLowerCase())))
+    .filter((payment) => !(payment.invoice_id && businessRows.testInvoiceIds.has(payment.invoice_id.toLowerCase())))
 
   // Filter invoices for Invoices tab
   const filteredInvoices = invoices.filter((inv) => {
@@ -293,12 +283,13 @@ type LuxorBookingExpense = {
       {activeTab === 'dashboard' && testClassificationVerified && !error && !loading && (
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="space-y-6">
+            {financeSummary.refundReconciliationRequired && <p role="status" className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">Refund-status records are listed separately ({financeSummary.refundRecordCount} records, ${financeSummary.refundRecordAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded gross). Their amounts do not establish whether a row is an original receipt or a separate refund. Finance figures are unreconciled and show paid-status records only until these transactions are checked against the payment source.</p>}
             {/* Top Cards */}
             <PortalStaggerGroup className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <PortalStaggerCard>
                 <MagicCard className="rounded-2xl p-6 flex flex-col justify-between min-h-[154px] h-full">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Gross Paid Revenue</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event Payments Recorded</p>
                     <p className="text-3xl font-extrabold text-[color:var(--portal-text)] mt-2 tabular-nums tracking-tight">${netRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                     <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
                       <motion.div
@@ -313,6 +304,7 @@ type LuxorBookingExpense = {
                   <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300 mt-4 font-bold tabular-nums">
                     <ArrowUpRight size={16} /> <span>+{businessInvoices.length} billing items</span>
                   </div>
+                    <p className="mt-2 text-[10px] text-[color:var(--portal-muted)]">Known paid cash: ${financeSummary.knownPaidCashTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                 </MagicCard>
               </PortalStaggerCard>
 
@@ -332,7 +324,7 @@ type LuxorBookingExpense = {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 mt-4 font-bold tabular-nums">
-                    <ArrowDownRight size={16} /> <span>-{businessExpenses.length} payments out</span>
+                    <ArrowDownRight size={16} /> <span>-{recordedBusinessExpenses.length} payments out</span>
                   </div>
                 </MagicCard>
               </PortalStaggerCard>
@@ -342,16 +334,16 @@ type LuxorBookingExpense = {
                   <BorderBeam size={95} duration={10} borderWidth={1.2} />
                   <div className="min-w-0 flex-1 pr-2 flex flex-col justify-between h-full">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Monthly Net Profit</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Recorded Income After Costs</p>
                       <p className="text-3xl font-extrabold text-[#a37d2c] dark:text-[#f1d27a] mt-2 tabular-nums tracking-tight">${monthlyProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-[#a37d2c] dark:text-[#caa24c] mt-4 font-bold tabular-nums">
-                      <span>Profit margin: {netRevenue > 0 ? ((monthlyProfit / netRevenue) * 100).toFixed(1) : 0}%</span>
+                        <span>Recorded expenses compared with event payments</span>
                     </div>
                   </div>
                   <div className="ml-auto shrink-0">
                     <AnimatedCircularProgressBar
-                      value={netRevenue > 0 ? (monthlyProfit / netRevenue) * 100 : 0}
+                      value={netRevenue > 0 ? Math.max(0, (monthlyProfit / netRevenue) * 100) : 0}
                       size={58}
                       strokeWidth={5}
                       gaugePrimaryColor="#caa24c"
@@ -370,7 +362,7 @@ type LuxorBookingExpense = {
                   <div className="space-y-3.5">
                     <div className="space-y-1.5 pb-2.5 border-b border-[color:var(--portal-border)]/60">
                       <div className="flex justify-between text-xs">
-                        <span className="text-[color:var(--portal-muted)] font-medium">Outstanding Invoice Value</span>
+                        <span className="text-[color:var(--portal-muted)] font-medium">Accepted Event Balance Outstanding</span>
                         <span className="text-[color:var(--portal-text)] font-bold tabular-nums">${outstandingAR.toLocaleString()}</span>
                       </div>
                       <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
@@ -399,10 +391,19 @@ type LuxorBookingExpense = {
                       </div>
                     </div>
                     <div className="flex justify-between text-xs pt-0.5">
-                      <span className="text-[color:var(--portal-muted)] font-medium">Unpaid Retainer Deposits</span>
-                      <span className="text-[#a37d2c] dark:text-[#caa24c] font-bold tabular-nums">${unpaidRetainers.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span className="text-[color:var(--portal-muted)] font-medium">Refundable Security Deposits Held</span>
+                      <span className="text-[#a37d2c] dark:text-[#caa24c] font-bold tabular-nums">${financeSummary.securityDepositsHeld.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
+                    <div className="flex justify-between text-xs pt-0.5">
+                      <span className="text-[color:var(--portal-muted)] font-medium">Unallocated Payments</span>
+                      <span className="text-amber-700 dark:text-amber-300 font-bold tabular-nums">${financeSummary.unallocatedPayments.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {financeSummary.unallocatedPaymentRows.length}</span>
+                    </div>
+                    {financeSummary.refundReconciliationRequired && <div className="flex justify-between text-xs pt-0.5">
+                      <span className="text-rose-700 dark:text-rose-300 font-medium">Refund-status records · reconcile</span>
+                      <span className="text-rose-700 dark:text-rose-300 font-bold tabular-nums">{financeSummary.refundRecordCount} · ${financeSummary.refundRecordAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>}
                   </div>
+                  {financeSummary.unallocatedPaymentRows.length > 0 && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These paid-status transactions remain included in known paid cash but cannot yet be assigned to event payments or security deposits. Reconcile invoice links and saved allocations.</p>}
                 </MagicCard>
               </PortalStaggerCard>
 
@@ -411,7 +412,7 @@ type LuxorBookingExpense = {
                   <div>
                     <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Tax Allocation Preview</h3>
                     <p className="text-xs text-[color:var(--portal-muted)] mt-2">
-                      Estimated 8.25% sales tax set aside:
+                      Estimated 8.25% of recorded event payments:
                     </p>
                     <p className="text-2xl tabular-nums font-extrabold tracking-tight text-[color:var(--portal-text)] mt-2">${(netRevenue * 0.0825).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                     <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
@@ -424,7 +425,7 @@ type LuxorBookingExpense = {
                       />
                     </div>
                   </div>
-                  <p className="text-[11px] text-[color:var(--portal-muted)] font-medium">Calculated automatically based on paid invoices total.</p>
+                  <p className="text-[11px] text-[color:var(--portal-muted)] font-medium">A rough reference only. It is not a tax calculation or bank reconciliation.</p>
                 </MagicCard>
               </PortalStaggerCard>
             </PortalStaggerGroup>
@@ -513,7 +514,7 @@ type LuxorBookingExpense = {
         {activeTab === 'payments' && (
           <PortalTableCard
             controls={
-              <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)] tabular-nums">Historical Revenue Entries ({allPayments.length})</h3>
+              <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)] tabular-nums">Recorded Payment Transactions ({allPayments.length})</h3>
             }
           >
             <div className="overflow-x-auto">
@@ -538,11 +539,11 @@ type LuxorBookingExpense = {
                         <td className="px-8 py-5 tabular-nums font-bold text-xs text-[color:var(--portal-muted)]">#{p.id?.slice(0, 10) || `TX-00${idx}`}</td>
                         <td className="px-6 py-5">
                           <p className="text-xs font-bold text-[color:var(--portal-text)] leading-none">{p.notes || 'Event Booking Retainer'}</p>
-                          <p className="text-[9px] text-[#caa24c] font-bold uppercase tracking-widest mt-1">Settled</p>
+                          <p className={`text-[9px] font-bold uppercase tracking-widest mt-1 ${p.status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-[#caa24c]'}`}>{p.status === 'refunded' ? 'Refund recorded' : 'Payment recorded'}</p>
                         </td>
                         <td className="px-6 py-5 text-xs text-[color:var(--portal-muted)] font-medium">{p.payment_method || 'Bank Transfer'}</td>
                         <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{p.paid_at ? new Date(p.paid_at).toLocaleDateString() : 'N/A'}</td>
-                        <td className="px-8 py-5 text-right tabular-nums font-bold text-emerald-700 dark:text-emerald-400">+${Number(p.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className={`px-8 py-5 text-right tabular-nums font-bold ${p.status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{Number(p.amount || 0) < 0 ? '−' : '+'}${Math.abs(Number(p.amount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       </tr>
                     ))
                   )}

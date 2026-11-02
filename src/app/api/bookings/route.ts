@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createLuxorBooking, findLuxorBookingConflicts, getLuxorBooking, listLuxorBookingsByInquiry, listLuxorBookingsWithPayments, updateLuxorBooking } from '@/lib/luxorBookingsServer'
+import { createLuxorBooking, findLuxorBookingConflicts, getLuxorBooking, listLuxorBookings, listLuxorBookingsByInquiry, listLuxorBookingsWithPayments, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
@@ -66,7 +66,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(bookings)
     }
 
-    const bookings = await listLuxorBookingsWithPayments(1000, searchParams.get('strictMetrics') === '1')
+    const strictMetrics = searchParams.get('strictMetrics') === '1'
+    const financeRowsOnly = searchParams.get('financeRowsOnly') === '1'
+    const bookings = strictMetrics && financeRowsOnly
+      ? await listLuxorBookings(1000, true)
+      : await listLuxorBookingsWithPayments(1000, strictMetrics)
     return NextResponse.json(bookings)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch bookings.'
