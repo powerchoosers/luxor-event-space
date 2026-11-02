@@ -89,6 +89,10 @@ export interface EmailMessageItem {
   legacyMessageId?: string
   deliveryError?: string | null
   threadId?: string
+  threadMessageCount?: number
+  threadUnreadCount?: number
+  threadHasUnread?: boolean
+  threadHasAttachment?: boolean
   folderId?: string
 }
 
@@ -180,6 +184,57 @@ function firstMailboxEmail(value: string) {
   return mailboxParts(value).find((part) => part.email)?.email || ''
 }
 
+function orderedConversationMessages(messages: EmailMessageItem[], selected: EmailMessageItem) {
+  const byId = new Map<string, { message: EmailMessageItem; index: number }>()
+  messages.forEach((message, index) => {
+    if (!byId.has(message.id)) byId.set(message.id, { message, index })
+  })
+  if (!byId.has(selected.id)) byId.set(selected.id, { message: selected, index: messages.length })
+  return [...byId.values()].sort((left, right) => {
+    const leftTime = left.message.receivedAt ? new Date(left.message.receivedAt).getTime() : Number.NaN
+    const rightTime = right.message.receivedAt ? new Date(right.message.receivedAt).getTime() : Number.NaN
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) return leftTime - rightTime
+    if (Number.isFinite(leftTime) !== Number.isFinite(rightTime)) return Number.isFinite(leftTime) ? -1 : 1
+    return left.index - right.index
+  }).map(({ message }) => message)
+}
+
+function isLuxorAddress(value: string) {
+  return mailboxParts(value).some(({ email }) => LUXOR_MAILBOXES.has(email))
+}
+
+function isOutgoingEmailMessage(message: EmailMessageItem) {
+  const senderIsLuxor = isLuxorAddress(message.from)
+  const recipientIsLuxor = isLuxorAddress(message.to)
+  if (senderIsLuxor !== recipientIsLuxor) return senderIsLuxor
+  return message.direction === 'outgoing' || message.direction === 'campaign'
+}
+
+function sameConversationDay(first: EmailMessageItem, second: EmailMessageItem) {
+  if (!first.receivedAt || !second.receivedAt) return false
+  const firstDate = new Date(first.receivedAt)
+  const secondDate = new Date(second.receivedAt)
+  return Number.isFinite(firstDate.getTime()) && Number.isFinite(secondDate.getTime())
+    && firstDate.toDateString() === secondDate.toDateString()
+}
+
+function messagesShareVisualGroup(first: EmailMessageItem, second: EmailMessageItem) {
+  if (!sameConversationDay(first, second)) return false
+  const firstTime = first.receivedAt ? new Date(first.receivedAt).getTime() : Number.NaN
+  const secondTime = second.receivedAt ? new Date(second.receivedAt).getTime() : Number.NaN
+  return Number.isFinite(firstTime) && Number.isFinite(secondTime) && Math.abs(secondTime - firstTime) <= 10 * 60 * 1000
+}
+
+function extractLuxorConversationBody(html: string | null | undefined) {
+  if (!html || typeof DOMParser === 'undefined') return null
+  const parsed = new DOMParser().parseFromString(html, 'text/html')
+  const wrapper = parsed.querySelector('table.luxor-outer')
+  const body = wrapper?.querySelector('.luxor-body')
+  const signature = wrapper?.querySelector('.luxor-signature-wrap')
+  if (!wrapper || !body || !signature || !wrapper.contains(body) || !wrapper.contains(signature)) return null
+  return body.innerHTML
+}
+
 async function requestMessageDetail(messageId: string, folderId?: string) {
   const cacheKey = detailCacheKey(messageId, folderId)
   const cached = messageDetailCache.get(cacheKey)
@@ -244,8 +299,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const appliedInitialMessageId = useRef<string | null>(null)
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
   const [mobileReplyAnchor, setMobileReplyAnchor] = useState<HTMLDivElement | null>(null)
-  const mobileReplyPortalRef = useRef<HTMLDivElement | null>(null)
-  const mobileReplyTriggerRef = useRef<HTMLButtonElement | null>(null)
   const threadScrollRef = useRef<HTMLDivElement | null>(null)
   const readerMenuRef = useRef<HTMLDivElement | null>(null)
   const mailboxListRef = useRef<HTMLDivElement | null>(null)
@@ -286,7 +339,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [replyStatus, setReplyStatus] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyPromptOpen, setReplyPromptOpen] = useState(false)
-  const [replyModalPresent, setReplyModalPresent] = useState(false)
   const [replyDraftLoadedKey, setReplyDraftLoadedKey] = useState<string | null>(null)
   const [mobileReplyBounds, setMobileReplyBounds] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
   const [replyViewport, setReplyViewport] = useState({ top: 0, left: 0, width: 0, height: 0 })
@@ -311,42 +363,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     }
     setReplyViewport((current) => current.top === nextViewport.top && current.left === nextViewport.left && current.width === nextViewport.width && current.height === nextViewport.height ? current : nextViewport)
   }, [mobileReplyAnchor])
-
-  useEffect(() => {
-    if (!replyModalPresent || !isMobileReader) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const background = document.querySelector<HTMLElement>('main.portal-main')
-    const previousInert = background?.inert || false
-    if (background) background.inert = true
-    const handleReplyKeys = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !sendingReply) {
-        event.preventDefault()
-        setReplyOpen(false)
-      }
-      if (event.key !== 'Tab') return
-      const panel = mobileReplyPortalRef.current
-      if (!panel) return
-      const controls = Array.from(panel.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])'))
-        .filter((element) => element.getClientRects().length > 0)
-      const first = controls[0]
-      const last = controls[controls.length - 1]
-      if (!first || !last) return
-      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
-        event.preventDefault()
-        last.focus({ preventScroll: true })
-      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
-        event.preventDefault()
-        first.focus({ preventScroll: true })
-      }
-    }
-    document.addEventListener('keydown', handleReplyKeys)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      if (background) background.inert = previousInert
-      document.removeEventListener('keydown', handleReplyKeys)
-    }
-  }, [replyModalPresent, isMobileReader, sendingReply])
 
   useEffect(() => {
     if (!isMobileReader || !mobileReplyAnchor) return
@@ -850,9 +866,34 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           })
           const data = await response.json() as EmailThreadData & { error?: string }
           if (response.ok) {
+            const unreadArchived = data.messages.filter((message) => message.direction === 'incoming' && !message.isRead
+              && /^mail-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(message.id))
+            const readResults = await Promise.all(unreadArchived.map(async (message) => {
+              try {
+                const readResponse = await fetch(`/api/email/messages/${encodeURIComponent(message.id)}`, {
+                  method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isRead: true }),
+                })
+                return readResponse.ok ? message.id : null
+              } catch { return null }
+            }))
+            const successfullyRead = new Set(readResults.filter((id): id is string => Boolean(id)))
+            const nextData = successfullyRead.size
+              ? { ...data, messages: data.messages.map((message) => successfullyRead.has(message.id) ? { ...message, isRead: true } : message) }
+              : data
             if (current) {
-              threadCache.set(threadId, data)
-              setThread(data)
+              threadCache.set(threadId, nextData)
+              setThread(nextData)
+              if (successfullyRead.size) {
+                setMessages((currentMessages) => {
+                  const next = currentMessages.map((message) => {
+                    if (message.threadId !== threadId || message.threadUnreadCount === undefined) return message
+                    const remainingUnread = Math.max(0, message.threadUnreadCount - successfullyRead.size)
+                    return { ...message, threadUnreadCount: remainingUnread, threadHasUnread: remainingUnread > 0, isRead: remainingUnread === 0 }
+                  })
+                  messagesRef.current = next
+                  return next
+                })
+              }
             }
             return
           }
@@ -972,6 +1013,16 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }, [replyOpen, isMobileReader, reduceMotion])
 
   useEffect(() => {
+    const scrollPane = threadScrollRef.current
+    if (!scrollPane || !messageDetail) return
+    const frame = window.requestAnimationFrame(() => {
+      scrollPane.scrollTo({ top: scrollPane.scrollHeight, behavior: 'auto' })
+      window.requestAnimationFrame(() => scrollPane.scrollTo({ top: scrollPane.scrollHeight, behavior: 'auto' }))
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [messageDetail?.id, thread?.messages.length, replyOpen, replyViewport.height])
+
+  useEffect(() => {
     if (!hasUnsentReply) return
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault()
@@ -1087,9 +1138,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     window.print()
   }
 
-  const openAttachmentPreview = async (attachment: EmailAttachment, message: EmailMessageItem) => {
+  const openAttachmentPreview = async (attachment: EmailAttachment, message: EmailMessageItem, existingUrl?: string) => {
     const reference = attachment.attachmentId || attachment.attachmentPath
     if (!reference) return
+    if (existingUrl && /^blob:https?:/i.test(existingUrl)) {
+      setPreviewAttachment({ ...attachment, mimeType: attachment.mimeType || 'image/jpeg', url: existingUrl })
+      return
+    }
     setOpeningAttachment(reference)
     try {
       const params = new URLSearchParams({
@@ -1582,8 +1637,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               messages.map((msg) => {
                 const isSelected = messageKey(msg) === selectedMessageKey
                 const isStarred = starredIds.has(msg.id)
-                const isRead = Boolean(msg.isRead) || readIds.has(msg.id) || msg.direction !== 'incoming'
-                const sender = msg.direction === 'outgoing' ? `To: ${mailboxLabel(msg.to, inquiryByEmail)}` : mailboxLabel(msg.from, inquiryByEmail)
+                const isRead = msg.threadHasUnread !== undefined
+                  ? !msg.threadHasUnread
+                  : Boolean(msg.isRead) || readIds.has(msg.id) || msg.direction !== 'incoming'
+                const sender = mailboxLabel(msg.direction === 'outgoing' ? msg.to : msg.from, inquiryByEmail)
                 const subject = decodeHtmlEntities(msg.subject) || '(No subject)'
                 const isCanonical = supportsDurableStar(msg.id)
                 const isOpenable = !msg.id.startsWith('event-')
@@ -1620,7 +1677,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                         className={`inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] disabled:cursor-wait disabled:opacity-50 ${isStarred ? 'text-[#b18432]' : 'text-[color:var(--portal-faint)] hover:bg-[color:var(--portal-card)] hover:text-[#a8792f]'}`}>
                         <Star size={15} className={isStarred ? 'fill-[#caa24c] text-[#a8792f]' : ''} />
                       </button> : <span className="h-10 w-10" aria-hidden="true" />}
-                      {msg.hasAttachment ? <span title="Has attachment" aria-label="Has attachment" className="text-[color:var(--portal-muted)]"><Paperclip size={12} /></span> : null}
+                      {(msg.threadHasAttachment || msg.hasAttachment) ? <span title={msg.threadMessageCount && msg.threadMessageCount > 1 ? 'Thread includes attachments' : 'Has attachment'} aria-label="Has attachment" className="text-[color:var(--portal-muted)]"><Paperclip size={12} /></span> : null}
                       {starErrors[msg.id] ? <span id={`star-error-${msg.id}`} role="status" className="sr-only">{starErrors[msg.id]}</span> : null}
                     </div>
                   </article>
@@ -1895,10 +1952,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               )}
               <div className="flex items-center justify-between gap-3 sm:gap-4">
                 <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-                  <PortalContactAvatar name={mailboxLabel(messageDetail.from, inquiryByEmail)} size="lg" className="!h-11 !w-11" />
+                  <PortalContactAvatar name={currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)} size="lg" className="!h-11 !w-11" />
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
-                      <p className="truncate text-sm font-semibold text-[color:var(--portal-text)]" title={messageDetail.from}>{mailboxLabel(messageDetail.from, inquiryByEmail)}</p>
+                      <p className="truncate text-sm font-semibold text-[color:var(--portal-text)]" title={thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to)}>{currentInquiry?.full_name || mailboxLabel(thread?.clientEmail || (messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to), inquiryByEmail)}</p>
                       {currentInquiry && (
                         <Link
                           href={`/portal/leads/${currentInquiry.id}`}
@@ -1926,7 +1983,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
             <div className="flex min-h-0 flex-1 flex-col">
             {/* Scrollable email thread — grows to fill, reply pinned below */}
-            <div ref={threadScrollRef} data-email-thread-scroll className="portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-bg)] p-3.5 [overflow-anchor:none] sm:px-6 sm:py-4 lg:px-8">
+            <div ref={threadScrollRef} data-email-thread-scroll className={`portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-bg)] p-3.5 [overflow-anchor:none] sm:px-6 sm:py-4 lg:px-8 ${replyOpen && isMobileReader ? 'pb-48' : ''}`}>
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {loadingThread && !thread && (
                   <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">
@@ -1946,29 +2003,35 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                     </button>
                   </div>
                 )}
-                {(thread?.messages || []).filter((message) => message.id !== messageDetail.id).map((message, index) => (
-                  <ThreadMessage
-                    key={`${messageKey(message)}:${index}:closed`}
-                    message={message}
-                    expanded={false}
-                    viewMode={viewMode}
-                    blockExternalImages={blockExternalImages}
-                    inquiryByEmail={inquiryByEmail}
-                    onOpenAttachment={openAttachmentPreview}
-                    openingAttachment={openingAttachment}
-                  />
-                ))}
-                <ThreadMessage
-                  key={`selected:${messageKey(messageDetail)}`}
-                  message={messageDetail}
-                  expanded
-                  currentMessage
-                  viewMode={viewMode}
-                  blockExternalImages={blockExternalImages}
-                  inquiryByEmail={inquiryByEmail}
-                  onOpenAttachment={openAttachmentPreview}
-                  openingAttachment={openingAttachment}
-                />
+                {orderedConversationMessages(thread?.messages || [], messageDetail).map((message, index, orderedMessages) => {
+                  const outgoing = isOutgoingEmailMessage(message)
+                  const previous = orderedMessages[index - 1]
+                  const grouped = Boolean(previous && isOutgoingEmailMessage(previous) === outgoing && messagesShareVisualGroup(previous, message))
+                  const currentMessage = message.id === messageDetail.id
+                  return (
+                    <React.Fragment key={`${messageKey(message)}:${index}`}>
+                      {index === 0 || !sameConversationDay(orderedMessages[index - 1], message) ? (
+                        <div className="flex items-center gap-3 py-2" aria-label={formatConversationDate(message.receivedAt)}>
+                          <span className="h-px flex-1 bg-[color:var(--portal-border)]" />
+                          <time className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1 text-[11px] font-medium text-[color:var(--portal-muted)]">{formatConversationDate(message.receivedAt)}</time>
+                          <span className="h-px flex-1 bg-[color:var(--portal-border)]" />
+                        </div>
+                      ) : null}
+                      <ThreadMessage
+                        message={message}
+                        expanded
+                        currentMessage={currentMessage}
+                        chat
+                        grouped={grouped}
+                        viewMode={viewMode}
+                        blockExternalImages={blockExternalImages}
+                        inquiryByEmail={inquiryByEmail}
+                        onOpenAttachment={openAttachmentPreview}
+                        openingAttachment={openingAttachment}
+                      />
+                    </React.Fragment>
+                  )
+                })}
 
                 <AnimatePresence initial={false}>
                   {!isMobileReader && messageDetail.direction !== 'campaign' && replyOpen && (
@@ -2074,30 +2137,32 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   </div>
     {isMobileReader && compactReaderOpen && mobileReplyAnchor && messageDetail && messageDetail.category !== 'Website Inquiry' && messageDetail.direction !== 'campaign' && mobileReplyBounds && typeof document !== 'undefined' ? createPortal(
       <>
-      {replyModalPresent && <div aria-hidden="true" className="fixed inset-0 z-[120]" />}
       <motion.div
         key="mobile-reply-container"
-        ref={mobileReplyPortalRef}
         id="mobile-reply-container"
-        role={replyModalPresent ? 'dialog' : undefined}
-        aria-modal={replyModalPresent || undefined}
-        aria-label={replyModalPresent ? 'Write email message' : undefined}
+        role={replyOpen ? 'region' : undefined}
+        aria-label={replyOpen ? 'Write email reply' : undefined}
         initial={false}
-        animate={{
-          top: replyOpen ? replyViewport.top : mobileReplyBounds.top,
-          left: replyOpen ? replyViewport.left : mobileReplyBounds.left,
-          width: replyOpen ? replyViewport.width : mobileReplyBounds.width,
-          height: replyOpen ? replyViewport.height : mobileReplyBounds.height,
-          borderRadius: replyOpen ? 0 : 24,
-        }}
+        animate={(() => {
+          const keyboardOpen = replyViewport.height < window.innerHeight - 120
+          const openBottom = keyboardOpen
+            ? replyViewport.top + replyViewport.height
+            : mobileReplyBounds.top + mobileReplyBounds.height
+          const openHeight = 184
+          return {
+            top: replyOpen ? Math.max(replyViewport.top, openBottom - openHeight) : mobileReplyBounds.top,
+            left: replyOpen ? replyViewport.left : mobileReplyBounds.left,
+            width: replyOpen ? replyViewport.width : mobileReplyBounds.width,
+            height: replyOpen ? Math.max(120, Math.min(openHeight, openBottom - replyViewport.top)) : mobileReplyBounds.height,
+            borderRadius: replyOpen ? 20 : 24,
+          }
+        })()}
         transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32 }}
         onAnimationComplete={() => {
-          if (replyOpen || !replyModalPresent) return
-          setReplyModalPresent(false)
-          mobileReplyTriggerRef.current?.focus({ preventScroll: true })
+          if (!replyOpen) syncReplyBounds()
         }}
-        className="fixed flex min-h-0 flex-col overflow-hidden border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-sm"
-        style={{ zIndex: replyModalPresent ? 130 : 65, paddingTop: replyOpen ? 'env(safe-area-inset-top)' : undefined, paddingBottom: replyOpen ? 'env(safe-area-inset-bottom)' : undefined }}
+        className="fixed flex min-h-0 flex-col overflow-hidden border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-lg"
+        style={{ zIndex: 65, paddingBottom: replyOpen ? 'env(safe-area-inset-bottom)' : undefined }}
       >
         <AnimatePresence initial={false} mode="popLayout">
           {replyOpen ? (
@@ -2106,10 +2171,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             </motion.div>
           ) : (
             <motion.button
-              ref={mobileReplyTriggerRef}
               key="mobile-reply-trigger"
               type="button"
-              onClick={() => { setReplyModalPresent(true); setReplyOpen(true) }}
+              onClick={() => setReplyOpen(true)}
               aria-label="Open reply editor"
               aria-controls="mobile-reply-container"
               aria-expanded={false}
@@ -2135,6 +2199,8 @@ function ThreadMessage({
   message,
   expanded: initiallyExpanded,
   currentMessage = false,
+  chat = false,
+  grouped = false,
   viewMode,
   blockExternalImages,
   inquiryByEmail,
@@ -2144,14 +2210,17 @@ function ThreadMessage({
   message: EmailMessageItem
   expanded: boolean
   currentMessage?: boolean
+  chat?: boolean
+  grouped?: boolean
   viewMode: 'html' | 'text'
   blockExternalImages: boolean
   inquiryByEmail: Map<string, LuxorInquiry>
-  onOpenAttachment: (attachment: EmailAttachment, message: EmailMessageItem) => void
+  onOpenAttachment: (attachment: EmailAttachment, message: EmailMessageItem, imageUrl?: string) => void
   openingAttachment: string | null
 }) {
   const reduceMotion = useReducedMotion()
   const [expanded, setExpanded] = useState(initiallyExpanded)
+  const [fullEmailOpen, setFullEmailOpen] = useState(false)
   const [frameHeight, setFrameHeight] = useState(260)
   const [readyFrameKey, setReadyFrameKey] = useState<string | null>(null)
   const frameObserverRef = useRef<ResizeObserver | null>(null)
@@ -2184,8 +2253,16 @@ function ThreadMessage({
     },
     () => 'light',
   )
-  const html = useMemo(() => buildMessageDocument(message, blockExternalImages, portalTheme), [message, blockExternalImages, portalTheme])
-  const frameKey = `${messageKey(message)}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`
+  const outgoing = isOutgoingEmailMessage(message)
+  const compactLuxorBody = useMemo(
+    () => chat && outgoing ? extractLuxorConversationBody(message.htmlContent) : null,
+    [chat, message.htmlContent, outgoing],
+  )
+  const displayedMessage = compactLuxorBody && !fullEmailOpen
+    ? { ...message, htmlContent: compactLuxorBody }
+    : message
+  const html = useMemo(() => buildMessageDocument(displayedMessage, blockExternalImages, portalTheme), [displayedMessage, blockExternalImages, portalTheme])
+  const frameKey = `${messageKey(message)}:${compactLuxorBody && !fullEmailOpen ? 'conversation-body' : 'full-email'}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`
   const ccLabel = message.cc ? mailboxLabel(message.cc, inquiryByEmail, '') : ''
 
   const resizeFrame = (frame: HTMLIFrameElement) => {
@@ -2351,6 +2428,78 @@ function ThreadMessage({
     frameInteractionCleanupRef.current = null
   }, [])
 
+  if (chat) {
+    return (
+      <article className={`flex w-full min-w-0 ${outgoing ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-1' : 'mt-4'}`}>
+        <div className={`flex min-w-0 max-w-full items-end gap-2 ${outgoing ? 'flex-row-reverse' : ''} sm:max-w-[min(88%,44rem)]`}>
+          {!grouped ? <PortalContactAvatar name={outgoing ? 'Luxor Event Space' : mailboxLabel(message.from, inquiryByEmail)} size="sm" className="mb-1 shrink-0" /> : <span aria-hidden="true" className="w-8 shrink-0" />}
+          <div className="min-w-0 max-w-full">
+            <div className={`mb-1 flex items-center gap-2 px-1 text-[11px] leading-4 text-[color:var(--portal-muted)] ${outgoing ? 'justify-end' : 'justify-start'}`}>
+              <time dateTime={message.receivedAt || undefined}>{formatConversationTime(message.receivedAt)}</time>
+              {outgoing && message.deliveryStatus ? <span>{luxorMailDeliveryLabel(message.deliveryStatus)}</span> : null}
+              {message.engagement ? <EngagementIndicators engagement={message.engagement} /> : null}
+            </div>
+            <div className={`min-w-0 max-w-full overflow-hidden rounded-2xl border px-1 py-1 shadow-sm ${outgoing
+              ? 'rounded-br-md border-[#caa24c]/30 bg-[#fbf3df] text-[#34291b] dark:border-[#caa24c]/25 dark:bg-[#725b2f]/25 dark:text-[color:var(--portal-text)]'
+              : 'rounded-bl-md border-[color:var(--portal-border)] bg-[#f4f1ed] text-[color:var(--portal-text)] dark:bg-[color:var(--portal-soft)]'}`}>
+              {viewMode === 'html' ? (
+                <iframe
+                  key={frameKey}
+                  srcDoc={html}
+                  title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
+                  ref={cleanupMessageFrame}
+                  className="block w-full max-w-full border-0 bg-transparent touch-pan-y"
+                  style={{ height: frameHeight, opacity: readyFrameKey === frameKey ? 1 : 0, transition: reduceMotion ? 'none' : 'opacity 160ms ease-out' }}
+                  scrolling="no"
+                  onLoad={(event) => {
+                    const frame = event.currentTarget
+                    const loadedDocument = frame.contentDocument
+                    if (!loadedDocument?.body?.innerHTML.trim()) return
+                    resizeFrame(frame)
+                    window.requestAnimationFrame(() => window.requestAnimationFrame(() => setReadyFrameKey(frameKey)))
+                  }}
+                  sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+                />
+              ) : (
+                <div className="min-h-10 whitespace-pre-wrap break-words px-3 py-2 font-sans text-sm leading-6 text-[color:var(--portal-text)] sm:px-4">
+                  {message.content || message.summary || 'No message body available.'}
+                </div>
+              )}
+              {compactLuxorBody ? <div className={`px-3 pb-1 pt-2 ${outgoing ? 'text-right' : 'text-left'}`}>
+                <button type="button" onClick={() => setFullEmailOpen((open) => !open)} aria-expanded={fullEmailOpen}
+                  className="min-h-9 text-xs font-medium text-[#8c6529] underline decoration-[#caa24c]/50 underline-offset-2 hover:text-[#6f4c1b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] dark:text-[#f1d27a]">
+                  {fullEmailOpen ? 'Return to conversation view' : 'View full email'}
+                </button>
+              </div> : null}
+              {message.attachments?.length ? (
+                <div className="border-t border-[color:var(--portal-border)] p-3">
+                  <div className="mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]"><Paperclip size={12} /> Attachments ({message.attachments.length})</div>
+                  <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+                    {message.attachments.map((attachment, index) => {
+                      const reference = attachment.attachmentId || attachment.attachmentPath || ''
+                      if (isPreviewableEmailImage(attachment)) return <EmailAttachmentImageThumbnail
+                        key={`${attachment.filename}-${index}`}
+                        attachment={attachment}
+                        message={message}
+                        onOpen={onOpenAttachment}
+                      />
+                      return <button key={`${attachment.filename}-${index}`} type="button" onClick={() => onOpenAttachment(attachment, message)} disabled={!reference || openingAttachment === reference}
+                        className="group flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 px-2.5 py-2 text-left transition-colors hover:border-[#caa24c]/35 disabled:cursor-wait disabled:opacity-60">
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[color:var(--portal-text)]">{attachment.filename}</span>
+                        {openingAttachment === reference ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} className="shrink-0 text-[color:var(--portal-muted)]" />}
+                      </button>
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {message.deliveryError ? <p role="status" className="mt-1 max-w-full break-words px-1 text-[11px] text-rose-600 dark:text-rose-300">{message.deliveryError}</p> : null}
+          </div>
+        </div>
+      </article>
+    )
+  }
+
   return (
     <article className={currentMessage ? 'w-full bg-[color:var(--portal-bg)]' : `overflow-hidden rounded-xl border transition-colors sm:rounded-2xl ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}>
       {!currentMessage && <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full cursor-pointer items-center gap-2.5 p-3 text-left sm:gap-3 sm:p-4">
@@ -2457,6 +2606,73 @@ function EngagementIndicators({ engagement }: { engagement?: EmailMessageItem['e
   )
 }
 
+function isPreviewableEmailImage(attachment: EmailAttachment) {
+  const mimeType = attachment.mimeType?.split(';')[0].trim().toLowerCase() || ''
+  return /^image\/(?:png|jpeg|gif|webp)$/.test(mimeType)
+    || /\.(?:png|jpe?g|gif|webp)$/i.test(attachment.filename)
+}
+
+function EmailAttachmentImageThumbnail({
+  attachment,
+  message,
+  onOpen,
+}: {
+  attachment: EmailAttachment
+  message: EmailMessageItem
+  onOpen: (attachment: EmailAttachment, message: EmailMessageItem, imageUrl?: string) => void
+}) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [imageMimeType, setImageMimeType] = useState<string>('image/jpeg')
+  const [failed, setFailed] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    let objectUrl: string | null = null
+    const params = new URLSearchParams({
+      attachmentId: attachment.attachmentId || '',
+      attachmentPath: attachment.attachmentPath || '',
+      folderId: message.folderId || '',
+      filename: attachment.filename,
+    })
+    void fetch(`/api/email/attachments/${encodeURIComponent(message.id)}?${params.toString()}`, { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Image preview could not be loaded.')
+        const contentType = (response.headers.get('content-type') || attachment.mimeType || '').split(';')[0].trim().toLowerCase()
+        if (!/^image\/(?:png|jpeg|gif|webp)$/.test(contentType)) throw new Error('This image format is not available for inline preview.')
+        const blob = await response.blob()
+        if (!blob.size) throw new Error('Image file is empty.')
+        if (active) setImageMimeType(contentType)
+        objectUrl = URL.createObjectURL(blob)
+        if (active) setImageUrl(objectUrl)
+        else URL.revokeObjectURL(objectUrl)
+      })
+      .catch(() => { if (active) setFailed(true) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [attachment.attachmentId, attachment.attachmentPath, attachment.filename, attachment.mimeType, message.folderId, message.id])
+
+  if (imageUrl) return (
+    <button type="button" onClick={() => onOpen({ ...attachment, mimeType: imageMimeType }, message, imageUrl)} aria-label={`Preview image: ${attachment.filename}`}
+      className="group relative block max-w-full overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
+      <img src={imageUrl} alt={attachment.filename} className="block max-h-44 max-w-full object-contain sm:max-h-56" />
+      <span className="block max-w-64 truncate border-t border-[color:var(--portal-border)] px-2.5 py-1.5 text-left text-[10px] text-[color:var(--portal-muted)]">{attachment.filename}</span>
+    </button>
+  )
+
+  return (
+    <button type="button" onClick={() => void onOpen(attachment, message)} disabled={loading}
+      className="flex min-h-12 min-w-40 max-w-full items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 px-2.5 py-2 text-left text-[11px] text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] disabled:cursor-wait disabled:opacity-65">
+      {loading ? <Loader2 size={14} className="shrink-0 animate-spin" /> : <Paperclip size={14} className="shrink-0 text-[color:var(--portal-muted)]" />}
+      <span className="min-w-0 flex-1 truncate">{attachment.filename}</span>
+      <span className="shrink-0 text-[10px] text-[color:var(--portal-muted)]">{loading ? 'Loading image…' : failed ? 'Open file' : 'Preview'}</span>
+    </button>
+  )
+}
+
 function buildMessageDocument(message: EmailMessageItem, blockExternalImages: boolean, portalTheme: 'light' | 'dark') {
   const hasHtmlBody = Boolean(message.htmlContent?.trim())
   const adaptHtmlForDarkTheme = hasHtmlBody && portalTheme === 'dark' && !hasDarkEmailSurface(message.htmlContent || '')
@@ -2471,7 +2687,7 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   if (blockExternalImages) {
     content = content.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '<div style="border:1px dashed #a1a1aa;padding:8px;font-size:11px;color:#71717a;text-align:center">[External image blocked]</div>')
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%}table.luxor-card{border-radius:16px!important;overflow:hidden!important}td,th{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:hidden;overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}table{max-width:100%!important}table[width]{width:100%!important}table.luxor-card{border-radius:16px!important;overflow:hidden!important}td,th{max-width:100%;overflow-wrap:anywhere;word-break:break-word}pre{white-space:pre-wrap;overflow-wrap:anywhere}${darkThemeFilter}</style></head><body>${content}</body></html>`
 }
 
 function hasDarkEmailSurface(html: string) {
@@ -2532,6 +2748,21 @@ function formatEmailDate(val: string | null) {
   return isToday
     ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
+function formatConversationDate(val: string | null) {
+  if (!val) return 'Date unavailable'
+  const date = new Date(val)
+  if (Number.isNaN(date.getTime())) return 'Date unavailable'
+  const sameYear = date.getFullYear() === new Date().getFullYear()
+  return date.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })
+}
+
+function formatConversationTime(val: string | null) {
+  if (!val) return 'Time unavailable'
+  const date = new Date(val)
+  if (Number.isNaN(date.getTime())) return 'Time unavailable'
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
 function formatEmailDateDetailed(val: string | null) {
