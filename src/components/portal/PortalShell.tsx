@@ -15,6 +15,7 @@ import {
   Settings,
   Users,
   CalendarRange,
+  CalendarDays,
   DollarSign,
   ChevronDown,
   Gauge,
@@ -146,6 +147,7 @@ const PortalElenaChat = dynamic(
 const navItems = [
   { href: '/portal', icon: <LayoutDashboard size={18} />, label: 'Overview', permission: 'overview' },
   { href: '/portal/leads', icon: <Users size={18} />, label: 'Leads & Clients', permission: 'leads' },
+  { href: '/portal/planner', icon: <CalendarDays size={18} />, label: 'Planner', permission: 'planner' },
   { href: '/portal/calls', icon: <Phone size={18} />, label: 'Phone', permission: 'calls' },
   { href: '/portal/emails', icon: <Mail size={18} />, label: 'Emails', permission: 'emails' },
   { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages', permission: 'messages' },
@@ -1616,8 +1618,21 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 </div>
                 <PortalCloseButton onClick={() => setMobileMoreOpen(false)} aria-label="Close more sections" />
               </div>
+              {canAccess('planner') ? <Link
+                href="/portal/planner"
+                onClick={() => setMobileMoreOpen(false)}
+                className={`mb-3 flex min-h-14 items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${isActivePath(pathname, '/portal/planner', searchParams) ? 'border-[#caa24c]/45 bg-[#caa24c]/10' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/30'}`}
+                aria-current={isActivePath(pathname, '/portal/planner', searchParams) ? 'page' : undefined}
+              >
+                <span className="text-[#caa24c]">{navItems.find((item) => item.href === '/portal/planner')?.icon}</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-[color:var(--portal-text)]">Planner</span>
+                  <span className="block text-xs text-[color:var(--portal-muted)]">Event plans, designs &amp; tasks</span>
+                </span>
+                <ArrowUpRight size={16} className="ml-auto text-[color:var(--portal-muted)]" aria-hidden="true" />
+              </Link> : null}
               <div className="grid grid-cols-3 gap-2">
-                {navItems.filter((item) => canAccess(item.permission as PortalPermission) && !accessibleMobilePrimaryNavItems.some((primary) => primary.href === item.href)).map((item) => {
+                {navItems.filter((item) => item.href !== '/portal/planner' && canAccess(item.permission as PortalPermission) && !accessibleMobilePrimaryNavItems.some((primary) => primary.href === item.href)).map((item) => {
                   const active = isActivePath(pathname, item.href, searchParams)
                   return (
                     <Link

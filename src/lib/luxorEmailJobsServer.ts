@@ -5,7 +5,7 @@ import { LUXOR_GRAND_OPENING } from './luxorGrandOpening'
 
 import crypto from 'crypto'
 import { LuxorBooking, LuxorEmailJob, LuxorEmailJobKind, LuxorInquiry, LuxorPayment, LuxorSignatureRequest } from './luxorInquiryTypes'
-import { supabaseRest } from './supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { buildAiTailoredInvoiceReminderEmail } from './luxorLifecycleEmailsServer'
 import { ensureLuxorFinalBalanceInvoice, getInvoice, getInvoiceByBookingAndKind, listInvoicesByBooking, listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
@@ -1065,6 +1065,7 @@ export async function processLuxorEmailJobs(
     let providerAccepted = false
     let providerAttemptStarted = false
     let providerMessageReference: string | null = null
+    let plannerCodeClaim: { presentationId: string; generationId: string; codeHash: string } | null = null
     const isCustomWorkflowJob = isCustomWorkflowJobBlockedFromLegacyDispatch(job)
     try {
       // Custom jobs have an isolated claim and a separately gated dispatch
@@ -1360,6 +1361,35 @@ export async function processLuxorEmailJobs(
       if (isBrochureFollowUpEmailSnapshot(job) && job.automation_step_key) {
         job = { ...job, body: cleanBrochureFollowUpEmailSnapshot(job.body, job.automation_step_key) }
       }
+      const plannerPresentationId = typeof metadata.planner_presentation_id === 'string' ? metadata.planner_presentation_id : ''
+      if (plannerPresentationId && (metadata.kind === 'planner_presentation_invitation' || metadata.kind === 'planner_presentation_verification')) {
+        const [presentation] = await supabaseRestStrict<Array<{ id: string; booking_id: string | null; recipient_email: string; expires_at: string; revoked_at: string | null; lifecycle_status: string }>>(
+          `luxor_planner_presentations?select=id,booking_id,recipient_email,expires_at,revoked_at,lifecycle_status&id=eq.${encodeURIComponent(plannerPresentationId)}&limit=1`,
+        )
+        if (!presentation || !['ready','queued'].includes(presentation.lifecycle_status) || !presentation.booking_id || presentation.revoked_at || Date.parse(presentation.expires_at) <= Date.now() || presentation.recipient_email.toLowerCase() !== job.recipient_email.toLowerCase()) {
+          await updateLuxorEmailJob(job.id, { status: 'cancelled', body: '[Private Planner presentation email cancelled.]', last_error: 'Planner presentation is no longer active.' })
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
+        if (metadata.kind === 'planner_presentation_verification') {
+          const generationId = typeof metadata.generation_id === 'string' ? metadata.generation_id : ''
+          const codeHash = typeof metadata.code_hash === 'string' ? metadata.code_hash : ''
+          const claim = generationId && codeHash ? await supabaseRestStrict<{ claimed: boolean; reason?: string; code_ciphertext?: string }>('rpc/luxor_planner_claim_presentation_code_email', {
+            method: 'POST', body: JSON.stringify({ p_presentation_id: plannerPresentationId, p_generation_id: generationId, p_code_hash: codeHash, p_job_id: job.id, p_recipient_email: job.recipient_email }),
+          }) : null
+          if (!claim?.claimed || !claim.code_ciphertext) {
+            await updateLuxorEmailJob(job.id, { status: 'cancelled', body: '[Stale or expired Planner verification email cancelled.]', last_error: 'Planner verification generation is no longer eligible for delivery.' })
+            results.push({ id: job.id, status: 'skipped' })
+            continue
+          }
+          plannerCodeClaim = { presentationId: plannerPresentationId, generationId, codeHash }
+          const sharing = await import('./luxorPlannerSharingServer')
+          const code = sharing.decryptPresentationSecret(claim.code_ciphertext)
+          if (!/^\d{6}$/.test(code)) throw new Error('Planner verification code was invalid.')
+          const email = sharing.buildPlannerPresentationCodeEmail(code)
+          job = { ...job, subject: email.subject, body: email.body }
+        }
+      }
       assertEmailHasNoUnresolvedPlaceholders(job.subject, job.body)
       if (isCustomWorkflowJob && !await authorizeCustomWorkflowEmailJob(job.id)) {
         results.push({ id: job.id, status: 'skipped' })
@@ -1397,7 +1427,14 @@ export async function processLuxorEmailJobs(
       if (isCustomWorkflowJob) {
         await recordCustomWorkflowEmailOutcome(job, 'accepted', providerMessageReference)
       } else {
-        await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null, body: job.body })
+        const isPlannerPresentationMail = metadata.kind === 'planner_presentation_invitation' || metadata.kind === 'planner_presentation_verification'
+        await updateLuxorEmailJob(job.id, { status: 'sent', sent_at: new Date().toISOString(), last_error: null, body: isPlannerPresentationMail ? '[Private Planner presentation email sent.]' : job.body })
+        if (plannerCodeClaim) {
+          await supabaseRestStrict<unknown>('rpc/luxor_planner_finish_presentation_code_email', { method: 'POST', body: JSON.stringify({ p_presentation_id: plannerCodeClaim.presentationId, p_generation_id: plannerCodeClaim.generationId, p_code_hash: plannerCodeClaim.codeHash, p_job_id: job.id, p_sent: true }) }).catch((error) => console.error('Sent Planner verification generation needs reconciliation:', error))
+        }
+        if (metadata.kind === 'planner_presentation_invitation' && plannerPresentationId) {
+          await supabaseRestStrict<unknown>(`luxor_planner_presentations?id=eq.${encodeURIComponent(plannerPresentationId)}`, { method: 'PATCH', body: JSON.stringify({ invitation_email_job_id: job.id, sent_at: new Date().toISOString() }) }).catch((error) => console.error('Sent Planner invitation status needs reconciliation:', error))
+        }
       }
       if (job.test_run_id) {
         await supabaseRest(`luxor_test_run_emails?email_job_id=eq.${encodeURIComponent(job.id)}`, {

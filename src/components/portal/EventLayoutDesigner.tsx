@@ -61,6 +61,7 @@ type Props = {
   eventType?: string | null
   eventDate?: string | null
   guestCount?: number | null
+  contextMessage?: string
   onSave: (layout: EventLayoutDocument) => Promise<boolean>
   onCreateReview?: (layout: EventLayoutDocument) => Promise<string | null>
 }
@@ -283,6 +284,7 @@ function EventLayoutDesignerComponent({
   eventType,
   eventDate,
   guestCount,
+  contextMessage,
   onSave,
   onCreateReview,
 }: Props) {
@@ -588,6 +590,7 @@ function EventLayoutDesignerComponent({
             <p className="hidden text-[11px] text-[color:var(--portal-muted)] sm:block">
               Arrange the hall, estimate guest seating, and save the architectural floor plan.
             </p>
+            {contextMessage ? <p className="mt-1 max-w-xl text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{contextMessage}</p> : null}
           </div>
         </div>
 

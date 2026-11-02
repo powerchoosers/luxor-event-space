@@ -4,7 +4,7 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 
 export const PORTAL_PERMISSIONS = [
   'overview', 'leads', 'emails', 'calls', 'messages', 'calendar', 'events',
-  'marketing', 'finances', 'operations', 'reports', 'settings', 'team_access',
+  'planner', 'marketing', 'finances', 'operations', 'reports', 'settings', 'team_access',
   'email_identity', 'phone_assignment',
 ] as const
 
@@ -23,13 +23,15 @@ export type LuxorPortalMember = {
 export const ROLE_DEFAULTS: Record<PortalRole, PortalPermission[]> = {
   owner: [...PORTAL_PERMISSIONS],
   admin: [...PORTAL_PERMISSIONS],
-  agent: ['overview', 'leads', 'emails', 'calls', 'messages', 'calendar', 'events'],
+  agent: ['overview', 'leads', 'emails', 'calls', 'messages', 'calendar', 'events', 'planner'],
 }
 
 export function normalizePermissions(value: unknown, role: PortalRole): PortalPermission[] {
   if (role === 'owner') return [...PORTAL_PERMISSIONS]
   const list = Array.isArray(value) ? value : ROLE_DEFAULTS[role]
-  return PORTAL_PERMISSIONS.filter((permission) => list.includes(permission))
+  // Lewis approved Planner access for all active portal staff. Keep its
+  // all-events scope independent of the other per-feature permissions.
+  return PORTAL_PERMISSIONS.filter((permission) => permission === 'planner' || list.includes(permission))
 }
 
 export async function getLuxorPortalMember(email: string) {
