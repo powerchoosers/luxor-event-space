@@ -5,6 +5,9 @@ import { getOfficialDecorService } from './luxorDecorCatalog'
 export const LUXOR_PAYMENT_COLLECTION_SCOPE = 'luxor_services_only'
 
 const LUXOR_SERVICE_IDS = new Set(['venue-additional-hours', 'venue-rental', 'required-cleaning', 'required-security', 'essential-decor'])
+// Proposal package fees are Luxor charges even though their IDs are generated
+// separately from the venue-service catalog rows.
+const LUXOR_PACKAGE_FEE_IDS = new Set(['package-fee-essentials', 'package-fee-signature', 'package-fee-luxor', 'package-fee-customized'])
 
 function money(value: number) { return Math.round(value * 100) / 100 }
 
@@ -18,6 +21,7 @@ export function isLuxorCollectedLineItem(item: LuxorInvoiceLineItem) {
   // vendor-estimate bucket merely because it does not use a catalog service ID.
   if (item.pricingRole === 'custom' && item.costClassification !== 'preferred_vendor_estimate') return true
   if (LUXOR_SERVICE_IDS.has(lineId(item))) return true
+  if (LUXOR_PACKAGE_FEE_IDS.has(lineId(item))) return true
   if (getOfficialDecorService(lineId(item))) return true
   const text = `${item.category || ''} ${item.description || ''}`.toLowerCase()
   return /venue\s+rental|required\s+cleaning|required\s+security|essential\s+decor/.test(text)

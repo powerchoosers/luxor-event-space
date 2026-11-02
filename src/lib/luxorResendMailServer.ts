@@ -53,9 +53,18 @@ export async function sendLuxorResendEmail(input: LuxorSendMailInput) {
   const payloadHash = createHash('sha256').update(JSON.stringify({ from, fromName, to, subject, html, text,
     inReplyTo: input.inReplyTo, references, calendar: input.calendar,
     attachments: attachments.map((a) => ({ filename: a.filename, type: a.contentType, hash: createHash('sha256').update(a.content).digest('hex') })) })).digest('hex')
+  const attachmentManifest = attachments.map((attachment, index) => ({
+    source_key: `outbound-${index}`,
+    filename: attachment.filename,
+    content_type: attachment.contentType || 'application/octet-stream',
+    size_bytes: attachment.content.byteLength,
+    sha256: createHash('sha256').update(attachment.content).digest('hex'),
+  }))
   const row = await prepareLuxorOutbox({ from, to, subject, html, text, idempotencyKey, payloadHash,
     smtpMessageId: false,
     threadId: input.threadId, references, metadata: { ...metadata,
+      fromName,
+      attachmentManifest,
       ...(idempotencyKey.startsWith('email-job/') || idempotencyKey.startsWith('agreement-job/') ? { emailJobId: idempotencyKey.split('/')[1] } : {}),
       hasAttachments: attachments.length > 0 || Boolean(input.calendar) } })
   if (row.accepted_at) return { messageId: `mail-${row.id}`, providerMessageId: row.provider_id, from, to }

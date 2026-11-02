@@ -1,11 +1,12 @@
 import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import { requiresLuxorPayInFull, LUXOR_PAY_IN_FULL_REQUIRED } from '@/lib/luxorPaymentEligibility'
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
 import Stripe from 'stripe'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { beginLuxorProposalSend, claimLuxorProposalPublication, completeLuxorProposalSend, failLuxorProposalSend, finishLuxorProposalPublication, isLuxorProposalHistoryReady, markLuxorProposalSendAttemptSending, ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice, reconcileLuxorProposalDeliveryReceipt, updateInvoice } from '@/lib/luxorInvoicesServer'
+import { beginLuxorProposalSend, claimLuxorProposalPublication, claimLuxorPaymentInvoiceFinalization, completeLuxorProposalSend, failLuxorProposalSend, finishLuxorProposalPublication, isLuxorProposalHistoryReady, luxorPaymentFinalizationAttempt, markLuxorProposalSendAttemptSending, ensureLuxorDepositInvoice, getInvoice, listPaidPaymentsByInvoice, reconcileLuxorProposalDeliveryReceipt, updateInvoice, updateLuxorPaymentInvoiceFinalization } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { getLuxorBooking, listLuxorBookingsByInquiry, updateLuxorBooking } from '@/lib/luxorBookingsServer'
+import { getLuxorBooking, listLuxorBookingsByInquiry, listLuxorPaymentsByBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { sendLuxorZohoEmail } from '@/lib/zohoMailServer'
 import { buildLuxorDateLockDepositEmail, buildLuxorProposalEmail, buildLuxorPaymentRequestEmail, buildLuxorProposalContractEmail } from '@/lib/luxorProposalEmailServer'
@@ -27,8 +28,40 @@ import { LuxorWeekdayRentalError } from '@/lib/luxorWeekdayRentalServer'
 import { LuxorProposalBookingTimingError } from '@/lib/luxorProposalBookingTiming'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { getLuxorActiveProposalDeliveryVariant } from '@/lib/luxorProposalDeliveryReceipt'
+import { paymentInvoiceFinalizationError } from '@/lib/luxorPaymentDashboardModel'
+import { listLuxorPaymentInstallments } from '@/lib/luxorPaymentInstallmentsServer'
+import { downloadLuxorMailAttachment, getLuxorMailByIdempotencyKey, listLuxorMailAttachments } from '@/lib/luxorMailboxServer'
+import type { LuxorInvoice } from '@/lib/luxorInquiryTypes'
+import type { LuxorPaymentFinalizationAttempt } from '@/lib/luxorInvoicesServer'
 
 const PAYMENT_PLAN_REQUIRED = 'Set the payment plan in Step 5 before publishing this final proposal.'
+
+async function completePaymentFinalizationFromAcceptance(input: {
+  invoice: LuxorInvoice
+  attempt: LuxorPaymentFinalizationAttempt
+  providerMessageId?: string | null
+  acceptedAt: string
+}) {
+  const { invoice, attempt } = input
+  if (attempt.state === 'completed') return invoice
+  const accepted = await updateLuxorPaymentInvoiceFinalization({
+    invoiceId: invoice.id,
+    idempotencyKey: attempt.idempotency_key,
+    payloadHash: attempt.payload_hash,
+    claimGeneration: attempt.claim_generation,
+    state: 'provider_accepted',
+    attemptUpdates: { provider_accepted_at: input.acceptedAt, provider_message_id: input.providerMessageId || null },
+  })
+  if (!accepted) return null
+  return updateLuxorPaymentInvoiceFinalization({
+    invoiceId: invoice.id,
+    idempotencyKey: attempt.idempotency_key,
+    payloadHash: attempt.payload_hash,
+    claimGeneration: attempt.claim_generation,
+    state: 'completed',
+    invoiceUpdates: { status: 'sent', proposal_sent_at: input.acceptedAt },
+  })
+}
 
 function offerReminderTimes(expiresAt?: string | null) {
   if (!expiresAt) return []
@@ -47,6 +80,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let publicationAttemptId: string | null = null
   let publicationState = 'failed'
   let proposalSendAttemptId: string | null = null
+  let paymentFinalizationProviderAccepted = false
+  let paymentFinalizationUnconfirmed = false
+  let paymentFinalizationProvider: 'resend' | 'zoho' | null = null
   try {
     const session = await getLuxorPortalSession()
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
@@ -54,6 +90,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     invoiceId = id
     let invoice = await getInvoice(id)
     if (!invoice) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 })
+    const body = await request.json().catch(() => ({})) as { mode?: 'proposal' | 'proposal_in_person' | 'proposal_contract' | 'payment' | 'finalize_and_send' | 'date_lock_deposit'; paymentAmount?: number; paymentLabel?: string; resend?: boolean }
+    if (body.mode === 'finalize_and_send') {
+      const attempt = luxorPaymentFinalizationAttempt(invoice)
+      if (attempt?.state === 'completed') return NextResponse.json({ invoice, mode: 'finalize_and_send', deduplicated: true })
+      if (attempt?.state === 'provider_accepted') {
+        const completed = await completePaymentFinalizationFromAcceptance({
+          invoice, attempt, providerMessageId: attempt.provider_message_id,
+          acceptedAt: attempt.provider_accepted_at || new Date().toISOString(),
+        })
+        if (!completed) return NextResponse.json({ error: 'The email was already accepted, but invoice finalization still needs reconciliation. Refresh before retrying.' }, { status: 503, headers: { 'Retry-After': '2' } })
+        return NextResponse.json({ invoice: completed, mode: 'finalize_and_send', deduplicated: true })
+      }
+    }
     if (invoice.invoice_kind === 'deposit' && isLuxorBookingDepositPaused()) return NextResponse.json({ error: 'Booking deposit payments are temporarily unavailable.' }, { status: 503 })
     invoice = await reconcileLuxorProposalDeliveryReceipt(invoice)
     assertLuxorWeekdayRentalPublication(invoice)
@@ -90,8 +139,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'This lead is archived. The proposal, contract, and payment links have been withdrawn.' }, { status: 409 })
     }
     if (!inquiry?.email) return NextResponse.json({ error: 'Add the lead email address before sending.' }, { status: 400 })
-    const body = await request.json().catch(() => ({})) as { mode?: 'proposal' | 'proposal_in_person' | 'proposal_contract' | 'payment' | 'date_lock_deposit'; paymentAmount?: number; paymentLabel?: string; resend?: boolean }
-
     // A final proposal is selected first. It is deliberately a distinct event
     // from contract signature, and neither legacy route is allowed to create
     // a payment session before that agreement has been signed.
@@ -821,9 +868,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ invoice: updated, inquiry: updatedInquiry, signature, signingUrl, mode: 'proposal_contract' })
     }
 
-    if (body.mode !== 'payment') {
+    if (body.mode !== 'payment' && body.mode !== 'finalize_and_send') {
       return NextResponse.json({ error: 'Choose a supported final-proposal or post-signature payment action.' }, { status: 400 })
     }
+    const finalizingDraft = body.mode === 'finalize_and_send'
     if (invoice.invoice_kind !== 'deposit' && invoice.invoice_kind !== 'final_balance' && invoice.invoice_kind !== 'security_deposit') {
       return NextResponse.json({ error: 'Create the scheduled booking-payment invoice from the signed agreement before sending a Stripe link.' }, { status: 409 })
     }
@@ -831,24 +879,143 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'The client must sign the agreement before a Stripe payment link can be created or sent.' }, { status: 409 })
     }
     if (balanceDue <= 0) return NextResponse.json({ error: 'This invoice is already fully paid.' }, { status: 400 })
+    const [installments, bookingPayments] = finalizingDraft && invoice.invoice_kind === 'final_balance'
+      ? await Promise.all([listLuxorPaymentInstallments(booking.id), listLuxorPaymentsByBooking(booking.id)])
+      : [[], paidPayments]
     const requestedAmount = Number(body.paymentAmount)
     const explicitPaymentAmount = Number.isFinite(requestedAmount) ? Math.round(requestedAmount * 100) / 100 : undefined
     const explicitPaymentLabel = body.paymentLabel ? String(body.paymentLabel).trim().slice(0, 80) : undefined
+    const finalizationLabel = explicitPaymentLabel || (invoice.invoice_kind === 'deposit'
+      ? 'Initial Booking Payment - Luxor at Las Palmas Events'
+      : invoice.invoice_kind === 'security_deposit' ? 'Refundable Security Deposit' : 'Remaining Final Event Price Balance')
+    let finalizationAttempt: ReturnType<typeof luxorPaymentFinalizationAttempt> = null
+    let finalizationPayloadHash: string | null = null
+    let finalizationRetrySnapshot: {
+      to: string; subject: string; content: string; text: string; from: string; fromName: string
+      attachments: Array<{ filename: string; content: Uint8Array; contentType: string }>
+    } | null = null
+    if (finalizingDraft) {
+      const finalizationError = paymentInvoiceFinalizationError({ invoice, mode: body.mode || '', outstanding: balanceDue, installments, payments: bookingPayments })
+      if (finalizationError) return NextResponse.json({ error: finalizationError }, { status: 409 })
+      if (explicitPaymentAmount !== undefined && Math.abs(explicitPaymentAmount - balanceDue) > 0.01) {
+        return NextResponse.json({ error: 'The payment must equal the approved invoice balance.' }, { status: 400 })
+      }
+      finalizationPayloadHash = createHash('sha256').update(JSON.stringify({
+        invoiceId: invoice.id,
+        bookingId: booking.id,
+        recipient: inquiry.email.trim().toLowerCase(),
+        amount: balanceDue,
+        label: finalizationLabel,
+        currency: 'USD',
+      })).digest('hex')
+      const idempotencyKey = `invoice-finalize/${invoice.id}/${finalizationPayloadHash.slice(0, 32)}`
+      const claim = await claimLuxorPaymentInvoiceFinalization({
+        invoice,
+        idempotencyKey,
+        payloadHash: finalizationPayloadHash,
+        provider: luxorMailProvider(),
+        recipientEmail: inquiry.email,
+      })
+      paymentFinalizationProvider = claim.attempt?.provider || luxorMailProvider()
+      if (claim.action === 'expired') {
+        const outbox = await getLuxorMailByIdempotencyKey(claim.attempt.idempotency_key)
+        if (outbox?.accepted_at) {
+          const completed = await completePaymentFinalizationFromAcceptance({ invoice, attempt: claim.attempt, providerMessageId: outbox.provider_id, acceptedAt: outbox.accepted_at })
+          if (completed) return NextResponse.json({ invoice: completed, mode: 'finalize_and_send', deduplicated: true })
+        }
+        return NextResponse.json({ error: 'The provider idempotency window has expired. Review the existing mailbox record before retrying this payment request.' }, { status: 409 })
+      }
+      if (claim.action === 'busy') {
+        return NextResponse.json({ error: 'This invoice finalization is already running or its email outcome needs reconciliation. Refresh the invoice before another send.' }, { status: 409 })
+      }
+      if (claim.action === 'conflict') {
+        return NextResponse.json({ error: 'A different finalization request is already recorded for this draft. Refresh and review the invoice.' }, { status: 409 })
+      }
+      if (claim.action === 'completed') {
+        return NextResponse.json({ invoice: claim.invoice, mode: 'finalize_and_send', deduplicated: true })
+      }
+      if (claim.action === 'finalize') {
+        const completed = await completePaymentFinalizationFromAcceptance({
+          invoice, attempt: claim.attempt, providerMessageId: claim.attempt.provider_message_id,
+          acceptedAt: claim.attempt.provider_accepted_at || new Date().toISOString(),
+        })
+        if (!completed) return NextResponse.json({ error: 'The email was already accepted, but invoice finalization still needs reconciliation. Refresh before retrying.' }, { status: 503, headers: { 'Retry-After': '2' } })
+        return NextResponse.json({ invoice: completed, mode: 'finalize_and_send', deduplicated: true })
+      }
+      if (!claim.attempt) {
+        return NextResponse.json({ error: 'Invoice finalization ownership could not be verified. Refresh before retrying.' }, { status: 409 })
+      }
+      const claimedAttempt = claim.attempt
+      finalizationAttempt = claimedAttempt
+      if (claimedAttempt.provider_attempted_at && claimedAttempt.provider === 'resend') {
+        const outbox = await getLuxorMailByIdempotencyKey(claimedAttempt.idempotency_key)
+        if (outbox?.accepted_at) {
+          const completed = await completePaymentFinalizationFromAcceptance({
+            invoice, attempt: claimedAttempt, providerMessageId: outbox.provider_id, acceptedAt: outbox.accepted_at,
+          })
+          if (!completed) return NextResponse.json({ error: 'The email was already accepted, but invoice finalization still needs reconciliation. Refresh before retrying.' }, { status: 503, headers: { 'Retry-After': '2' } })
+          return NextResponse.json({ invoice: completed, mode: 'finalize_and_send', deduplicated: true })
+        }
+        if (outbox) {
+          const manifest = Array.isArray(outbox.metadata?.attachmentManifest)
+            ? outbox.metadata.attachmentManifest as Array<{ source_key?: string; filename?: string; content_type?: string; size_bytes?: number; sha256?: string }>
+            : []
+          if (outbox.metadata?.paymentFinalizationPayloadHash !== finalizationPayloadHash
+            || outbox.to_addresses[0]?.trim().toLowerCase() !== inquiry.email.trim().toLowerCase()
+            || manifest.length !== 1 || manifest[0].source_key !== 'outbound-0'
+            || manifest[0].filename !== `Luxor-Proposal-${invoice.id.slice(0, 8)}.pdf`
+            || manifest[0].content_type !== 'application/pdf' || !manifest[0].sha256) {
+            return NextResponse.json({ error: 'The stored email retry snapshot is incomplete or does not match this request. Review the mailbox before retrying.' }, { status: 409 })
+          }
+          const attachments = await listLuxorMailAttachments(outbox.id)
+          const savedAttachment = attachments.find((attachment) => attachment.id && attachment.source_key === manifest[0].source_key)
+          if (!savedAttachment || savedAttachment.filename !== manifest[0].filename || savedAttachment.content_type !== manifest[0].content_type || savedAttachment.size_bytes !== manifest[0].size_bytes) {
+            return NextResponse.json({ error: 'The stored email attachment is incomplete. Review the mailbox before retrying.' }, { status: 409 })
+          }
+          const downloaded = await downloadLuxorMailAttachment(outbox.id, savedAttachment.id)
+          if (createHash('sha256').update(downloaded.bytes).digest('hex') !== manifest[0].sha256) {
+            return NextResponse.json({ error: 'The stored email attachment failed its integrity check. Review the mailbox before retrying.' }, { status: 409 })
+          }
+          finalizationRetrySnapshot = {
+            to: outbox.to_addresses[0],
+            subject: outbox.subject,
+            content: outbox.html_body || outbox.text_body,
+            text: outbox.text_body,
+            from: outbox.from_address,
+            fromName: typeof outbox.metadata?.fromName === 'string' ? outbox.metadata.fromName : 'Luxor at Las Palmas Events',
+            attachments: [{ filename: downloaded.filename, content: downloaded.bytes, contentType: downloaded.contentType }],
+          }
+        }
+      }
+    } else {
+      const finalizationError = paymentInvoiceFinalizationError({ invoice, mode: body.mode || '', outstanding: balanceDue, installments, payments: bookingPayments })
+      if (finalizationError) return NextResponse.json({ error: finalizationError }, { status: 409 })
+    }
     const origin = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
     if (explicitPaymentAmount !== undefined && Math.abs(explicitPaymentAmount - balanceDue) > 0.01) {
       return NextResponse.json({ error: 'The payment must equal the approved invoice balance.' }, { status: 400 })
     }
-    const deferredUrl = invoice.invoice_kind === 'deposit'
+    const deferredUrl = !finalizationRetrySnapshot && invoice.invoice_kind === 'deposit'
       ? await prepareLuxorDepositPaymentLink({ invoice, inquiry, booking, origin }) : null
-    const checkout = invoice.invoice_kind === 'deposit'
-      ? deferredUrl && { checkoutUrl: deferredUrl, checkoutId: null, paymentAmount: balanceDue,
-          paymentLabel: 'Initial Booking Payment - Luxor at Las Palmas Events', reused: false }
-      : await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin, paymentAmount: explicitPaymentAmount, paymentLabel: explicitPaymentLabel })
+    const checkout = finalizationRetrySnapshot
+      ? {
+        checkoutUrl: invoice.stripe_checkout_url || (invoice.public_token
+          ? `${origin}/api/public/proposals/${encodeURIComponent(invoice.public_token)}/checkout`
+          : ''),
+        checkoutId: invoice.stripe_checkout_session_id || null,
+        paymentAmount: Number(invoice.payment_requested_amount || balanceDue),
+        paymentLabel: invoice.payment_requested_label || finalizationLabel,
+        reused: true,
+      }
+      : invoice.invoice_kind === 'deposit'
+        ? deferredUrl && { checkoutUrl: deferredUrl, checkoutId: null, paymentAmount: balanceDue,
+            paymentLabel: 'Initial Booking Payment - Luxor at Las Palmas Events', reused: false }
+        : await createLuxorPostContractCheckout({ invoice, inquiry, booking, origin, paymentAmount: explicitPaymentAmount, paymentLabel: explicitPaymentLabel })
     if (!checkout) return NextResponse.json({ error: 'No payment remains on this invoice.' }, { status: 400 })
     const { paymentAmount, paymentLabel } = checkout
 
-    const pdf = await buildLuxorInvoicePdf(invoice, inquiry)
-    await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
+    const pdf = finalizationRetrySnapshot?.attachments[0]?.content || await buildLuxorInvoicePdf(invoice, inquiry)
+    if (!finalizationRetrySnapshot) await saveLuxorProposalPdf({ invoice, inquiryId: invoice.inquiry_id, pdf, createdBy: session.email })
     const now = new Date().toISOString()
     const publicToken = invoice.invoice_kind === 'deposit'
       ? (await getInvoice(invoice.id))?.public_token
@@ -856,23 +1023,88 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!publicToken) throw new Error('The payment link could not be prepared.')
     const paymentUrl = checkout.checkoutUrl
     const paymentRequestKey = checkout.checkoutId || invoice.id
-    await updateInvoice(invoice.id, {
+    const requestInvoiceFields = {
       public_token: publicToken,
       payment_requested_at: now,
       payment_requested_amount: paymentAmount,
       payment_requested_label: paymentLabel,
       ...(checkout.checkoutId ? { stripe_checkout_session_id: checkout.checkoutId, stripe_checkout_url: checkout.checkoutUrl } : {}),
-    })
-    const notes = await listNotesByInquiry(inquiry.id).catch(() => [])
-    const email = await buildLuxorPaymentRequestEmail({ invoice, inquiry, booking, notes, paymentUrl, paymentAmount, paymentLabel, paidTotal, balanceDue })
-    await sendLuxorZohoEmail({
-      to: inquiry.email,
-      subject: email.subject,
-      content: email.html,
-      attachments: [{ filename: `Luxor-Proposal-${invoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }],
-    })
+    }
+    if (finalizingDraft && finalizationAttempt && finalizationPayloadHash) {
+      const staged = await updateLuxorPaymentInvoiceFinalization({
+        invoiceId: invoice.id,
+        idempotencyKey: finalizationAttempt.idempotency_key,
+        payloadHash: finalizationPayloadHash,
+        claimGeneration: finalizationAttempt.claim_generation,
+        state: 'sending',
+        attemptUpdates: { started_at: new Date().toISOString(), provider_attempted_at: finalizationAttempt.provider_attempted_at || new Date().toISOString(), failure_reason: null },
+        invoiceUpdates: finalizationRetrySnapshot ? {} : requestInvoiceFields,
+      })
+      if (!staged) throw new Error('The payment request could not be staged safely. Refresh the invoice before retrying.')
+      invoice = staged
+    } else {
+      await updateInvoice(invoice.id, requestInvoiceFields)
+    }
+    const notes = finalizationRetrySnapshot ? [] : await listNotesByInquiry(inquiry.id).catch(() => [])
+    const email = finalizationRetrySnapshot
+      ? { subject: finalizationRetrySnapshot.subject, html: finalizationRetrySnapshot.content }
+      : await buildLuxorPaymentRequestEmail({ invoice, inquiry, booking, notes, paymentUrl, paymentAmount, paymentLabel, paidTotal, balanceDue })
+    let mailReceipt: Awaited<ReturnType<typeof sendLuxorZohoEmail>>
+    try {
+      mailReceipt = await sendLuxorZohoEmail({
+        ...(finalizingDraft && finalizationAttempt ? { idempotencyKey: finalizationAttempt.idempotency_key } : {}),
+        ...(finalizationRetrySnapshot ? {
+          to: finalizationRetrySnapshot.to,
+          from: finalizationRetrySnapshot.from,
+          fromName: finalizationRetrySnapshot.fromName,
+          text: finalizationRetrySnapshot.text,
+          attachments: finalizationRetrySnapshot.attachments,
+        } : { to: inquiry.email }),
+        subject: email.subject,
+        content: email.html,
+        ...(finalizationRetrySnapshot ? {} : { metadata: finalizingDraft && finalizationPayloadHash ? { paymentFinalizationPayloadHash: finalizationPayloadHash } : undefined }),
+        ...(finalizationRetrySnapshot ? {} : { attachments: [{ filename: `Luxor-Proposal-${invoice.id.slice(0, 8)}.pdf`, content: pdf, contentType: 'application/pdf' }] }),
+      })
+    } catch (mailError) {
+      if (finalizingDraft && finalizationAttempt && finalizationPayloadHash) {
+        paymentFinalizationUnconfirmed = true
+        await updateLuxorPaymentInvoiceFinalization({
+          invoiceId: invoice.id,
+          idempotencyKey: finalizationAttempt.idempotency_key,
+          payloadHash: finalizationPayloadHash,
+          claimGeneration: finalizationAttempt.claim_generation,
+          state: 'delivery_unconfirmed',
+          attemptUpdates: { failure_reason: mailError instanceof Error ? mailError.message.slice(0, 500) : 'Payment request delivery outcome is unconfirmed.' },
+        }).catch(() => null)
+      }
+      throw mailError
+    }
 
-    const updated = await updateInvoice(invoice.id, { status: 'sent', proposal_sent_at: now })
+    let updated: typeof invoice | null
+    if (finalizingDraft && finalizationAttempt && finalizationPayloadHash) {
+      paymentFinalizationProviderAccepted = true
+      const acceptedAt = new Date().toISOString()
+      const accepted = await updateLuxorPaymentInvoiceFinalization({
+        invoiceId: invoice.id,
+        idempotencyKey: finalizationAttempt.idempotency_key,
+        payloadHash: finalizationPayloadHash,
+        claimGeneration: finalizationAttempt.claim_generation,
+        state: 'provider_accepted',
+        attemptUpdates: { provider_accepted_at: acceptedAt, provider_message_id: mailReceipt.messageId },
+      })
+      if (!accepted) throw new Error('The email provider accepted this payment request, but its delivery receipt could not be saved.')
+      updated = await updateLuxorPaymentInvoiceFinalization({
+        invoiceId: invoice.id,
+        idempotencyKey: finalizationAttempt.idempotency_key,
+        payloadHash: finalizationPayloadHash,
+        claimGeneration: finalizationAttempt.claim_generation,
+        state: 'completed',
+        invoiceUpdates: { status: 'sent', proposal_sent_at: acceptedAt },
+      })
+      if (!updated) throw new Error('The email provider accepted this payment request, but invoice finalization is pending reconciliation.')
+    } else {
+      updated = await updateInvoice(invoice.id, { status: 'sent', proposal_sent_at: now })
+    }
     let updatedInquiry = inquiry
     if (!['booked', 'closed_lost'].includes(inquiry.status)) {
       updatedInquiry = await updateLuxorInquiry(inquiry.id, {
@@ -969,6 +1201,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       invoiceId,
       error: error instanceof Error ? error.message : String(error),
     })
+    if (paymentFinalizationProviderAccepted) {
+      return NextResponse.json({
+        error: 'The email provider accepted this payment request, but invoice status needs reconciliation. Refresh the invoice before taking another action.',
+        delivery: 'provider_accepted',
+      }, { status: 503, headers: { 'Retry-After': '2' } })
+    }
+    if (paymentFinalizationUnconfirmed) {
+      const message = paymentFinalizationProvider === 'resend'
+        ? 'Email delivery could not be confirmed. Retry this same Finalize & Send action after a short wait; it reuses the provider idempotency key.'
+        : 'Email delivery could not be confirmed. Do not retry the send; review the mailbox before taking another action.'
+      return NextResponse.json({ error: message, delivery: 'outcome_unconfirmed', provider: paymentFinalizationProvider }, { status: 503, headers: { 'Retry-After': '120' } })
+    }
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to send proposal.' }, { status: 500 })
   } finally {
     if (publicationAttemptId) await finishLuxorProposalPublication(invoiceId, publicationAttemptId, publicationState).catch(error => console.error('Proposal delivery state needs reconciliation:', error))

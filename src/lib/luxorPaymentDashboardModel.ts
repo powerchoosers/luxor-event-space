@@ -35,6 +35,46 @@ export function installmentReminderMilestone(dueDate: string, todayInChicago: st
   return null
 }
 
+function validCalendarDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T12:00:00.000Z`)
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+export function chicagoCalendarDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now)
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+export function isCalendarDateBeforeChicagoToday(value: string | null | undefined, now = new Date()) {
+  const date = calendarDateInChicago(value)
+  const today = chicagoCalendarDate(now)
+  return validCalendarDate(date) && date < today
+}
+
+export function isCalendarDateDueInChicago(value: string | null | undefined, now = new Date()) {
+  const date = calendarDateInChicago(value)
+  const today = chicagoCalendarDate(now)
+  return validCalendarDate(date) && date <= today
+}
+
+export function calendarDateInChicago(value: string | null | undefined) {
+  if (typeof value !== 'string') return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return validCalendarDate(value) ? value : ''
+  const timestamp = new Date(value)
+  return Number.isFinite(timestamp.getTime()) ? chicagoCalendarDate(timestamp) : ''
+}
+
+export function daysOverdueInChicago(value: string | null | undefined, now = new Date()) {
+  const date = calendarDateInChicago(value)
+  const today = chicagoCalendarDate(now)
+  if (!validCalendarDate(date) || date >= today) return 0
+  return Math.floor((Date.parse(`${today}T12:00:00.000Z`) - Date.parse(`${date}T12:00:00.000Z`)) / 86_400_000)
+}
+
 export function isLuxorReminderDaytime(now: Date) {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: '2-digit', hourCycle: 'h23' }).format(now) === '10'
 }
@@ -73,6 +113,54 @@ export function installmentPaidAmount(installment: LuxorPaymentInstallment, paym
     ? frozenLegacyBaseline
     : Math.max(0, recordedLegacyPaid - allocated)
   return Math.min(amountDue, Math.max(0, allocated + legacyBaseline))
+}
+
+export function installmentScheduleOutstanding(installments: LuxorPaymentInstallment[], payments: LuxorPayment[]) {
+  return roundMoney(installments.filter((item) => item.status !== 'void').reduce((sum, item) =>
+    sum + Math.max(0, Number(item.amount || 0) - installmentPaidAmount(item, payments)), 0))
+}
+
+export function installmentDisplayState(installment: LuxorPaymentInstallment, payments: LuxorPayment[], now = new Date()) {
+  const amountDue = Math.max(0, Number(installment.amount) || 0)
+  const credited = Math.min(amountDue, installmentPaidAmount(installment, payments))
+  const isPaid = amountDue > 0 && (credited >= amountDue || installment.status === 'paid')
+  const isPartial = installment.status === 'partial' || credited > 0 && !isPaid
+  const overdueDays = !isPaid ? daysOverdueInChicago(installment.due_at, now) : 0
+  return {
+    amountDue, credited, isPaid, isPartial, overdueDays,
+    isOverdue: overdueDays > 0 && amountDue - credited > 0.005,
+    status: isPaid ? 'Paid' : overdueDays > 0 && amountDue - credited > 0.005 ? 'Overdue' : isPartial ? 'Partially paid' : 'Pending',
+  }
+}
+
+export function installmentsForInvoiceStatus(invoice: LuxorInvoice, installments: LuxorPaymentInstallment[]) {
+  // Legacy accepted master invoices may not carry the newer explicit kind.
+  // Child payment invoices have their own kind and must not re-use the master schedule.
+  if (!invoice.invoice_kind || invoice.invoice_kind === 'event') {
+    return installments.filter((item) => item.status !== 'void' && item.invoice_id === invoice.id)
+  }
+  return []
+}
+
+export function hasOverdueInstallment(installments: LuxorPaymentInstallment[], payments: LuxorPayment[], now = new Date()) {
+  return installments.some((item) => installmentDisplayState(item, payments, now).isOverdue)
+}
+
+export function paymentInvoiceFinalizationError(input: {
+  invoice: LuxorInvoice
+  mode: string
+  outstanding: number
+  installments: LuxorPaymentInstallment[]
+  payments: LuxorPayment[]
+}) {
+  const { invoice, mode, outstanding, installments, payments } = input
+  if (invoice.status === 'draft' && mode !== 'finalize_and_send') return 'Draft payment invoices require the explicit Finalize & Send action.'
+  if (invoice.status !== 'draft' && mode === 'finalize_and_send') return 'Finalize & Send is only available for a draft payment invoice.'
+  if (invoice.status === 'draft' && invoice.invoice_kind === 'final_balance' && installments.length > 0
+    && Math.abs(installmentScheduleOutstanding(installments, payments) - outstanding) > 0.01) {
+    return 'This draft does not match the outstanding amount on the saved payment schedule. Review the invoice before finalizing it.'
+  }
+  return null
 }
 
 export function paidOnInvoice(invoice: LuxorInvoice, invoices: LuxorInvoice[], payments: LuxorPayment[]) {

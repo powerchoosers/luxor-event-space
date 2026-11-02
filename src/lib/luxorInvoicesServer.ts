@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { randomUUID } from 'node:crypto'
+
 import { LuxorInvoice, LuxorInvoiceKind, LuxorInvoiceLineItem, LuxorInvoiceStatus, LuxorBill, LuxorPayment, LuxorProposalContext, LuxorProposalPromotionSnapshot } from './luxorInquiryTypes'
 import { roundLuxorMoney } from './luxorOffer'
 import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from './luxorBookingMoney'
@@ -279,6 +281,164 @@ export async function updateInvoice(
   })
 
   return updated ?? null
+}
+
+export type LuxorPaymentFinalizationAttempt = {
+  idempotency_key: string
+  payload_hash: string
+  claim_generation: string
+  provider: 'resend' | 'zoho'
+  recipient_email: string
+  state: 'preparing' | 'sending' | 'delivery_unconfirmed' | 'provider_accepted' | 'completed'
+  started_at: string
+  provider_attempted_at?: string
+  provider_accepted_at?: string
+  provider_message_id?: string | null
+  failure_reason?: string | null
+}
+
+export function luxorPaymentFinalizationAttempt(invoice: LuxorInvoice): LuxorPaymentFinalizationAttempt | null {
+  const value = invoice.proposal_context?.payment_finalization_attempt
+  return value && typeof value === 'object' ? value as LuxorPaymentFinalizationAttempt : null
+}
+
+type PaymentFinalizationClaim =
+  | { action: 'send' | 'finalize'; invoice: LuxorInvoice; attempt: LuxorPaymentFinalizationAttempt }
+  | { action: 'completed'; invoice: LuxorInvoice; attempt: LuxorPaymentFinalizationAttempt }
+  | { action: 'expired'; invoice: LuxorInvoice; attempt: LuxorPaymentFinalizationAttempt }
+  | { action: 'busy' | 'conflict'; invoice: LuxorInvoice; attempt: LuxorPaymentFinalizationAttempt | null }
+
+const LUXOR_PAYMENT_FINALIZATION_RETRY_LEASE_MS = 2 * 60_000
+const LUXOR_PAYMENT_FINALIZATION_PROVIDER_WINDOW_MS = 23 * 60 * 60_000
+
+function nextLuxorInvoiceUpdatedAt(invoice: LuxorInvoice, now: Date) {
+  const previous = Date.parse(invoice.updated_at)
+  return new Date(Math.max(now.getTime(), Number.isFinite(previous) ? previous + 1 : now.getTime())).toISOString()
+}
+
+/** Claim one immutable draft-finalization request using invoice CAS and its durable JSON snapshot. */
+export async function claimLuxorPaymentInvoiceFinalization(input: {
+  invoice: LuxorInvoice
+  idempotencyKey: string
+  payloadHash: string
+  provider: 'resend' | 'zoho'
+  recipientEmail: string
+  now?: Date
+}): Promise<PaymentFinalizationClaim> {
+  const now = input.now || new Date()
+  const currentAttempt = luxorPaymentFinalizationAttempt(input.invoice)
+  if (currentAttempt) {
+    if (currentAttempt.idempotency_key !== input.idempotencyKey || currentAttempt.payload_hash !== input.payloadHash
+      || currentAttempt.recipient_email.toLowerCase() !== input.recipientEmail.toLowerCase()
+      || currentAttempt.provider !== input.provider) {
+      return { action: 'conflict', invoice: input.invoice, attempt: currentAttempt }
+    }
+    if (currentAttempt.state === 'completed') return { action: 'completed', invoice: input.invoice, attempt: currentAttempt }
+    if (currentAttempt.state === 'provider_accepted') return { action: 'finalize', invoice: input.invoice, attempt: currentAttempt }
+    if (input.invoice.status !== 'draft') return { action: 'conflict', invoice: input.invoice, attempt: currentAttempt }
+    const age = now.getTime() - Date.parse(currentAttempt.started_at)
+    const providerAge = now.getTime() - Date.parse(currentAttempt.provider_attempted_at || currentAttempt.started_at)
+    if (currentAttempt.state !== 'preparing' && input.provider === 'resend' && providerAge >= LUXOR_PAYMENT_FINALIZATION_PROVIDER_WINDOW_MS) {
+      return { action: 'expired', invoice: input.invoice, attempt: currentAttempt }
+    }
+    const canRecover = age >= LUXOR_PAYMENT_FINALIZATION_RETRY_LEASE_MS
+      && (currentAttempt.state === 'preparing' || input.provider === 'resend' && providerAge < LUXOR_PAYMENT_FINALIZATION_PROVIDER_WINDOW_MS)
+    if (!canRecover) return { action: 'busy', invoice: input.invoice, attempt: currentAttempt }
+    const recovered: LuxorPaymentFinalizationAttempt = { ...currentAttempt, claim_generation: randomUUID(), started_at: now.toISOString(), failure_reason: null }
+    const saved = await writeLuxorPaymentFinalizationAttempt(input.invoice, recovered)
+    return saved
+      ? { action: 'send', invoice: saved, attempt: recovered }
+      : { action: 'busy', invoice: await getInvoice(input.invoice.id) || input.invoice, attempt: currentAttempt }
+  }
+
+  if (input.invoice.status !== 'draft') return { action: 'conflict', invoice: input.invoice, attempt: null }
+  const attempt: LuxorPaymentFinalizationAttempt = {
+    idempotency_key: input.idempotencyKey,
+    payload_hash: input.payloadHash,
+    claim_generation: randomUUID(),
+    provider: input.provider,
+    recipient_email: input.recipientEmail.toLowerCase(),
+    state: 'preparing',
+    started_at: now.toISOString(),
+  }
+  const context = { ...(input.invoice.proposal_context || {}), payment_finalization_attempt: attempt }
+  const updatedAt = nextLuxorInvoiceUpdatedAt(input.invoice, now)
+  const [claimed] = await supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&id=eq.${encodeURIComponent(input.invoice.id)}&status=eq.draft&updated_at=eq.${encodeURIComponent(input.invoice.updated_at)}`,
+    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ proposal_context: context, updated_at: updatedAt }) },
+  )
+  if (claimed) return { action: 'send', invoice: claimed, attempt }
+
+  const fresh = await getInvoice(input.invoice.id)
+  const winner = fresh && luxorPaymentFinalizationAttempt(fresh)
+  if (!fresh || !winner) return { action: 'conflict', invoice: fresh || input.invoice, attempt: null }
+  if (winner.idempotency_key !== input.idempotencyKey || winner.payload_hash !== input.payloadHash
+    || winner.recipient_email.toLowerCase() !== input.recipientEmail.toLowerCase() || winner.provider !== input.provider) {
+    return { action: 'conflict', invoice: fresh, attempt: winner }
+  }
+  if (winner.state === 'completed') return { action: 'completed', invoice: fresh, attempt: winner }
+  if (winner.state === 'provider_accepted') return { action: 'finalize', invoice: fresh, attempt: winner }
+  return { action: 'busy', invoice: fresh, attempt: winner }
+}
+
+/** Compare-and-swap the durable send state and related invoice fields as one row update. */
+export async function updateLuxorPaymentInvoiceFinalization(input: {
+  invoiceId: string
+  idempotencyKey: string
+  payloadHash: string
+  claimGeneration: string
+  state: LuxorPaymentFinalizationAttempt['state']
+  attemptUpdates?: Partial<LuxorPaymentFinalizationAttempt>
+  invoiceUpdates?: Partial<Pick<LuxorInvoice, 'status' | 'proposal_sent_at' | 'payment_requested_at' | 'payment_requested_amount' | 'payment_requested_label' | 'stripe_checkout_session_id' | 'stripe_checkout_url' | 'public_token'>>
+  now?: Date
+}) {
+  const current = await getInvoice(input.invoiceId)
+  if (!current) return null
+  const existing = luxorPaymentFinalizationAttempt(current)
+  if (!existing || existing.idempotency_key !== input.idempotencyKey || existing.payload_hash !== input.payloadHash
+    || existing.claim_generation !== input.claimGeneration) return null
+  // A claimed draft can become paid, cancelled, or otherwise terminal while
+  // checkout/email preparation is in progress. Never stage or send against it.
+  // Provider acceptance/completion reconciliation remains allowed below.
+  if (input.state === 'sending' && current.status !== 'draft') return null
+  const allowedNext: Record<LuxorPaymentFinalizationAttempt['state'], LuxorPaymentFinalizationAttempt['state'][]> = {
+    preparing: ['preparing', 'sending'],
+    sending: ['sending', 'delivery_unconfirmed', 'provider_accepted'],
+    delivery_unconfirmed: ['delivery_unconfirmed', 'sending', 'provider_accepted'],
+    provider_accepted: ['provider_accepted', 'completed'],
+    completed: ['completed'],
+  }
+  if (!allowedNext[existing.state].includes(input.state)) return null
+  const nextAttempt: LuxorPaymentFinalizationAttempt = { ...existing, ...input.attemptUpdates, state: input.state }
+  const invoiceUpdates = { ...input.invoiceUpdates }
+  // Sent is never allowed to revive or downgrade a payment lifecycle state.
+  if (invoiceUpdates.status === 'sent' && current.status !== 'draft' && current.status !== 'sent') {
+    delete invoiceUpdates.status
+    delete invoiceUpdates.proposal_sent_at
+  }
+  const now = input.now || new Date()
+  const updatedAt = nextLuxorInvoiceUpdatedAt(current, now)
+  const [updated] = await supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&id=eq.${encodeURIComponent(input.invoiceId)}&updated_at=eq.${encodeURIComponent(current.updated_at)}`,
+    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
+      ...invoiceUpdates,
+      proposal_context: { ...(current.proposal_context || {}), payment_finalization_attempt: nextAttempt },
+      updated_at: updatedAt,
+    }) },
+  )
+  return updated || null
+}
+
+async function writeLuxorPaymentFinalizationAttempt(invoice: LuxorInvoice, attempt: LuxorPaymentFinalizationAttempt) {
+  const updatedAt = nextLuxorInvoiceUpdatedAt(invoice, new Date(attempt.started_at))
+  const [updated] = await supabaseRest<LuxorInvoice[]>(
+    `luxor_invoices?select=*&id=eq.${encodeURIComponent(invoice.id)}&updated_at=eq.${encodeURIComponent(invoice.updated_at)}`,
+    { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
+      proposal_context: { ...(invoice.proposal_context || {}), payment_finalization_attempt: attempt },
+      updated_at: updatedAt,
+    }) },
+  )
+  return updated || null
 }
 
 /** Update proposal terms and append their edit event in the same database transaction. */
@@ -736,6 +896,9 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
     throw new Error('A configured final payment due date is required before a final-balance invoice can be created.')
   }
   const existing = await getInvoiceByBookingAndKind(input.bookingId, 'final_balance')
+  // Final-balance records are financial history. Routine retries or schedule
+  // refreshes must not silently reprice a draft that already exists.
+  if (existing) return existing
   const { depositAmount: defaultDepositAmount, refundableSecurityDeposit } = calculateLuxorThirtyPercentDeposit(input.masterInvoice)
   // New proposals collect the separate refundable security deposit with the
   // signed-agreement booking payment. Keep it out of the final event balance
@@ -747,20 +910,6 @@ export async function ensureLuxorFinalBalanceInvoice(input: {
   const finalBalance = remainingEventBalance
   const lineItems: LuxorInvoiceLineItem[] = [{ description: collection.scoped ? 'Remaining Luxor-Controlled Services Balance' : 'Remaining Event Balance After Initial Booking Payment', quantity: 1, unitPrice: remainingEventBalance, total: remainingEventBalance, category: 'Final Balance', paymentBucket: 'event', required: true }]
   const promotion = inheritedProposalPromotion(input.masterInvoice, existing)
-  if (existing) {
-    if (existing.status === 'paid') return existing
-    return await updateInvoice(existing.id, {
-      line_items: lineItems,
-      subtotal: finalBalance,
-      tax_rate: 0,
-      total: finalBalance,
-      ...promotion,
-      due_date: dueDate,
-      notes: collection.scoped
-        ? `Internal collection note: this Stripe balance settles Luxor-controlled services only. Planner-managed services remain on the complete contract total and are collected separately. Luxor-controlled total: ${collection.luxorServicesTotal.toFixed(2)}; planner-managed total: ${collection.plannerServicesTotal.toFixed(2)}.`
-        : `Final Event Price balance after the ${depositAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} initial booking payment. The refundable security deposit was collected separately with the initial payment and remains held through post-event inspection.`,
-    }) || existing
-  }
   try {
     return await createInvoice({
     inquiry_id: input.masterInvoice.inquiry_id,

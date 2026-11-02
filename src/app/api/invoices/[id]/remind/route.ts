@@ -63,6 +63,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!isPaymentInvoice) {
       return NextResponse.json({ error: 'Payment reminders can only be sent for deposit, final-balance, or security-deposit invoices.' }, { status: 409 })
     }
+    if (invoice.status === 'draft') {
+      return NextResponse.json({ error: 'Finalize & Send the payment invoice before sending a payment reminder.' }, { status: 409 })
+    }
 
     // A payment reminder is never a way around the signed-agreement gate.
     // In particular, do not forward an old stored Stripe URL for a booking

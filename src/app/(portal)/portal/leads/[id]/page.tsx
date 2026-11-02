@@ -3649,7 +3649,7 @@ export default function LeadDetailPage({
       : invoice
     const balance = getInvoiceBalance(paymentInvoice)
     setPaymentRequestInvoice(paymentInvoice)
-    setPaymentRequestKind(paymentInvoice.invoice_kind === 'final_balance' ? 'balance' : 'deposit')
+    setPaymentRequestKind(paymentInvoice.invoice_kind === 'final_balance' || paymentInvoice.invoice_kind === 'security_deposit' ? 'balance' : 'deposit')
     setCustomPaymentAmount(String(balance))
   }
 
@@ -3659,7 +3659,7 @@ export default function LeadDetailPage({
     const invoiceId = paymentRequestInvoice.id
     const balance = getInvoiceBalance(paymentRequestInvoice)
     const suggestedDeposit = getSuggestedInvoiceDeposit(paymentRequestInvoice)
-    const isScheduledPayment = paymentRequestInvoice.invoice_kind === 'deposit' || paymentRequestInvoice.invoice_kind === 'final_balance'
+    const isScheduledPayment = paymentRequestInvoice.invoice_kind === 'deposit' || paymentRequestInvoice.invoice_kind === 'final_balance' || paymentRequestInvoice.invoice_kind === 'security_deposit'
     const paymentAmount = isScheduledPayment
       ? balance
       : paymentRequestKind === 'balance'
@@ -3667,7 +3667,9 @@ export default function LeadDetailPage({
         : paymentRequestKind === 'deposit'
           ? Math.min(suggestedDeposit, balance)
           : Number(customPaymentAmount)
-    const paymentLabel = paymentRequestInvoice.invoice_kind === 'deposit'
+    const paymentLabel = paymentRequestInvoice.invoice_kind === 'security_deposit'
+      ? 'Refundable Security Deposit'
+      : paymentRequestInvoice.invoice_kind === 'deposit'
       ? 'Initial Booking Payment - Luxor at Las Palmas Events'
       : paymentRequestInvoice.invoice_kind === 'final_balance'
         ? 'Remaining Final Event Price Balance'
@@ -3681,7 +3683,7 @@ export default function LeadDetailPage({
       const response = await fetch(`/api/invoices/${invoiceId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'payment', paymentAmount, paymentLabel }),
+        body: JSON.stringify({ mode: paymentRequestInvoice.status === 'draft' ? 'finalize_and_send' : 'payment', paymentAmount, paymentLabel }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'The proposal could not be sent.')
@@ -6974,7 +6976,7 @@ export default function LeadDetailPage({
                             ) : agreementBooking.contract_status !== 'signed' ? (
                               <span className="min-h-11 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{agreementDeliveryConfirmed ? 'Agreement awaiting signature' : agreementDeliveryPending ? 'Agreement delivery pending' : 'Agreement not confirmed'}</span>
                             ) : (
-                              <button type="button" onClick={() => depositInvoice && openPaymentRequest(depositInvoice)} disabled={!depositInvoice || depositBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">Resend Payment Link</button>
+                              <button type="button" onClick={() => depositInvoice && openPaymentRequest(depositInvoice)} disabled={!depositInvoice || depositBalance <= 0} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all disabled:opacity-40 cursor-pointer">{depositInvoice?.status === 'draft' ? 'Finalize & Send Payment Link' : 'Resend Payment Link'}</button>
                             )}
                           </>}
                         </div>
@@ -7517,7 +7519,7 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          {depositInvoice && depositBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(depositInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">Resend Payment Link</button> : null}
+                          {depositInvoice && depositBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(depositInvoice)} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">{depositInvoice.status === 'draft' ? 'Finalize & Send Payment Link' : 'Resend Payment Link'}</button> : null}
                           {latestBooking ? (
                             <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/10 px-5 text-[10px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/20 transition-all cursor-pointer">
                               Mark Initial Payment Paid
@@ -7571,7 +7573,7 @@ export default function LeadDetailPage({
                           </div>
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2 pt-2 border-t border-[color:var(--portal-border)]">
-                          {depositInvoice && depositBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(depositInvoice)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">Resend Payment Link</button> : null}
+                          {depositInvoice && depositBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(depositInvoice)} className="flex-1 min-w-[80px] py-1.5 rounded bg-[#caa24c] text-[9px] font-black uppercase text-white hover:bg-[#a8792f] transition-colors cursor-pointer">{depositInvoice.status === 'draft' ? 'Finalize & Send Payment Link' : 'Resend Payment Link'}</button> : null}
                           {latestBooking ? (
                             <button type="button" onClick={() => handleRecordManualPayment(latestBooking, 'deposit')} className="flex-1 min-w-[80px] py-1.5 rounded border border-[#caa24c]/25 bg-[#caa24c]/10 text-[9px] font-black uppercase text-[#a8792f] dark:text-[#caa24c] hover:bg-[#caa24c]/15 transition-colors cursor-pointer">Mark Initial Payment Paid</button>
                           ) : null}
@@ -7629,7 +7631,7 @@ export default function LeadDetailPage({
                           <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Payments are applied to Venue Services first, then Event Services. The refundable security deposit is tracked separately.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {finalBalanceInvoice && finalPaymentBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice)} className="min-h-11 rounded-xl bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-wider !text-white shadow-md hover:bg-[#a8792f] transition-all">Send secure payment link</button> : null}
+                          {finalBalanceInvoice && finalPaymentBalance > 0 ? <button type="button" onClick={() => openPaymentRequest(finalBalanceInvoice)} className="min-h-11 rounded-xl bg-[#b98a3e] px-5 text-[10px] font-black uppercase tracking-wider !text-white shadow-md hover:bg-[#a8792f] transition-all">{finalBalanceInvoice.status === 'draft' ? 'Finalize & Send Secure Payment Link' : 'Send secure payment link'}</button> : null}
                           {agreementBooking && finalPaymentBalance > 0 ? <button type="button" onClick={() => handleRecordManualPayment(agreementBooking, 'final')} className="min-h-11 rounded-xl border border-[#caa24c]/30 bg-[color:var(--portal-soft)] px-5 text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] hover:border-[#caa24c]/60 transition-all">Record manual payment</button> : null}
                         </div>
                       </div>
@@ -8026,7 +8028,7 @@ export default function LeadDetailPage({
               } else if (currentStage === 'final_payment') {
                 nextStepTitle = 'Collect final payment'
                 nextStepDetail = finalBalanceInvoice ? 'Send the secure balance link; Stripe advances the stage after payment' : 'Create an invoice before collecting the balance'
-                nextStepButton = finalBalanceInvoice ? 'Send Secure Payment Link' : 'Create Invoice'
+                nextStepButton = finalBalanceInvoice ? finalBalanceInvoice.status === 'draft' ? 'Finalize & Send Secure Payment Link' : 'Send Secure Payment Link' : 'Create Invoice'
                 nextStepAction = finalBalanceInvoice ? () => openPaymentRequest(finalBalanceInvoice) : () => setIsInvoiceModalOpen(true)
               } else if (currentStage === 'event') {
                 nextStepTitle = 'Close out event'
@@ -9278,10 +9280,10 @@ export default function LeadDetailPage({
                       <a href={`/api/invoices/${inv.id}/pdf`} className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">
                         <FileText size={12} /> Download PDF
                       </a>
-                      <button type="button" onClick={() => openPaymentRequest(inv)} disabled={sendingInvoiceId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0 || (inv.invoice_kind !== 'deposit' && inv.invoice_kind !== 'final_balance') || reminderBooking?.contract_status !== 'signed'} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
-                        <Send size={12} /> {sendingInvoiceId === inv.id ? 'Sending...' : getInvoiceBalance(inv) <= 0 ? 'Paid in full' : 'Send payment request'}
+                      <button type="button" onClick={() => openPaymentRequest(inv)} disabled={sendingInvoiceId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0 || !['deposit', 'final_balance', 'security_deposit'].includes(inv.invoice_kind || '') || reminderBooking?.contract_status !== 'signed'} className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] disabled:opacity-40">
+                        <Send size={12} /> {sendingInvoiceId === inv.id ? 'Sending...' : getInvoiceBalance(inv) <= 0 ? 'Paid in full' : inv.status === 'draft' ? 'Finalize & Send' : 'Send payment request'}
                       </button>
-                      {['deposit', 'final_balance', 'security_deposit'].includes(inv.invoice_kind || '') ? <button type="button" onClick={() => handleSendAiInvoiceReminder(inv)} disabled={sendingReminderId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0 || !reminderDueDate} title={!reminderDueDate ? 'A saved payment due date is required before a reminder can be sent.' : `Payment due ${formatDisplayDate(reminderDueDate)}`} className="inline-flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-40 cursor-pointer">
+                      {['deposit', 'final_balance', 'security_deposit'].includes(inv.invoice_kind || '') ? <button type="button" onClick={() => handleSendAiInvoiceReminder(inv)} disabled={inv.status === 'draft' || sendingReminderId === inv.id || !lead.email || getInvoiceBalance(inv) <= 0 || !reminderDueDate} title={inv.status === 'draft' ? 'Finalize & Send the invoice before sending reminders.' : !reminderDueDate ? 'A saved payment due date is required before a reminder can be sent.' : `Payment due ${formatDisplayDate(reminderDueDate)}`} className="inline-flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-40 cursor-pointer">
                         <Sparkles size={12} /> {sendingReminderId === inv.id ? 'Sending AI Email...' : reminderDueDate ? `Send reminder · Due ${formatDisplayDate(reminderDueDate)}` : 'Set due date to remind'}
                       </button> : null}
                       <button type="button" onClick={() => setInvoiceToDelete(inv)} disabled={getInvoicePaidTotal(inv.id) > 0 || inv.status === 'paid'} className="inline-flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-35 dark:text-red-300">
@@ -9582,7 +9584,7 @@ export default function LeadDetailPage({
           <form onSubmit={handleSendInvoice} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[color:var(--portal-bg)]">
             <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
               <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Send Signed-Contract Payment Request</h3>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{paymentRequestInvoice.status === 'draft' ? 'Finalize & Send Payment Request' : 'Send Signed-Contract Payment Request'}</h3>
                 <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Available only after the agreement is signed. The client receives a secure Stripe link for the amount selected here.</p>
               </div>
               <PortalCloseButton onClick={() => setPaymentRequestInvoice(null)} aria-label="Close payment request window" />
@@ -9602,6 +9604,8 @@ export default function LeadDetailPage({
                     ? [{ value: 'deposit', label: 'Initial booking payment + refundable security deposit — ' + formatMoney(getInvoiceBalance(paymentRequestInvoice)) }]
                     : paymentRequestInvoice.invoice_kind === 'final_balance'
                       ? [{ value: 'balance', label: 'Remaining Final Event Price balance — ' + formatMoney(getInvoiceBalance(paymentRequestInvoice)) }]
+                      : paymentRequestInvoice.invoice_kind === 'security_deposit'
+                        ? [{ value: 'balance', label: 'Refundable security deposit — ' + formatMoney(getInvoiceBalance(paymentRequestInvoice)) }]
                       : [
                         { value: 'deposit', label: 'Initial booking payment + refundable security deposit — ' + formatMoney(getSuggestedInvoiceDeposit(paymentRequestInvoice)) },
                         { value: 'balance', label: 'Pay invoice in full — ' + formatMoney(getInvoiceBalance(paymentRequestInvoice)) },
@@ -9616,7 +9620,7 @@ export default function LeadDetailPage({
                 </div>
               ) : null}
               <button type="submit" disabled={sendingInvoiceId === paymentRequestInvoice.id} className="w-full rounded-lg bg-[#caa24c] py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#dfbd68] disabled:opacity-40">
-                {sendingInvoiceId === paymentRequestInvoice.id ? 'Creating link and sending...' : 'Email Secure Payment Link'}
+                {sendingInvoiceId === paymentRequestInvoice.id ? 'Creating link and sending...' : paymentRequestInvoice.status === 'draft' ? 'Finalize & Email Secure Payment Link' : 'Email Secure Payment Link'}
               </button>
             </div>
           </form>

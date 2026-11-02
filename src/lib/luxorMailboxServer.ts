@@ -37,6 +37,13 @@ export async function getLuxorMailRow(id: string) {
   return rows[0] || null
 }
 
+/** Resolve the durable send snapshot for a Resend idempotency key. */
+export async function getLuxorMailByIdempotencyKey(idempotencyKey: string) {
+  const rows = await supabaseRest<LuxorMailRow[]>(`luxor_mail_messages?select=*&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=1`)
+  const row = rows[0]
+  return row?.direction === 'outgoing' && row.provider === 'resend' ? row : null
+}
+
 const MAX_PORTAL_MAIL_STARS = 10_000
 
 /** Read only canonical, durable message stars for the signed-in portal identity. */

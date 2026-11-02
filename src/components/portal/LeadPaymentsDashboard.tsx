@@ -19,7 +19,7 @@ import {
   ReceiptText,
 } from 'lucide-react'
 import type { LuxorBooking, LuxorEmailJob, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
-import { eventCreditForPayment as paymentMoneyForEvent, installmentPaidAmount, isBookingPaymentMilestone, paidOnInvoice } from '@/lib/luxorPaymentDashboardModel'
+import { eventCreditForPayment as paymentMoneyForEvent, hasOverdueInstallment, installmentDisplayState, installmentPaidAmount, installmentsForInvoiceStatus, isBookingPaymentMilestone, isCalendarDateDueInChicago, isCalendarDateBeforeChicagoToday, paidOnInvoice } from '@/lib/luxorPaymentDashboardModel'
 import { PortalSelect } from '@/components/portal/PortalUI'
 
 const PaymentReceiptPdfPreview = dynamic(() => import('./PaymentReceiptPdfPreview'), {
@@ -377,24 +377,14 @@ export function LeadPaymentsDashboard({
             </div>
             <div className="flex items-center gap-3 py-2"><span className="z-10 h-2 w-2 rounded-full bg-[#c29448]" /><p className="flex flex-1 items-center gap-3 text-[10px] font-bold uppercase tracking-[0.15em] text-[#a6772b]">Monthly payments<span className="h-px flex-1 bg-[#d8c6ac]" /></p></div>
             {timelineInstallments.map((installment) => {
-              const allocatedPaid = installmentPaidAmount(installment, uniquePayments)
-              const due = Number(installment.amount || 0)
-              // Allocation rows are authoritative when present. Older rows
-              // predate explicit allocation records; retain their canonical
-              // installment status without fabricating an allocation.
-              const canonicalPaid = installment.status === 'paid' ? due : 0
-              const canonicalPartial = installment.status === 'partial'
-                ? Number(installment.metadata?.paid_amount || 0)
-                : 0
-              const credited = Math.min(due, Math.max(allocatedPaid, canonicalPaid, canonicalPartial))
-              const isPaid = due > 0 && (credited >= due || installment.status === 'paid')
-              const isPartial = installment.status === 'partial' || credited > 0 && !isPaid
-              const overdue = !isPaid && installment.due_at && Date.parse(installment.due_at) < Date.now()
-              const amountText = isPartial ? credited > 0 ? `${formatMoney(credited)} / ${formatMoney(due)}` : `Unverified / ${formatMoney(due)}` : !credited && installment.due_at && Date.parse(installment.due_at) <= Date.now() ? `${formatMoney(0)} / ${formatMoney(due)}` : formatMoney(due)
-              const status = isPaid ? 'Paid' : isPartial ? 'Partially paid' : overdue ? 'Overdue' : 'Pending'
+              const state = installmentDisplayState(installment, uniquePayments)
+              const { amountDue: due, credited, isPaid, isPartial, overdueDays } = state
+              const overdue = state.isOverdue
+              const amountText = isPartial ? credited > 0 ? `${formatMoney(credited)} / ${formatMoney(due)}` : `Unverified / ${formatMoney(due)}` : !credited && installment.due_at && isCalendarDateDueInChicago(installment.due_at) ? `${formatMoney(0)} / ${formatMoney(due)}` : formatMoney(due)
+              const status = isPaid ? 'Paid' : overdue ? 'Overdue' : isPartial ? 'Partially paid' : 'Pending'
               return <div key={installment.id} className="relative grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#f1eae2] py-3 last:border-0">
                 <span className={`z-10 grid h-6 w-6 place-items-center rounded-full border-2 bg-white ${isPaid ? 'border-emerald-600 bg-emerald-600 text-white' : overdue ? 'border-rose-500 text-rose-600' : 'border-[#b4a391] text-[#817364]'}`}>{isPaid ? <Check size={14} /> : <Clock3 size={14} />}</span>
-                <div className="min-w-0"><p className="font-semibold">{installment.label || `Installment ${installment.installment_order}`}</p><p className="text-xs text-[#78685a]">{formatDate(installment.due_at)}{isPaid && installment.paid_at ? ` · Paid ${formatDate(installment.paid_at)}` : installment.due_at ? ` · ${overdue ? `Overdue by ${Math.max(1, Math.floor((Date.now() - Date.parse(installment.due_at)) / 86400000))} days` : 'Scheduled'}` : ''}</p></div>
+                <div className="min-w-0"><p className="font-semibold">{installment.label || `Installment ${installment.installment_order}`}</p><p className="text-xs text-[#78685a]">{formatDate(installment.due_at)}{isPaid && installment.paid_at ? ` · Paid ${formatDate(installment.paid_at)}` : installment.due_at ? ` · ${overdue ? `Overdue by ${overdueDays} days` : 'Scheduled'}` : ''}</p></div>
                 <div className="text-right"><p className="font-semibold tabular-nums">{amountText}</p><span className={`text-[10px] font-bold uppercase tracking-wide ${isPaid ? 'text-emerald-700' : overdue ? 'text-rose-700' : isPartial ? 'text-amber-700' : 'text-[#a6772b]'}`}>{status}</span></div>
               </div>
             })}
@@ -431,8 +421,15 @@ export function LeadPaymentsDashboard({
               const total = Number(invoice.total || 0)
               const balance = Math.max(0, round(total - invoicePaid))
               const dueAt = invoice.due_date
-              const status = invoice.status === 'cancelled' ? 'Cancelled' : balance <= 0 && invoicePaid > 0 ? 'Paid' : dueAt && Date.parse(dueAt) < Date.now() && balance > 0 ? 'Overdue' : invoice.status === 'draft' ? 'Draft' : invoicePaid > 0 ? 'Partially paid' : invoice.status === 'paid' ? 'Needs reconciliation' : 'Open'
-              return <article key={invoice.id} className="grid gap-3 rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-4 md:grid-cols-[1fr_auto] md:items-center"><div className="min-w-0"><p className="font-semibold">{invoice.description || `${invoice.invoice_kind || 'Event'} invoice`}</p><p className="mt-1 text-xs text-[#78685a]">Invoice {invoice.id.slice(0, 8).toUpperCase()} · Issued {formatDate(invoice.created_at)} · Due {formatDate(dueAt)}</p><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs"><span>Total <strong>{formatMoney(total)}</strong></span><span>Paid <strong>{formatMoney(invoicePaid)}</strong></span><span>Outstanding <strong>{formatMoney(balance)}</strong></span><span className="font-semibold text-[#91651f]">{status}</span></div></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onViewInvoice(invoice)} className="rounded-lg border border-[#e7d6be] px-3 py-2 text-xs font-semibold text-[#624d35]">View</button><a href={`/api/invoices/${encodeURIComponent(invoice.id)}/pdf`} className="rounded-lg border border-[#e7d6be] px-3 py-2 text-xs font-semibold text-[#624d35]">Download</a>{balance > 0 && invoice.status !== 'cancelled' && invoice.status !== 'paid' ? <button type="button" onClick={() => onRequestInvoicePayment(invoice)} className="rounded-lg bg-[#b88737] px-3 py-2 text-xs font-semibold text-white">Payment request</button> : null}</div></article>
+              const invoiceSchedule = installmentsForInvoiceStatus(invoice, installments)
+              const scheduleControlsOverdue = invoiceSchedule.length > 0
+              const overdueBySchedule = hasOverdueInstallment(invoiceSchedule, uniquePayments)
+              const overdueByInvoice = invoice.payment_requested_at && isCalendarDateBeforeChicagoToday(dueAt)
+              const isOverdue = balance > 0 && invoice.status !== 'draft' && (scheduleControlsOverdue ? overdueBySchedule : overdueByInvoice)
+              const status = invoice.status === 'cancelled' ? 'Cancelled' : balance <= 0 && invoicePaid > 0 ? 'Paid' : invoice.status === 'draft' ? 'Draft' : isOverdue ? 'Overdue' : invoicePaid > 0 ? 'Partially paid' : invoice.status === 'paid' ? 'Needs reconciliation' : 'Open'
+              const supportsPaymentRequest = invoice.invoice_kind === 'deposit' || invoice.invoice_kind === 'final_balance' || invoice.invoice_kind === 'security_deposit'
+              const canRequestPayment = balance > 0 && supportsPaymentRequest && invoice.status !== 'draft' && invoice.status !== 'cancelled' && invoice.status !== 'paid'
+              return <article key={invoice.id} className="grid gap-3 rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-4 md:grid-cols-[1fr_auto] md:items-center"><div className="min-w-0"><p className="font-semibold">{invoice.description || `${invoice.invoice_kind || 'Event'} invoice`}</p><p className="mt-1 text-xs text-[#78685a]">Invoice {invoice.id.slice(0, 8).toUpperCase()} · Issued {formatDate(invoice.created_at)} · Due {formatDate(dueAt)}</p><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs"><span>Total <strong>{formatMoney(total)}</strong></span><span>Paid <strong>{formatMoney(invoicePaid)}</strong></span><span>Outstanding <strong>{formatMoney(balance)}</strong></span><span className="font-semibold text-[#91651f]">{status}</span></div></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onViewInvoice(invoice)} className="rounded-lg border border-[#e7d6be] px-3 py-2 text-xs font-semibold text-[#624d35]">View</button><a href={`/api/invoices/${encodeURIComponent(invoice.id)}/pdf`} className="rounded-lg border border-[#e7d6be] px-3 py-2 text-xs font-semibold text-[#624d35]">Download</a>{canRequestPayment ? <button type="button" onClick={() => onRequestInvoicePayment(invoice)} className="rounded-lg bg-[#b88737] px-3 py-2 text-xs font-semibold text-white">Payment request</button> : null}</div></article>
             }) : <p className="rounded-xl border border-dashed border-[#e7d6be] p-8 text-center text-sm text-[#78685a]">No invoices are associated with this event.</p>}</div> : null}
             {activeTab === 'receipts' ? <div className="space-y-2">{receiptEmailMessage ? <p role="status" className="rounded-lg bg-[#faf5ee] p-3 text-xs text-[#624d35]">{receiptEmailMessage}</p> : null}{paidPayments.length ? paidPayments.map((payment) => {
               const invoice = invoiceById.get(payment.invoice_id || '')
