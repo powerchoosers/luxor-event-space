@@ -293,40 +293,83 @@ as $$
 declare
   v_invoice public.luxor_invoices;
   v_existing_payment public.luxor_payments;
+  v_new_invoice_kind text;
+  v_old_invoice_kind text;
+  v_existing_invoice_kind text;
   v_paid numeric(12,2);
 begin
-  if tg_op = 'UPDATE'
-    and new.status is not distinct from old.status
-    and new.amount is not distinct from old.amount
-    and new.invoice_id is not distinct from old.invoice_id then
-    return new;
+  perform pg_advisory_xact_lock(2147483000,400);
+
+  if new.invoice_id is not null then
+    select invoice_kind into v_new_invoice_kind from public.luxor_invoices where id = new.invoice_id;
   end if;
 
-  perform pg_advisory_xact_lock(2147483000,400);
   -- INSERT ... ON CONFLICT invokes BEFORE INSERT before PostgreSQL resolves the
-  -- conflicting row. Recognize exact stable-transaction retries before adding
-  -- NEW.amount to the invoice total; reject reuse of a processor/reference
-  -- pair with different financial details.
+  -- conflicting row. Only apply stable-identity validation when either side is
+  -- a final-balance transaction; leave other invoice kinds on their existing
+  -- conflict behavior.
   if tg_op = 'INSERT' and new.processor is not null and new.processor_reference is not null then
     select * into v_existing_payment from public.luxor_payments
       where processor = new.processor and processor_reference = new.processor_reference
       for update;
     if found then
+      select invoice_kind into v_existing_invoice_kind from public.luxor_invoices where id = v_existing_payment.invoice_id;
+      if v_new_invoice_kind is distinct from 'final_balance'
+        and v_existing_invoice_kind is distinct from 'final_balance' then
+        return new;
+      end if;
       if v_existing_payment.invoice_id is distinct from new.invoice_id
         or v_existing_payment.booking_id is distinct from new.booking_id
-        or v_existing_payment.amount is distinct from new.amount
-        or v_existing_payment.payment_method is distinct from new.payment_method then
+        or v_existing_payment.amount is distinct from new.amount then
         raise exception 'This payment transaction reference was already used with different financial details.' using errcode = '23505';
       end if;
+      if nullif(v_existing_payment.metadata->>'currency', '') is not null
+        and nullif(new.metadata->>'currency', '') is not null
+        and lower(v_existing_payment.metadata->>'currency') <> lower(new.metadata->>'currency') then
+        raise exception 'This payment transaction reference was already used with a different currency.' using errcode = '23505';
+      end if;
       if v_existing_payment.status = 'paid' then
-        if new.status is distinct from 'paid' or v_existing_payment.paid_at is distinct from new.paid_at then
-          raise exception 'This paid transaction reference was already used with different payment details.' using errcode = '23505';
-        end if;
-        -- Exact paid retry: allow ON CONFLICT to resolve to the same ledger row
-        -- without charging its amount against the invoice a second time.
+        -- An exact provider/manual transaction retry may arrive with a new
+        -- transport timestamp or method label. Preserve the canonical ledger
+        -- receipt so ON CONFLICT DO UPDATE cannot rewrite it, while DO NOTHING
+        -- continues to ignore the duplicate row.
+        new.status := v_existing_payment.status;
+        new.payment_method := v_existing_payment.payment_method;
+        new.paid_at := v_existing_payment.paid_at;
+        new.inquiry_id := v_existing_payment.inquiry_id;
+        new.notes := v_existing_payment.notes;
+        new.metadata := v_existing_payment.metadata;
         return new;
       end if;
     end if;
+  end if;
+
+  if tg_op = 'UPDATE' and old.invoice_id is not null then
+    select invoice_kind into v_old_invoice_kind from public.luxor_invoices where id = old.invoice_id;
+  end if;
+  if v_new_invoice_kind is distinct from 'final_balance'
+    and v_old_invoice_kind is distinct from 'final_balance' then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and v_old_invoice_kind = 'final_balance' and old.status = 'paid' then
+    if old.invoice_id is distinct from new.invoice_id
+      or old.booking_id is distinct from new.booking_id
+      or old.amount is distinct from new.amount
+      or old.processor is distinct from new.processor
+      or old.processor_reference is distinct from new.processor_reference then
+      raise exception 'A paid final-balance transaction identity cannot be changed.' using errcode = '23505';
+    end if;
+    if nullif(old.metadata->>'currency', '') is not null
+      and nullif(new.metadata->>'currency', '') is not null
+      and lower(old.metadata->>'currency') <> lower(new.metadata->>'currency') then
+      raise exception 'A paid final-balance transaction currency cannot be changed.' using errcode = '23505';
+    end if;
+  end if;
+  if tg_op = 'UPDATE'
+    and new.status is not distinct from old.status
+    and new.amount is not distinct from old.amount
+    and new.invoice_id is not distinct from old.invoice_id then
+    return new;
   end if;
   if new.status <> 'paid' or new.invoice_id is null then return new; end if;
   select * into v_invoice from public.luxor_invoices where id = new.invoice_id for update;

@@ -260,6 +260,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
         offer_savings: session.metadata?.offer_savings || '0',
         offer_expires_at: session.metadata?.offer_expires_at || null,
         stripe_coupon_id: session.metadata?.stripe_coupon_id || null,
+        currency: session.currency,
       },
     }),
   })
