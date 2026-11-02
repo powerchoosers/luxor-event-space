@@ -89,6 +89,7 @@ import {
 } from '@/lib/luxorLeadEmailNotice'
 import { getLuxorTourSection, luxorTodayKey } from '@/lib/luxorTourMetrics'
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
+import { queueLuxorPaymentReceiptAfterSave } from '@/lib/luxorPaymentReceiptClient'
 import { CorrectEmailResendDialog } from '@/components/portal/CorrectEmailResendDialog'
 import type { CorrectEmailResendOption } from '@/lib/luxorLeadEmailResend'
 import { WeekdayRentalSummary } from '@/components/portal/WeekdayRentalSummary'
@@ -4081,11 +4082,19 @@ export default function LeadDetailPage({
         })
         return
       }
+      if (emailReceipt && !paymentPayload.payment?.id) {
+        notify({ title: 'Payment saved; receipt email needs attention', description: 'The payment is saved. Do not record it again. A receipt could not be prepared because its saved transaction reference was not returned.', variant: 'error' })
+        return
+      }
       if (emailReceipt && paymentPayload.payment?.id) {
-        const receiptEmail = await fetch(`/api/payments/${encodeURIComponent(paymentPayload.payment.id)}/receipt/email`, { method: 'POST' })
-        const receiptResult = await receiptEmail.json().catch(() => ({})) as { error?: string; job?: LuxorEmailJob }
-        if (!receiptEmail.ok) throw new Error(`Payment recorded, but the receipt email was not queued: ${receiptResult.error || 'review the receipt email status before retrying.'}`)
-        if (receiptResult.job) setTourEmailJobs((current) => [...current.filter((job) => job.id !== receiptResult.job!.id), receiptResult.job!])
+        try {
+          const receiptResult = await queueLuxorPaymentReceiptAfterSave(paymentPayload.payment.id)
+          if (receiptResult.job) setTourEmailJobs((current) => [...current.filter((job) => job.id !== receiptResult.job!.id), receiptResult.job!])
+        } catch (receiptError) {
+          const reason = receiptError instanceof Error ? receiptError.message : 'the receipt email could not be queued.'
+          notify({ title: 'Payment saved; receipt email needs attention', description: `The payment is saved. Do not record it again. The receipt email was not queued: ${reason}`, variant: 'error' })
+          return
+        }
       }
       const amount = Number(paymentPayload.payment?.amount || paymentPayload.invoice?.total || 0)
       notify({
@@ -4130,11 +4139,19 @@ export default function LeadDetailPage({
       if (!response.ok) throw new Error(result.error || 'Installment payment could not be recorded.')
       await fetchAllData(false)
       setPaymentInstallmentRefresh((revision) => revision + 1)
+      if (input.emailReceipt && !result.payment?.id) {
+        notify({ title: 'Payment saved; receipt email needs attention', description: 'The installment payment is saved. Do not record it again. A receipt could not be prepared because its saved transaction reference was not returned.', variant: 'error' })
+        return
+      }
       if (input.emailReceipt && result.payment?.id) {
-        const receiptResponse = await fetch(`/api/payments/${encodeURIComponent(result.payment.id)}/receipt/email`, { method: 'POST' })
-        const receiptResult = await receiptResponse.json().catch(() => ({})) as { error?: string; job?: LuxorEmailJob }
-        if (!receiptResponse.ok) throw new Error(`Payment recorded, but the receipt email was not queued: ${receiptResult.error || 'review the receipt email status before retrying.'}`)
-        if (receiptResult.job) setTourEmailJobs((current) => [...current.filter((job) => job.id !== receiptResult.job!.id), receiptResult.job!])
+        try {
+          const receiptResult = await queueLuxorPaymentReceiptAfterSave(result.payment.id)
+          if (receiptResult.job) setTourEmailJobs((current) => [...current.filter((job) => job.id !== receiptResult.job!.id), receiptResult.job!])
+        } catch (receiptError) {
+          const reason = receiptError instanceof Error ? receiptError.message : 'the receipt email could not be queued.'
+          notify({ title: 'Payment saved; receipt email needs attention', description: `The installment payment is saved. Do not record it again. The receipt email was not queued: ${reason}`, variant: 'error' })
+          return
+        }
       }
       notify({
         title: result.replayed ? 'Payment already recorded' : 'Installment payment recorded',

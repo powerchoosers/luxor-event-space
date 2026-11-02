@@ -205,15 +205,24 @@ export async function deliverLuxorTransactionalNotice(job: LuxorEmailJob): Promi
   if (snapshot.provider === 'zoho' && current.metadata.transactionalSendStarted === true) {
     throw new Error('Zoho delivery may already have started; review before retrying.')
   }
-  if (snapshot.provider === 'zoho') {
-    const [started] = await supabaseRest<LuxorEmailJob[]>(
-      `luxor_email_jobs?select=*&id=eq.${job.id}&status=eq.sending&attempts=eq.${job.attempts}&or=(metadata->>transactionalSendStarted.is.null,metadata->>transactionalSendStarted.eq.false)`, {
-        method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
-          metadata: { ...current.metadata, transactionalSendStarted: true }, updated_at: new Date().toISOString(),
-        }),
-      })
-    if (!started) throw new Error('Transactional notice claim changed; delivery stopped.')
-  }
+  const currentMetadata = current.metadata || {}
+  const firstSendStartedAt = typeof currentMetadata.transactionalFirstSendStartedAt === 'string'
+    && Number.isFinite(Date.parse(currentMetadata.transactionalFirstSendStartedAt))
+    ? currentMetadata.transactionalFirstSendStartedAt : new Date().toISOString()
+  const zohoStartedFilter = snapshot.provider === 'zoho'
+    ? '&or=(metadata->>transactionalSendStarted.is.null,metadata->>transactionalSendStarted.eq.false)' : ''
+  const [started] = await supabaseRest<LuxorEmailJob[]>(
+    `luxor_email_jobs?select=*&id=eq.${job.id}&status=eq.sending&attempts=eq.${job.attempts}&updated_at=eq.${encodeURIComponent(current.updated_at)}${zohoStartedFilter}`, {
+      method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
+        metadata: {
+          ...currentMetadata,
+          ...(snapshot.kind === 'payment_receipt' ? { transactionalFirstSendStartedAt: firstSendStartedAt } : {}),
+          ...(snapshot.provider === 'zoho' ? { transactionalSendStarted: true } : {}),
+        },
+        updated_at: new Date().toISOString(),
+      }),
+    })
+  if (!started) throw new Error('Transactional notice claim changed; delivery stopped.')
   const input = { to: snapshot.recipient, subject: snapshot.subject, content: snapshot.html,
     from: snapshot.from, fromName: snapshot.fromName, idempotencyKey: `email-job/${job.id}`,
     attachments: [{ filename: snapshot.pdf.filename, content: pdf, contentType: 'application/pdf' }] }

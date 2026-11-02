@@ -39,6 +39,12 @@ export function isLuxorReminderDaytime(now: Date) {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: '2-digit', hourCycle: 'h23' }).format(now) === '10'
 }
 
+/** True once today's one-hour reminder send window (10:00–11:00 Chicago) has ended. */
+export function hasLuxorReminderSendWindowPassed(scheduledFor: string | Date, now: Date) {
+  const scheduledAt = scheduledFor instanceof Date ? scheduledFor.getTime() : Date.parse(scheduledFor)
+  return Number.isFinite(scheduledAt) && now.getTime() >= scheduledAt + 60 * 60 * 1000
+}
+
 export function installmentReminderWindowIsCurrent(dueDate: string, todayInChicago: string, milestone: string, now: Date) {
   return isLuxorReminderDaytime(now) && installmentReminderMilestone(dueDate, todayInChicago) === milestone
 }

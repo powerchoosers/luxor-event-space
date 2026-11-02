@@ -22,7 +22,7 @@ import { processDueLuxorCustomWorkflowOrchestration } from './luxorCustomWorkflo
 import { cleanBrochureFollowUpEmailSnapshot, customerFacingFollowUpTitle, isBrochureFollowUpEmailSnapshot } from './luxorFollowUpEmailContent'
 import { areLuxorFinalPaymentRemindersEnabled } from './luxorPaymentRemindersServer'
 import { listLuxorPaymentInstallments } from './luxorPaymentInstallmentsServer'
-import { installmentPaidAmount, installmentReminderAutomationKey, installmentReminderMilestone, installmentReminderWindowIsCurrent, isBookingPaymentMilestone, isFinalPaymentMilestone, isLuxorReminderDaytime } from './luxorPaymentDashboardModel'
+import { hasLuxorReminderSendWindowPassed, installmentPaidAmount, installmentReminderAutomationKey, installmentReminderMilestone, installmentReminderWindowIsCurrent, isBookingPaymentMilestone, isFinalPaymentMilestone } from './luxorPaymentDashboardModel'
 import { luxorCalendarDate, validCalendarDate } from './luxorProposalTerms'
 import { zonedTourDateTimeToUtc } from './luxorTourPlanningServer'
 
@@ -1659,11 +1659,12 @@ async function queueInstallmentPaymentReminders() {
       const milestone = typeof job.metadata?.milestone === 'string' ? job.metadata.milestone : ''
       const offset = milestone === 'installment_7_days_before' ? -7 : milestone === 'installment_1_day_overdue' ? 1 : null
       const scheduledLocalDate = offset === null ? '' : addLuxorCalendarDays(dueDate, offset)
+      const scheduledFor = scheduledLocalDate ? zonedTourDateTimeToUtc(scheduledLocalDate, '10:00') : null
       const paid = installment ? installmentPaidAmount(installment, bookingPayments) : 0
       const remaining = installment ? Math.max(0, Math.round((Number(installment.amount) - paid) * 100) / 100) : 0
       const obsolete = invoiceRemaining === 0 || !installment || installment.status === 'void' || installment.status === 'paid' || remaining <= 0
-        || !validCalendarDate(dueDate) || job.metadata?.due_date !== dueDate || !scheduledLocalDate
-        || scheduledLocalDate < today || (scheduledLocalDate === today && !isLuxorReminderDaytime(now))
+        || !validCalendarDate(dueDate) || job.metadata?.due_date !== dueDate || !scheduledLocalDate || !scheduledFor
+        || scheduledLocalDate < today || (scheduledLocalDate === today && hasLuxorReminderSendWindowPassed(scheduledFor, now))
       if (!obsolete) continue
       const reason = invoiceRemaining === 0 || remaining <= 0 ? 'Canceled because this payment obligation is fully paid.'
         : 'Canceled because this installment schedule changed or its approved send window passed.'
@@ -1685,9 +1686,10 @@ async function queueInstallmentPaymentReminders() {
         { milestone: 'installment_1_day_overdue', offset: 1, overdue: true },
       ] as const) {
         const scheduledLocalDate = addLuxorCalendarDays(dueDate, planned.offset)
-        if (!scheduledLocalDate || scheduledLocalDate < today
-          || (scheduledLocalDate === today && !isLuxorReminderDaytime(now))) continue
-        const scheduledFor = zonedTourDateTimeToUtc(scheduledLocalDate, '10:00').toISOString()
+        if (!scheduledLocalDate || scheduledLocalDate < today) continue
+        const scheduledTime = zonedTourDateTimeToUtc(scheduledLocalDate, '10:00')
+        if (hasLuxorReminderSendWindowPassed(scheduledTime, now)) continue
+        const scheduledFor = scheduledTime.toISOString()
         const email = installmentReminderContent(inquiry, installment, remaining, planned.overdue)
         const automationKey = installmentReminderAutomationKey(booking.id, installment.id, dueDate, planned.milestone)
         await createUniqueLuxorEmailJob({

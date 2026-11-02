@@ -31,9 +31,14 @@ async function retryReceiptJob(job: LuxorEmailJob) {
   if (snapshot?.kind !== 'payment_receipt') throw new Error('Receipt email details could not be verified.')
   const now = new Date()
   const resendRetryWindowMs = 23 * 60 * 60 * 1000
+  const firstProviderAttemptAt = typeof job.metadata?.transactionalFirstSendStartedAt === 'string'
+    ? Date.parse(job.metadata.transactionalFirstSendStartedAt) : Number.NaN
+  const hasProviderAttemptTimestamp = Number.isFinite(firstProviderAttemptAt)
   const retryAllowed = snapshot.provider === 'resend'
-    ? Number.isFinite(Date.parse(job.updated_at)) && now.getTime() - Date.parse(job.updated_at) < resendRetryWindowMs
-    : snapshot.provider === 'zoho' && job.metadata?.transactionalSendStarted !== true
+    ? hasProviderAttemptTimestamp
+      ? now.getTime() >= firstProviderAttemptAt && now.getTime() - firstProviderAttemptAt < resendRetryWindowMs
+      : Number(job.attempts || 0) === 0 && job.metadata?.transactionalSendStarted !== true
+    : snapshot.provider === 'zoho' && job.metadata?.transactionalSendStarted !== true && !hasProviderAttemptTimestamp
   if (!retryAllowed) {
     throw new Error(snapshot.provider === 'resend'
       ? 'The provider’s 24-hour duplicate-protection window has expired. Verify delivery with Luxor before sending another receipt.'

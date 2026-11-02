@@ -30,7 +30,17 @@ export type LuxorPaymentReceiptEmailContext = {
   pdfSha256: string
 }
 
-export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Promise<LuxorPaymentReceiptEmailContext> {
+type LuxorPaymentReceiptPdfContext = {
+  payment: LuxorPayment
+  booking: LuxorBooking | null
+  inquiry: LuxorInquiry | null
+  invoice: LuxorInvoice | null
+  filename: string
+  pdf: Uint8Array
+  pdfSha256: string
+}
+
+async function getLuxorPaymentReceiptSource(paymentId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(paymentId)) throw new Error('Payment record not found.')
   const [payment] = await supabaseRest<LuxorPayment[]>(`luxor_payments?select=*&id=eq.${encodeURIComponent(paymentId)}&limit=1`)
   if (!payment) throw new Error('Payment record not found.')
@@ -42,6 +52,19 @@ export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Pro
     payment.invoice_id ? getInvoice(payment.invoice_id) : Promise.resolve(null),
   ])
   const inquiry = directInquiry || (booking?.inquiry_id ? await getLuxorInquiry(booking.inquiry_id) : null)
+  return { payment, booking, inquiry, invoice }
+}
+
+export async function getLuxorPaymentReceiptPdfContext(paymentId: string): Promise<LuxorPaymentReceiptPdfContext> {
+  const { payment, booking, inquiry, invoice } = await getLuxorPaymentReceiptSource(paymentId)
+  const pdf = await buildLuxorPaymentReceiptPdf({ payment, booking, inquiry, invoice })
+  const filename = `Luxor-Payment-Receipt-${payment.id.slice(0, 8).toUpperCase()}.pdf`
+  const pdfSha256 = crypto.createHash('sha256').update(pdf).digest('hex')
+  return { payment, booking, inquiry, invoice, filename, pdf, pdfSha256 }
+}
+
+export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Promise<LuxorPaymentReceiptEmailContext> {
+  const { payment, booking, inquiry, invoice, pdf, filename, pdfSha256 } = await getLuxorPaymentReceiptPdfContext(paymentId)
   const recipient = luxorMailAddress(inquiry?.email || booking?.email || '')
   if (!recipient) throw new Error('No client email is saved for this payment.')
 
@@ -67,8 +90,6 @@ export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Pro
     `Receipt ${receiptNumber} · Received ${receivedDate} · ${payment.payment_method || 'Payment method not recorded'}`,
   ].join('\n')
   const html = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#fffdfa;color:#211b17;border:1px solid #ded6ca"><div style="padding:20px 24px;background:#101010;color:#d1ad61;font-family:Georgia,serif;letter-spacing:.12em">LUXOR AT LAS PALMAS EVENTS</div><div style="padding:28px 24px"><h1 style="margin:0 0 20px;color:#1b1713;font-family:Georgia,serif;font-size:24px">Payment received</h1><p>Hi ${escapeHtml(firstName)},</p><p>Thank you for your payment! We’ve successfully received <strong>${escapeHtml(amount)}</strong> for ${escapeHtml(eventName)}.</p><p>Your payment receipt is attached to this email for your records.</p><p>Thank you for choosing Luxor at Las Palmas Events. We’re looking forward to helping make your event special.</p><p style="margin-top:24px">Best regards,<br />Luxor at Las Palmas Events</p><p style="margin-top:24px;padding-top:14px;border-top:1px solid #e7dfd4;color:#756a5d;font-size:12px">Receipt ${receiptNumber} · Received ${escapeHtml(receivedDate)} · ${escapeHtml(payment.payment_method || 'Payment method not recorded')}</p></div></div>`
-  const pdf = await buildLuxorPaymentReceiptPdf({ payment, booking, inquiry, invoice })
-  const filename = `Luxor-Payment-Receipt-${receiptNumber}.pdf`
   const fingerprintSource = {
     payment: {
       id: payment.id, status: payment.status, amount: payment.amount, paid_at: payment.paid_at,
@@ -85,7 +106,6 @@ export async function getLuxorPaymentReceiptEmailContext(paymentId: string): Pro
     invoice: invoice && { id: invoice.id, invoice_kind: invoice.invoice_kind, description: invoice.description, event_type: invoice.event_type },
     recipient, subject, html, filename,
   }
-  const pdfSha256 = crypto.createHash('sha256').update(pdf).digest('hex')
   const fingerprint = crypto.createHash('sha256').update(JSON.stringify(fingerprintSource)).digest('hex')
 
   return { payment, booking, inquiry, invoice, recipient, eventName, receiptNumber, subject, message, html, filename, fingerprint, pdf, pdfSha256 }

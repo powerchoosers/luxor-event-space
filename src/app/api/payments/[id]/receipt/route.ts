@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { getLuxorPaymentReceiptEmailContext } from '@/lib/luxorPaymentReceiptEmailServer'
+import { getLuxorPaymentReceiptEmailContext, getLuxorPaymentReceiptPdfContext } from '@/lib/luxorPaymentReceiptEmailServer'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getLuxorPortalSession()
@@ -8,10 +8,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const { id } = await params
-    const context = await getLuxorPaymentReceiptEmailContext(id)
     const expectedFingerprint = request.nextUrl.searchParams.get('fingerprint')
     const expectedPdfSha256 = request.nextUrl.searchParams.get('pdfSha256')
-    if ((expectedFingerprint && expectedFingerprint !== context.fingerprint)
+    const emailContext = expectedFingerprint || expectedPdfSha256 ? await getLuxorPaymentReceiptEmailContext(id) : null
+    const context = emailContext || await getLuxorPaymentReceiptPdfContext(id)
+    if ((expectedFingerprint && expectedFingerprint !== emailContext?.fingerprint)
       || (expectedPdfSha256 && expectedPdfSha256 !== context.pdfSha256)) {
       return NextResponse.json({ error: 'The receipt changed after preview. Reopen the preview before sending.' }, { status: 409 })
     }
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         'Content-Disposition': `${disposition}; filename="${context.filename}"`,
         'Cache-Control': 'private, no-store',
         'X-Luxor-Receipt-SHA256': context.pdfSha256,
-        'X-Luxor-Receipt-Fingerprint': context.fingerprint,
+        'X-Luxor-Receipt-Fingerprint': emailContext?.fingerprint || '',
       },
     })
   } catch (error) {
