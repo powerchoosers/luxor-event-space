@@ -50,6 +50,7 @@ import type { LuxorMailboxPageRequest, LuxorMailboxPageResult } from '@/lib/luxo
 
 const EmailPdfPreview = dynamic(() => import('@/components/portal/EmailPdfPreview'), { ssr: false })
 const EMAIL_READER_MOBILE_QUERY = '(max-width: 1023px)'
+const EMAIL_READER_SHORT_LANDSCAPE_QUERY = '(max-width: 1100px) and (orientation: landscape) and (max-height: 500px)'
 
 function subscribeToEmailReaderMobileLayout(callback: () => void) {
   const mediaQuery = window.matchMedia(EMAIL_READER_MOBILE_QUERY)
@@ -59,6 +60,16 @@ function subscribeToEmailReaderMobileLayout(callback: () => void) {
 
 function getEmailReaderMobileLayoutSnapshot() {
   return window.matchMedia(EMAIL_READER_MOBILE_QUERY).matches
+}
+
+function subscribeToEmailReaderShortLandscape(callback: () => void) {
+  const mediaQuery = window.matchMedia(EMAIL_READER_SHORT_LANDSCAPE_QUERY)
+  mediaQuery.addEventListener('change', callback)
+  return () => mediaQuery.removeEventListener('change', callback)
+}
+
+function getEmailReaderShortLandscapeSnapshot() {
+  return window.matchMedia(EMAIL_READER_SHORT_LANDSCAPE_QUERY).matches
 }
 
 export interface EmailMessageItem {
@@ -295,6 +306,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     getEmailReaderMobileLayoutSnapshot,
     () => false,
   )
+  const isShortLandscape = useSyncExternalStore(
+    subscribeToEmailReaderShortLandscape,
+    getEmailReaderShortLandscapeSnapshot,
+    () => false,
+  )
   const reduceMotion = useReducedMotion()
   const appliedInitialMessageId = useRef<string | null>(null)
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
@@ -423,6 +439,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [blockExternalImages, setBlockExternalImages] = useState(false)
   const mailboxDrawerRef = useRef<HTMLElement | null>(null)
   const [readerExpanded, setReaderExpanded] = useState(false)
+  const [landscapeDetailsMessageId, setLandscapeDetailsMessageId] = useState<string | null>(null)
   const [readerMenuOpen, setReaderMenuOpen] = useState(false)
   const [openingAttachment, setOpeningAttachment] = useState<string | null>(null)
   const [previewAttachment, setPreviewAttachment] = useState<(EmailAttachment & { url: string; mimeType: string }) | null>(null)
@@ -1937,7 +1954,37 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             className="flex min-h-0 flex-1 flex-col"
           >
             {/* Email Header Bar */}
-            <div className="shrink-0 space-y-1 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 pb-2 pt-2 sm:px-6 sm:pb-3 sm:pt-3">
+            <div className={`shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] ${isShortLandscape ? 'px-2 py-1' : 'space-y-1 px-4 pb-2 pt-2 sm:px-6 sm:pb-3 sm:pt-3'}`}>
+              {isShortLandscape ? (
+                <>
+                <div className="flex min-h-10 items-center gap-2">
+                  <PortalContactAvatar name={currentInquiry?.full_name || mailboxLabel(messageDetail.from, inquiryByEmail)} size="sm" className="!h-8 !w-8 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-[color:var(--portal-text)]">{currentInquiry?.full_name || mailboxLabel(messageDetail.from, inquiryByEmail)}</p>
+                    <p className="truncate text-[10px] text-[color:var(--portal-muted)]">{messageDetail.direction === 'incoming' ? 'From ' : 'To '}{mailboxLabel(messageDetail.direction === 'incoming' ? messageDetail.from : messageDetail.to, inquiryByEmail, 'Client')}</p>
+                  </div>
+                  <time className="shrink-0 text-[10px] text-[color:var(--portal-muted)]" dateTime={messageDetail.receivedAt || undefined}>{formatConversationTime(messageDetail.receivedAt)}</time>
+                  <button type="button" onClick={() => setLandscapeDetailsMessageId((current) => current === messageDetail.id ? null : messageDetail.id)} aria-expanded={landscapeDetailsMessageId === messageDetail.id}
+                    className="min-h-9 shrink-0 rounded-lg px-2 text-[10px] font-medium text-[#8c6529] underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] dark:text-[#f1d27a]">
+                    {landscapeDetailsMessageId === messageDetail.id ? 'Hide details' : 'Details'}
+                  </button>
+                </div>
+                {landscapeDetailsMessageId === messageDetail.id ? (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[color:var(--portal-border)] py-1.5 text-[10px] leading-4 text-[color:var(--portal-muted)]">
+                    <span>From: {mailboxLabel(messageDetail.from, inquiryByEmail)}</span>
+                    <span>To: {mailboxLabel(messageDetail.to, inquiryByEmail, 'Client')}</span>
+                    {selectedCcLabel ? <span>CC: {selectedCcLabel}</span> : null}
+                    {messageDetail.folderPath ? <span>Folder: {messageDetail.folderPath}</span> : null}
+                    {messageDetail.deliveryStatus ? <span>{luxorMailDeliveryLabel(messageDetail.deliveryStatus)}</span> : null}
+                    {currentInquiry ? <Link href={`/portal/leads/${currentInquiry.id}`} className="font-medium text-[#a8792f] hover:underline">View lead file</Link> : null}
+                    {messageDetail.category === 'Website Inquiry' && currentInquiry?.email ? <button type="button" onClick={respondToInquiry} className="font-semibold text-[#8c6529] underline underline-offset-2 dark:text-[#f1d27a]">Respond to inquiry</button> : null}
+                  </div>
+                ) : null}
+                {readStateError?.id === messageDetail.id ? <p role="alert" className="text-[10px] leading-4 text-[color:var(--portal-text)]">{readStateError.message} Use “More email actions” to retry.</p> : null}
+                {messageDetail.deliveryError ? <p role="status" className="truncate text-[10px] leading-4 text-[color:var(--portal-text)]" title={messageDetail.deliveryError}>{messageDetail.deliveryError}</p> : null}
+                </>
+              ) : (
+                <>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   {messageDetail.category === 'Website Inquiry' ? <span className="inline-flex rounded-md border border-[#caa24c]/35 px-1.5 py-0.5 text-[9px] font-semibold text-[#8c6529] dark:text-[#f1d27a]">Website Inquiry</span> : null}
@@ -1987,12 +2034,13 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                   </div>
                 </div>
               </div>
-
+                </>
+              )}
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col">
             {/* Scrollable email thread — grows to fill, reply pinned below */}
-            <div ref={threadScrollRef} data-email-thread-scroll className={`portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-bg)] p-3.5 [overflow-anchor:none] sm:px-6 sm:py-4 lg:px-8 ${replyOpen && isMobileReader ? 'pb-48' : ''}`}>
+            <div ref={threadScrollRef} data-email-thread-scroll className={`portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-bg)] [overflow-anchor:none] ${isShortLandscape ? 'p-2' : 'p-3.5 sm:px-6 sm:py-4 lg:px-8'} ${replyOpen && isMobileReader ? 'pb-48' : ''}`}>
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
                 {loadingThread && !thread && (
                   <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">
@@ -2061,7 +2109,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             </div>
 
             {messageDetail.category !== 'Website Inquiry' && messageDetail.direction !== 'campaign' && (isMobileReader || !replyOpen) ? <div
-              className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 sm:px-6"
+              className={`shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] ${isShortLandscape ? 'px-2 py-1' : 'px-3 py-2 sm:px-6'}`}
             >
               {isMobileReader ? (
                 <div ref={setMobileReplyAnchor} className="h-11 w-full" aria-hidden="true" />
