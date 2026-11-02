@@ -15,6 +15,7 @@ let booking
 let installment
 let paidPayments
 let rpcResult
+let replayResult
 
 function mockResponse() {
   return { json: (body, init = {}) => ({ body, status: init.status || 200 }) }
@@ -37,8 +38,12 @@ function loadRoute() {
     },
     '@/lib/luxorInquiriesServer': { getLuxorInquiry: async () => ({ id: 'inquiry', status: 'booked', is_test: false }) },
     '@/lib/luxorPaymentInstallmentsServer': { listLuxorPaymentInstallments: async () => [installment] },
+    '@/lib/luxorStripeCheckoutServer': { expireLuxorCheckoutForRepricing: async () => undefined },
     '@/lib/luxorTestLeadServer': { assertLuxorProductionSideEffectsAllowed: async () => undefined },
-    '@/lib/luxorPaymentDashboardModel': { isBookingPaymentMilestone: (row) => row.installment_order === 1 && row.label === 'Booking Payment' },
+    '@/lib/luxorPaymentDashboardModel': {
+      isBookingPaymentMilestone: (row) => row.installment_order === 1 && row.label === 'Booking Payment',
+      installmentPaidAmount: (row, payments) => payments.filter((payment) => payment.status === 'paid').reduce((sum, payment) => sum + (payment.metadata?.installment_allocations || []).filter((allocation) => allocation.installment_id === row.id).reduce((total, allocation) => total + allocation.amount, 0), 0),
+    },
     '@/lib/luxorTourPlanningServer': { zonedTourDateTimeToUtc: (date) => {
       const [year, month, day] = date.split('-').map(Number)
       const target = Date.UTC(year, month - 1, day)
@@ -50,7 +55,7 @@ function loadRoute() {
       }
       return result
     } },
-    '@/lib/supabaseRestServer': { supabaseRest: async (path, init) => { calls.push({ path, init }); return rpcResult } },
+    '@/lib/supabaseRestServer': { supabaseRest: async (path, init) => { calls.push({ path, init }); return path.includes('luxor_lookup_manual_installment_payment_replay') ? replayResult : rpcResult } },
   }
   const loaded = new Module(routePath, module)
   loaded.filename = routePath
@@ -78,13 +83,15 @@ test.beforeEach(() => {
   installment = { id: installmentId, booking_id: bookingId, invoice_id: 'master', label: 'Payment 2', installment_order: 2, amount: 750, due_at: '2999-01-01T12:00:00Z', status: 'scheduled', metadata: {} }
   paidPayments = []
   rpcResult = { payment: { id: 'payment', amount: 250 }, allocations: [{ installment_id: 'monthly', amount: 250 }], replayed: false }
+  replayResult = { payment: null, allocations: [], replayed: false }
 })
 
 test('records a verified early partial installment through the atomic RPC', async () => {
   const response = await route.POST(request(baseBody))
   assert.equal(response.status, 200, JSON.stringify(response.body))
-  assert.equal(calls.length, 1)
-  const args = JSON.parse(calls[0].init.body)
+  assert.equal(calls.length, 2)
+  assert.match(calls[0].path, /luxor_lookup_manual_installment_payment_replay/)
+  const args = JSON.parse(calls[1].init.body)
   assert.equal(args.p_booking_id, bookingId)
   assert.equal(args.p_invoice_id, 'final')
   assert.equal(args.p_amount, 250)
@@ -96,21 +103,24 @@ test('records a verified early partial installment through the atomic RPC', asyn
 test('rejects an allocation over the obligation remainder before database mutation', async () => {
   const response = await route.POST(request({ ...baseBody, amount: 751 }))
   assert.equal(response.status, 409)
-  assert.equal(calls.length, 0)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].path, /luxor_lookup_manual_installment_payment_replay/)
 })
 
 test('refuses an unreconciled legacy partial obligation', async () => {
   installment = { ...installment, status: 'partial', metadata: {} }
   const response = await route.POST(request(baseBody))
   assert.equal(response.status, 409)
-  assert.equal(calls.length, 0)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].path, /luxor_lookup_manual_installment_payment_replay/)
 })
 
 test('refuses payment dates before the signed agreement', async () => {
   booking.contract_signed_at = '2099-01-01T12:00:00Z'
   const response = await route.POST(request(baseBody))
   assert.equal(response.status, 409)
-  assert.equal(calls.length, 0)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].path, /luxor_lookup_manual_installment_payment_replay/)
 })
 
 test('keeps the workflow disabled until the reviewed allocation migration is enabled', async () => {
@@ -118,4 +128,15 @@ test('keeps the workflow disabled until the reviewed allocation migration is ena
   const response = await route.POST(request(baseBody))
   assert.equal(response.status, 503)
   assert.equal(calls.length, 0)
+})
+
+test('replays a completed full payment before mutable booking checks', async () => {
+  booking = null
+  replayResult = { payment: { id: 'payment-already-recorded', amount: 250 }, allocations: [{ installment_id: installmentId, amount: 250 }], replayed: true }
+  const response = await route.POST(request(baseBody))
+  assert.equal(response.status, 200)
+  assert.equal(response.body.replayed, true)
+  assert.equal(response.body.payment.id, 'payment-already-recorded')
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].path, /luxor_lookup_manual_installment_payment_replay/)
 })

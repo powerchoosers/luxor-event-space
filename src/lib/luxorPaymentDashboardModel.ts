@@ -20,6 +20,10 @@ export function isBookingPaymentMilestone(installment: LuxorPaymentInstallment) 
   return installment.installment_order === 1 && installment.label.trim().toLowerCase() === 'booking payment'
 }
 
+export function isFinalPaymentMilestone(installment: LuxorPaymentInstallment) {
+  return installment.label.trim().toLowerCase() === 'final payment'
+}
+
 export function installmentReminderMilestone(dueDate: string, todayInChicago: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || !/^\d{4}-\d{2}-\d{2}$/.test(todayInChicago)) return null
   const date = new Date(`${dueDate}T12:00:00.000Z`)
@@ -35,6 +39,14 @@ export function isLuxorReminderDaytime(now: Date) {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: '2-digit', hourCycle: 'h23' }).format(now) === '10'
 }
 
+export function installmentReminderWindowIsCurrent(dueDate: string, todayInChicago: string, milestone: string, now: Date) {
+  return isLuxorReminderDaytime(now) && installmentReminderMilestone(dueDate, todayInChicago) === milestone
+}
+
+export function installmentReminderAutomationKey(bookingId: string, installmentId: string, dueDate: string, milestone: string) {
+  return `installment:${bookingId}:${installmentId}:${dueDate}:${milestone}`
+}
+
 export function installmentPaidAmount(installment: LuxorPaymentInstallment, payments: LuxorPayment[]) {
   const allocated = payments.reduce((sum, payment) => {
     if (payment.status !== 'paid') return sum
@@ -48,9 +60,13 @@ export function installmentPaidAmount(installment: LuxorPaymentInstallment, paym
     }, 0)
   }, 0)
   const amountDue = Math.max(0, Number(installment.amount) || 0)
-  const legacyPaid = installment.status === 'paid' ? amountDue : 0
-  const legacyPartial = installment.status === 'partial' ? Math.max(0, Number(installment.metadata?.paid_amount) || 0) : 0
-  return Math.min(amountDue, Math.max(allocated, legacyPaid, legacyPartial))
+  if (installment.status === 'paid') return amountDue
+  const frozenLegacyBaseline = Number(installment.metadata?.installment_allocation_legacy_baseline)
+  const recordedLegacyPaid = installment.status === 'partial' ? Math.max(0, Number(installment.metadata?.paid_amount) || 0) : 0
+  const legacyBaseline = Number.isFinite(frozenLegacyBaseline) && frozenLegacyBaseline >= 0
+    ? frozenLegacyBaseline
+    : Math.max(0, recordedLegacyPaid - allocated)
+  return Math.min(amountDue, Math.max(0, allocated + legacyBaseline))
 }
 
 export function paidOnInvoice(invoice: LuxorInvoice, invoices: LuxorInvoice[], payments: LuxorPayment[]) {

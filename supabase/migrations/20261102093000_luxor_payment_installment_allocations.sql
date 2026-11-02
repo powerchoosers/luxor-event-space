@@ -46,6 +46,9 @@ declare
   v_allocated numeric(12,2);
   v_balance numeric(12,2);
   v_existing numeric(12,2);
+  v_existing_metadata_allocated numeric(12,2);
+  v_legacy_paid numeric(12,2);
+  v_legacy_baseline numeric(12,2);
   v_count integer := 0;
   v_distinct_count integer := 0;
   v_rows jsonb := '[]'::jsonb;
@@ -67,6 +70,9 @@ begin
   -- existing payment, so concurrent duplicate requests replay instead of
   -- racing into the unique index.
   perform pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
+  -- Match the lock used by the existing payment-claim trigger. This serializes
+  -- installment entries with legacy final-balance/manual/Stripe ledger writes.
+  perform pg_advisory_xact_lock(2147483000,400);
   select * into v_payment from public.luxor_payments
     where metadata->>'installment_entry_key' = p_idempotency_key::text for update;
   if found then
@@ -93,6 +99,9 @@ begin
       and parent_invoice_id = v_master.id for update;
   if not found or v_master.id is null or v_master.status = 'cancelled' or v_invoice.status = 'cancelled' then
     raise exception 'The approved final-balance invoice for this booking is unavailable.' using errcode = '23514';
+  end if;
+  if v_invoice.stripe_checkout_session_id is not null then
+    raise exception 'An active Stripe checkout must be reconciled before recording installment funds.' using errcode = '23514';
   end if;
 
   select count(*), count(distinct (item->>'installment_id')::uuid), round(sum((item->>'amount')::numeric), 2)
@@ -128,14 +137,33 @@ begin
       from public.luxor_payment_installment_allocations a
       join public.luxor_payments p on p.id = a.payment_id and p.status = 'paid'
       where a.installment_id = v_installment.id;
+    select coalesce(sum((allocation->>'amount')::numeric), 0) into v_existing_metadata_allocated
+      from public.luxor_payments p
+      cross join lateral jsonb_array_elements(case
+        when jsonb_typeof(p.metadata->'installment_allocations') = 'array' then p.metadata->'installment_allocations'
+        else '[]'::jsonb end) as allocation
+      where p.status = 'paid' and (allocation->>'installment_id')::uuid = v_installment.id;
+    v_existing := greatest(v_existing, v_existing_metadata_allocated);
     if v_installment.status = 'partial'
       and v_existing = 0
       and coalesce(v_installment.metadata->>'paid_amount', '') !~ '^\d+(\.\d{1,2})?$' then
       raise exception 'An earlier partial installment amount needs reconciliation before another payment.' using errcode = '23514';
     end if;
-    v_existing := greatest(v_existing, case
-      when coalesce(v_installment.metadata->>'paid_amount', '') ~ '^\d+(\.\d{1,2})?$'
-      then (v_installment.metadata->>'paid_amount')::numeric else 0 end);
+    if coalesce(v_installment.metadata->>'installment_allocation_legacy_baseline', '') ~ '^\d+(\.\d{1,2})?$' then
+      v_legacy_baseline := (v_installment.metadata->>'installment_allocation_legacy_baseline')::numeric;
+    else
+      v_legacy_paid := case when coalesce(v_installment.metadata->>'paid_amount', '') ~ '^\d+(\.\d{1,2})?$'
+        then (v_installment.metadata->>'paid_amount')::numeric else 0 end;
+      -- Legacy paid_amount may already include receipts whose allocation is
+      -- represented in either ledger. Freeze only its unreconciled remainder.
+      v_legacy_baseline := greatest(0, v_legacy_paid - v_existing);
+      update public.luxor_payment_installments set
+        metadata = jsonb_set(coalesce(metadata, '{}'::jsonb), '{installment_allocation_legacy_baseline}', to_jsonb(v_legacy_baseline), true),
+        updated_at = now()
+        where id = v_installment.id;
+      v_installment.metadata := jsonb_set(coalesce(v_installment.metadata, '{}'::jsonb), '{installment_allocation_legacy_baseline}', to_jsonb(v_legacy_baseline), true);
+    end if;
+    v_existing := v_existing + v_legacy_baseline;
     if v_existing + (v_allocation->>'amount')::numeric > v_installment.amount then
       raise exception 'The allocation exceeds the selected installment balance.' using errcode = '23514';
     end if;
@@ -177,9 +205,16 @@ begin
       from public.luxor_payment_installment_allocations a
       join public.luxor_payments p on p.id = a.payment_id and p.status = 'paid'
       where a.installment_id = v_installment.id;
-    v_existing := greatest(v_existing, case
-      when coalesce(v_installment.metadata->>'paid_amount', '') ~ '^\d+(\.\d{1,2})?$'
-      then (v_installment.metadata->>'paid_amount')::numeric else 0 end);
+    select coalesce(sum((allocation->>'amount')::numeric), 0) into v_existing_metadata_allocated
+      from public.luxor_payments p
+      cross join lateral jsonb_array_elements(case
+        when jsonb_typeof(p.metadata->'installment_allocations') = 'array' then p.metadata->'installment_allocations'
+        else '[]'::jsonb end) as allocation
+      where p.status = 'paid' and (allocation->>'installment_id')::uuid = v_installment.id;
+    v_existing := greatest(v_existing, v_existing_metadata_allocated);
+    v_legacy_baseline := case when coalesce(v_installment.metadata->>'installment_allocation_legacy_baseline', '') ~ '^\d+(\.\d{1,2})?$'
+      then (v_installment.metadata->>'installment_allocation_legacy_baseline')::numeric else 0 end;
+    v_existing := v_existing + v_legacy_baseline;
     update public.luxor_payment_installments set
       status = case when v_existing >= amount then 'paid' else 'partial' end,
       payment_method = p_payment_method,
@@ -200,6 +235,42 @@ begin
 end;
 $$;
 
+create or replace function public.luxor_lookup_manual_installment_payment_replay(
+  p_idempotency_key uuid,
+  p_request_fingerprint text
+) returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_payment public.luxor_payments%rowtype;
+  v_rows jsonb := '[]'::jsonb;
+begin
+  if p_idempotency_key is null or p_request_fingerprint is null or p_request_fingerprint !~ '^[0-9a-f]{64}$' then
+    raise exception 'Invalid installment payment identity.' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
+  select * into v_payment from public.luxor_payments
+    where metadata->>'installment_entry_key' = p_idempotency_key::text for update;
+  if not found then return jsonb_build_object('payment', null, 'allocations', '[]'::jsonb, 'replayed', false); end if;
+  if v_payment.metadata->>'installment_entry_fingerprint' <> p_request_fingerprint then
+    raise exception 'This payment request key was already used with different details.' using errcode = '23505';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object('installment_id', a.installment_id, 'amount', a.amount)), '[]'::jsonb)
+    into v_rows from public.luxor_payment_installment_allocations a where a.payment_id = v_payment.id;
+  if v_rows = '[]'::jsonb then
+    v_rows := coalesce(v_payment.metadata->'installment_allocations', '[]'::jsonb);
+  end if;
+  return jsonb_build_object('payment', to_jsonb(v_payment), 'allocations', v_rows, 'replayed', true);
+end;
+$$;
+
+revoke all on function public.luxor_lookup_manual_installment_payment_replay(uuid,text)
+  from public, anon, authenticated;
+grant execute on function public.luxor_lookup_manual_installment_payment_replay(uuid,text)
+  to service_role;
+
 revoke all on function public.luxor_record_manual_installment_payment(uuid,text,uuid,uuid,numeric,timestamptz,text,text,text,text,jsonb)
   from public, anon, authenticated;
 grant execute on function public.luxor_record_manual_installment_payment(uuid,text,uuid,uuid,numeric,timestamptz,text,text,text,text,jsonb)
@@ -207,4 +278,51 @@ grant execute on function public.luxor_record_manual_installment_payment(uuid,te
 
 comment on table public.luxor_payment_installment_allocations is
   'Explicit cents-precise allocations from confirmed paid payment transactions to event payment installments.';
+
+-- Existing manual final-payment and Stripe webhook paths insert directly into
+-- luxor_payments. Enforce the final-invoice cap at the shared ledger boundary
+-- so those paths cannot race a newly allocated installment payment into an
+-- overpaid ledger. The existing guard takes the same advisory lock first; the
+-- installment RPC also takes it before locking booking/invoice rows.
+create or replace function public.luxor_guard_final_balance_payment_total()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_invoice public.luxor_invoices;
+  v_paid numeric(12,2);
+begin
+  if new.status <> 'paid' or new.invoice_id is null then return new; end if;
+  if tg_op = 'UPDATE'
+    and new.status is not distinct from old.status
+    and new.amount is not distinct from old.amount
+    and new.invoice_id is not distinct from old.invoice_id then
+    return new;
+  end if;
+
+  perform pg_advisory_xact_lock(2147483000,400);
+  select * into v_invoice from public.luxor_invoices where id = new.invoice_id for update;
+  if not found or v_invoice.invoice_kind <> 'final_balance' then return new; end if;
+
+  if tg_op = 'UPDATE' then
+    select coalesce(sum(p.amount),0) into v_paid from public.luxor_payments p
+      where p.invoice_id = new.invoice_id and p.status = 'paid' and p.id <> old.id;
+  else
+    select coalesce(sum(p.amount),0) into v_paid from public.luxor_payments p
+      where p.invoice_id = new.invoice_id and p.status = 'paid';
+  end if;
+  if v_paid + new.amount > v_invoice.total then
+    raise exception 'The payment exceeds the remaining final-balance invoice.' using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists luxor_final_balance_payment_total_guard on public.luxor_payments;
+create trigger luxor_final_balance_payment_total_guard
+  before insert or update on public.luxor_payments
+  for each row execute function public.luxor_guard_final_balance_payment_total();
+revoke all on function public.luxor_guard_final_balance_payment_total() from public, anon, authenticated;
 notify pgrst, 'reload schema';

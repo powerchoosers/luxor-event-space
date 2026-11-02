@@ -5,8 +5,9 @@ import { getLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getInvoice, getInvoiceByBookingAndKind, listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { listLuxorPaymentInstallments } from '@/lib/luxorPaymentInstallmentsServer'
+import { expireLuxorCheckoutForRepricing } from '@/lib/luxorStripeCheckoutServer'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
-import { isBookingPaymentMilestone } from '@/lib/luxorPaymentDashboardModel'
+import { installmentPaidAmount, isBookingPaymentMilestone } from '@/lib/luxorPaymentDashboardModel'
 import { zonedTourDateTimeToUtc } from '@/lib/luxorTourPlanningServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorPayment, LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
@@ -15,17 +16,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const roundMoney = (amount: number) => Math.round(amount * 100) / 100
 
 function allocatedTo(installment: LuxorPaymentInstallment, payments: LuxorPayment[]) {
-  const allocated = payments.reduce((sum, payment) => {
-    if (payment.status !== 'paid' || !Array.isArray(payment.metadata?.installment_allocations)) return sum
-    return sum + payment.metadata.installment_allocations.reduce((allocationSum, item) => {
-      if (!item || typeof item !== 'object') return allocationSum
-      const row = item as Record<string, unknown>
-      return row.installment_id === installment.id ? allocationSum + (Number(row.amount) || 0) : allocationSum
-    }, 0)
-  }, 0)
-  const due = Math.max(0, Number(installment.amount) || 0)
-  const canonical = installment.status === 'paid' ? due : installment.status === 'partial' ? Math.max(0, Number(installment.metadata?.paid_amount) || 0) : 0
-  return roundMoney(Math.min(due, Math.max(allocated, canonical)))
+  return roundMoney(installmentPaidAmount(installment, payments))
 }
 
 export async function POST(request: NextRequest) {
@@ -60,6 +51,18 @@ export async function POST(request: NextRequest) {
     if (!methods.has(paymentMethod)) return NextResponse.json({ error: 'Choose Cash, Zelle, Check, or ACH.' }, { status: 400 })
     const reference = typeof body.reference === 'string' ? body.reference.trim().slice(0, 200) : ''
     const notes = typeof body.notes === 'string' ? body.notes.trim().slice(0, 1000) : ''
+    const fingerprint = crypto.createHash('sha256').update(JSON.stringify({
+      bookingId, installmentId: body.installmentId, amount,
+      paidAt: paidOn.toISOString(), paymentMethod, reference, notes,
+    })).digest('hex')
+    const replay = await supabaseRest<{ payment: LuxorPayment | null; allocations: Array<{ installment_id: string; amount: number }>; replayed: boolean }>(
+      'rpc/luxor_lookup_manual_installment_payment_replay', {
+        method: 'POST', body: JSON.stringify({ p_idempotency_key: body.idempotencyKey, p_request_fingerprint: fingerprint }),
+      },
+    )
+    if (replay?.replayed && replay.payment?.id) {
+      return NextResponse.json({ payment: replay.payment, allocations: replay.allocations, replayed: true })
+    }
 
     const booking = await getLuxorBooking(bookingId)
     if (!booking) return NextResponse.json({ error: 'Booking record not found.' }, { status: 404 })
@@ -104,11 +107,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'The amount is greater than the remaining installment or final-invoice balance.' }, { status: 409 })
     }
 
+    // Match the established manual final-payment flow only after all local
+    // eligibility and balance checks pass. Reload after expiry; the database
+    // RPC checks again while holding the invoice lock.
+    if (invoice.stripe_checkout_session_id) {
+      await expireLuxorCheckoutForRepricing(invoice)
+      const refreshed = await getInvoice(invoice.id)
+      if (!refreshed || refreshed.stripe_checkout_session_id) {
+        return NextResponse.json({ error: 'The existing card payment link needs reconciliation before recording installment funds.' }, { status: 409 })
+      }
+    }
+
     const allocations = [{ installment_id: installment.id, amount }]
-    const fingerprint = crypto.createHash('sha256').update(JSON.stringify({
-      bookingId: booking.id, invoiceId: invoice.id, installmentId: installment.id, amount,
-      paidAt: paidOn.toISOString(), paymentMethod, reference, notes,
-    })).digest('hex')
     const result = await supabaseRest<{ payment: LuxorPayment; allocations: Array<{ installment_id: string; amount: number }>; replayed: boolean }>(
       'rpc/luxor_record_manual_installment_payment', {
         method: 'POST',
@@ -130,6 +140,7 @@ export async function POST(request: NextRequest) {
     if (!result?.payment?.id) throw new Error('The saved payment could not be confirmed in the ledger.')
     return NextResponse.json({ payment: result.payment, allocations: result.allocations, replayed: result.replayed })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Installment payment could not be recorded.' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Installment payment could not be recorded.'
+    return NextResponse.json({ error: message }, { status: message.includes('request key was already used with different details') ? 409 : 500 })
   }
 }

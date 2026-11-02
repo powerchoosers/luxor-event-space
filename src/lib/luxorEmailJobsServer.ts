@@ -22,7 +22,7 @@ import { processDueLuxorCustomWorkflowOrchestration } from './luxorCustomWorkflo
 import { cleanBrochureFollowUpEmailSnapshot, customerFacingFollowUpTitle, isBrochureFollowUpEmailSnapshot } from './luxorFollowUpEmailContent'
 import { areLuxorFinalPaymentRemindersEnabled } from './luxorPaymentRemindersServer'
 import { listLuxorPaymentInstallments } from './luxorPaymentInstallmentsServer'
-import { installmentReminderMilestone, isBookingPaymentMilestone, isLuxorReminderDaytime } from './luxorPaymentDashboardModel'
+import { installmentPaidAmount, installmentReminderAutomationKey, installmentReminderMilestone, installmentReminderWindowIsCurrent, isBookingPaymentMilestone, isFinalPaymentMilestone, isLuxorReminderDaytime } from './luxorPaymentDashboardModel'
 import { luxorCalendarDate, validCalendarDate } from './luxorProposalTerms'
 import { zonedTourDateTimeToUtc } from './luxorTourPlanningServer'
 
@@ -724,10 +724,23 @@ export async function createUniqueLuxorEmailJob(data: Parameters<typeof createLu
   )
   if (existing[0]) return existing[0]
   const { automationKey, ...job } = data
-  return createLuxorEmailJob({
-    ...job,
-    metadata: { ...(job.metadata || {}), automation_key: automationKey },
-  })
+  try {
+    return await createLuxorEmailJob({
+      ...job,
+      metadata: { ...(job.metadata || {}), automation_key: automationKey },
+    })
+  } catch (error) {
+    // Concurrent cron workers can both pass the read above. The partial unique
+    // index is authoritative; on its conflict, return the winner and let the
+    // caller continue the rest of its scheduling batch.
+    const message = error instanceof Error ? error.message : String(error)
+    if (!/luxor_email_jobs_installment_reminder_identity_uidx|duplicate key|unique constraint/i.test(message)) throw error
+    const winner = await supabaseRest<LuxorEmailJob[]>(
+      `luxor_email_jobs?select=*&job_type=eq.${encodeURIComponent(data.jobType)}${inquiryFilter}&metadata->>automation_key=eq.${encodeURIComponent(automationKey)}&limit=1`,
+    )
+    if (winner[0]) return winner[0]
+    throw error
+  }
 }
 
 export async function cancelQueuedLuxorEmailJobs(inquiryId: string, jobTypes: LuxorEmailJobKind[]) {
@@ -959,23 +972,11 @@ async function preparePostContractPaymentReminder(job: LuxorEmailJob): Promise<L
   return { ...job, subject: email.subject, body: email.body, metadata: refreshedMetadata }
 }
 
-function installmentPaidAmount(installment: { id: string; amount: number; status: string; metadata?: Record<string, unknown> }, payments: LuxorPayment[]) {
-  const allocated = payments.reduce((sum, payment) => {
-    if (payment.status !== 'paid' || !Array.isArray(payment.metadata?.installment_allocations)) return sum
-    return sum + payment.metadata.installment_allocations.reduce((amount, item) => {
-      if (!item || typeof item !== 'object') return amount
-      const allocation = item as Record<string, unknown>
-      return allocation.installment_id === installment.id && Number(allocation.amount) > 0 ? amount + Number(allocation.amount) : amount
-    }, 0)
-  }, 0)
-  const total = Math.max(0, Number(installment.amount) || 0)
-  const legacy = installment.status === 'paid' ? total : installment.status === 'partial' ? Math.max(0, Number(installment.metadata?.paid_amount) || 0) : 0
-  return Math.min(total, Math.max(allocated, legacy))
-}
-
 async function listPaidPaymentsForBooking(bookingId: string) {
   const invoices = await listInvoicesByBooking(bookingId)
-  const payments = await Promise.all(invoices.map((invoice) => listPaidPaymentsByInvoice(invoice.id).catch(() => [])))
+  // A failed read is not a zero balance. Fail closed so callers cannot create
+  // a misleading reminder from incomplete accounting data.
+  const payments = await Promise.all(invoices.map((invoice) => listPaidPaymentsByInvoice(invoice.id)))
   return [...new Map(payments.flat().map((payment) => [payment.id, payment])).values()]
 }
 
@@ -1037,6 +1038,11 @@ async function prepareInstallmentPaymentReminder(job: LuxorEmailJob, metadata: R
   }
   const dueDate = installment.due_at?.slice(0, 10) || ''
   if (!validCalendarDate(dueDate)) return pause('The installment due date is unavailable.')
+  if (isFinalPaymentMilestone(installment)) return pause('The final payment uses the existing final-balance reminder schedule.')
+  const today = luxorCalendarDate(new Date())
+  if (!installmentReminderWindowIsCurrent(dueDate, today, milestone, new Date())) {
+    return pause('This installment reminder is outside its approved date or daytime window.')
+  }
   const payments = await listPaidPaymentsForBooking(booking.id)
   const paid = installmentPaidAmount(installment, payments)
   const remaining = Math.max(0, Math.round((Number(installment.amount) - paid) * 100) / 100)
@@ -1642,7 +1648,7 @@ async function queueInstallmentPaymentReminders() {
     if (!masterInvoice || masterInvoice.invoice_kind !== 'event' || invoiceRemaining === null || invoiceRemaining === 0) continue
     for (const installment of installments) {
       if (!installment.invoice_id || installment.invoice_id !== booking.invoice_id || installment.status === 'void' || installment.status === 'paid'
-        || isBookingPaymentMilestone(installment)) continue
+        || isBookingPaymentMilestone(installment) || isFinalPaymentMilestone(installment)) continue
       const dueDate = installment.due_at?.slice(0, 10) || ''
       if (!validCalendarDate(dueDate)) continue
       const milestone = installmentReminderMilestone(dueDate, today)
@@ -1652,6 +1658,7 @@ async function queueInstallmentPaymentReminders() {
       if (remaining <= 0) continue
       const email = installmentReminderContent(inquiry, installment, remaining, milestone === 'installment_1_day_overdue')
       const safeDaytime = zonedTourDateTimeToUtc(today, '10:00').toISOString()
+      const automationKey = installmentReminderAutomationKey(booking.id, installment.id, dueDate, milestone)
       await createUniqueLuxorEmailJob({
         inquiryId: inquiry.id,
         bookingId: booking.id,
@@ -1660,9 +1667,9 @@ async function queueInstallmentPaymentReminders() {
         subject: email.subject,
         body: email.body,
         scheduledFor: safeDaytime,
-        automationKey: `installment:${booking.id}:${installment.id}:${milestone}`,
+        automationKey,
         metadata: {
-          automation_key: `installment:${booking.id}:${installment.id}:${milestone}`,
+          automation_key: automationKey,
           milestone,
           invoice_id: installment.invoice_id,
           installment_id: installment.id,

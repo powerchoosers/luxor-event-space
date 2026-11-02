@@ -2,7 +2,7 @@ import 'server-only'
 
 import crypto from 'node:crypto'
 import Stripe from 'stripe'
-import type { LuxorBooking, LuxorInquiry, LuxorInvoice } from './luxorInquiryTypes'
+import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment } from './luxorInquiryTypes'
 import { getInvoice, listPaidPaymentsByInvoice, updateInvoice } from './luxorInvoicesServer'
 import { getLuxorBooking } from './luxorBookingsServer'
 import { getLuxorInquiry } from './luxorInquiriesServer'
@@ -175,6 +175,28 @@ export async function createLuxorPostContractCheckout(input: {
     const currentMaster = await assertLuxorSameDayPaymentAllowed(currentInvoice, currentBooking)
     if (fingerprint && (!currentMaster || currentMaster.same_day_booking_status === 'eligible' || sameDayTermsFingerprint(currentMaster, currentBooking) !== fingerprint)) throw new Error('The same-day booking payment was received or its agreement changed. No additional link is available.')
   }
+  const verifyCurrentFinalBalanceState = async (checkoutId: string) => {
+    if (invoice.invoice_kind !== 'final_balance' || process.env.LUXOR_PAYMENT_INSTALLMENT_ALLOCATIONS_READY !== 'true') return
+    let currentInvoice: LuxorInvoice | null
+    let currentBooking: LuxorBooking | null
+    let paid: LuxorPayment[]
+    try {
+      [currentInvoice, currentBooking, paid] = await Promise.all([
+        getInvoice(invoice.id), getLuxorBooking(booking.id), listPaidPaymentsByInvoice(invoice.id),
+      ])
+    } catch (error) {
+      await stripe.checkout.sessions.expire(checkoutId).catch(() => undefined)
+      throw error
+    }
+    const currentBalance = currentInvoice
+      ? Math.max(0, Math.round((Number(currentInvoice.total) - paid.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)) * 100) / 100)
+      : 0
+    if (!currentInvoice || !currentBooking || currentInvoice.status === 'cancelled' || currentBooking.contract_status !== 'signed'
+      || Math.abs(currentBalance - paymentAmount) > 0.01) {
+      await stripe.checkout.sessions.expire(checkoutId)
+      throw new Error('The final-balance invoice changed while the card link was being created. Refresh before collecting payment.')
+    }
+  }
   const offer = luxorOfferSnapshot(invoice)
   // Proposal totals are already final and price-locked before the scheduled
   // child invoices are made. A promotion is part of that final price; it must
@@ -343,6 +365,7 @@ export async function createLuxorPostContractCheckout(input: {
   if (depositReservation) await assertNoPendingProviderPaidReview(booking.id)
   if (!checkout.url) throw new Error('Stripe did not return a checkout link.')
   try { await verifyCurrentSameDayState(checkout.id) } catch (error) { await stripe.checkout.sessions.expire(checkout.id); throw error }
+  await verifyCurrentFinalBalanceState(checkout.id)
   await updateInvoice(invoice.id, {
     payment_requested_at: new Date().toISOString(),
     payment_requested_amount: Number(checkout.amount_total || Math.round(paymentAmount * 100)) / 100,
@@ -351,6 +374,7 @@ export async function createLuxorPostContractCheckout(input: {
     stripe_checkout_url: checkout.url,
   })
   try { await verifyCurrentSameDayState(checkout.id) } catch (error) { await stripe.checkout.sessions.expire(checkout.id); throw error }
+  await verifyCurrentFinalBalanceState(checkout.id)
 
   const actualPaymentAmount = Number(checkout.amount_total || Math.round(paymentAmount * 100)) / 100
   if (Math.abs(actualPaymentAmount - paymentAmount) > 0.01) {
