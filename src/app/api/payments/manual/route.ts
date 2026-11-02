@@ -370,6 +370,10 @@ export async function POST(request: NextRequest) {
       }),
     })
     if (!payment) throw new Error('Payment record could not be created.')
+    // The ledger trigger returns the original receipt on a stable-reference
+    // retry. Carry that canonical timestamp into invoice and booking updates
+    // too, rather than replacing it with this request's new `now` value.
+    actualPaidAt = payment.paid_at || actualPaidAt
 
     const updatedInvoice = (sameDay?.coverage_amount ? await getInvoice(invoice.id) : await updateInvoice(invoice.id, { status: 'paid', paid_at: actualPaidAt })) || invoice
     const finalBalanceInvoice = kind === 'deposit'
