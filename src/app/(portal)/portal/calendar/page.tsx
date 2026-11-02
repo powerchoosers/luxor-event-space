@@ -13,14 +13,17 @@ import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import type { LuxorAvailabilityCalendar as LuxorAvailabilityMap } from '@/lib/luxorAvailability'
 import type { PendingProposalSummary } from '@/lib/luxorPendingProposals'
+import type { LuxorPlannerCalendarMeeting } from '@/lib/luxorPlannerCalendar'
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
-import { getLuxorScheduleTours, getLuxorTourSection, isLuxorDateInUpcomingSchedule, luxorDateKey, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
+import { getLuxorScheduleTours, getLuxorTourSection, isLuxorDateInUpcomingSchedule, LUXOR_TOUR_TIMEZONE, luxorDateKey, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
 import { useToast } from '@/components/portal/ToastProvider'
 
 type CalendarPayload = {
   tours: LuxorInquiry[]
   slots: LuxorTourSlot[]
   bookings: (LuxorBooking & { paid_total?: number; balance_due?: number })[]
+  plannerMeetings: LuxorPlannerCalendarMeeting[]
+  plannerMeetingsError?: string | null
   tasks: CalendarTask[]
   availability: LuxorAvailabilityMap
   pendingProposals: PendingProposalSummary[]
@@ -79,10 +82,16 @@ function timeLabel(value?: string | null) {
   return `${hour % 12 || 12}:${match[2]} ${suffix}`
 }
 
+function meetingTimeLabel(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: LUXOR_TOUR_TIMEZONE }).format(date)
+}
+
 export default function CalendarPage() {
   const [activeCalendar, setActiveCalendar] = useState<'tours' | 'events'>('tours')
   const [view, setView] = useState<PortalCalendarView>('schedule')
-  const [data, setData] = useState<CalendarPayload>({ tours: [], slots: [], bookings: [], tasks: [], availability: {}, pendingProposals: [], pendingProposalCounts: {} })
+  const [data, setData] = useState<CalendarPayload>({ tours: [], slots: [], bookings: [], plannerMeetings: [], tasks: [], availability: {}, pendingProposals: [], pendingProposalCounts: {} })
   const [selectedEventDate, setSelectedEventDate] = useState(() => luxorTodayKey())
   const [scheduleToday, setScheduleToday] = useState(() => luxorTodayKey())
   const [loading, setLoading] = useState(true)
@@ -327,7 +336,7 @@ export default function CalendarPage() {
 
   const eventItems = useMemo<PortalCalendarItem[]>(() => {
     const todayKey = scheduleToday
-    return data.bookings
+    const bookings = data.bookings
       .filter((booking) => booking.event_date
         && (view !== 'schedule' || (booking.status === 'confirmed' && isLuxorDateInUpcomingSchedule(booking.event_date, todayKey))))
       .map((booking) => ({
@@ -347,7 +356,20 @@ export default function CalendarPage() {
           />
         ),
       } satisfies PortalCalendarItem))
-  }, [busyId, data.bookings, scheduleToday, view])
+    const meetings = data.plannerMeetings
+      .filter((meeting) => view !== 'schedule' || isLuxorDateInUpcomingSchedule(meeting.starts_at, todayKey))
+      .map((meeting) => ({
+        id: `planner-meeting-${meeting.id}`,
+        date: luxorDateKey(meeting.starts_at),
+        title: meeting.title,
+        subtitle: `Planning meeting · ${meetingTimeLabel(meeting.starts_at)} · ${meeting.duration_minutes} min`,
+        tone: 'blue' as const,
+        href: `/portal/planner/event/${meeting.booking_id}?tab=meetings#meeting-${meeting.id}`,
+        openLabel: 'Open planning meeting',
+      } satisfies PortalCalendarItem))
+      .filter((meeting) => Boolean(meeting.date))
+    return [...bookings, ...meetings]
+  }, [busyId, data.bookings, data.plannerMeetings, scheduleToday, view])
 
   const todayStats = useMemo(() => {
     const todayKey = luxorTodayKey()
@@ -465,6 +487,7 @@ export default function CalendarPage() {
           </div>
 
           {data.pendingProposalsError ? <p role="status" className="rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">Pending proposal counts could not be loaded. Availability is current.</p> : null}
+          {data.plannerMeetingsError ? <p role="status" className="rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">{data.plannerMeetingsError} Existing booking calendar data is still available.</p> : null}
 
           <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
             <LuxorAvailabilityCalendar availability={data.availability} availabilityReady={!loading && !error} selectedDate={selectedEventDate} onSelectDate={setSelectedEventDate} pendingCounts={!error ? data.pendingProposalCounts : {}} />

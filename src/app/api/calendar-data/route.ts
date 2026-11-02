@@ -8,6 +8,9 @@ import { listInvoices, listLuxorProposalActivitiesForFamilies } from '@/lib/luxo
 import { buildLuxorAvailabilityCalendar, isLuxorTestAvailabilityBooking } from '@/lib/luxorAvailability'
 import { countLuxorPendingProposalsByDate, listLuxorPendingProposals, type LuxorProposalActivitySummary } from '@/lib/luxorPendingProposals'
 import { annotateLuxorReviewAvailability } from '@/lib/luxorAvailabilityReviewServer'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
+import { supabaseRestStrict } from '@/lib/supabaseRestServer'
+import { canIncludePlannerCalendarMeetings, toLuxorPlannerCalendarMeetings, type LuxorPlannerMeetingCalendarSource } from '@/lib/luxorPlannerCalendar'
 
 export async function GET() {
   try {
@@ -16,15 +19,35 @@ export async function GET() {
       return NextResponse.json({ error: 'Please log in again to continue.' }, { status: 401 })
     }
 
-    const [tours, slots, bookings, tasks, invoiceResult] = await Promise.all([
+    // Planner meetings are a read-only projection. Keep the calendar API's
+    // existing permission boundary: only members with Planner access receive
+    // this minimal view, and no calendar rows or reminder jobs are created.
+    const plannerMeetingsResultPromise = getLuxorPortalMember(session.email).then(async (member) => {
+      if (!canIncludePlannerCalendarMeetings(member?.status, memberCan(member, 'planner'))) {
+        return { meetings: [] as LuxorPlannerMeetingCalendarSource[], error: null as string | null }
+      }
+      try {
+        const meetings = await supabaseRestStrict<LuxorPlannerMeetingCalendarSource[]>(
+          'luxor_planner_meetings?select=id,booking_id,title,starts_at,duration_minutes,status&status=eq.scheduled&order=starts_at.asc&limit=1000',
+        )
+        return { meetings, error: null as string | null }
+      } catch {
+        // Preserve the existing calendar if the optional Planner projection is
+        // temporarily unavailable; expose a small status warning to staff.
+        return { meetings: [] as LuxorPlannerMeetingCalendarSource[], error: 'Planner meetings could not be loaded.' }
+      }
+    }).catch(() => ({ meetings: [] as LuxorPlannerMeetingCalendarSource[], error: 'Planner meetings could not be loaded.' }))
+
+    const [tours, slots, bookings, tasks, invoiceResult, plannerMeetingsResult] = await Promise.all([
       listLuxorConfirmedTours(),
       listUpcomingLuxorTourSlots(1000),
       listLuxorBookingsWithPayments(1000, true),
       listAllTasks().catch(() => []),
-      listInvoices(1000).then((invoices) => ({ invoices, error: null as string | null })).catch((error: unknown) => ({
+      listInvoices(1000).then((invoices) => ({ invoices, error: null as string | null })).catch(() => ({
         invoices: [],
         error: 'Pending proposal records could not be verified.',
       })),
+      plannerMeetingsResultPromise,
     ])
 
     let taskInquiryContexts: Awaited<ReturnType<typeof listTaskInquiryContexts>> = []
@@ -50,12 +73,18 @@ export async function GET() {
     const testTourIds = await getVerifiedTestInquiryIds([...inquiryIds, ...tours.map((tour) => tour.id)])
     const annotatedBookings = await annotateTestBookings(bookings, testTourIds)
     const ownerBookings = annotatedBookings.filter((booking) => !isLuxorTestAvailabilityBooking(booking))
+    const plannerCalendarMeetings = toLuxorPlannerCalendarMeetings(
+      plannerMeetingsResult.meetings,
+      new Set(ownerBookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed').map((booking) => booking.id)),
+    )
     const pendingProposals = pendingProposalsError
       ? []
       : listLuxorPendingProposals(invoiceResult.invoices, ownerBookings, Date.now(), activityResult.activities)
 
     return NextResponse.json({
       tours: tours.filter((tour) => !testTourIds.has(tour.id)),
+      plannerMeetings: plannerCalendarMeetings,
+      plannerMeetingsError: plannerMeetingsResult.error,
       slots,
       bookings: ownerBookings,
       tasks: tasksWithInquiryContext,
