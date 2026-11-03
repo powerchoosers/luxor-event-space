@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { ensureLuxorFinalBalanceInvoice, getInvoice, listPaidPaymentsByInvoice, luxorFinalPaymentDueDate, updateInvoice } from '@/lib/luxorInvoicesServer'
-import { supabaseRest } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import { createNote, listNotesByInquiry } from '@/lib/luxorNotesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
 import { queuePaymentConfirmationText } from '@/lib/luxorTextCampaignsServer'
 import { luxorCollectionAmounts } from '@/lib/luxorPaymentOwnership'
-import type { LuxorBooking, LuxorInvoice, LuxorPayment } from '@/lib/luxorInquiryTypes'
+import type { LuxorBooking, LuxorInvoice, LuxorPayment, LuxorPaymentRefund } from '@/lib/luxorInquiryTypes'
 import { buildLuxorInvoicePdf } from '@/lib/luxorInvoicePdfServer'
 import { saveLuxorInvoicePdf } from '@/lib/luxorDocumentsServer'
 import { queueLuxorTransactionalNotice } from '@/lib/luxorTransactionalNoticeServer'
@@ -41,6 +41,32 @@ function configuredFinalPaymentDueDate(booking: LuxorBooking) {
 
 function formatMoney(value: number | null | undefined) {
   return Number(value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+async function reconcileStripeRefund(refund: Stripe.Refund, eventLivemode: boolean) {
+  const requestId = refund.metadata?.luxor_refund_request_id
+  if (!requestId) return
+  const [savedRequest] = await supabaseRestStrict<LuxorPaymentRefund[]>(
+    `luxor_payment_refunds?select=*&id=eq.${encodeURIComponent(requestId)}&limit=1`,
+  )
+  if (!savedRequest) throw new Error('Stripe refund references a Luxor refund request that is not available.')
+  const paymentIntentId = typeof refund.payment_intent === 'string' ? refund.payment_intent : refund.payment_intent?.id
+  if (paymentIntentId !== savedRequest.processor_payment_intent_id || eventLivemode !== savedRequest.livemode ||
+    refund.amount !== Math.round(Number(savedRequest.amount) * 100) || refund.currency !== 'usd') {
+    throw new Error('Stripe refund does not match its saved Luxor request.')
+  }
+  const status = refund.status === 'succeeded' ? 'succeeded'
+    : refund.status === 'failed' || refund.status === 'canceled' ? 'failed' : 'pending'
+  await supabaseRestStrict<LuxorPaymentRefund>('rpc/luxor_record_payment_refund_result', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_refund_id: savedRequest.id,
+      p_status: status,
+      p_processor_refund_id: refund.id,
+      p_failure_code: refund.failure_reason || null,
+      p_livemode: eventLivemode,
+    }),
+  })
 }
 
 function getInitialPaymentBreakdown(invoice: LuxorInvoice) {
@@ -465,7 +491,9 @@ export async function POST(request: NextRequest) {
   }
   try {
     const stripe = new Stripe(secretKey)
-    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+    if (event.type === 'refund.created' || event.type === 'refund.updated' || event.type === 'refund.failed') {
+      await reconcileStripeRefund(event.data.object as Stripe.Refund, event.livemode)
+    } else if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
       await recordPaidCheckoutSession(event.data.object, event, stripe)
     } else if (event.type === 'payment_intent.succeeded' && event.data.object.metadata?.workflow === 'luxor_same_day_booking') {
       const sessions = await stripe.checkout.sessions.list({ payment_intent: event.data.object.id, limit: 2 })

@@ -3510,6 +3510,19 @@ export default function LeadDetailPage({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Failed to refund security deposit via Stripe.')
+      if (data.success !== true) {
+        if (data.status === 'pending' || data.status === 'uncertain') {
+          setConfirmRefundModalOpen(false)
+          notify({
+            title: 'Refund Needs Reconciliation',
+            description: 'Stripe has not confirmed the final refund status. No second refund was submitted. Check the refund history before taking another action.',
+            variant: 'error',
+          })
+          await fetchAllData(false)
+          return
+        }
+        throw new Error(data.error || data.message || 'The refund was not confirmed by Stripe.')
+      }
       setConfirmRefundModalOpen(false)
       notify({
         title: 'Security Deposit Refunded',

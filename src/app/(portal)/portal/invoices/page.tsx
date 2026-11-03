@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { LuxorInvoice, type LuxorBooking, type LuxorPayment, type LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
+import { LuxorInvoice, type LuxorBooking, type LuxorPayment, type LuxorPaymentInstallment, type LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
 import { getInvoiceCollectionDisplayState } from '@/lib/luxorPaymentDashboardModel'
 import {
@@ -37,6 +37,7 @@ import {
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
+  const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
   const [bookings, setBookings] = useState<LuxorBooking[]>([])
   const [installments, setInstallments] = useState<LuxorPaymentInstallment[]>([])
   const [verifiedTestInquiryIds, setVerifiedTestInquiryIds] = useState<ReadonlySet<string>>(new Set())
@@ -92,14 +93,15 @@ export default function InvoicesPage() {
       setInvoices(invoiceData)
 
       try {
-        const [paymentResponse, bookingResponse, installmentResponse] = await Promise.all([
+        const [paymentResponse, bookingResponse, installmentResponse, refundResponse] = await Promise.all([
           fetch('/api/payments'),
           fetch('/api/bookings?strictMetrics=1&financeRowsOnly=1'),
           fetch('/api/portal/payment-installments?strictMetrics=1'),
+          fetch('/api/payments/refunds'),
         ])
-        if (!paymentResponse.ok || !bookingResponse.ok || !installmentResponse.ok) throw new Error('Financial records could not be fully verified.')
-        const [paymentData, bookingData, installmentData] = await Promise.all([paymentResponse.json(), bookingResponse.json(), installmentResponse.json()])
-        if (![paymentData, bookingData, installmentData].every(Array.isArray)) throw new Error('Financial records could not be fully verified.')
+        if (!paymentResponse.ok || !bookingResponse.ok || !installmentResponse.ok || !refundResponse.ok) throw new Error('Financial records could not be fully verified.')
+        const [paymentData, bookingData, installmentData, refundData] = await Promise.all([paymentResponse.json(), bookingResponse.json(), installmentResponse.json(), refundResponse.json()])
+        if (![paymentData, bookingData, installmentData, refundData].every(Array.isArray)) throw new Error('Financial records could not be fully verified.')
         const knownBookingIds = new Set(bookingData.map((booking: LuxorBooking) => booking.id).filter((id: unknown): id is string => typeof id === 'string'))
         const inquiryIds = [...new Set([
           ...invoiceData.map((invoice: LuxorInvoice) => invoice.inquiry_id),
@@ -134,6 +136,7 @@ export default function InvoicesPage() {
         }
         if (generation !== refreshGeneration.current) return
         setPayments(paymentData)
+        setRefunds(refundData)
         setBookings(bookingData)
         setInstallments(installmentData)
         setVerifiedTestInquiryIds(testInquiryIds)
@@ -227,9 +230,9 @@ export default function InvoicesPage() {
     testBookingIds: verifiedTestBookingIds,
   }), [invoices, bookings, verifiedTestInquiryIds, verifiedTestBookingIds])
   const financialSummary = useMemo(() => financeVerified
-    ? getLuxorInvoiceFinancialSummary(invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, installments, new Date(), financeRows.testInvoiceIds)
+    ? getLuxorInvoiceFinancialSummary(invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, installments, new Date(), financeRows.testInvoiceIds, refunds)
     : null,
-  [financeVerified, invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, financeRows.testInvoiceIds, installments])
+  [financeVerified, invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, financeRows.testInvoiceIds, installments, refunds])
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">

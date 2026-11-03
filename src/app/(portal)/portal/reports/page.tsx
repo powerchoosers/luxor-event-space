@@ -7,7 +7,7 @@ import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStaggerGroup, Po
 import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
-import { type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice, type LuxorPayment, type LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
+import { type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice, type LuxorPayment, type LuxorPaymentInstallment, type LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 import { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorInvoiceFinancialSummary, getLuxorRecordedFinanceExpenses } from '@/lib/luxorFinanceReporting'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from '@/lib/luxorTestLeadPolicy'
 
@@ -16,11 +16,12 @@ type ReportData = {
   bookings: LuxorBooking[]
   invoices: LuxorInvoice[]
   payments: LuxorPayment[]
+  refunds: LuxorPaymentRefundView[]
   expenses: LuxorBookingExpense[]
   installments: LuxorPaymentInstallment[]
 }
 
-const EMPTY_DATA: ReportData = { inquiries: [], bookings: [], invoices: [], payments: [], expenses: [], installments: [] }
+const EMPTY_DATA: ReportData = { inquiries: [], bookings: [], invoices: [], payments: [], refunds: [], expenses: [], installments: [] }
 
 export default function ReportsPage() {
   const [data, setData] = useState<ReportData>(EMPTY_DATA)
@@ -40,21 +41,23 @@ export default function ReportsPage() {
         fetch('/api/bookings?strictMetrics=1&financeRowsOnly=1'),
         fetch('/api/invoices?strictMetrics=1'),
         fetch('/api/payments'),
+        fetch('/api/payments/refunds'),
         fetch('/api/expenses?strictMetrics=1'),
         fetch('/api/portal/payment-installments?strictMetrics=1'),
       ])
       if (responses.some((response) => !response.ok)) throw new Error('Some business records could not be loaded.')
-      const [inquiries, bookings, invoices, payments, expenses, installments] = await Promise.all(responses.map((response) => response.json()))
-      if (![inquiries, bookings, invoices, payments, expenses, installments].every(Array.isArray)) throw new Error('Business records could not be verified.')
+      const [inquiries, bookings, invoices, payments, refunds, expenses, installments] = await Promise.all(responses.map((response) => response.json()))
+      if (![inquiries, bookings, invoices, payments, refunds, expenses, installments].every(Array.isArray)) throw new Error('Business records could not be verified.')
       const inquiryRows = inquiries as LuxorInquiry[]
       const bookingRows = bookings as LuxorBooking[]
       const invoiceRows = invoices as LuxorInvoice[]
       const paymentRows = payments as LuxorPayment[]
+      const refundRows = refunds as LuxorPaymentRefundView[]
       const expenseRows = expenses as LuxorBookingExpense[]
       const installmentRows = installments as LuxorPaymentInstallment[]
-      const inquiryIds = [...new Set([...inquiryRows.map((inquiry) => inquiry.id), ...[...invoiceRows, ...bookingRows, ...paymentRows].map((record) => record.inquiry_id).filter((id): id is string => typeof id === 'string' && Boolean(id))])]
+      const inquiryIds = [...new Set([...inquiryRows.map((inquiry) => inquiry.id), ...[...invoiceRows, ...bookingRows, ...paymentRows, ...refundRows].map((record) => record.inquiry_id).filter((id): id is string => typeof id === 'string' && Boolean(id))])]
       const knownBookingIds = new Set(bookingRows.map((booking) => booking.id).filter((id): id is string => typeof id === 'string'))
-      const bookingIds = [...new Set([...invoiceRows, ...expenseRows, ...paymentRows].map((record) => record.booking_id).filter((id): id is string => typeof id === 'string' && Boolean(id) && !knownBookingIds.has(id)))]
+      const bookingIds = [...new Set([...invoiceRows, ...expenseRows, ...paymentRows, ...refundRows].map((record) => record.booking_id).filter((id): id is string => typeof id === 'string' && Boolean(id) && !knownBookingIds.has(id)))]
       const testInquiryIds = new Set<string>()
       const testBookingIds = new Set<string>()
       for (let offset = 0; offset < Math.max(inquiryIds.length, bookingIds.length); offset += 1000) {
@@ -74,7 +77,7 @@ export default function ReportsPage() {
       for (const inquiry of inquiryRows) {
         if (inquiry.is_test === true || inquiry.metadata?.is_test_record === true) testInquiryIds.add(inquiry.id.toLowerCase())
       }
-      setData({ inquiries: inquiryRows, bookings: bookingRows, invoices: invoiceRows, payments: paymentRows, expenses: expenseRows, installments: installmentRows })
+      setData({ inquiries: inquiryRows, bookings: bookingRows, invoices: invoiceRows, payments: paymentRows, refunds: refundRows, expenses: expenseRows, installments: installmentRows })
       setVerifiedTestInquiryIds(testInquiryIds)
       setVerifiedTestBookingIds(testBookingIds)
       setClassificationVerified(true)
@@ -97,8 +100,8 @@ export default function ReportsPage() {
       ['Confirmed bookings', String(metrics.confirmedBookings.length)],
       ['Lead-to-booking conversion', `${metrics.conversionRate.toFixed(1)}%`],
       ['Known paid cash (paid-status rows only)', String(metrics.knownPaidCashTotal)],
-      ['Refund-status transaction count', String(metrics.refundRecordCount)],
-      ['Refund-status recorded gross amount; not treated as signed cash', String(metrics.refundRecordAmount)],
+      ['Refund request and legacy refund-status count', String(metrics.refundRecordCount)],
+      ['Recorded confirmed refund amount plus legacy refund-status gross', String(metrics.refundRecordAmount)],
       ['Event payments recorded', String(metrics.paidRevenue)],
       ['Refundable security deposits held', String(metrics.securityDepositsHeld)],
       ['Unallocated payments requiring review', String(metrics.unallocatedPayments)],
@@ -125,7 +128,7 @@ export default function ReportsPage() {
 
       {error && <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-xs text-rose-700 dark:text-rose-300">{error}</div>}
       {!classificationVerified && !loading && !error && <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs">Verified record coverage is unavailable; report totals are hidden.</div>}
-      {classificationVerified && metrics.refundReconciliationRequired && <div role="status" className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-xs leading-relaxed">Refund-status rows ({metrics.refundRecordCount}, {currency(metrics.refundRecordAmount)} recorded gross) are shown separately. The saved amount does not establish whether a row is an original receipt marked refunded or a separate refund event. Finance totals are unreconciled; figures below include paid-status rows only and should not be treated as definitive until reconciled with the payment source.</div>}
+      {classificationVerified && metrics.refundReconciliationRequired && <div role="status" className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-xs leading-relaxed">{metrics.refundRecordCount} refund records are shown separately ({currency(metrics.refundRecordAmount)} confirmed outflow and any legacy refund-status rows). Only Stripe-confirmed refunds reduce known cash; pending or uncertain requests remain excluded until reconciled. Legacy refund-status payments still require manual source review.</div>}
 
       {classificationVerified && <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
         <PortalStaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -235,7 +238,7 @@ export default function ReportsPage() {
           </p>
         )}
 
-        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use accepted proposals for event obligations and paid-status transaction records for known receipts. Refund-status rows are reported separately and are not assigned a cash direction. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
+        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use accepted proposals for event obligations, paid-status receipts, and separately linked Stripe refunds. Only confirmed refunds reduce known cash. Pending or uncertain refunds remain excluded until reconciled. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
       </div>}
     </PortalPageFrame>
   )
@@ -249,7 +252,7 @@ function buildMetrics(data: ReportData, testInquiryIds: ReadonlySet<string>, tes
   const businessBookings = financeRows.bookings
   const businessExpenses = financeRows.expenses
   const confirmedBookings = businessBookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed')
-  const finance = getLuxorInvoiceFinancialSummary(data.invoices, data.payments, verifiedTestInquiryIds, verifiedTestBookingIds, data.installments, new Date(), financeRows.testInvoiceIds)
+  const finance = getLuxorInvoiceFinancialSummary(data.invoices, data.payments, verifiedTestInquiryIds, verifiedTestBookingIds, data.installments, new Date(), financeRows.testInvoiceIds, data.refunds)
   const paidRevenue = finance.eventPaymentsReceived
   const outstandingRevenue = finance.outstandingEventReceivable
   const recordedExpenses = getLuxorRecordedFinanceExpenses(businessExpenses).reduce((sum, expense) => sum + Number(expense.amount || 0), 0)

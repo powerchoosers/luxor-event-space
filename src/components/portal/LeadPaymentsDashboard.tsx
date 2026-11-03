@@ -19,7 +19,7 @@ import {
   ReceiptText,
   CalendarDays as CalendarEdit,
 } from 'lucide-react'
-import type { LuxorBooking, LuxorEmailJob, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
+import type { LuxorBooking, LuxorEmailJob, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment, LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 import { getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
 import { eventCreditForPayment as paymentMoneyForEvent, getInvoiceCollectionDisplayState, installmentDisplayState, installmentPaidAmount, isBookingPaymentMilestone, isCalendarDateDueInChicago, paymentDisplayReceivedDate } from '@/lib/luxorPaymentDashboardModel'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
@@ -164,6 +164,8 @@ export function LeadPaymentsDashboard({
   const [reminderActionMessage, setReminderActionMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<LuxorPayment | null>(null)
+  const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
+  const [refundLoadError, setRefundLoadError] = useState<string | null>(null)
   const [receivedDateTarget, setReceivedDateTarget] = useState<LuxorPayment | null>(null)
   const [receivedDateValue, setReceivedDateValue] = useState('')
   const [receivedDateReason, setReceivedDateReason] = useState('')
@@ -177,6 +179,23 @@ export function LeadPaymentsDashboard({
   const invoiceById = useMemo(() => new Map(invoices.map((invoice) => [invoice.id, invoice])), [invoices])
   const uniquePayments = useMemo(() => Array.from(new Map(payments.map((payment) => [payment.id, payment])).values())
     .sort((left, right) => Date.parse(right.received_date || right.paid_at || right.created_at) - Date.parse(left.received_date || left.paid_at || left.created_at)), [payments])
+  const refreshRefunds = useCallback(async () => {
+    if (!booking?.id) {
+      setRefunds([])
+      setRefundLoadError(null)
+      return
+    }
+    try {
+      const response = await fetch(`/api/payments/refunds?bookingId=${encodeURIComponent(booking.id)}`, { cache: 'no-store' })
+      const result = await response.json().catch(() => ({})) as { error?: string } | LuxorPaymentRefundView[]
+      if (!response.ok || !Array.isArray(result)) throw new Error(!Array.isArray(result) ? result.error || 'Refund history could not be verified.' : 'Refund history could not be verified.')
+      setRefunds(result)
+      setRefundLoadError(null)
+    } catch (error) {
+      setRefundLoadError(error instanceof Error ? error.message : 'Refund history could not be verified.')
+    }
+  }, [booking?.id])
+  useEffect(() => { void refreshRefunds() }, [refreshRefunds])
   const invoiceFinancialSummary = useMemo(
     () => getLuxorInvoiceFinancialSummary(invoices, uniquePayments, new Set(), new Set(), installments),
     [invoices, uniquePayments, installments],
@@ -242,6 +261,12 @@ export function LeadPaymentsDashboard({
     .filter(isFutureQueuedReminder)
     .sort((left, right) => Date.parse(left.scheduled_for) - Date.parse(right.scheduled_for))[0]
   const categorizedPayments = useMemo(() => uniquePayments.map((payment) => ({ payment, invoice: invoiceById.get(payment.invoice_id || '') })), [invoiceById, uniquePayments])
+  const securityDepositRefunds = useMemo(() => refunds.filter((refund) => refund.refund_kind === 'security_deposit'), [refunds])
+  useEffect(() => {
+    if (activeTab !== 'history' || !securityDepositRefunds.some((refund) => refund.status === 'pending' || refund.status === 'uncertain')) return
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refreshRefunds() }, 15_000)
+    return () => window.clearInterval(timer)
+  }, [activeTab, refreshRefunds, securityDepositRefunds])
   const displayReceivedDate = (payment: LuxorPayment) => paymentDisplayReceivedDate(payment, receivedDateOverrides[payment.id])
   const selectedInstallment = timelineInstallments.find((item) => item.id === recordInstallmentId) || timelineInstallments[0]
   const selectedInstallmentRemaining = selectedInstallment
@@ -474,6 +499,15 @@ export function LeadPaymentsDashboard({
           </div>
           <div id={`payment-record-panel-${activeTab}`} role="tabpanel" aria-labelledby={`payment-record-tab-${activeTab}`} className="mt-4">
             {activeTab === 'history' ? <div>
+              {refundLoadError ? <p role="status" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">{refundLoadError}</p> : null}
+              {securityDepositRefunds.length ? <section aria-label="Security deposit refund history" className="mb-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 sm:p-4">
+                <h4 className="text-xs font-bold uppercase tracking-wide text-[color:var(--portal-muted)]">Security deposit refunds</h4>
+                <div className="mt-2 space-y-2">{securityDepositRefunds.map((refund) => <div key={refund.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-surface)] px-3 py-2 text-sm">
+                  <span className="text-[color:var(--portal-text)]">{refund.status === 'succeeded' ? 'Refund completed' : refund.status === 'pending' ? 'Refund pending' : refund.status === 'uncertain' ? 'Refund status needs review' : 'Refund failed'}</span>
+                  <span className="font-semibold tabular-nums text-[color:var(--portal-text)]">{refund.status === 'succeeded' ? '−' : ''}{formatMoney(Number(refund.amount || 0))}</span>
+                  <span className="text-xs text-[color:var(--portal-muted)]">{formatDate(refund.completed_at || refund.requested_at)}</span>
+                </div>)}</div>
+              </section> : null}
               <div className="space-y-2 sm:hidden">{categorizedPayments.length ? categorizedPayments.map(({ payment, invoice }) => <article key={payment.id} className="rounded-xl border border-[#eee5dc] bg-[#fffdf9] p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold">{paymentDescription(payment, invoice)}</p><p className="mt-1 text-[11px] text-[#78685a]">{formatDate(displayReceivedDate(payment))} · {payment.payment_method || 'Method not recorded'}</p></div><strong className="shrink-0 tabular-nums">{formatMoney(Number(payment.amount || 0))}</strong></div><p className="mt-2 text-[11px] text-[#78685a]">Applied to: {appliedTo(payment, invoice)}{payment.status !== 'paid' ? ` · ${payment.status}` : ''}</p>{payment.status === 'paid' ? <div className="mt-2 flex flex-wrap gap-4 text-xs font-semibold text-[#91651f]"><button type="button" onClick={() => setSelectedPayment(payment)} className="inline-flex items-center gap-1"><Eye size={14} /> View</button><a href={`/api/payments/${encodeURIComponent(payment.id)}/receipt`}>Download receipt</a>{payment.processor === 'manual' ? <button type="button" onClick={() => { void openReceivedDateCorrection(payment) }} className="inline-flex items-center gap-1"><CalendarEdit size={13} /> Correct received date</button> : null}</div> : null}</article>) : <p className="rounded-xl border border-dashed border-[#e7d6be] p-6 text-center text-sm text-[#78685a]">No payment transactions are recorded for this event.</p>}</div>
               <div className="hidden overflow-x-auto rounded-xl border border-[#eee5dc] sm:block"><table className="w-full border-collapse text-left text-xs"><thead className="bg-[#faf5ee] text-[10px] uppercase tracking-wide text-[#78685a]"><tr>{['Date', 'Description', 'Amount', 'Method', 'Applied To', 'Receipt'].map((heading) => <th key={heading} className="px-3 py-3 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#f1eae2]">{categorizedPayments.length ? categorizedPayments.map(({ payment, invoice }) => <tr key={payment.id}><td className="whitespace-nowrap px-3 py-3">{formatDate(displayReceivedDate(payment))}</td><td className="px-3 py-3 font-medium">{paymentDescription(payment, invoice)}{payment.status !== 'paid' ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-amber-800">{payment.status}</span> : null}</td><td className="whitespace-nowrap px-3 py-3 font-semibold tabular-nums">{formatMoney(Number(payment.amount || 0))}</td><td className="px-3 py-3">{payment.payment_method || 'Not recorded'}</td><td className="px-3 py-3">{appliedTo(payment, invoice)}</td><td className="px-3 py-3">{payment.status === 'paid' ? <div className="flex items-center gap-2"><button type="button" onClick={() => setSelectedPayment(payment)} className="inline-flex items-center gap-1 text-[#91651f] hover:underline"><Eye size={14} /> View</button><a href={`/api/payments/${encodeURIComponent(payment.id)}/receipt`} className="text-[#91651f] hover:underline">Download</a>{payment.processor === 'manual' ? <button type="button" onClick={() => { void openReceivedDateCorrection(payment) }} className="text-[#91651f] hover:underline">Correct date</button> : null}</div> : <span className="text-[#988979]">—</span>}</td></tr>) : <tr><td colSpan={6} className="px-3 py-8 text-center text-sm text-[#78685a]">No payment transactions are recorded for this event.</td></tr>}</tbody></table></div>
             </div> : null}

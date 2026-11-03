@@ -34,7 +34,7 @@ import {
 import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
-import type { LuxorInvoice, LuxorBooking, LuxorPayment } from '@/lib/luxorInquiryTypes'
+import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
 import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary, getLuxorRecordedFinanceExpenses } from '@/lib/luxorFinanceReporting'
 
@@ -44,12 +44,15 @@ type BookingWithPayments = LuxorBooking & {
   balance_due?: number
 }
 
+type FinanceTransaction = { kind: 'payment'; payment: LuxorPayment } | { kind: 'refund'; refund: LuxorPaymentRefundView }
+
 type Tab = 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports'
 
 export default function FinancesPage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
+  const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
   const [installments, setInstallments] = useState<LuxorPaymentInstallment[]>([])
   const [bookings, setBookings] = useState<BookingWithPayments[]>([])
   const [verifiedTestInquiryIds, setVerifiedTestInquiryIds] = useState<ReadonlySet<string>>(new Set())
@@ -88,28 +91,31 @@ type LuxorBookingExpense = {
       setLoading(true)
       setError(null)
       setTestClassificationVerified(false)
-      const [invRes, bookRes, expRes, paymentRes, installmentRes] = await Promise.all([
+      const [invRes, bookRes, expRes, paymentRes, installmentRes, refundRes] = await Promise.all([
         fetch('/api/invoices?strictMetrics=1'),
         fetch('/api/bookings?strictMetrics=1&financeRowsOnly=1'),
         fetch('/api/expenses?strictMetrics=1'),
         fetch('/api/payments'),
         fetch('/api/portal/payment-installments?strictMetrics=1'),
+        fetch('/api/payments/refunds'),
       ])
 
-      if (!invRes.ok || !bookRes.ok || !expRes.ok || !paymentRes.ok || !installmentRes.ok) throw new Error('Failed to load financial records.')
+      if (!invRes.ok || !bookRes.ok || !expRes.ok || !paymentRes.ok || !installmentRes.ok || !refundRes.ok) throw new Error('Failed to load financial records.')
 
-      const [invData, bookData, expData, paymentData, installmentData] = await Promise.all([
+      const [invData, bookData, expData, paymentData, installmentData, refundData] = await Promise.all([
         invRes.json(),
         bookRes.json(),
         expRes.json(),
         paymentRes.json(),
         installmentRes.json(),
+        refundRes.json(),
       ])
 
-      if (!Array.isArray(invData) || !Array.isArray(bookData) || !Array.isArray(expData) || !Array.isArray(paymentData) || !Array.isArray(installmentData)) throw new Error('Financial records could not be verified.')
+      if (!Array.isArray(invData) || !Array.isArray(bookData) || !Array.isArray(expData) || !Array.isArray(paymentData) || !Array.isArray(installmentData) || !Array.isArray(refundData)) throw new Error('Financial records could not be verified.')
       if (generation !== refreshGeneration.current) return
       setInvoices(invData)
       setPayments(paymentData)
+      setRefunds(refundData)
       setBookings(bookData)
       setExpenses(expData)
       setInstallments(installmentData)
@@ -198,7 +204,7 @@ type LuxorBookingExpense = {
   const { invoices: businessInvoices, expenses: businessExpenses } = businessRows
   const recordedBusinessExpenses = useMemo(() => getLuxorRecordedFinanceExpenses(businessExpenses), [businessExpenses])
 
-  const financeSummary = useMemo(() => getLuxorInvoiceFinancialSummary(invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, installments, new Date(), businessRows.testInvoiceIds), [invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, installments])
+  const financeSummary = useMemo(() => getLuxorInvoiceFinancialSummary(invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, installments, new Date(), businessRows.testInvoiceIds, refunds), [invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, installments, refunds])
   const netRevenue = financeSummary.eventPaymentsReceived
   const outstandingAR = financeSummary.outstandingEventReceivable
   const overdueAR = financeSummary.overdueEventReceivable
@@ -211,6 +217,18 @@ type LuxorBookingExpense = {
     .filter((payment) => !(payment.booking_id && businessRows.testBookingIds.has(payment.booking_id.toLowerCase())))
     .filter((payment) => !(payment.inquiry_id && businessRows.testInquiryIds.has(payment.inquiry_id.toLowerCase())))
     .filter((payment) => !(payment.invoice_id && businessRows.testInvoiceIds.has(payment.invoice_id.toLowerCase())))
+  const visibleRefunds = refunds.filter((refund) => refund.metadata?.is_test_record !== true)
+    .filter((refund) => !businessRows.testBookingIds.has(refund.booking_id.toLowerCase()))
+    .filter((refund) => !businessRows.testInquiryIds.has(refund.inquiry_id?.toLowerCase() || ''))
+    .filter((refund) => !businessRows.testInvoiceIds.has(refund.invoice_id.toLowerCase()))
+  const allLedgerTransactions: FinanceTransaction[] = [
+    ...allPayments.map((payment) => ({ kind: 'payment' as const, payment })),
+    ...visibleRefunds.map((refund) => ({ kind: 'refund' as const, refund })),
+  ].sort((left, right) => {
+    const leftAt = left.kind === 'payment' ? left.payment.received_date || left.payment.paid_at || left.payment.created_at : left.refund.completed_at || left.refund.requested_at
+    const rightAt = right.kind === 'payment' ? right.payment.received_date || right.payment.paid_at || right.payment.created_at : right.refund.completed_at || right.refund.requested_at
+    return Date.parse(rightAt || '') - Date.parse(leftAt || '')
+  })
 
   // Filter invoices for Invoices tab
   const filteredInvoices = invoices.filter((inv) => {
@@ -262,7 +280,7 @@ type LuxorBookingExpense = {
       {activeTab === 'dashboard' && testClassificationVerified && !error && !loading && (
         <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
           <div className="space-y-6">
-            {financeSummary.refundReconciliationRequired && <p role="status" className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">Refund-status records are listed separately ({financeSummary.refundRecordCount} records, ${financeSummary.refundRecordAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded gross). Their amounts do not establish whether a row is an original receipt or a separate refund. Finance figures are unreconciled and show paid-status records only until these transactions are checked against the payment source.</p>}
+            {financeSummary.refundReconciliationRequired && <p role="status" className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">{financeSummary.refundRecordCount} refund records appear in the ledger; Stripe-confirmed outflow is ${financeSummary.refundRecordAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}. Only confirmed refunds reduce collected cash. Pending or uncertain requests stay out of totals until reconciled, and older refund-status payment rows remain flagged for manual source review.</p>}
             {/* Top Cards */}
             <PortalStaggerGroup className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <PortalStaggerCard>
@@ -483,7 +501,7 @@ type LuxorBookingExpense = {
         {activeTab === 'payments' && (
           <PortalTableCard
             controls={
-              <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)] tabular-nums">Recorded Payment Transactions ({allPayments.length})</h3>
+              <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)] tabular-nums">Payment and Refund Transactions ({allLedgerTransactions.length})</h3>
             }
           >
             <div className="overflow-x-auto">
@@ -498,23 +516,29 @@ type LuxorBookingExpense = {
                   </tr>
                 </PortalStickyThead>
                 <tbody className="divide-y divide-[color:var(--portal-border)]/50">
-                  {allPayments.length === 0 ? (
+                  {allLedgerTransactions.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-8 py-12 text-center text-xs text-[color:var(--portal-muted)]">No payment transaction records found.</td>
                     </tr>
                   ) : (
-                    allPayments.map((p, idx) => (
-                      <tr key={p.id || idx} className="hover:bg-[color:var(--portal-soft)]/50 transition-colors">
-                        <td className="px-8 py-5 tabular-nums font-bold text-xs text-[color:var(--portal-muted)]">#{p.id?.slice(0, 10) || `TX-00${idx}`}</td>
+                    allLedgerTransactions.map((transaction, idx) => {
+                      const isRefund = transaction.kind === 'refund'
+                      const id = isRefund ? transaction.refund.id : transaction.payment.id
+                      const status = isRefund ? transaction.refund.status : transaction.payment.status
+                      const amount = isRefund ? Number(transaction.refund.amount || 0) : Number(transaction.payment.amount || 0)
+                      const at = isRefund ? transaction.refund.completed_at || transaction.refund.requested_at : transaction.payment.received_date || transaction.payment.paid_at || transaction.payment.created_at
+                      const label = isRefund ? (status === 'succeeded' ? 'Refund completed' : `Refund ${status}`) : status === 'refunded' ? 'Legacy refund needs review' : 'Payment recorded'
+                      return <tr key={`${transaction.kind}-${id || idx}`} className="hover:bg-[color:var(--portal-soft)]/50 transition-colors">
+                        <td className="px-8 py-5 tabular-nums font-bold text-xs text-[color:var(--portal-muted)]">#{id?.slice(0, 10) || `TX-00${idx}`}</td>
                         <td className="px-6 py-5">
-                          <p className="text-xs font-bold text-[color:var(--portal-text)] leading-none">{p.notes || 'Event Booking Retainer'}</p>
-                          <p className={`text-[9px] font-bold uppercase tracking-widest mt-1 ${p.status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-[#caa24c]'}`}>{p.status === 'refunded' ? 'Refund recorded' : 'Payment recorded'}</p>
+                          <p className="text-xs font-bold text-[color:var(--portal-text)] leading-none">{isRefund ? 'Refundable security deposit' : transaction.payment.notes || 'Event Booking Retainer'}</p>
+                          <p className={`text-[9px] font-bold uppercase tracking-widest mt-1 ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-[#caa24c]'}`}>{label}</p>
                         </td>
-                        <td className="px-6 py-5 text-xs text-[color:var(--portal-muted)] font-medium">{p.payment_method || 'Bank Transfer'}</td>
-                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{p.paid_at ? new Date(p.paid_at).toLocaleDateString() : 'N/A'}</td>
-                        <td className={`px-8 py-5 text-right tabular-nums font-bold ${p.status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{Number(p.amount || 0) < 0 ? '−' : '+'}${Math.abs(Number(p.amount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="px-6 py-5 text-xs text-[color:var(--portal-muted)] font-medium">{isRefund ? 'Stripe' : transaction.payment.payment_method || 'Bank Transfer'}</td>
+                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{at ? new Date(at).toLocaleDateString() : 'N/A'}</td>
+                        <td className={`px-8 py-5 text-right tabular-nums font-bold ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{isRefund ? status === 'succeeded' ? '-' : '' : status === 'refunded' ? '-' : '+'}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       </tr>
-                    ))
+                    })
                   )}
                 </tbody>
               </PortalStickyTable>

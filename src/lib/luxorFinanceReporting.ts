@@ -1,5 +1,5 @@
 import { isLuxorTestAvailabilityBooking } from './luxorAvailability'
-import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment } from './luxorInquiryTypes'
+import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment, LuxorPaymentRefundView } from './luxorInquiryTypes'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from './luxorTestLeadPolicy'
 import { installmentDisplayState, invoiceEventObligation, refundableSecurityAmount } from './luxorPaymentDashboardModel'
 
@@ -71,7 +71,7 @@ function luxorTestInvoiceLineage(invoices: LuxorInvoice[], inquiryIds: ReadonlyS
  * Child invoices describe collection installments under the accepted master;
  * they do not create additional obligations.
  */
-export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], payments: LuxorPayment[], testInquiryIds: ReadonlySet<string> = new Set(), testBookingIds: ReadonlySet<string> = new Set(), installments: LuxorPaymentInstallment[] = [], now = new Date(), excludedTestInvoiceIds: ReadonlySet<string> = new Set()): LuxorInvoiceFinancialSummary {
+export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], payments: LuxorPayment[], testInquiryIds: ReadonlySet<string> = new Set(), testBookingIds: ReadonlySet<string> = new Set(), installments: LuxorPaymentInstallment[] = [], now = new Date(), excludedTestInvoiceIds: ReadonlySet<string> = new Set(), refunds: LuxorPaymentRefundView[] = []): LuxorInvoiceFinancialSummary {
   const testInquiries = new Set([...testInquiryIds].map((id) => id.toLowerCase()))
   const testBookings = new Set([...testBookingIds].map((id) => id.toLowerCase()))
   const byId = new Map(invoices.map((invoice) => [invoice.id, invoice]))
@@ -137,6 +137,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
   let knownPaidCashTotal = 0
   let refundRecordCount = 0
   let refundRecordAmount = 0
+  let refundReconciliationRequired = false
   let eventPaymentsReceived = 0
   let securityDepositsHeld = 0
   let unallocatedPayments = 0
@@ -152,6 +153,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
       if (Number.isFinite(rawAmount)) {
         refundRecordCount += 1
         refundRecordAmount = money(refundRecordAmount + Math.abs(rawAmount))
+        refundReconciliationRequired = true
       }
       continue
     }
@@ -230,6 +232,25 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     overdue: overdueByMaster.get(row.invoice.id) || 0,
   }))
 
+  for (const refund of refunds) {
+    if (refund.metadata?.is_test_record === true) continue
+    if ((refund.inquiry_id && testInquiries.has(refund.inquiry_id.toLowerCase()))
+      || (refund.booking_id && testBookings.has(refund.booking_id.toLowerCase()))
+      || (refund.invoice_id && testInvoiceIds.has(refund.invoice_id.toLowerCase()))) continue
+    refundRecordCount += 1
+    if (refund.status === 'pending' || refund.status === 'uncertain') refundReconciliationRequired = true
+    if (refund.status !== 'succeeded') continue
+    const amount = Number(refund.amount || 0)
+    if (!Number.isFinite(amount) || amount <= 0) continue
+    refundRecordAmount = money(refundRecordAmount + amount)
+    knownPaidCashTotal = money(knownPaidCashTotal - amount)
+    if (refund.refund_kind === 'security_deposit') securityDepositsHeld = money(Math.max(0, securityDepositsHeld - amount))
+    else {
+      eventPaymentsReceived = money(eventPaymentsReceived - amount)
+      eventPaymentRows.push({ amount: -money(amount), paid_at: refund.completed_at })
+    }
+  }
+
   return {
     acceptedInvoices,
     acceptedInvoiceRows,
@@ -238,7 +259,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     knownPaidCashTotal,
     refundRecordCount,
     refundRecordAmount,
-    refundReconciliationRequired: refundRecordCount > 0,
+    refundReconciliationRequired,
     eventPaymentsReceived,
     securityDepositsHeld,
     unallocatedPayments,

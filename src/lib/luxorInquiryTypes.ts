@@ -819,6 +819,35 @@ export type LuxorPayment = {
   metadata: Record<string, unknown>
 }
 
+export type LuxorPaymentRefund = {
+  id: string
+  created_at: string
+  updated_at: string
+  source_payment_id: string
+  booking_id: string
+  invoice_id: string
+  inquiry_id: string | null
+  refund_kind: 'security_deposit'
+  amount: number
+  currency: 'usd'
+  status: 'pending' | 'succeeded' | 'failed' | 'uncertain'
+  processor: 'stripe'
+  processor_payment_intent_id: string
+  processor_refund_id: string | null
+  idempotency_key: string
+  requested_by: string
+  requested_at: string
+  completed_at: string | null
+  failure_code: string | null
+  livemode: boolean
+  metadata: Record<string, unknown>
+  created?: boolean
+}
+
+export type LuxorPaymentRefundView = Pick<LuxorPaymentRefund,
+  'id' | 'booking_id' | 'invoice_id' | 'inquiry_id' | 'refund_kind' | 'amount' | 'currency' | 'status' | 'requested_at' | 'completed_at' | 'metadata'
+>
+
 export type LuxorBookingExpenseStatus = 'planned' | 'incurred' | 'paid' | 'cancelled'
 
 export type LuxorBookingExpense = {
