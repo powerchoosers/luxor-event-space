@@ -1,7 +1,7 @@
 'use client'
 
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, UserPlus, UserRound, X } from 'lucide-react'
+import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, UserPlus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react'
@@ -315,28 +315,28 @@ export function LuxorMessenger() {
   const sharedMedia = selectedConversation?.messages.flatMap((message) => message.media_urls.map((url) => ({ url, message }))) || []
 
   return (
-    <section className="portal-card-surface portal-surface relative grid min-h-0 h-full min-w-0 flex-1 overflow-hidden lg:grid-cols-[22rem_minmax(0,1fr)]">
+    <section className="relative grid min-h-0 h-full min-w-0 flex-1 overflow-hidden rounded-none border-0 bg-[color:var(--portal-card)] lg:grid-cols-[22rem_minmax(0,1fr)] lg:rounded-2xl lg:border lg:border-[color:var(--portal-border)] lg:shadow-xs">
       <aside ref={listPaneRef} className={`${showThreadOnMobile ? 'hidden lg:flex' : 'flex'} min-h-0 min-w-0 flex-col border-r border-[color:var(--portal-border)]`}>
-        <div className="border-b border-[color:var(--portal-border)] p-4">
+        <div className="border-b border-[color:var(--portal-border)]/70 p-4">
           <div className="flex items-center justify-between gap-3">
-            <h1 className="font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Text Messages</h1>
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => { setNewMessageOpen(true); setShowThreadOnMobile(true); setContactQuery(''); setContactResults([]) }} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-white hover:bg-[#dfbd68]"><Plus size={13}/> New</button>
+            <h1 className="text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">Messages</h1>
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => { setNewMessageOpen(true); setShowThreadOnMobile(true); setContactQuery(''); setContactResults([]) }} className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-[#caa24c] px-3 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#b88f3d]"><Plus size={14}/> New</button>
               <div className="relative" ref={lineOptionsRef}>
-                <button type="button" onClick={() => setLineOptionsOpen((current) => !current)} className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] opacity-75 transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Message line options" aria-expanded={lineOptionsOpen}><MoreVertical size={16}/></button>
-                <AnimatePresence>{lineOptionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl">
-                  <p className="px-3 pb-1 pt-2 font-mono text-[8px] uppercase tracking-widest text-[color:var(--portal-muted)]">Show messages for</p>
-                  {[{ value: 'all', label: 'All Luxor numbers' }, ...businessLines.map((line) => ({ value: line.phoneNumber, label: `${line.isActive ? 'Main · ' : ''}${formatPhoneDisplay(line.phoneNumber)}` }))].map((option) => <button key={option.value} type="button" onClick={() => { setSelectedLine(option.value); setSelectedKey(null); setDraftConversation(null); setLineOptionsOpen(false) }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><span className="flex h-4 w-4 items-center justify-center">{selectedLine === option.value ? <Check size={13} className="text-[#caa24c]"/> : null}</span><span>{option.label}</span></button>)}
+                <button type="button" onClick={() => setLineOptionsOpen((current) => !current)} className="flex h-8.5 w-8.5 items-center justify-center rounded-xl text-[color:var(--portal-muted)] opacity-80 transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Message line options" aria-expanded={lineOptionsOpen}><MoreVertical size={16}/></button>
+                <AnimatePresence>{lineOptionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-10 z-30 w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl backdrop-blur-xl">
+                  <p className="px-3 pb-1 pt-2 text-[11px] font-medium text-[color:var(--portal-muted)]">Show messages for</p>
+                  {[{ value: 'all', label: 'All Luxor numbers' }, ...businessLines.map((line) => ({ value: line.phoneNumber, label: `${line.isActive ? 'Main · ' : ''}${formatPhoneDisplay(line.phoneNumber)}` }))].map((option) => <button key={option.value} type="button" onClick={() => { setSelectedLine(option.value); setSelectedKey(null); setDraftConversation(null); setLineOptionsOpen(false) }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><span className="flex h-4 w-4 items-center justify-center">{selectedLine === option.value ? <Check size={13} className="text-[#caa24c]"/> : null}</span><span>{option.label}</span></button>)}
                 </motion.div> : null}</AnimatePresence>
               </div>
             </div>
           </div>
-          <label className="mt-4 flex h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 focus-within:border-[#caa24c]/45">
+          <label className="mt-3.5 flex h-9.5 items-center gap-2 rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3 transition-all focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10">
             <Search size={14} className="text-[color:var(--portal-muted)]" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" className="portal-input-transparent min-w-0 flex-1 bg-transparent text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" className="portal-input-transparent min-w-0 flex-1 bg-transparent text-xs font-medium text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]" />
           </label>
-          <div className="mt-3 grid grid-cols-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
-            {(['all', 'unread'] as const).map((value) => <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-md py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${filter === value ? 'bg-[#caa24c]/12 text-[#caa24c]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{value}</button>)}
+          <div className="mt-3 grid grid-cols-2 rounded-xl border border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)] p-1">
+            {(['all', 'unread'] as const).map((value) => <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-lg py-1.5 text-xs font-semibold capitalize transition-all ${filter === value ? 'border border-[color:var(--portal-border)]/50 bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{value}</button>)}
           </div>
         </div>
 
@@ -346,21 +346,21 @@ export function LuxorMessenger() {
             skeleton={<LoadingConversations />}
           >
             {visibleConversations.length ? visibleConversations.map((conversation) => (
-              <button key={conversation.key} type="button" onClick={() => selectConversation(conversation)} className={`flex w-full gap-3 border-b border-[color:var(--portal-border)] px-4 py-4 text-left transition-colors ${selectedConversation?.key === conversation.key ? 'bg-[#caa24c]/10 shadow-[inset_3px_0_0_#caa24c]' : 'hover:bg-[color:var(--portal-soft)]'}`}>
+              <button key={conversation.key} type="button" onClick={() => selectConversation(conversation)} className={`flex w-full gap-3 border-b border-[color:var(--portal-border)]/70 px-4 py-3.5 text-left transition-colors ${selectedConversation?.key === conversation.key ? 'bg-[#caa24c]/10 shadow-[inset_3px_0_0_#caa24c]' : 'hover:bg-[color:var(--portal-soft)]/70'}`}>
                 <PortalContactAvatar name={conversation.contactName} inquiryId={conversation.inquiryId || undefined} size="md" />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-start justify-between gap-2">
-                    <span className={`truncate text-sm ${conversation.unreadCount ? 'font-black text-[color:var(--portal-text)]' : 'font-semibold text-[color:var(--portal-muted)]'}`}>{conversation.contactName}</span>
-                    <span className="shrink-0 font-mono text-[9px] text-[color:var(--portal-muted)]">{conversation.latest ? formatConversationTime(conversation.latest.created_at) : 'New'}</span>
+                    <span className={`truncate text-sm ${conversation.unreadCount ? 'font-bold text-[color:var(--portal-text)]' : 'font-semibold text-[color:var(--portal-text)]'}`}>{conversation.contactName}</span>
+                    <span className="shrink-0 tabular-nums text-[11px] text-[color:var(--portal-muted)]">{conversation.latest ? formatConversationTime(conversation.latest.created_at) : 'New'}</span>
                   </span>
-                  <span className="mt-0.5 block font-mono text-[9px] text-[color:var(--portal-muted)]">{formatPhoneDisplay(conversation.phoneNumber)}</span>
+                  <span className="mt-0.5 block tabular-nums text-[11px] text-[color:var(--portal-muted)]">{formatPhoneDisplay(conversation.phoneNumber)}</span>
                   <span className="mt-1 flex items-center gap-2">
-                    <span className={`min-w-0 flex-1 truncate text-[11px] ${conversation.unreadCount ? 'font-semibold text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{conversation.latest?.direction === 'outbound' ? 'You: ' : ''}{conversation.latest?.body || 'Start a new conversation'}</span>
-                    {conversation.unreadCount ? <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#caa24c] px-1 font-mono text-[9px] font-black text-white">{conversation.unreadCount}</span> : null}
+                    <span className={`min-w-0 flex-1 truncate text-xs ${conversation.unreadCount ? 'font-semibold text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{conversation.latest?.direction === 'outbound' ? 'You: ' : ''}{conversation.latest?.body || 'Start a new conversation'}</span>
+                    {conversation.unreadCount ? <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#caa24c] px-1.5 tabular-nums text-[10px] font-bold text-white">{conversation.unreadCount}</span> : null}
                   </span>
                 </span>
               </button>
-            )) : <div className="px-6 py-16 text-center"><MessageSquare size={24} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-xs font-bold text-[color:var(--portal-text)]">No conversations found</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Try another search or filter.</p></div>}
+            )) : <div className="px-6 py-16 text-center"><MessageSquare size={24} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">No conversations found</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Try another search or filter.</p></div>}
           </PortalSkeletonTransition>
         </div>
       </aside>
@@ -377,42 +377,57 @@ export function LuxorMessenger() {
           >
             {newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={setContactQuery} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
             <>
-              <header className="flex min-h-20 shrink-0 items-center justify-between gap-1 border-b border-[color:var(--portal-border)] px-2 py-3 sm:gap-4 sm:px-5">
+              <header className="flex min-h-18 shrink-0 items-center justify-between gap-1 border-b border-[color:var(--portal-border)]/70 px-2 py-3 sm:gap-4 sm:px-5">
                 <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-3">
-                  <button type="button" onClick={() => setShowThreadOnMobile(false)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 lg:hidden" aria-label="Back to conversations"><ArrowLeft size={18}/></button>
-                  <PortalContactAvatar name={selectedConversation.contactName} inquiryId={selectedConversation.inquiryId || undefined} size="md" className="hidden sm:flex" />
+                  <button type="button" onClick={() => setShowThreadOnMobile(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 lg:hidden" aria-label="Back to conversations"><ArrowLeft size={18}/></button>
+                  {selectedConversation.inquiryId ? (
+                    <Link href={`/portal/leads/${selectedConversation.inquiryId}`} className="hidden shrink-0 no-underline sm:flex" aria-label={`Open ${selectedConversation.contactName} lead profile`}>
+                      <PortalContactAvatar name={selectedConversation.contactName} inquiryId={selectedConversation.inquiryId} size="md" />
+                    </Link>
+                  ) : (
+                    <PortalContactAvatar name={selectedConversation.contactName} inquiryId={selectedConversation.inquiryId || undefined} size="md" className="hidden sm:flex" />
+                  )}
                   <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2">
-                      <p title={selectedConversation.contactName} className="max-w-full truncate text-[15px] font-bold leading-5 text-[color:var(--portal-text)] sm:order-1 sm:text-sm sm:font-black">{selectedConversation.contactName}</p>
-                      <div className="whitespace-nowrap font-mono text-[10px] leading-4 text-[color:var(--portal-muted)] sm:order-3 sm:basis-full">
+                    <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2">
+                      {selectedConversation.inquiryId ? (
+                        <Link
+                          href={`/portal/leads/${selectedConversation.inquiryId}`}
+                          title={selectedConversation.contactName}
+                          className="max-w-full truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a] sm:order-1 sm:text-sm sm:font-bold"
+                        >
+                          {selectedConversation.contactName}
+                        </Link>
+                      ) : (
+                        <p title={selectedConversation.contactName} className="max-w-full truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] sm:order-1 sm:text-sm sm:font-bold">{selectedConversation.contactName}</p>
+                      )}
+                      <div className="whitespace-nowrap tabular-nums text-xs leading-4 text-[color:var(--portal-muted)] sm:order-3 sm:basis-full">
                         <span className="sm:hidden">{formatPhoneDisplay(selectedConversation.phoneNumber)}</span>
-                        <button type="button" aria-label={`Call ${selectedConversation.contactName} at ${formatPhoneDisplay(selectedConversation.phoneNumber)}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="hidden rounded-sm transition-colors hover:text-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:inline-block">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
+                        <button type="button" aria-label={`Call ${selectedConversation.contactName} at ${formatPhoneDisplay(selectedConversation.phoneNumber)}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="hidden rounded-sm transition-colors hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:inline-block">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
                       </div>
                       <span className="sm:order-2"><PortalSmsConsentBadge phone={selectedConversation.phoneNumber} initialConsent={smsConsent} compact /></span>
                     </div>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center sm:gap-2">
-                  <button type="button" aria-label={`Call ${selectedConversation.contactName}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-11 w-11 items-center justify-center gap-2 rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:h-9 sm:w-auto sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-3 sm:text-[9px] sm:font-black sm:uppercase sm:tracking-wider sm:hover:border-emerald-500/35"><Phone size={16}/> <span className="hidden sm:inline">Call</span></button>
-                  {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} className="hidden h-9 items-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:bg-[#caa24c]/15 sm:inline-flex"><UserRound size={13}/> View Lead</Link> : null}
+                  <button type="button" aria-label={`Call ${selectedConversation.contactName}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-10 w-10 items-center justify-center gap-1.5 rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:h-9 sm:w-auto sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-3 sm:text-xs sm:font-medium sm:text-[color:var(--portal-text)] sm:hover:border-emerald-500/35"><Phone size={15}/> <span className="hidden sm:inline">Call</span></button>
                   <div className="relative" ref={optionsRef}>
-                    <button type="button" onClick={() => setOptionsOpen((current) => !current)} className="flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:h-9 sm:w-9" aria-label="Conversation options" aria-expanded={optionsOpen}><MoreVertical size={18}/></button>
-                    <AnimatePresence>{optionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl">
-                      <button type="button" onClick={() => { setOptionsOpen(false); setMediaGalleryOpen(true) }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] sm:min-h-0 sm:text-[10px]"><Images size={14}/> Media gallery <span className="ml-auto font-mono text-[color:var(--portal-muted)]">{sharedMedia.length}</span></button>
-                      {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} onClick={() => setOptionsOpen(false)} className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-bold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] sm:min-h-0 sm:text-[10px]"><Info size={14}/> Contact details</Link> : null}
+                    <button type="button" onClick={() => setOptionsOpen((current) => !current)} className="flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:h-9 sm:w-9" aria-label="Conversation options" aria-expanded={optionsOpen}><MoreVertical size={17}/></button>
+                    <AnimatePresence>{optionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl backdrop-blur-xl">
+                      <button type="button" onClick={() => { setOptionsOpen(false); setMediaGalleryOpen(true) }} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Images size={14}/> Media gallery <span className="ml-auto tabular-nums text-[color:var(--portal-muted)]">{sharedMedia.length}</span></button>
+                      {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} onClick={() => setOptionsOpen(false)} className="flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Info size={14}/> Contact details</Link> : null}
                       {smsConsent?.status === 'opted_in' ? (
-                        <p className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                        <p className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                           <Check size={14}/> SMS consent is active
                         </p>
                       ) : (
                         <>
                           {smsConsent?.status === 'opted_out' ? (
-                            <p className="px-3 py-1.5 text-[10px] leading-4 text-red-600 dark:text-red-400">
+                            <p className="px-3 py-1.5 text-xs leading-4 text-red-600 dark:text-red-400">
                               SMS opted out (STOP keyword).
                             </p>
                           ) : null}
                           {smsConsent?.consent_request_status === 'pending' ? (
-                            <p className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold text-[color:var(--portal-muted)]">
+                            <p className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[color:var(--portal-muted)]">
                               <MessageSquare size={14}/> Verification text sent · waiting for YES
                             </p>
                           ) : (
@@ -420,7 +435,7 @@ export function LuxorMessenger() {
                               type="button"
                               onClick={() => void requestSmsConsent()}
                               disabled={!smsConsent || !selectedConversation.phoneNumber || consentRequestSending}
-                              className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                              className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <MessageSquare size={14}/>
                               {consentRequestSending ? 'Sending verification text…' : smsConsent?.consent_request_status === 'failed' ? 'Retry verification text' : 'Send verification text'}
@@ -430,7 +445,7 @@ export function LuxorMessenger() {
                             type="button"
                             onClick={() => void manualOptIn()}
                             disabled={manualOptInLoading || !selectedConversation.phoneNumber}
-                            className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <ShieldCheck size={14} className="text-emerald-600 dark:text-emerald-400" />
                             {manualOptInLoading ? 'Recording opt-in…' : 'Manually opt in to SMS'}
@@ -438,8 +453,8 @@ export function LuxorMessenger() {
                         </>
                       )}
                       <div className="my-1 h-px bg-[color:var(--portal-border)]"/>
-                      <button type="button" disabled className="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-bold text-[color:var(--portal-faint)] opacity-60"><UserPlus size={14}/> Add a member</button>
-                      <p className="px-3 pb-2 text-[9px] leading-4 text-[color:var(--portal-faint)]">Twilio RCS does not support group messaging.</p>
+                      <button type="button" disabled className="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-[color:var(--portal-faint)] opacity-60"><UserPlus size={14}/> Add a member</button>
+                      <p className="px-3 pb-2 text-[11px] leading-4 text-[color:var(--portal-faint)]">Twilio RCS does not support group messaging.</p>
                     </motion.div> : null}</AnimatePresence>
                   </div>
                 </div>
@@ -451,7 +466,7 @@ export function LuxorMessenger() {
                     const previous = thread[index - 1]
                     const showDate = !previous || dayKey(previous.created_at) !== dayKey(message.created_at)
                     return <div key={message.id}>{showDate ? <DateDivider value={message.created_at}/> : null}<MessageBubble message={message}/></div>
-                  }) : <div className="py-16 text-center"><MessageSquare size={22} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-bold text-[color:var(--portal-text)]">Start your conversation with {selectedConversation.contactName}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Messages send through Luxor’s approved Twilio sender.</p></div>}
+                  }) : <div className="py-16 text-center"><MessageSquare size={22} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">Start your conversation with {selectedConversation.contactName}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Messages send through Luxor’s approved Twilio sender.</p></div>}
                   <div ref={threadEndRef}/>
                 </div>
               </div>
@@ -459,16 +474,16 @@ export function LuxorMessenger() {
           ) : <EmptyMessenger />}
           </div>
           {selectedConversation && !newMessageOpen ? (
-            <div className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:p-4">
-              <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 focus-within:border-[#caa24c]/45">
+            <div className="shrink-0 border-t border-[color:var(--portal-border)]/70 bg-[color:var(--portal-card)] p-3 sm:p-4">
+              <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-transparent bg-[color:var(--portal-soft)] p-2 transition-all focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10">
                 <div className="min-w-0 flex-1 px-2 py-1">
                   <div className="relative">
-                    {!body ? <span key={selectedConversation.key} aria-hidden="true" className="luxor-pane-enter-desktop pointer-events-none absolute inset-x-0 top-0 truncate text-sm leading-6 text-[color:var(--portal-faint)]">Message {selectedConversation.contactName}</span> : null}
+                    {!body ? <span key={selectedConversation.key} aria-hidden="true" className="luxor-pane-enter-desktop pointer-events-none absolute inset-x-0 top-0 truncate text-sm leading-6 text-[color:var(--portal-muted)]">Message {selectedConversation.contactName}</span> : null}
                     <textarea value={body} onChange={(event) => setBody(event.target.value.slice(0, 1600))} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} rows={1} aria-label={`Message ${selectedConversation.contactName}`} className="portal-input-transparent relative max-h-32 min-h-7 w-full resize-none bg-transparent text-sm leading-6 text-[color:var(--portal-text)] outline-none" />
                   </div>
-                  <div className="mt-1 flex items-center justify-between gap-2"><p className="font-mono text-[8px] text-[color:var(--portal-muted)]">{body.length} / 1600 · Enter to send · Shift+Enter for a new line</p></div>
+                  <div className="mt-1 flex items-center justify-between gap-2"><p className="tabular-nums text-[11px] text-[color:var(--portal-muted)]">{body.length} / 1600 · Enter to send</p></div>
                 </div>
-                <button type="button" onClick={() => void sendMessage()} disabled={!body.trim() || sending} className="flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-3 text-[9px] font-black uppercase tracking-wider text-white transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-45">{sending ? <Loader2 size={15} className="animate-spin"/> : <><Send size={14}/><span className="hidden sm:inline">Send</span></>}</button>
+                <button type="button" onClick={() => void sendMessage()} disabled={!body.trim() || sending} className="flex h-9.5 min-w-9.5 items-center justify-center gap-1.5 rounded-xl bg-[#caa24c] px-3.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#b88f3d] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-45">{sending ? <Loader2 size={15} className="animate-spin"/> : <><Send size={14}/><span className="hidden sm:inline">Send</span></>}</button>
               </div>
             </div>
           ) : null}
@@ -512,30 +527,30 @@ function MessageBubble({ message }: { message: LuxorMessage }) {
   const outbound = message.direction === 'outbound'
   return <div className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
     <div className={`max-w-[88%] sm:max-w-[72%] ${outbound ? 'text-right' : 'text-left'}`}>
-      <div className={`inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-6 ${outbound ? 'rounded-br-md bg-[#caa24c] !text-white shadow-md' : 'rounded-bl-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{message.body || '(Media message)'}</div>
-      <p className={`mt-1 flex items-center gap-1 font-mono text-[8px] uppercase tracking-wider text-[color:var(--portal-muted)] ${outbound ? 'justify-end' : 'justify-start'}`}>{message.owner_email === 'luxor-automation' ? <><span>Automated</span><span>·</span></> : null}{formatMessageTime(message.created_at)}{outbound ? <><span>·</span><span>{message.status}</span>{message.status === 'delivered' || message.status === 'read' ? <CheckCheck size={11} className={message.status === 'read' ? 'text-emerald-500' : 'text-[#caa24c]'}/> : null}</> : null}</p>
-      {message.error_message ? <p className="mt-1 text-[9px] text-red-400">{message.error_message}</p> : null}
+      <div className={`inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-6 ${outbound ? 'rounded-br-md bg-[#caa24c] !text-white shadow-xs' : 'rounded-bl-md border border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{message.body || '(Media message)'}</div>
+      <p className={`mt-1 flex items-center gap-1 tabular-nums text-[11px] text-[color:var(--portal-muted)] ${outbound ? 'justify-end' : 'justify-start'}`}>{message.owner_email === 'luxor-automation' ? <><span>Automated</span><span>·</span></> : null}{formatMessageTime(message.created_at)}{outbound ? <><span>·</span><span className="capitalize">{message.status}</span>{message.status === 'delivered' || message.status === 'read' ? <CheckCheck size={12} className={message.status === 'read' ? 'text-emerald-500' : 'text-[#caa24c]'}/> : null}</> : null}</p>
+      {message.error_message ? <p className="mt-1 text-xs text-red-500">{message.error_message}</p> : null}
     </div>
   </div>
 }
 
 function NewMessagePane({ query, results, searching, onQueryChange, onSelect, onClose }: { query: string; results: ContactResult[]; searching: boolean; onQueryChange: (value: string) => void; onSelect: (contact: ContactResult) => void; onClose: () => void }) {
   return <motion.div initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-0 flex-1 flex-col">
-    <header className="flex min-h-20 items-center gap-3 border-b border-[color:var(--portal-border)] px-4 py-3 sm:px-5">
-      <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Close new message"><ArrowLeft size={18}/></button>
-      <div><p className="text-sm font-black text-[color:var(--portal-text)]">New conversation</p><p className="mt-0.5 text-[10px] text-[color:var(--portal-muted)]">Choose a Luxor contact to start messaging.</p></div>
+    <header className="flex min-h-18 items-center gap-3 border-b border-[color:var(--portal-border)]/70 px-4 py-3 sm:px-5">
+      <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Close new message"><ArrowLeft size={18}/></button>
+      <div><p className="text-sm font-semibold text-[color:var(--portal-text)]">New conversation</p><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a Luxor contact to start messaging.</p></div>
     </header>
-    <div className="border-b border-[color:var(--portal-border)] px-4 py-5 sm:px-6">
-      <label className="flex items-center gap-3">
-        <span className="text-xs font-black text-[#caa24c]">To:</span>
-        <input autoFocus value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Type a name or phone number" className="portal-input-transparent min-w-0 flex-1 bg-transparent text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"/>
+    <div className="border-b border-[color:var(--portal-border)]/70 px-4 py-4 sm:px-6">
+      <label className="flex h-10 items-center gap-3 rounded-xl bg-[color:var(--portal-soft)] px-3.5">
+        <span className="text-xs font-semibold text-[color:var(--portal-muted)]">To:</span>
+        <input autoFocus value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Type a name or phone number" className="portal-input-transparent min-w-0 flex-1 bg-transparent text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"/>
         {searching ? <Loader2 size={14} className="animate-spin text-[#caa24c]"/> : null}
       </label>
     </div>
     <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
       <div className="mx-auto max-w-3xl">
-        <p className="mb-2 font-mono text-[8px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{query.trim().length >= 2 ? 'Matching contacts' : 'Find a contact'}</p>
-        {query.trim().length < 2 ? <div className="py-16 text-center"><Search size={24} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-bold text-[color:var(--portal-text)]">Search Luxor contacts</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Enter at least two letters or digits.</p></div> : searching ? <p className="py-16 text-center text-xs text-[color:var(--portal-muted)]">Searching Luxor contacts…</p> : results.length ? <div className="space-y-1">{results.map((contact) => <button key={contact.id} type="button" onClick={() => onSelect(contact)} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[color:var(--portal-soft)]"><PortalContactAvatar name={contact.fullName} inquiryId={contact.id} size="md"/><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-[color:var(--portal-text)]">{contact.fullName}</span><span className="mt-0.5 block font-mono text-[10px] text-[color:var(--portal-muted)]">{formatPhoneDisplay(contact.phoneNumber)}{contact.eventType ? ` · ${contact.eventType}` : ''}</span></span><MessageSquare size={15} className="text-[#caa24c]"/></button>)}</div> : <p className="py-16 text-center text-xs text-[color:var(--portal-muted)]">No matching contacts with a mobile number.</p>}
+        <p className="mb-2 text-xs font-medium text-[color:var(--portal-muted)]">{query.trim().length >= 2 ? 'Matching contacts' : 'Find a contact'}</p>
+        {query.trim().length < 2 ? <div className="py-16 text-center"><Search size={24} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">Search Luxor contacts</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Enter at least two letters or digits.</p></div> : searching ? <p className="py-16 text-center text-xs text-[color:var(--portal-muted)]">Searching Luxor contacts…</p> : results.length ? <div className="space-y-1">{results.map((contact) => <button key={contact.id} type="button" onClick={() => onSelect(contact)} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[color:var(--portal-soft)]"><PortalContactAvatar name={contact.fullName} inquiryId={contact.id} size="md"/><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{contact.fullName}</span><span className="mt-0.5 block tabular-nums text-xs text-[color:var(--portal-muted)]">{formatPhoneDisplay(contact.phoneNumber)}{contact.eventType ? ` · ${contact.eventType}` : ''}</span></span><MessageSquare size={15} className="text-[#caa24c]"/></button>)}</div> : <p className="py-16 text-center text-xs text-[color:var(--portal-muted)]">No matching contacts with a mobile number.</p>}
       </div>
     </div>
   </motion.div>
@@ -544,13 +559,13 @@ function NewMessagePane({ query, results, searching, onQueryChange, onSelect, on
 function MediaGallery({ items, onClose }: { items: Array<{ url: string; message: LuxorMessage }>; onClose: () => void }) {
   return <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-40 bg-black/80 p-5 backdrop-blur-sm">
     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="portal-card-surface mx-auto flex h-full max-w-4xl flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-4"><div><p className="text-sm font-black text-[color:var(--portal-text)]">Shared media</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Images and files received in this conversation.</p></div><PortalCloseButton onClick={onClose} aria-label="Close media gallery" /></div>
-      <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-5">{items.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{items.map((item, index) => <a key={`${item.message.id}-${index}`} href={item.url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]"><div className="aspect-square bg-[color:var(--portal-card)]"><img src={item.url} alt={`Shared media from ${formatMessageTime(item.message.created_at)}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"/></div><p className="px-3 py-2 font-mono text-[8px] text-[color:var(--portal-muted)]">{new Date(item.message.created_at).toLocaleString()}</p></a>)}</div> : <div className="flex h-full items-center justify-center text-center"><div><Images size={25} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-bold text-[color:var(--portal-text)]">No shared media yet</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Photos received through MMS or RCS will appear here.</p></div></div>}</div>
+      <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-4"><div><p className="text-sm font-semibold text-[color:var(--portal-text)]">Shared media</p><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Images and files received in this conversation.</p></div><PortalCloseButton onClick={onClose} aria-label="Close media gallery" /></div>
+      <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto p-5">{items.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{items.map((item, index) => <a key={`${item.message.id}-${index}`} href={item.url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]"><div className="aspect-square bg-[color:var(--portal-card)]"><img src={item.url} alt={`Shared media from ${formatMessageTime(item.message.created_at)}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"/></div><p className="px-3 py-2 tabular-nums text-[11px] text-[color:var(--portal-muted)]">{new Date(item.message.created_at).toLocaleString()}</p></a>)}</div> : <div className="flex h-full items-center justify-center text-center"><div><Images size={25} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">No shared media yet</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Photos received through MMS or RCS will appear here.</p></div></div>}</div>
     </motion.div>
   </motion.div>
 }
 
-function DateDivider({ value }: { value: string }) { return <div className="my-5 flex items-center gap-3"><span className="h-px flex-1 bg-[color:var(--portal-border)]"/><span className="font-mono text-[8px] uppercase tracking-wider text-[color:var(--portal-muted)]">{new Date(value).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span><span className="h-px flex-1 bg-[color:var(--portal-border)]"/></div> }
+function DateDivider({ value }: { value: string }) { return <div className="my-5 flex items-center gap-3"><span className="h-px flex-1 bg-[color:var(--portal-border)]/70"/><span className="text-[11px] font-medium text-[color:var(--portal-muted)]">{new Date(value).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span><span className="h-px flex-1 bg-[color:var(--portal-border)]/70"/></div> }
 function LoadingConversations() {
   return (
     <div className="divide-y divide-[color:var(--portal-border)]" aria-label="Loading conversations">

@@ -27,7 +27,7 @@ type LuxorEventTypeComboboxProps = {
 const INPUT_STYLES = {
   'public-light': 'border-[#d8c4a4] bg-[#fffdfa] text-[#241d17] placeholder:text-[#8d8075] focus:border-[#b98a3d] focus:ring-2 focus:ring-[#b98a3d]/15',
   'public-dark': 'border-[#caa24c]/24 bg-black/35 text-[#f7efe3] placeholder:text-[#d7c29a]/42 focus:border-[#f1d27a]/70 focus:ring-2 focus:ring-[#caa24c]/15',
-  portal: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15',
+  portal: 'border-transparent bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10',
 } as const
 
 const LIST_STYLES = {
@@ -119,7 +119,7 @@ export function LuxorEventTypeCombobox({
 
   return (
     <div ref={rootRef} className={`relative min-w-0 ${className}`}>
-      <label htmlFor={inputId} className={`${hideLabel ? 'sr-only' : 'mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em]'} ${LABEL_STYLES[variant]} ${labelClassName}`}>
+      <label htmlFor={inputId} className={`${hideLabel ? 'sr-only' : variant === 'portal' ? 'mb-1.5 block text-xs font-medium' : 'mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em]'} ${LABEL_STYLES[variant]} ${labelClassName}`}>
         {label}{required ? ' *' : ''}
       </label>
       <div className="relative">

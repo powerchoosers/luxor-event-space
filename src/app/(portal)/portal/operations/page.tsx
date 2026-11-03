@@ -29,6 +29,8 @@ import {
   PortalPageFrame,
   PortalPageHeader,
   PortalAnimatedTabs,
+  PortalMobileTabPicker,
+  PortalMobileTabTrigger,
   PortalTabTransition,
   PortalTableCard,
   PortalStickyTable,
@@ -75,15 +77,15 @@ type ReadinessTask = {
 
 const READINESS_STORAGE_KEY = 'luxor-operations-readiness-checklist-v1'
 
-const operationsTabs: Array<{ id: SubTab; label: string; icon: React.ReactNode }> = [
-  { id: 'dashboard', label: 'Operations Dashboard', icon: <Activity size={15} /> },
-  { id: 'bills', label: 'Bills & Payments', icon: <DollarSign size={15} /> },
-  { id: 'maintenance', label: 'Maintenance Log', icon: <Wrench size={15} /> },
-  { id: 'inventory', label: 'Inventory Counts', icon: <Package size={15} /> },
-  { id: 'vendors', label: 'Preferred Vendors', icon: <Users size={15} /> },
-  { id: 'utilities', label: 'Utility Sensors', icon: <Zap size={15} /> },
-  { id: 'cleaning', label: 'Cleaning Checklists', icon: <Sparkles size={15} /> },
-  { id: 'staff', label: 'Staff Rota', icon: <Clock size={15} /> },
+const operationsTabs: Array<{ id: SubTab; label: string; icon: React.ReactNode; description: string; group: string }> = [
+  { id: 'dashboard', label: 'Operations Dashboard', icon: <Activity size={15} />, description: 'Facility readiness, alerts, and operational KPIs', group: 'Overview & Facility' },
+  { id: 'bills', label: 'Bills & Payments', icon: <DollarSign size={15} />, description: 'Vendor payables, invoice ledger, and cost tracking', group: 'Overview & Facility' },
+  { id: 'maintenance', label: 'Maintenance Log', icon: <Wrench size={15} />, description: 'Facility work orders, repairs, and scheduled upkeep', group: 'Overview & Facility' },
+  { id: 'inventory', label: 'Inventory Counts', icon: <Package size={15} />, description: 'Tables, chairs, linens, audio gear, and decor stock', group: 'Logistics & Supplies' },
+  { id: 'vendors', label: 'Preferred Vendors', icon: <Users size={15} />, description: 'Approved caterers, florists, DJs, and security partners', group: 'Logistics & Supplies' },
+  { id: 'utilities', label: 'Utility Sensors', icon: <Zap size={15} />, description: 'Real-time power, water, HVAC, and ambient readings', group: 'Facility & Environment' },
+  { id: 'cleaning', label: 'Cleaning Checklists', icon: <Sparkles size={15} />, description: 'Sanitation rota, turn-down status, and audit logs', group: 'Facility & Environment' },
+  { id: 'staff', label: 'Staff Rota', icon: <Clock size={15} />, description: 'Shift assignments, coordinator on-duty, and team schedule', group: 'Team & Staffing' },
 ]
 
 type EditFormData = {
@@ -122,6 +124,23 @@ function OperationsPageContent() {
   const { notify, dismiss } = useToast()
   const tabParam = searchParams.get('tab') as SubTab | null
   const activeTab = tabParam || 'dashboard'
+  const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
+
+  // Remember and restore the last visited tab
+  useEffect(() => {
+    if (tabParam && operationsTabs.some((t) => t.id === tabParam)) {
+      try {
+        window.localStorage.setItem('luxor-portal-operations-last-tab', tabParam)
+      } catch {}
+    } else if (!tabParam) {
+      try {
+        const saved = window.localStorage.getItem('luxor-portal-operations-last-tab')
+        if (saved && operationsTabs.some((t) => t.id === saved) && saved !== 'dashboard') {
+          router.replace(`/portal/operations?tab=${saved}`, { scroll: false })
+        }
+      } catch {}
+    }
+  }, [tabParam, router])
 
   // Database states
   const [bills, setBills] = useState<LuxorBill[]>([])
@@ -606,35 +625,39 @@ function OperationsPageContent() {
         icon={<Wrench size={18} />}
         title="Venue Operations"
         actions={
-          activeTab === 'maintenance' ? (
-            <PortalButton variant="primary" onClick={() => setIsTaskModalOpen(true)}><Plus size={14} /> New Ticket</PortalButton>
-          ) : activeTab === 'inventory' ? (
-            <PortalButton variant="primary" onClick={() => setIsInventoryModalOpen(true)}><Plus size={14} /> Audit Stock</PortalButton>
-          ) : activeTab === 'vendors' ? (
-            <PortalButton variant="primary" onClick={() => setIsVendorModalOpen(true)}><Plus size={14} /> Add Vendor</PortalButton>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            <PortalMobileTabTrigger
+              tabs={operationsTabs}
+              activeTab={activeTab}
+              onClick={() => setIsViewPickerOpen(true)}
+            />
+            {activeTab === 'maintenance' ? (
+              <PortalButton variant="primary" onClick={() => setIsTaskModalOpen(true)}><Plus size={14} /> New Ticket</PortalButton>
+            ) : activeTab === 'inventory' ? (
+              <PortalButton variant="primary" onClick={() => setIsInventoryModalOpen(true)}><Plus size={14} /> Audit Stock</PortalButton>
+            ) : activeTab === 'vendors' ? (
+              <PortalButton variant="primary" onClick={() => setIsVendorModalOpen(true)}><Plus size={14} /> Add Vendor</PortalButton>
+            ) : null}
+          </div>
         }
       />
 
-      {/* Compact navigation on tablets and mobile; full tab rail on wide desktops. */}
-      <div className="shrink-0 xl:hidden">
-        <div className="flex items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2.5 shadow-sm">
-          <div className="hidden min-w-0 flex-1 sm:block">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Operations view</p>
-            <p className="mt-0.5 truncate text-xs text-[color:var(--portal-text)]">Choose a workspace without scrolling through tabs.</p>
-          </div>
-          <PortalSelect
-            value={activeTab}
-            onChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
-            options={operationsTabs.map((tab) => ({ value: tab.id, label: tab.label }))}
-            className="w-full sm:w-64"
-            buttonClassName="min-h-11 bg-[color:var(--portal-soft)] font-semibold"
-          />
-        </div>
-      </div>
+      {/* Compact navigation on tablets and mobile with modal picker */}
+      <PortalMobileTabPicker
+        tabs={operationsTabs}
+        activeTab={activeTab}
+        open={isViewPickerOpen}
+        onOpenChange={setIsViewPickerOpen}
+        onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}
+        title="Operations views"
+        subtitle="Choose a venue operations workspace."
+      />
 
-      <div className="hidden shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 xl:flex">
+      {/* Desktop rectangular sliding tab navigation */}
+      <div className="hidden shrink-0 xl:flex">
         <PortalAnimatedTabs
+          variant="slider"
+          ariaLabel="Operations sections"
           tabs={operationsTabs}
           activeTab={activeTab}
           onTabChange={(tab) => router.push(`/portal/operations?tab=${tab}`)}

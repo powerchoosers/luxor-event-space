@@ -501,7 +501,7 @@ export default function CalendarPage() {
                   <article key={booking.id} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3.5">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <h4 className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{booking.client_name || booking.event_type || 'Confirmed event'}</h4>
+                        {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}`} className="block truncate text-sm font-semibold text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{booking.client_name || booking.event_type || 'Confirmed event'}</Link> : <h4 className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{booking.client_name || booking.event_type || 'Confirmed event'}</h4>}
                         <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{booking.event_type || 'Event'}{booking.guest_count ? ` · ${booking.guest_count} guests` : ''}</p>
                         {booking.start_time || booking.end_time ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{timeLabel(booking.start_time) || 'Time TBD'}{booking.end_time ? ` – ${timeLabel(booking.end_time)}` : ''}</p> : null}
                       </div>

@@ -3,7 +3,7 @@ import 'server-only'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 
 export const PORTAL_PERMISSIONS = [
-  'overview', 'leads', 'emails', 'calls', 'messages', 'calendar', 'events',
+  'overview', 'leads', 'emails', 'calls', 'messages', 'calendar',
   'planner', 'marketing', 'finances', 'operations', 'reports', 'settings', 'team_access',
   'email_identity', 'phone_assignment',
 ] as const
@@ -23,7 +23,7 @@ export type LuxorPortalMember = {
 export const ROLE_DEFAULTS: Record<PortalRole, PortalPermission[]> = {
   owner: [...PORTAL_PERMISSIONS],
   admin: [...PORTAL_PERMISSIONS],
-  agent: ['overview', 'leads', 'emails', 'calls', 'messages', 'calendar', 'events', 'planner'],
+  agent: ['overview', 'leads', 'emails', 'calls', 'messages', 'calendar', 'planner'],
 }
 
 export function normalizePermissions(value: unknown, role: PortalRole): PortalPermission[] {

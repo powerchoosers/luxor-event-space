@@ -361,7 +361,7 @@ export function ElenaSettingsManager() {
       <div className="flex gap-2"><PortalButton onClick={() => { setActiveTab('overview'); window.setTimeout(() => previewEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60) }}><MessageCircle size={13} />Test Elena</PortalButton><PortalButton variant="primary" disabled={!hasDraftChanges || busyAction === 'publish'} onClick={() => void publish()}>{busyAction === 'publish' ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}Publish</PortalButton></div>
     </div>
 
-    <div className="portal-scrollbar overflow-x-auto border-b border-[color:var(--portal-border)]"><PortalAnimatedTabs tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} ariaLabel="Elena settings sections" className="gap-6" buttonClassName="pb-3" /></div>
+    <div className="portal-scrollbar overflow-x-auto"><PortalAnimatedTabs variant="slider" tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} ariaLabel="Elena settings sections" /></div>
 
     <PortalTabTransition activeKey={activeTab}>
     {activeTab === 'overview' ? <div className="grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(24rem,0.92fr)]">

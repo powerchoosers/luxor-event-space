@@ -165,8 +165,8 @@ export function PortalSettingsSearch({ onSelect, allowedTabs }: { onSelect: (tab
   return (
     <div ref={containerRef} className="relative z-20 mx-auto w-full max-w-2xl shrink-0">
       <label htmlFor="settings-search" className="sr-only">Search settings</label>
-      <div className={`flex items-center gap-3 rounded-xl border bg-[color:var(--portal-card)] px-4 transition-colors ${isOpen ? 'border-[#caa24c]/55 ring-2 ring-[#caa24c]/10' : 'border-[color:var(--portal-border)]'}`}>
-        <Search size={17} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
+      <div className={`flex items-center gap-3 rounded-xl border bg-[color:var(--portal-soft)] px-4 transition-all ${isOpen ? 'border-[#caa24c]/40 bg-[color:var(--portal-card)] ring-2 ring-[#caa24c]/10' : 'border-transparent hover:border-[color:var(--portal-border)]'}`}>
+        <Search size={16} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
         <input
           ref={inputRef}
           id="settings-search"
@@ -198,7 +198,7 @@ export function PortalSettingsSearch({ onSelect, allowedTabs }: { onSelect: (tab
           aria-autocomplete="list"
           aria-controls="settings-search-results"
           aria-expanded={isOpen && Boolean(query.trim())}
-          className="h-11 min-w-0 flex-1 bg-transparent text-sm font-medium text-[color:var(--portal-text)] outline-none placeholder:font-normal placeholder:text-[color:var(--portal-faint)] [&::-webkit-search-cancel-button]:hidden"
+          className="portal-input-transparent h-10.5 min-w-0 flex-1 bg-transparent text-xs font-medium text-[color:var(--portal-text)] outline-none placeholder:font-normal placeholder:text-[color:var(--portal-muted)] [&::-webkit-search-cancel-button]:hidden"
         />
         {query ? (
           <button type="button" onClick={() => { setQuery(''); inputRef.current?.focus() }} aria-label="Clear settings search" className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
@@ -208,7 +208,7 @@ export function PortalSettingsSearch({ onSelect, allowedTabs }: { onSelect: (tab
       </div>
 
       {isOpen && query.trim() ? (
-        <div id="settings-search-results" role="listbox" className="absolute inset-x-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/15 backdrop-blur-2xl dark:bg-[color:var(--portal-soft)]">
+        <div id="settings-search-results" role="listbox" className="absolute inset-x-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl backdrop-blur-2xl dark:bg-[color:var(--portal-soft)]">
           {results.length ? (
             <div className="p-1.5">
               {results.map((item, index) => {
@@ -221,17 +221,17 @@ export function PortalSettingsSearch({ onSelect, allowedTabs }: { onSelect: (tab
                     aria-selected={index === activeIndex}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => selectResult(item)}
-                    className={`flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors ${index === activeIndex ? 'bg-[color:var(--portal-soft)]' : 'hover:bg-[color:var(--portal-soft)]'}`}
+                    className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${index === activeIndex ? 'bg-[color:var(--portal-soft)]' : 'hover:bg-[color:var(--portal-soft)]'}`}
                   >
                     <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 text-[#a8792f] dark:text-[#e0bd67]">
                       <Icon size={15} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-baseline gap-x-2">
-                        <span className="text-xs font-bold text-[color:var(--portal-text)]">{item.title}</span>
-                        <span className="text-[9px] font-bold uppercase tracking-[0.13em] text-[color:var(--portal-faint)]">{item.section}</span>
+                        <span className="text-xs font-semibold text-[color:var(--portal-text)]">{item.title}</span>
+                        <span className="text-[11px] font-medium text-[color:var(--portal-muted)]">{item.section}</span>
                       </span>
-                      <span className="mt-1 block text-[10px] leading-4 text-[color:var(--portal-muted)]">{item.description}</span>
+                      <span className="mt-0.5 block text-xs leading-4 text-[color:var(--portal-muted)]">{item.description}</span>
                     </span>
                   </button>
                 )
@@ -240,7 +240,7 @@ export function PortalSettingsSearch({ onSelect, allowedTabs }: { onSelect: (tab
           ) : (
             <div className="px-4 py-5 text-center">
               <p className="text-xs font-semibold text-[color:var(--portal-text)]">No setting found</p>
-              <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Try notifications, email, booking, theme, or phone.</p>
+              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Try notifications, email, booking, theme, or phone.</p>
             </div>
           )}
         </div>

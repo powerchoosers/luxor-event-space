@@ -278,6 +278,22 @@ function MarketingPageContent() {
   // Tab & Filter States derived from URL
   const tabParam = searchParams.get('tab')
   const activeTab: MarketingTab = isMarketingTab(tabParam) ? tabParam : 'overview'
+
+  // Remember and restore the last visited tab
+  useEffect(() => {
+    if (tabParam && isMarketingTab(tabParam)) {
+      try {
+        window.localStorage.setItem('luxor-portal-marketing-last-tab', tabParam)
+      } catch {}
+    } else if (!tabParam) {
+      try {
+        const saved = window.localStorage.getItem('luxor-portal-marketing-last-tab')
+        if (saved && isMarketingTab(saved) && saved !== 'overview') {
+          router.replace(`/portal/marketing?tab=${saved}`, { scroll: false })
+        }
+      } catch {}
+    }
+  }, [tabParam, router])
   const initialSourceFilter = searchParams.get('source') || ''
 
   // Campaign & Inquiries lists database states
@@ -727,8 +743,7 @@ function MarketingPageContent() {
       case 'automations':
         return {
           title: 'Automations',
-          icon: <Workflow size={18} />,
-          description: 'Manage saved follow-ups, confirmations, reminders, and marketing workflows in one place.'
+          icon: <Workflow size={18} />
         }
       case 'templates':
         return {
@@ -802,44 +817,57 @@ function MarketingPageContent() {
     </PortalButton>
   )
 
-  if (activeTab === 'sources' || activeTab === 'text-campaigns' || activeTab === 'call-center') {
+  if (activeTab === 'contact-lists') {
     headerActions = (
-      createCampaignButton
-    )
-  } else if (activeTab === 'email-campaigns') {
-    headerActions = (
-      createCampaignButton
-    )
-  } else if (activeTab === 'builder-automation') {
-    headerActions = (
-      createCampaignButton
-    )
-  } else if (activeTab === 'contact-lists') {
-    headerActions = (
-      <PortalButton variant="primary" onClick={() => setIsAddContactModalOpen(true)}>
-        <Plus size={13} /> Add Contact
-      </PortalButton>
-    )
-  } else if (activeTab === 'calendar') {
-    headerActions = (
-      createCampaignButton
+      <>
+        {createCampaignButton}
+        <PortalButton variant="primary" onClick={() => setIsAddContactModalOpen(true)}>
+          <Plus size={13} /> Add Contact
+        </PortalButton>
+      </>
     )
   } else if (activeTab === 'automations') {
     headerActions = (
-      <div className="flex items-center gap-2">
-        <Link
-          href="/portal/marketing/custom-workflows/new"
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] shadow-sm transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-        >
-          <Plus size={14} /> Create Workflow
-        </Link>
-      </div>
+      <Link
+        href="/portal/marketing/custom-workflows/new"
+        className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#caa24c] px-4 text-xs font-bold text-[#17130b] shadow-sm transition hover:bg-[#d6b45f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+      >
+        <Plus size={14} /> Create Workflow
+      </Link>
     )
+  } else {
+    headerActions = createCampaignButton
   }
 
-  if (activeTab === 'contact-lists') {
-    headerActions = <>{createCampaignButton}{headerActions}</>
-  }
+  const activeMarketingItem = PRIMARY_MARKETING_TABS.find((item) => item.id === activeTab)
+    ?? LEGACY_MARKETING_TABS.find((item) => item.id === activeTab)
+
+  const ipadBrowseViewsButton = (
+    <button
+      type="button"
+      onClick={() => setMobileViewPickerOpen(true)}
+      aria-haspopup="dialog"
+      aria-expanded={mobileViewPickerOpen}
+      aria-label={`Browse views. Currently viewing ${activeMarketingItem?.label || 'Overview'}`}
+      className="hidden md:inline-flex xl:hidden min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+    >
+      <Menu size={16} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[8px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)] leading-none">Browse views</span>
+        <span className="mt-0.5 block truncate text-xs font-bold leading-tight max-w-[130px] lg:max-w-[170px]">
+          {activeMarketingItem?.label || 'Overview'}
+        </span>
+      </span>
+      <ChevronDown size={15} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
+    </button>
+  )
+
+  const finalHeaderActions = (
+    <div className="flex items-center gap-2">
+      {ipadBrowseViewsButton}
+      {headerActions}
+    </div>
+  )
 
   return (
     <PortalPageFrame className={activeTab === 'contact-lists' || activeTab === 'builder-automation' || activeTab === 'call-center' ? 'h-full flex-1 min-h-0 overflow-clip' : ''}>
@@ -901,7 +929,7 @@ function MarketingPageContent() {
             icon={activeTab === 'overview' ? undefined : header.icon}
             title={activeTab === 'overview' ? 'Marketing' : header.title}
             description={activeTab === 'overview' ? 'Grow your audience, engage your contacts, and fill your event calendar.' : ('description' in header ? header.description : undefined)}
-            actions={headerActions}
+            actions={finalHeaderActions}
           />
         </div>
       ) : null}
@@ -911,7 +939,7 @@ function MarketingPageContent() {
         <div className="shrink-0 md:hidden">
           <MarketingMobileViewPicker activeTab={activeTab} open={mobileViewPickerOpen} onOpenChange={setMobileViewPickerOpen} onTabChange={handleTabChange} />
         </div>
-        <div className="hidden shrink-0 md:block">
+        <div className="hidden shrink-0 xl:block">
           <MarketingWorkspaceNav activeTab={activeTab} onTabChange={handleTabChange} />
           <MarketingSubnav activeTab={activeTab} onTabChange={handleTabChange} />
         </div>

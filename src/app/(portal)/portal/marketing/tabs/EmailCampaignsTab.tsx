@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import React, { useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import { AlertCircle, ChevronLeft, ChevronRight, Eye, Grid2X2, List, Loader2, MoreHorizontal, Search, Send, Trash2, X } from 'lucide-react'
 import { PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { Campaign } from '../page'
@@ -148,10 +149,30 @@ export function EmailCampaignsTab({ campaigns, loading, error, busyId, detailLoa
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] pb-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex gap-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Campaign status">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Campaign status">
             {([['all', 'All'], ['draft', 'Drafts'], ['scheduled', 'Scheduled'], ['sent', 'Sent'], ['automations', 'Automation audience label']] as const).map(([value, label]) => (
-              <button key={value} type="button" role="tab" aria-selected={filter === value} onClick={() => { setFilter(value); setPage(1) }} className={`relative shrink-0 pb-3 text-[11px] font-bold transition-colors ${filter === value ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{label} <span className="ml-1 font-mono text-[9px] text-[color:var(--portal-faint)]">{filterCounts[value]}</span>{filter === value ? <span className="absolute inset-x-0 bottom-0 h-0.5 bg-[#caa24c]" /> : null}</button>
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={filter === value}
+                onClick={() => { setFilter(value); setPage(1) }}
+                className={`relative isolate inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:text-xs ${filter === value ? 'text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+              >
+                {filter === value ? (
+                  <motion.span
+                    layoutId="email-campaigns-status-tab-pill"
+                    className="absolute inset-0 rounded-lg bg-[#caa24c]/15 dark:bg-[#caa24c]/10"
+                    transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span className="relative z-10">{label}</span>
+                <span className={`relative z-10 ml-0.5 rounded-full px-1.5 py-0.5 font-mono text-[9px] ${filter === value ? 'bg-[#caa24c]/15 text-[#8c6424] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-faint)]'}`}>
+                  {filterCounts[value]}
+                </span>
+              </button>
             ))}
           </div>
           <div className="flex items-center justify-between gap-3 lg:justify-end">

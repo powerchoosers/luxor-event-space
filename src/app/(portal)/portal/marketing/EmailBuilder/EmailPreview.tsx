@@ -407,17 +407,17 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
           </div>
 
           {/* Tabs */}
-          <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1 border border-zinc-800">
-            <PortalAnimatedTabs
-              tabs={tabs}
-              activeTab={activeTab}
-              onTabChange={(tab) => {
-                if (tab === 'preview') setIframeLoading(true)
-                setActiveTab(tab)
-              }}
-              buttonClassName="px-3"
-            />
-          </div>
+          <PortalAnimatedTabs
+            variant="slider"
+            ariaLabel="Email preview views"
+            tabs={tabs}
+            activeTab={activeTab}
+            onTabChange={(tab) => {
+              if (tab === 'preview') setIframeLoading(true)
+              setActiveTab(tab)
+            }}
+            buttonClassName="px-3"
+          />
 
           <PortalCloseButton onClick={onClose} aria-label="Close preview" />
         </div>

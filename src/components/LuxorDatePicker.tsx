@@ -474,7 +474,7 @@ export function LuxorDatePicker({
             setOpen(true)
           } else closeAndReturnFocus()
         }}
-        className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-sm transition hover:border-[#caa24c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/30 ${isPortal ? 'border-[color:var(--portal-border,rgba(202,162,76,0.24))] bg-[color:var(--portal-soft,#171310)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]'}`}
+        className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-sm transition hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/20 ${isPortal ? 'border-transparent bg-[color:var(--portal-soft,#171310)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]'}`}
       >
         <span className={value ? (isPortal ? 'text-[color:var(--portal-text,#f7efe3)]' : 'text-[#3b2b1d]') : (isPortal ? 'text-[color:var(--portal-muted,#b9ad9f)]' : 'text-[#827567]')}>{value ? dateLabel(value, locale) : placeholder}</span>
         <CalendarDays aria-hidden="true" className="h-4 w-4 shrink-0 text-[#8d672b]" />

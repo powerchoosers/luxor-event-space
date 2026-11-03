@@ -1,10 +1,17 @@
 'use client'
 
 import {
+  ArrowLeft,
+  CheckCheck,
+  ChevronRight,
+  Circle,
   Clock3,
-  Headphones,
+  Delete,
+  ExternalLink,
+  FileText,
+  Grid,
   Loader2,
-  Mic2,
+  MessageSquare,
   Phone,
   PhoneCall,
   PhoneIncoming,
@@ -12,20 +19,29 @@ import {
   PhoneOutgoing,
   RefreshCw,
   Search,
-  Voicemail,
-  FileText,
-  CheckCheck,
-  Circle,
+  Sparkles,
   Tags,
   Trash2,
+  User,
+  Voicemail,
+  X,
 } from 'lucide-react'
 import Link from 'next/link'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { PortalButton, PortalPageFrame, PortalPageHeader, PortalSelect } from '@/components/portal/PortalUI'
+import {
+  PortalContactAvatar,
+  PortalSelect,
+} from '@/components/portal/PortalUI'
+import { PortalAudioPlayer } from '@/components/portal/PortalAudioPlayer'
 import { usePortalVoice } from '@/components/portal/PortalVoiceProvider'
 import { useToast } from '@/components/portal/ToastProvider'
 import type { LuxorCall } from '@/lib/luxorCallTypes'
-import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
+import {
+  formatPhoneDisplay,
+  formatUsDialInput,
+  removeLastDialDigit,
+  toUsE164,
+} from '@/lib/luxorPhoneClient'
 import {
   PortalBulkActionDeck,
   PortalBulkChoiceDialog,
@@ -35,10 +51,12 @@ import {
   usePortalBulkSelection,
 } from '@/components/portal/PortalBulkSelection'
 
-type DirectionFilter = 'all' | 'inbound' | 'outbound' | 'voicemail' | 'missed'
+type PhoneAppTab = 'recents' | 'voicemail' | 'keypad'
+type RecentsFilter = 'all' | 'missed'
+type ReaderTab = 'transcript' | 'summary'
 
 const OUTCOME_OPTIONS = [
-  { value: '', label: 'No outcome selected' },
+  { value: '', label: 'No outcome logged' },
   { value: 'connected', label: 'Connected' },
   { value: 'left_voicemail', label: 'Left voicemail' },
   { value: 'tour_scheduled', label: 'Tour scheduled' },
@@ -48,22 +66,55 @@ const OUTCOME_OPTIONS = [
   { value: 'wrong_number', label: 'Wrong number' },
 ]
 
+const KEYPAD_KEYS: Array<{ digit: string; letters?: string }> = [
+  { digit: '1', letters: '' },
+  { digit: '2', letters: 'ABC' },
+  { digit: '3', letters: 'DEF' },
+  { digit: '4', letters: 'GHI' },
+  { digit: '5', letters: 'JKL' },
+  { digit: '6', letters: 'MNO' },
+  { digit: '7', letters: 'PQRS' },
+  { digit: '8', letters: 'TUV' },
+  { digit: '9', letters: 'WXYZ' },
+  { digit: '*' },
+  { digit: '0', letters: '+' },
+  { digit: '#' },
+]
+
 export default function CallsPage() {
   const { notify } = useToast()
-  const { openPanel, phoneState } = usePortalVoice()
+  const { openPanel, phoneState, startCall, enablePhone } = usePortalVoice()
+
   const [calls, setCalls] = useState<LuxorCall[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false)
+  const [expandedVoicemailId, setExpandedVoicemailId] = useState<string | null>(null)
+
+  const [activeTab, setActiveTab] = useState<PhoneAppTab>('recents')
+  const [recentsFilter, setRecentsFilter] = useState<RecentsFilter>('all')
+  const [readerTab, setReaderTab] = useState<ReaderTab>('transcript')
+  const [isEditingList, setIsEditingList] = useState(false)
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [filter, setFilter] = useState<DirectionFilter>('all')
+  const [generatingSummary, setGeneratingSummary] = useState(false)
   const [search, setSearch] = useState('')
   const [notes, setNotes] = useState('')
   const [outcome, setOutcome] = useState('')
+
+  // Keypad state
+  const [keypadInput, setKeypadInput] = useState('')
+
+  // Bulk selection state
   const bulkSelection = usePortalBulkSelection<string>()
   const [bulkBusy, setBulkBusy] = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkOutcomeOpen, setBulkOutcomeOpen] = useState(false)
   const [bulkOutcome, setBulkOutcome] = useState('follow_up')
+
+  // Audio playback synchronization
+  const [targetSeekTime, setTargetSeekTime] = useState<number | null>(null)
+  const [currentPlayheadTime, setCurrentPlayheadTime] = useState(0)
 
   const loadCalls = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -72,12 +123,14 @@ export default function CallsPage() {
         headers: { Accept: 'application/json' },
         cache: 'no-store',
       })
-      const payload = await response.json().catch(() => []) as LuxorCall[] | { error?: string }
+      const payload = (await response.json().catch(() => [])) as LuxorCall[] | { error?: string }
       if (!response.ok || !Array.isArray(payload)) {
         throw new Error(!Array.isArray(payload) ? payload.error : 'Unable to load calls.')
       }
       setCalls(payload)
-      setSelectedId((current) => current && payload.some((call) => call.id === current) ? current : payload[0]?.id || null)
+      setSelectedId((current) =>
+        current && payload.some((call) => call.id === current) ? current : payload[0]?.id || null,
+      )
     } catch (error) {
       notify({
         title: 'Call history unavailable',
@@ -96,28 +149,64 @@ export default function CallsPage() {
     return () => window.removeEventListener('luxor-call-history-refresh', refresh)
   }, [loadCalls])
 
+  const unreadMissedCount = useMemo(
+    () => calls.filter((c) => isMissed(c) && !c.is_read).length,
+    [calls],
+  )
+  const unreadVoicemailCount = useMemo(
+    () => calls.filter((c) => c.is_voicemail && !c.is_read).length,
+    [calls],
+  )
+
   const filteredCalls = useMemo(() => {
     const query = search.trim().toLowerCase()
     return calls.filter((call) => {
-      if (filter === 'inbound' && call.direction !== 'inbound') return false
-      if (filter === 'outbound' && call.direction !== 'outbound') return false
-      if (filter === 'voicemail' && !call.is_voicemail) return false
-      if (filter === 'missed' && !isMissed(call)) return false
+      if (activeTab === 'voicemail' && !call.is_voicemail) return false
+      if (activeTab === 'recents' && recentsFilter === 'missed' && !isMissed(call)) return false
       if (!query) return true
-      return [call.contact_name, call.caller_number, call.callee_number, call.outcome]
+      return [
+        call.contact_name,
+        call.caller_number,
+        call.callee_number,
+        call.outcome,
+        call.notes,
+        call.summary_text,
+      ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query))
     })
-  }, [calls, filter, search])
+  }, [calls, activeTab, recentsFilter, search])
 
-  const selectedCall = calls.find((call) => call.id === selectedId) || null
+  const selectedCall = useMemo(
+    () => calls.find((call) => call.id === selectedId) || null,
+    [calls, selectedId],
+  )
   const matchingCallIds = useMemo(() => filteredCalls.map((call) => call.id), [filteredCalls])
   const bulkSelectedCount = bulkSelection.selectedCount(matchingCallIds.length)
 
-  async function runCallBulkAction(action: 'mark_read' | 'mark_unread' | 'set_outcome' | 'delete', value?: string) {
+  // Match typed keypad number against known call history contacts
+  const keypadMatchedContact = useMemo(() => {
+    const e164 = toUsE164(keypadInput)
+    if (!e164) return null
+    const match = calls.find((c) => {
+      const other = c.direction === 'inbound' ? c.caller_number : c.callee_number
+      return toUsE164(other) === e164 && c.contact_name
+    })
+    if (!match) return null
+    return {
+      name: match.contact_name!,
+      inquiryId: match.inquiry_id,
+      phoneNumber: e164,
+    }
+  }, [keypadInput, calls])
+
+  async function runCallBulkAction(
+    action: 'mark_read' | 'mark_unread' | 'set_outcome' | 'delete',
+    value?: string,
+  ) {
     const ids = bulkSelection.resolveIds(matchingCallIds)
     if (!ids.length) return
-    const busyId = action === 'set_outcome' ? (value || action) : action
+    const busyId = action === 'set_outcome' ? value || action : action
     setBulkBusy(busyId)
     try {
       const response = await fetch('/api/portal/bulk-actions', {
@@ -125,17 +214,35 @@ export default function CallsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resource: 'calls', action, ids, value }),
       })
-      const payload = await response.json().catch(() => ({})) as { error?: string }
+      const payload = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) throw new Error(payload.error || 'Unable to update the selected calls.')
       if (action === 'delete') setCalls((current) => current.filter((call) => !ids.includes(call.id)))
-      if (action === 'mark_read') setCalls((current) => current.map((call) => ids.includes(call.id) ? { ...call, is_read: true } : call))
-      if (action === 'mark_unread') setCalls((current) => current.map((call) => ids.includes(call.id) ? { ...call, is_read: false } : call))
-      if (action === 'set_outcome') setCalls((current) => current.map((call) => ids.includes(call.id) ? { ...call, outcome: value || null } : call))
+      if (action === 'mark_read')
+        setCalls((current) =>
+          current.map((call) => (ids.includes(call.id) ? { ...call, is_read: true } : call)),
+        )
+      if (action === 'mark_unread')
+        setCalls((current) =>
+          current.map((call) => (ids.includes(call.id) ? { ...call, is_read: false } : call)),
+        )
+      if (action === 'set_outcome')
+        setCalls((current) =>
+          current.map((call) => (ids.includes(call.id) ? { ...call, outcome: value || null } : call)),
+        )
       bulkSelection.clear()
       setConfirmBulkDelete(false)
-      notify({ title: 'Calls updated', description: `${ids.length} call record${ids.length === 1 ? '' : 's'} updated.`, variant: 'success' })
+      setIsEditingList(false)
+      notify({
+        title: 'Calls updated',
+        description: `${ids.length} call record${ids.length === 1 ? '' : 's'} updated.`,
+        variant: 'success',
+      })
     } catch (bulkError) {
-      notify({ title: 'Bulk action failed', description: bulkError instanceof Error ? bulkError.message : 'Unable to update calls.', variant: 'error' })
+      notify({
+        title: 'Bulk action failed',
+        description: bulkError instanceof Error ? bulkError.message : 'Unable to update calls.',
+        variant: 'error',
+      })
       void loadCalls(true)
     } finally {
       setBulkBusy(null)
@@ -146,14 +253,19 @@ export default function CallsPage() {
     if (!selectedCall) return
     setNotes(selectedCall.notes || '')
     setOutcome(selectedCall.outcome || '')
+    setTargetSeekTime(null)
+    setCurrentPlayheadTime(0)
     if (selectedCall.direction === 'inbound' && !selectedCall.is_read) {
       void updateCall(selectedCall.id, { isRead: true }, false)
     }
-    // The selected call ID is the intentional boundary for loading editable values.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCall?.id])
 
-  async function updateCall(id: string, updates: { isRead?: boolean; notes?: string | null; outcome?: string | null }, showToast = true) {
+  async function updateCall(
+    id: string,
+    updates: { isRead?: boolean; notes?: string | null; outcome?: string | null },
+    showToast = true,
+  ) {
     setSaving(true)
     try {
       const response = await fetch('/api/twilio/calls', {
@@ -161,299 +273,1043 @@ export default function CallsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, ...updates }),
       })
-      const updated = await response.json() as LuxorCall & { error?: string }
+      const updated = (await response.json()) as LuxorCall & { error?: string }
       if (!response.ok) throw new Error(updated.error || 'Unable to update call.')
-      setCalls((current) => current.map((call) => call.id === id ? updated : call))
+      setCalls((current) =>
+        current.map((call) =>
+          call.id === id
+            ? { ...updated, transcript_segments: call.transcript_segments }
+            : call,
+        ),
+      )
       window.dispatchEvent(new Event('luxor-call-history-refresh'))
-      if (showToast) notify({ title: 'Call updated', description: 'Notes and outcome were saved.', variant: 'success' })
+      if (showToast) {
+        notify({
+          title: 'Saved',
+          description: 'Call details updated.',
+          variant: 'success',
+        })
+      }
     } catch (error) {
-      notify({ title: 'Call update failed', description: error instanceof Error ? error.message : 'Unable to update call.', variant: 'error' })
+      notify({
+        title: 'Update failed',
+        description: error instanceof Error ? error.message : 'Unable to update call.',
+        variant: 'error',
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  const stats = useMemo(() => ({
-    total: calls.length,
-    inbound: calls.filter((call) => call.direction === 'inbound').length,
-    outbound: calls.filter((call) => call.direction === 'outbound').length,
-    missed: calls.filter(isMissed).length,
-    voicemail: calls.filter((call) => call.is_voicemail).length,
-  }), [calls])
+  async function handleGenerateSummary(call: LuxorCall) {
+    setReaderTab('summary')
+    if (call.summary_text || generatingSummary) return
+    setGeneratingSummary(true)
+    try {
+      const query = call.inquiry_id ? `?inquiryId=${encodeURIComponent(call.inquiry_id)}` : ''
+      const endpoint = `/api/portal/calls/${encodeURIComponent(call.id)}/summary${query}`
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inquiryId: call.inquiry_id || '' }),
+      })
+      let payload = (await response.json().catch(() => ({}))) as {
+        status?: LuxorCall['summary_status']
+        summary?: string | null
+        error?: string
+      }
+      if (!response.ok) throw new Error(payload.error || 'Unable to summarize this call.')
 
-  // Voicemail transcript from metadata
+      for (let attempt = 0; attempt < 8 && payload.status === 'generating'; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1500))
+        const statusResponse = await fetch(endpoint, { cache: 'no-store' })
+        payload = (await statusResponse.json().catch(() => ({}))) as {
+          status?: LuxorCall['summary_status']
+          summary?: string | null
+          error?: string
+        }
+        if (!statusResponse.ok) throw new Error(payload.error || 'Unable to load summary.')
+      }
+
+      if (payload.summary) {
+        setCalls((current) =>
+          current.map((item) =>
+            item.id === call.id
+              ? { ...item, summary_status: 'completed', summary_text: payload.summary }
+              : item,
+          ),
+        )
+      }
+    } catch (error) {
+      notify({
+        title: 'Summary unavailable',
+        description: error instanceof Error ? error.message : 'Unable to generate summary.',
+        variant: 'error',
+      })
+    } finally {
+      setGeneratingSummary(false)
+    }
+  }
+
+  const callSummary = selectedCall
+    ? selectedCall.summary_text ||
+      (selectedCall.metadata?.summary as string | undefined) ||
+      (selectedCall.metadata?.call_summary as string | undefined) ||
+      null
+    : null
+
   const voicemailTranscript = selectedCall
     ? (selectedCall.metadata?.voicemail_transcript as string | undefined) ||
       (selectedCall.metadata?.transcript as string | undefined) ||
       null
     : null
 
+  const targetPhoneNumber = selectedCall
+    ? selectedCall.direction === 'inbound'
+      ? selectedCall.caller_number
+      : selectedCall.callee_number
+    : null
+
+  const hasDirtyDetails = selectedCall
+    ? (notes.trim() || '') !== (selectedCall.notes?.trim() || '') ||
+      (outcome || '') !== (selectedCall.outcome || '')
+    : false
+
+  function handleCallNumber(phone: string | null, name?: string | null, inquiryId?: string | null) {
+    if (!phone) {
+      openPanel()
+      return
+    }
+    void startCall({
+      phoneNumber: phone,
+      contactName: name || undefined,
+      inquiryId: inquiryId || undefined,
+    })
+  }
+
+  function handleKeypadDigit(digit: string) {
+    setKeypadInput((current) => formatUsDialInput(`${current}${digit}`))
+  }
+
+  function handleKeypadCall() {
+    const e164 = toUsE164(keypadInput)
+    if (!e164) return
+    void startCall({
+      phoneNumber: e164,
+      contactName: keypadMatchedContact?.name,
+      inquiryId: keypadMatchedContact?.inquiryId,
+    })
+  }
+
   return (
-    <PortalPageFrame>
-      <PortalPageHeader
-        icon={<PhoneCall size={20} />}
-        title="Calls & Voicemail"
-        actions={(
-          <>
-            <PortalButton onClick={() => void loadCalls()}>
-              <RefreshCw size={14} /> Refresh
-            </PortalButton>
-            <PortalButton variant="primary" onClick={openPanel}>
-              <Phone size={14} /> New Call
-            </PortalButton>
-          </>
-        )}
-      />
-
-      {/* Stats row */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 shrink-0">
-        <MetricCard label="All Calls" value={stats.total} icon={<Headphones size={15} />} />
-        <MetricCard label="Inbound" value={stats.inbound} icon={<PhoneIncoming size={15} />} />
-        <MetricCard label="Outbound" value={stats.outbound} icon={<PhoneOutgoing size={15} />} />
-        <MetricCard label="Missed" value={stats.missed} icon={<PhoneMissed size={15} />} />
-        <MetricCard label="Voicemail" value={stats.voicemail} icon={<Voicemail size={15} />} />
-      </div>
-
-      {/* Main two-pane container — independently scrollable, fixed viewport height */}
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+      {/* Main Phone App Shell: Edge-to-edge on Mobile & iPad, Contained rounded container on Desktop */}
       <div
-        className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] grid grid-cols-1 lg:grid-cols-[minmax(20rem,0.9fr)_minmax(24rem,1.1fr)]"
-        style={{ height: 'calc(100vh - 19rem)' }}
+        className="grid grid-cols-1 md:grid-cols-[20.5rem_minmax(0,1fr)] lg:grid-cols-[23.5rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)] h-full min-h-0 w-full flex-1 overflow-hidden bg-[color:var(--portal-card)] rounded-none border-0 lg:rounded-2xl lg:border lg:border-[color:var(--portal-border)] lg:shadow-xs"
       >
-
-        {/* PANE 1: Call list */}
-        <section className="flex flex-col overflow-hidden border-b border-[color:var(--portal-border)] lg:border-b-0 lg:border-r">
-          {/* Search + filters — pinned */}
-          <div className="shrink-0 space-y-3 border-b border-[color:var(--portal-border)] p-4">
-            <div className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3">
-              <Search size={14} className="text-[color:var(--portal-faint)]" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search name or number"
-                className="h-10 min-w-0 flex-1 bg-transparent text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
-              />
-            </div>
-            <div className="flex gap-2 overflow-x-auto portal-scrollbar">
-              {(['all', 'inbound', 'outbound', 'missed', 'voicemail'] as DirectionFilter[]).map((value) => (
+        {/* ============================================================
+            LEFT COLUMN: Native Phone App (Recents / Voicemail / Keypad)
+           ============================================================ */}
+        <section
+          className={`flex flex-col min-h-0 overflow-hidden md:border-r md:border-[color:var(--portal-border)] ${
+            mobileDetailOpen ? 'hidden md:flex' : 'flex'
+          }`}
+        >
+          {/* Top Navigation Bar (iOS style) */}
+          {activeTab !== 'keypad' && (
+            <div className="shrink-0 px-4 pt-3.5 pb-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-md space-y-2.5">
+              {/* Top Utility Row: Edit | Segmented Control | Refresh */}
+              <div className="flex items-center justify-between gap-2 min-h-8">
                 <button
-                  key={value}
                   type="button"
-                  onClick={() => setFilter(value)}
-                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
-                    filter === value
-                      ? 'border-[#caa24c]/35 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]'
-                      : 'border-[color:var(--portal-border)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                  }`}
+                  onClick={() => {
+                    if (isEditingList) bulkSelection.clear()
+                    setIsEditingList((prev) => !prev)
+                  }}
+                  className="text-xs font-semibold text-[#a8792f] dark:text-[#f1d27a] hover:opacity-80 transition-opacity cursor-pointer px-1 py-0.5"
                 >
-                  {value}
+                  {isEditingList ? 'Done' : 'Edit'}
                 </button>
-              ))}
-              {matchingCallIds.length > 0 ? (
-                <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-                  <PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(matchingCallIds)} onChange={() => bulkSelection.selectPage(matchingCallIds)} label="Select all visible calls" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-faint)]">Select all</span>
-                </div>
-              ) : null}
+
+                {activeTab === 'recents' ? (
+                  <div
+                    className="inline-flex rounded-lg bg-[color:var(--portal-soft)] p-0.5 border border-[color:var(--portal-border)]"
+                    role="tablist"
+                    aria-label="Filter recent calls"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={recentsFilter === 'all'}
+                      onClick={() => setRecentsFilter('all')}
+                      className={`w-16 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        recentsFilter === 'all'
+                          ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs'
+                          : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={recentsFilter === 'missed'}
+                      onClick={() => setRecentsFilter('missed')}
+                      className={`w-16 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        recentsFilter === 'missed'
+                          ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs'
+                          : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                      }`}
+                    >
+                      Missed
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs font-medium text-[color:var(--portal-muted)]">
+                    {unreadVoicemailCount > 0 ? `${unreadVoicemailCount} unread` : 'All messages'}
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => void loadCalls()}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] transition-colors cursor-pointer"
+                  aria-label="Refresh calls"
+                  title="Refresh"
+                >
+                  <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+
+              {/* Large iOS Title */}
+              <div className="flex items-baseline justify-between pt-0.5">
+                <h1 className="text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">
+                  {activeTab === 'voicemail' ? 'Voicemail' : 'Recents'}
+                </h1>
+                {isEditingList && matchingCallIds.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <PortalBulkHeaderSelector
+                      state={bulkSelection.pageSelectionState(matchingCallIds)}
+                      onChange={() => bulkSelection.selectPage(matchingCallIds)}
+                      label="Select all visible calls"
+                    />
+                    <span className="text-xs font-medium text-[color:var(--portal-muted)]">
+                      Select all
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Clean Search Field */}
+              <div className="flex items-center gap-2 rounded-xl bg-[color:var(--portal-soft)] px-3 h-9 border border-transparent focus-within:border-[#caa24c]/35 transition-colors">
+                <Search size={14} className="text-[color:var(--portal-muted)] shrink-0" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search"
+                  className="portal-input-transparent h-full min-w-0 flex-1 bg-transparent text-[13px] text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="rounded-full p-0.5 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
+                    aria-label="Clear search"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Scrollable call list */}
-          <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar">
-            {loading ? (
-              <div className="p-4 space-y-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                    <div className="h-9 w-9 rounded-full luxor-skeleton shrink-0" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-3.5 w-32 rounded luxor-skeleton" />
-                      <div className="h-2.5 w-24 rounded luxor-skeleton" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : filteredCalls.length === 0 ? (
-              <div className="flex h-full min-h-64 flex-col items-center justify-center px-6 text-center">
-                <Phone size={28} className="text-[color:var(--portal-faint)]" />
-                <p className="mt-3 text-sm font-bold text-[color:var(--portal-muted)]">No calls found</p>
-                <p className="mt-1 text-xs text-[color:var(--portal-faint)]">Calls will appear here after the Twilio setup is connected.</p>
-              </div>
-            ) : filteredCalls.map((call, rowIndex) => (
-              <div
-                key={call.id}
-                className={`group flex w-full items-start border-b border-[color:var(--portal-border)] text-left transition-colors ${
-                  selectedId === call.id
-                    ? 'bg-[#caa24c]/7 border-l-2 border-l-[#caa24c]'
-                    : 'border-l-2 border-l-transparent hover:bg-[color:var(--portal-soft)]'
-                } ${bulkSelection.isSelected(call.id) ? 'bg-[#caa24c]/5' : ''}`}
-              >
-                <div className="shrink-0 py-4 pl-3">
-                  <PortalBulkRowSelector checked={bulkSelection.isSelected(call.id)} index={rowIndex + 1} onChange={() => bulkSelection.toggle(call.id)} label={call.contact_name || 'call'} />
-                </div>
-                <button type="button" onClick={() => setSelectedId(call.id)} className="flex min-w-0 flex-1 items-start gap-3 px-3 py-4 text-left">
-                <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
-                  isMissed(call)
-                    ? 'border-red-500/20 bg-red-500/8 text-red-400'
-                    : call.is_voicemail
-                      ? 'border-amber-500/20 bg-amber-500/8 text-amber-400'
-                      : call.direction === 'inbound'
-                        ? 'border-blue-500/20 bg-blue-500/8 text-blue-400'
-                        : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400'
-                }`}>
-                  {call.is_voicemail ? <Voicemail size={15} /> : call.direction === 'inbound' ? <PhoneIncoming size={15} /> : <PhoneOutgoing size={15} />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className={`truncate text-xs font-black ${!call.is_read && call.direction === 'inbound' ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>
-                      {call.contact_name || 'Unknown caller'}
-                    </p>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {call.is_voicemail && <Voicemail size={11} className="text-amber-400" />}
-                      {!call.is_read && call.direction === 'inbound' && <span className="h-2 w-2 rounded-full bg-[#caa24c]" />}
-                    </div>
-                  </div>
-                  <p className="mt-1 truncate tabular-nums font-medium text-[11px] text-[color:var(--portal-muted)]">
-                    {formatPhoneDisplay(call.direction === 'inbound' ? call.caller_number : call.callee_number)}
-                  </p>
-                  <div className="mt-2 flex items-center justify-between gap-3 text-[10px] tabular-nums text-[color:var(--portal-faint)]">
-                    <span className="capitalize">{call.status.replace('-', ' ')}</span>
-                    <span>{formatRelativeDate(call.created_at)}</span>
-                  </div>
-                </div>
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* PANE 2: Call detail — independently scrollable */}
-        <section className="flex-1 min-h-0 overflow-y-auto p-5 portal-scrollbar sm:p-7">
-          {selectedCall ? (
-            <div className="space-y-6">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-4 border-b border-[color:var(--portal-border)] pb-5">
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#caa24c]">{selectedCall.direction} call</p>
-                  <h2 className="mt-2 text-xl font-black text-[color:var(--portal-text)]">{selectedCall.contact_name || 'Unknown caller'}</h2>
-                  <p className="mt-1 tabular-nums font-medium text-xs text-[color:var(--portal-muted)]">
-                    {formatPhoneDisplay(selectedCall.direction === 'inbound' ? selectedCall.caller_number : selectedCall.callee_number)}
-                  </p>
-                </div>
-                <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-wider ${
-                  isMissed(selectedCall)
-                    ? 'border-red-500/20 bg-red-500/8 text-red-400'
-                    : selectedCall.is_voicemail
-                      ? 'border-amber-500/20 bg-amber-500/8 text-amber-400'
-                      : 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400'
-                }`}>
-                  {selectedCall.is_voicemail ? 'voicemail' : selectedCall.status.replace('-', ' ')}
+          {/* Middle Body: Either Keypad OR Scrollable Call/Voicemail List */}
+          {activeTab === 'keypad' ? (
+            <div className="flex-1 min-h-0 flex flex-col justify-between px-6 py-5 overflow-y-auto portal-scrollbar">
+              {/* Softphone status pill */}
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--portal-muted)]">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      phoneState === 'ready'
+                        ? 'bg-emerald-500'
+                        : phoneState === 'starting'
+                          ? 'bg-amber-500'
+                          : 'bg-[color:var(--portal-faint)]'
+                    }`}
+                  />
+                  {phoneState === 'ready'
+                    ? 'Luxor Line Ready'
+                    : phoneState === 'starting'
+                      ? 'Connecting…'
+                      : 'Browser Phone Offline'}
                 </span>
+                {phoneState !== 'ready' && (
+                  <button
+                    type="button"
+                    onClick={() => void enablePhone()}
+                    className="text-xs font-semibold text-[#a8792f] dark:text-[#f1d27a] hover:underline cursor-pointer"
+                  >
+                    Enable Audio
+                  </button>
+                )}
               </div>
 
-              {/* Meta grid */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Detail label="Started" value={formatDateTime(selectedCall.started_at)} />
-                <Detail label="Duration" value={formatDuration(selectedCall.duration_seconds)} />
-                <Detail label="Direction" value={selectedCall.direction} />
-                <Detail label="Phone" value={phoneState === 'ready' ? 'Browser ready' : 'Browser offline'} />
-              </div>
-
-              {/* Matched lead link */}
-              {selectedCall.inquiry_id && (
-                <Link
-                  href={`/portal/leads/${selectedCall.inquiry_id}`}
-                  className="flex items-center justify-between rounded-xl border border-[#caa24c]/15 bg-[#caa24c]/5 px-4 py-3 text-xs font-bold text-[#a8792f] dark:text-[#f1d27a] hover:border-[#caa24c]/30 transition-colors"
-                >
-                  Open matched Luxor lead <span>→</span>
-                </Link>
-              )}
-
-              {/* ── Voicemail player ── */}
-              {selectedCall.recording_sid && (
-                <div className="rounded-2xl border border-[#caa24c]/25 bg-[color:var(--portal-soft)] overflow-hidden">
-                  {/* Player header */}
-                  <div className="flex items-center gap-3 px-5 py-4 border-b border-[color:var(--portal-border)]">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 text-[#caa24c]">
-                      <Mic2 size={16} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-black text-[color:var(--portal-text)]">
-                        {selectedCall.is_voicemail ? 'Voicemail Recording' : 'Call Recording'}
-                      </p>
-                      <p className="text-[10px] tabular-nums font-medium text-[color:var(--portal-muted)] mt-0.5">
-                        {selectedCall.recording_duration_seconds != null
-                          ? `${formatDuration(selectedCall.recording_duration_seconds)} · MP3`
-                          : 'Duration unknown · MP3'}
-                      </p>
-                    </div>
-                    {selectedCall.is_voicemail && (
-                      <span className="shrink-0 rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-amber-400">
-                        Voicemail
-                      </span>
+              {/* Number Display & Contact Match */}
+              <div className="my-auto py-4 text-center min-h-[5.5rem] flex flex-col items-center justify-center">
+                <input
+                  type="tel"
+                  value={keypadInput}
+                  onChange={(e) => setKeypadInput(formatUsDialInput(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && toUsE164(keypadInput)) handleKeypadCall()
+                  }}
+                  placeholder="(000) 000-0000"
+                  aria-label="Phone number to dial"
+                  className="portal-input-transparent w-full bg-transparent text-center text-2xl sm:text-3xl font-semibold tracking-tight tabular-nums text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]/50"
+                />
+                {keypadMatchedContact ? (
+                  <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-[#a8792f] dark:text-[#f1d27a]">
+                    <span>{keypadMatchedContact.name}</span>
+                    {keypadMatchedContact.inquiryId && (
+                      <Link
+                        href={`/portal/leads/${keypadMatchedContact.inquiryId}`}
+                        className="underline hover:opacity-80"
+                      >
+                        View Lead
+                      </Link>
                     )}
                   </div>
+                ) : (
+                  <span className="mt-1.5 text-xs text-[color:var(--portal-muted)]">
+                    {keypadInput ? 'Outbound via Luxor line' : 'Enter a number to call'}
+                  </span>
+                )}
+              </div>
 
-                  {/* Audio element */}
-                  <div className="px-5 py-4">
-                    <audio
-                      controls
-                      preload="metadata"
-                      className="w-full h-10 rounded-lg"
-                      src={`/api/twilio/recordings/${selectedCall.recording_sid}${selectedCall.inquiry_id ? `?inquiryId=${encodeURIComponent(selectedCall.inquiry_id)}` : ''}`}
+              {/* 3x4 Tactile Keypad Grid */}
+              <div className="mx-auto w-full max-w-[16.5rem] space-y-3">
+                <div className="grid grid-cols-3 gap-x-5 gap-y-3 justify-items-center">
+                  {KEYPAD_KEYS.map((item) => (
+                    <button
+                      key={item.digit}
+                      type="button"
+                      onClick={() => handleKeypadDigit(item.digit)}
+                      className="flex h-16 w-16 flex-col items-center justify-center rounded-full bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] transition-transform duration-75 active:scale-92 hover:bg-[color:var(--portal-border)]/60 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]"
                     >
-                      Your browser does not support audio playback.
-                    </audio>
-                  </div>
+                      <span className="text-2xl font-medium leading-none">{item.digit}</span>
+                      {item.letters !== undefined && (
+                        <span className="mt-0.5 text-[9px] font-semibold tracking-[0.16em] text-[color:var(--portal-muted)] min-h-[11px]">
+                          {item.letters}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
 
-                  {/* Transcript (if available in metadata) */}
-                  {voicemailTranscript && (
-                    <div className="px-5 pb-5 space-y-2">
-                      <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">
-                        <FileText size={11} /> Transcript
+                {/* Call & Delete Row */}
+                <div className="grid grid-cols-3 items-center justify-items-center pt-1">
+                  <div />
+                  <button
+                    type="button"
+                    onClick={handleKeypadCall}
+                    disabled={!toUsE164(keypadInput)}
+                    className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm transition-transform duration-100 active:scale-95 hover:bg-emerald-400 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                    aria-label="Place call"
+                  >
+                    <Phone size={24} className="fill-current" />
+                  </button>
+                  {keypadInput ? (
+                    <button
+                      type="button"
+                      onClick={() => setKeypadInput((curr) => removeLastDialDigit(curr))}
+                      className="flex h-12 w-12 items-center justify-center rounded-full text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] transition-transform active:scale-90 cursor-pointer"
+                      aria-label="Delete last digit"
+                    >
+                      <Delete size={20} />
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]/70">
+              {loading ? (
+                <div className="p-4 space-y-3.5">
+                  {Array.from({ length: 7 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 py-1.5">
+                      <div className="h-10 w-10 rounded-full luxor-skeleton shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3.5 w-32 rounded luxor-skeleton" />
+                        <div className="h-2.5 w-24 rounded luxor-skeleton" />
                       </div>
-                      <p className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-sm leading-relaxed text-[color:var(--portal-text)] font-normal italic">
-                        &ldquo;{voicemailTranscript}&rdquo;
+                    </div>
+                  ))}
+                </div>
+              ) : filteredCalls.length === 0 ? (
+                <div className="flex h-full min-h-60 flex-col items-center justify-center px-6 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]">
+                    {activeTab === 'voicemail' ? <Voicemail size={22} /> : <Phone size={22} />}
+                  </div>
+                  <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">
+                    {activeTab === 'voicemail' ? 'No Voicemails' : 'No Recent Calls'}
+                  </p>
+                  <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
+                    {search
+                      ? 'Try a different name or phone number.'
+                      : activeTab === 'voicemail'
+                        ? 'Voicemail messages left by callers will appear here.'
+                        : 'Inbound and outbound calls will appear here.'}
+                  </p>
+                </div>
+              ) : (
+                filteredCalls.map((call, rowIndex) => {
+                  const isSelected = selectedId === call.id
+                  const missed = isMissed(call)
+                  const unreadInbound = !call.is_read && call.direction === 'inbound'
+                  const phoneNum =
+                    call.direction === 'inbound' ? call.caller_number : call.callee_number
+                  const namedContact = getNamedContact(call.contact_name)
+                  const displayName = namedContact || formatPhoneDisplay(phoneNum)
+                  const isVoicemailExpanded =
+                    activeTab === 'voicemail' && expandedVoicemailId === call.id
+                  const inlineVmTranscript =
+                    (call.metadata?.voicemail_transcript as string | undefined) ||
+                    (call.metadata?.transcript as string | undefined) ||
+                    call.summary_text ||
+                    null
+
+                  return (
+                    <div
+                      key={call.id}
+                      className={`transition-colors ${
+                        isSelected
+                          ? 'md:bg-[color:var(--portal-soft)]'
+                          : 'hover:bg-[color:var(--portal-soft)]/50'
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        {isEditingList && (
+                          <div className="pl-3.5 pr-1 py-3 shrink-0">
+                            <PortalBulkRowSelector
+                              checked={bulkSelection.isSelected(call.id)}
+                              index={rowIndex + 1}
+                              onChange={() => bulkSelection.toggle(call.id)}
+                              label={displayName}
+                            />
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedId(call.id)
+                            if (activeTab === 'voicemail') {
+                              setExpandedVoicemailId((curr) => (curr === call.id ? null : call.id))
+                            } else {
+                              setMobileDetailOpen(true)
+                            }
+                          }}
+                          className="flex min-w-0 flex-1 items-center gap-3 py-3 pr-3.5 pl-3 text-left cursor-pointer"
+                        >
+                          {/* Unread indicator dot */}
+                          <span className="flex w-2 shrink-0 justify-center">
+                            {unreadInbound && (
+                              <span className="h-2 w-2 rounded-full bg-[#caa24c]" />
+                            )}
+                          </span>
+
+                          {/* Contact Avatar */}
+                          {namedContact ? (
+                            <PortalContactAvatar
+                              name={namedContact}
+                              size="sm"
+                              className="shrink-0"
+                            />
+                          ) : (
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]">
+                              <User size={14} />
+                            </div>
+                          )}
+
+                          {/* Primary & Secondary Labels */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <p
+                                className={`truncate text-[15px] tracking-[-0.01em] ${
+                                  unreadInbound ? 'font-semibold' : 'font-medium'
+                                } ${
+                                  missed
+                                    ? 'text-red-600 dark:text-red-400'
+                                    : 'text-[color:var(--portal-text)]'
+                                }`}
+                              >
+                                {displayName}
+                              </p>
+                              <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">
+                                {formatPhoneListTime(call.created_at)}
+                              </span>
+                            </div>
+
+                            <div className="mt-0.5 flex items-center justify-between gap-2 text-[13px] text-[color:var(--portal-muted)]">
+                              <span className="flex items-center gap-1.5 truncate">
+                                {call.is_voicemail ? (
+                                  <Voicemail size={12} className="shrink-0 text-[#caa24c]" />
+                                ) : missed ? (
+                                  <PhoneMissed size={12} className="shrink-0 text-red-500" />
+                                ) : call.direction === 'inbound' ? (
+                                  <PhoneIncoming size={12} className="shrink-0" />
+                                ) : (
+                                  <PhoneOutgoing size={12} className="shrink-0" />
+                                )}
+                                <span className="truncate">
+                                  {namedContact
+                                    ? formatPhoneDisplay(phoneNum)
+                                    : call.is_voicemail
+                                      ? 'Voicemail'
+                                      : missed
+                                        ? 'Missed Call'
+                                        : call.direction === 'inbound'
+                                          ? 'Inbound Call'
+                                          : 'Outbound Call'}
+                                </span>
+                              </span>
+
+                              {call.recording_duration_seconds != null ? (
+                                <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">
+                                  {formatDuration(call.recording_duration_seconds)}
+                                </span>
+                              ) : call.duration_seconds ? (
+                                <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">
+                                  {formatDuration(call.duration_seconds)}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <ChevronRight
+                            size={15}
+                            className={`shrink-0 text-[color:var(--portal-faint)] transition-transform ${
+                              isVoicemailExpanded ? 'rotate-90 md:rotate-0' : ''
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Mobile Inline Visual Voicemail Expansion */}
+                      {isVoicemailExpanded && call.recording_sid && (
+                        <div className="md:hidden px-4 pb-4 pt-1 space-y-3 bg-[color:var(--portal-soft)]/35">
+                          <PortalAudioPlayer
+                            variant="compact"
+                            src={`/api/twilio/recordings/${call.recording_sid}${
+                              call.inquiry_id
+                                ? `?inquiryId=${encodeURIComponent(call.inquiry_id)}`
+                                : ''
+                            }`}
+                            durationSeconds={call.recording_duration_seconds}
+                            downloadFilename={`voicemail-${call.id}.mp3`}
+                          />
+                          {inlineVmTranscript && (
+                            <p className="text-xs leading-relaxed text-[color:var(--portal-text)] px-1">
+                              &ldquo;{inlineVmTranscript}&rdquo;
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCallNumber(phoneNum, call.contact_name, call.inquiry_id)
+                              }
+                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#caa24c] py-2 text-xs font-semibold text-white cursor-pointer"
+                            >
+                              <Phone size={13} /> Call Back
+                            </button>
+                            <Link
+                              href={`/portal/messages?phone=${encodeURIComponent(phoneNum)}`}
+                              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] py-2 text-xs font-semibold text-[color:var(--portal-text)]"
+                            >
+                              <MessageSquare size={13} /> Message
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => setMobileDetailOpen(true)}
+                              className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-xs font-semibold text-[color:var(--portal-muted)]"
+                            >
+                              Details
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
+
+          {/* Bottom Tab Bar (Recents | Voicemail | Keypad) */}
+          <nav
+            aria-label="Phone navigation"
+            className="shrink-0 grid grid-cols-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-xl px-2 py-1.5"
+          >
+            <button
+              type="button"
+              onClick={() => setActiveTab('recents')}
+              className={`relative flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
+                activeTab === 'recents'
+                  ? 'text-[#a8792f] dark:text-[#f1d27a]'
+                  : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+              }`}
+            >
+              <div className="relative">
+                <Clock3 size={19} />
+                {unreadMissedCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                    {unreadMissedCount}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-semibold">Recents</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('voicemail')}
+              className={`relative flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
+                activeTab === 'voicemail'
+                  ? 'text-[#a8792f] dark:text-[#f1d27a]'
+                  : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+              }`}
+            >
+              <div className="relative">
+                <Voicemail size={19} />
+                {unreadVoicemailCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#caa24c] px-1 text-[9px] font-bold text-white">
+                    {unreadVoicemailCount}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-semibold">Voicemail</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('keypad')}
+              className={`flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
+                activeTab === 'keypad'
+                  ? 'text-[#a8792f] dark:text-[#f1d27a]'
+                  : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+              }`}
+            >
+              <Grid size={19} />
+              <span className="text-[10px] font-semibold">Keypad</span>
+            </button>
+          </nav>
+        </section>
+
+        {/* ============================================================
+            RIGHT COLUMN: Calm Call & Recording Inspector
+           ============================================================ */}
+        <section
+          className={`flex-1 min-h-0 overflow-y-auto portal-scrollbar bg-[color:var(--portal-bg)]/35 ${
+            mobileDetailOpen ? 'flex flex-col' : 'hidden md:flex md:flex-col'
+          }`}
+        >
+          {selectedCall ? (
+            <div className="mx-auto w-full max-w-2xl p-5 sm:p-7 lg:p-8 space-y-6">
+              {/* Mobile Back Bar (< Recents) */}
+              <div className="md:hidden flex items-center justify-between pb-2">
+                <button
+                  type="button"
+                  onClick={() => setMobileDetailOpen(false)}
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-[#a8792f] dark:text-[#f1d27a] cursor-pointer"
+                >
+                  <ArrowLeft size={16} />
+                  {activeTab === 'voicemail' ? 'Voicemail' : 'Recents'}
+                </button>
+              </div>
+
+              {/* 1. Calm Contact Poster Header */}
+              <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  {getNamedContact(selectedCall.contact_name) ? (
+                    selectedCall.inquiry_id ? (
+                      <Link
+                        href={`/portal/leads/${selectedCall.inquiry_id}`}
+                        className="shrink-0 no-underline"
+                        aria-label={`Open ${getNamedContact(selectedCall.contact_name)} lead profile`}
+                      >
+                        <PortalContactAvatar
+                          name={getNamedContact(selectedCall.contact_name)!}
+                          size="lg"
+                          className="shrink-0"
+                        />
+                      </Link>
+                    ) : (
+                      <PortalContactAvatar
+                        name={getNamedContact(selectedCall.contact_name)!}
+                        size="lg"
+                        className="shrink-0"
+                      />
+                    )
+                  ) : (
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]">
+                      <User size={20} />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedCall.inquiry_id ? (
+                        <Link
+                          href={`/portal/leads/${selectedCall.inquiry_id}`}
+                          className="text-xl sm:text-2xl font-semibold tracking-tight text-[color:var(--portal-text)] truncate no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                        >
+                          {getNamedContact(selectedCall.contact_name) || formatPhoneDisplay(targetPhoneNumber)}
+                        </Link>
+                      ) : (
+                        <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-[color:var(--portal-text)] truncate">
+                          {getNamedContact(selectedCall.contact_name) || formatPhoneDisplay(targetPhoneNumber)}
+                        </h2>
+                      )}
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                          isMissed(selectedCall)
+                            ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                            : selectedCall.is_voicemail
+                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
+                        }`}
+                      >
+                        {selectedCall.is_voicemail
+                          ? 'Voicemail'
+                          : isMissed(selectedCall)
+                            ? 'Missed'
+                            : selectedCall.direction === 'inbound'
+                              ? 'Inbound'
+                              : 'Outbound'}
+                      </span>
+                    </div>
+
+                    {getNamedContact(selectedCall.contact_name) && (
+                      <p className="mt-0.5 text-sm tabular-nums text-[color:var(--portal-muted)]">
+                        {formatPhoneDisplay(targetPhoneNumber)}
                       </p>
+                    )}
+
+                    <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
+                      {formatDateTime(selectedCall.started_at)}
+                      {selectedCall.duration_seconds != null &&
+                        ` · ${formatDuration(selectedCall.duration_seconds)}`}
+                    </p>
+                  </div>
+                </div>
+
+                {/* iOS Contact Action Row */}
+                <div className="mt-5 grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleCallNumber(
+                        targetPhoneNumber,
+                        selectedCall.contact_name,
+                        selectedCall.inquiry_id,
+                      )
+                    }
+                    className="flex flex-col items-center justify-center gap-1.5 rounded-xl bg-[color:var(--portal-soft)] py-3 px-2 text-xs font-medium text-[color:var(--portal-text)] transition-transform active:scale-97 hover:bg-[#caa24c]/12 hover:text-[#a8792f] dark:hover:text-[#f1d27a] cursor-pointer"
+                  >
+                    <Phone size={17} className="text-[#caa24c]" />
+                    <span>call</span>
+                  </button>
+
+                  {targetPhoneNumber ? (
+                    <Link
+                      href={`/portal/messages?phone=${encodeURIComponent(targetPhoneNumber)}`}
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl bg-[color:var(--portal-soft)] py-3 px-2 text-xs font-medium text-[color:var(--portal-text)] transition-transform active:scale-97 hover:bg-[#caa24c]/12 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                    >
+                      <MessageSquare size={17} className="text-[#caa24c]" />
+                      <span>message</span>
+                    </Link>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-1.5 rounded-xl bg-[color:var(--portal-soft)]/50 py-3 px-2 text-xs text-[color:var(--portal-faint)]">
+                      <MessageSquare size={17} />
+                      <span>message</span>
+                    </div>
+                  )}
+
+                  {selectedCall.inquiry_id ? (
+                    <Link
+                      href={`/portal/leads/${selectedCall.inquiry_id}`}
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl bg-[color:var(--portal-soft)] py-3 px-2 text-xs font-medium text-[color:var(--portal-text)] transition-transform active:scale-97 hover:bg-[#caa24c]/12 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                    >
+                      <User size={17} className="text-[#caa24c]" />
+                      <span>lead profile</span>
+                    </Link>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-1.5 rounded-xl bg-[color:var(--portal-soft)]/50 py-3 px-2 text-xs text-[color:var(--portal-faint)]">
+                      <User size={17} />
+                      <span>unlinked</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void updateCall(selectedCall.id, { isRead: !selectedCall.is_read })
+                    }
+                    className="hidden sm:flex flex-col items-center justify-center gap-1.5 rounded-xl bg-[color:var(--portal-soft)] py-3 px-2 text-xs font-medium text-[color:var(--portal-text)] transition-transform active:scale-97 hover:bg-[#caa24c]/12 hover:text-[#a8792f] dark:hover:text-[#f1d27a] cursor-pointer"
+                  >
+                    {selectedCall.is_read ? (
+                      <Circle size={17} className="text-[color:var(--portal-muted)]" />
+                    ) : (
+                      <CheckCheck size={17} className="text-[#caa24c]" />
+                    )}
+                    <span>{selectedCall.is_read ? 'mark unread' : 'mark read'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. Cohesive Audio Player + Transcript & Summary Surface */}
+              {(selectedCall.recording_sid ||
+                (selectedCall.transcript_segments &&
+                  selectedCall.transcript_segments.length > 0) ||
+                voicemailTranscript ||
+                callSummary) && (
+                <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] overflow-hidden">
+                  {/* Shared React Audio Player */}
+                  {selectedCall.recording_sid && (
+                    <div className="p-4 sm:p-5">
+                      <PortalAudioPlayer
+                        variant="full"
+                        className="!border-0 !p-0 !bg-transparent"
+                        src={`/api/twilio/recordings/${selectedCall.recording_sid}${
+                          selectedCall.inquiry_id
+                            ? `?inquiryId=${encodeURIComponent(selectedCall.inquiry_id)}`
+                            : ''
+                        }`}
+                        title={
+                          selectedCall.is_voicemail ? 'Voicemail Recording' : 'Call Recording'
+                        }
+                        subtitle={
+                          selectedCall.recording_duration_seconds != null
+                            ? formatDuration(selectedCall.recording_duration_seconds)
+                            : undefined
+                        }
+                        durationSeconds={selectedCall.recording_duration_seconds}
+                        downloadFilename={`${
+                          selectedCall.is_voicemail ? 'voicemail' : 'call'
+                        }-${selectedCall.id}.mp3`}
+                        seekToSeconds={targetSeekTime}
+                        onTimeUpdate={(curr) => setCurrentPlayheadTime(curr)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Transcript & Summary Reader */}
+                  {((selectedCall.transcript_segments &&
+                    selectedCall.transcript_segments.length > 0) ||
+                    voicemailTranscript ||
+                    callSummary) && (
+                    <div className="border-t border-[color:var(--portal-border)]">
+                      {/* Reader Header with Transcript | Summary Switcher */}
+                      <div className="flex items-center justify-between gap-2 px-5 py-3 bg-[color:var(--portal-soft)]/40 border-b border-[color:var(--portal-border)]">
+                        <div
+                          className="inline-flex rounded-lg bg-[color:var(--portal-soft)] p-0.5 border border-[color:var(--portal-border)]"
+                          role="tablist"
+                        >
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={readerTab === 'transcript'}
+                            onClick={() => setReaderTab('transcript')}
+                            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                              readerTab === 'transcript'
+                                ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs'
+                                : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                            }`}
+                          >
+                            <FileText size={12} /> Transcript
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={readerTab === 'summary'}
+                            onClick={() => void handleGenerateSummary(selectedCall)}
+                            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                              readerTab === 'summary'
+                                ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs'
+                                : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                            }`}
+                          >
+                            <Sparkles size={12} className="text-[#caa24c]" /> Summary
+                          </button>
+                        </div>
+
+                        {readerTab === 'transcript' &&
+                          selectedCall.transcript_segments &&
+                          selectedCall.transcript_segments.length > 0 && (
+                            <span className="text-[11px] text-[color:var(--portal-muted)]">
+                              Tap time to jump
+                            </span>
+                          )}
+                      </div>
+
+                      {/* Reader Content */}
+                      {readerTab === 'summary' ? (
+                        <div className="p-5">
+                          {generatingSummary || selectedCall.summary_status === 'generating' ? (
+                            <div className="flex items-center gap-2 text-sm text-[color:var(--portal-muted)] py-4">
+                              <Loader2 size={15} className="animate-spin text-[#caa24c]" />
+                              <span>Summarizing call transcript…</span>
+                            </div>
+                          ) : callSummary ? (
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-[color:var(--portal-text)]">
+                              {callSummary}
+                            </p>
+                          ) : (
+                            <div className="py-4 text-sm text-[color:var(--portal-muted)] flex items-center justify-between gap-3">
+                              <span>
+                                {selectedCall.transcription_status === 'completed'
+                                  ? 'Generate a concise summary of event needs and next steps.'
+                                  : 'A summary can be generated once a call transcript is available.'}
+                              </span>
+                              {selectedCall.transcription_status === 'completed' && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleGenerateSummary(selectedCall)}
+                                  className="shrink-0 rounded-lg bg-[#caa24c] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#b98a3d] cursor-pointer"
+                                >
+                                  Summarize
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : selectedCall.transcript_segments &&
+                        selectedCall.transcript_segments.length > 0 ? (
+                        <div className="max-h-72 overflow-y-auto divide-y divide-[color:var(--portal-border)]/50 p-3 sm:p-4 portal-scrollbar">
+                          {selectedCall.transcript_segments.map((segment) => {
+                            const isSpokenNow =
+                              segment.startSeconds != null &&
+                              currentPlayheadTime >= segment.startSeconds &&
+                              currentPlayheadTime < segment.startSeconds + 4
+                            const isCustomer =
+                              segment.track === 'inbound' ||
+                              segment.track === 'caller' ||
+                              segment.track === 'customer' ||
+                              (selectedCall.direction === 'inbound'
+                                ? segment.track === 'outbound_track'
+                                : segment.track === 'inbound_track')
+
+                            return (
+                              <button
+                                key={segment.id}
+                                type="button"
+                                onClick={() => {
+                                  if (segment.startSeconds != null) {
+                                    setTargetSeekTime(segment.startSeconds)
+                                  }
+                                }}
+                                className={`w-full flex items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                                  isSpokenNow
+                                    ? 'bg-[#caa24c]/12'
+                                    : 'hover:bg-[color:var(--portal-soft)]/70'
+                                }`}
+                              >
+                                <span className="w-11 shrink-0 pt-0.5 text-xs tabular-nums font-medium text-[#a8792f] dark:text-[#f1d27a]">
+                                  {segment.startSeconds != null
+                                    ? formatDuration(Math.floor(segment.startSeconds))
+                                    : '—'}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-xs font-semibold text-[color:var(--portal-muted)]">
+                                    {isCustomer
+                                      ? selectedCall.contact_name || 'Caller'
+                                      : 'Luxor'}
+                                  </span>
+                                  <p className="mt-0.5 text-sm leading-relaxed text-[color:var(--portal-text)]">
+                                    {segment.text}
+                                  </p>
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : voicemailTranscript ? (
+                        <div className="p-5">
+                          <p className="text-sm leading-relaxed text-[color:var(--portal-text)]">
+                            &ldquo;{voicemailTranscript}&rdquo;
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-5 text-sm text-[color:var(--portal-muted)]">
+                          No transcript available for this recording.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Call outcome */}
-              <div className="space-y-2">
-                <label className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Call outcome</label>
-                <PortalSelect value={outcome} onChange={setOutcome} options={OUTCOME_OPTIONS} />
-              </div>
+              {/* 3. Quiet Call Log Card (Outcome & Notes) */}
+              <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold text-[color:var(--portal-muted)]">
+                    Call Outcome & Notes
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void updateCall(selectedCall.id, {
+                        notes: notes.trim() || null,
+                        outcome: outcome || null,
+                      })
+                    }
+                    disabled={saving || !hasDirtyDetails}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                      hasDirtyDetails
+                        ? 'bg-[#caa24c] text-white hover:bg-[#b98a3d]'
+                        : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] opacity-60 cursor-default'
+                    }`}
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
 
-              {/* Call notes */}
-              <div className="space-y-2">
-                <label className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Call notes</label>
-                <textarea
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  rows={5}
-                  placeholder="What was discussed and what happens next?"
-                  className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/35"
-                />
+                <div className="grid grid-cols-1 gap-3">
+                  <PortalSelect
+                    value={outcome}
+                    onChange={setOutcome}
+                    options={OUTCOME_OPTIONS}
+                  />
+                  <textarea
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    rows={3}
+                    placeholder="Add a note about what was discussed or the next follow-up step…"
+                    className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-3.5 py-2.5 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/45 transition-colors resize-y"
+                  />
+                </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => void updateCall(selectedCall.id, { notes: notes.trim() || null, outcome: outcome || null })}
-                disabled={saving}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] text-[10px] font-black uppercase tracking-wider text-white hover:bg-[#dfbd68] disabled:opacity-50 transition-colors cursor-pointer"
-              >
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Clock3 size={14} />} Save call details
-              </button>
             </div>
           ) : (
-            <div className="flex min-h-80 flex-col items-center justify-center text-center">
-              <Phone size={30} className="text-[color:var(--portal-faint)]" />
-              <p className="mt-3 text-sm font-bold text-[color:var(--portal-muted)]">Select a call</p>
-              <p className="mt-1 text-xs text-[color:var(--portal-faint)]">Details, voicemail, and notes will appear here.</p>
+            <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]">
+                <PhoneCall size={22} />
+              </div>
+              <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">
+                No Call Selected
+              </p>
+              <p className="mt-1 text-xs text-[color:var(--portal-muted)] max-w-xs">
+                Choose a recent call or voicemail on the left to listen to recordings, read transcripts, or log notes.
+              </p>
             </div>
           )}
         </section>
       </div>
+
+      {/* Bulk Action Deck (Only visible when Edit mode has selected items) */}
       <PortalBulkActionDeck
         selectedCount={bulkSelectedCount}
         pageCount={matchingCallIds.length}
@@ -479,14 +1335,19 @@ export default function CallsPage() {
       <PortalBulkChoiceDialog
         open={bulkOutcomeOpen}
         title="Set call outcome"
-        description={`Apply one outcome to ${bulkSelectedCount} selected ${bulkSelectedCount === 1 ? 'call' : 'calls'}.`}
+        description={`Apply one outcome to ${bulkSelectedCount} selected ${
+          bulkSelectedCount === 1 ? 'call' : 'calls'
+        }.`}
         label="Outcome"
         value={bulkOutcome}
         options={OUTCOME_OPTIONS.filter((option) => option.value)}
         confirmLabel="Update calls"
         busy={Boolean(bulkBusy)}
         onValueChange={setBulkOutcome}
-        onConfirm={() => { setBulkOutcomeOpen(false); void runCallBulkAction('set_outcome', bulkOutcome) }}
+        onConfirm={() => {
+          setBulkOutcomeOpen(false)
+          void runCallBulkAction('set_outcome', bulkOutcome)
+        }}
         onClose={() => setBulkOutcomeOpen(false)}
       />
       <PortalBulkConfirmDialog
@@ -498,48 +1359,64 @@ export default function CallsPage() {
         onClose={() => setConfirmBulkDelete(false)}
         onConfirm={() => void runCallBulkAction('delete')}
       />
-    </PortalPageFrame>
-  )
-}
-
-function MetricCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 transition-all hover:border-[#caa24c]/30">
-      <div className="flex items-center justify-between text-[#caa24c]">
-        {icon}
-        <span className="tabular-nums text-2xl font-extrabold tracking-tight text-[color:var(--portal-text)]">{value}</span>
-      </div>
-      <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
     </div>
   )
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3">
-      <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">{label}</p>
-      <p className="mt-1 truncate text-[11px] font-bold capitalize text-[color:var(--portal-text)]">{value}</p>
-    </div>
-  )
+function getNamedContact(name: string | null | undefined): string | null {
+  if (!name) return null
+  const trimmed = name.trim()
+  if (!trimmed) return null
+  const lower = trimmed.toLowerCase()
+  if (lower === 'unknown caller' || lower === 'unknown' || lower === 'caller') return null
+  if (/^[\d+\-()\s.]+$/.test(trimmed)) return null
+  return trimmed
 }
 
 function isMissed(call: LuxorCall) {
-  return call.direction === 'inbound' && ['busy', 'failed', 'no-answer', 'canceled'].includes(call.status)
+  return (
+    call.direction === 'inbound' &&
+    ['busy', 'failed', 'no-answer', 'canceled'].includes(call.status)
+  )
 }
 
 function formatDateTime(value: string) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return Number.isNaN(date.getTime())
+    ? 'Unknown'
+    : date.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
 }
 
-function formatRelativeDate(value: string) {
-  const timestamp = new Date(value).getTime()
-  if (Number.isNaN(timestamp)) return 'Unknown'
-  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60_000))
-  if (minutes < 1) return 'Now'
-  if (minutes < 60) return `${minutes}m`
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}h`
-  return `${Math.floor(minutes / 1440)}d`
+function formatPhoneListTime(value: string) {
+  const date = new Date(value)
+  const timestamp = date.getTime()
+  if (Number.isNaN(timestamp)) return ''
+  const now = new Date()
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear()
+  if (isToday) {
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  }
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  const isYesterday =
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear()
+  if (isYesterday) return 'Yesterday'
+
+  const diffDays = Math.floor((now.getTime() - timestamp) / 86_400_000)
+  if (diffDays < 7) {
+    return date.toLocaleDateString([], { weekday: 'short' })
+  }
+  return date.toLocaleDateString([], { month: 'numeric', day: 'numeric', year: '2-digit' })
 }
 
 function formatDuration(seconds: number | null) {

@@ -144,13 +144,11 @@ test('strict booking metrics keep the event-page enriched-row contract for non-e
   assert.match(routeSource, /strictMetrics\s*&&\s*financeRowsOnly[\s\S]*?listLuxorBookings\(1000,\s*true\)/)
   assert.match(routeSource, /listLuxorBookingsWithPayments\(1000,\s*strictMetrics\)/)
   const consumerUrls = [
-    require('node:fs').readFileSync(path.join(repo, 'src/app/(portal)/portal/events/page.tsx'), 'utf8'),
     require('node:fs').readFileSync(path.join(repo, 'src/app/(portal)/portal/finances/page.tsx'), 'utf8'),
     require('node:fs').readFileSync(path.join(repo, 'src/app/(portal)/portal/reports/page.tsx'), 'utf8'),
   ]
-  assert.ok(consumerUrls[0].includes("fetch('/api/bookings?strictMetrics=1')"))
+  assert.ok(consumerUrls[0].includes('strictMetrics=1&financeRowsOnly=1'))
   assert.ok(consumerUrls[1].includes('strictMetrics=1&financeRowsOnly=1'))
-  assert.ok(consumerUrls[2].includes('strictMetrics=1&financeRowsOnly=1'))
 })
 
 test('overdue receivable is only the overdue installment remainder after saved payment allocations', () => {

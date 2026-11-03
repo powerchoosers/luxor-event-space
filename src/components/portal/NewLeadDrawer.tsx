@@ -204,12 +204,12 @@ export function NewLeadDrawer({
             exit={{ x: '100%' }}
             transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
           >
-            <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
+            <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-5 py-4 sm:px-6">
               <div className="min-w-0">
-                <h2 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">
+                <h2 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">
                   Add new client / lead
                 </h2>
-                <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">
+                <p className="mt-0.5 text-xs leading-5 text-[color:var(--portal-muted)]">
                   Capture the client details and the event information you have so far.
                 </p>
               </div>
@@ -218,7 +218,7 @@ export function NewLeadDrawer({
             <div className="min-h-0 flex-1 overflow-y-auto p-5 portal-scrollbar sm:p-6">
               <form onSubmit={handleSubmit} className="flex min-h-full flex-col space-y-5">
                 <div className="space-y-1.5">
-                  <label htmlFor="drawer-lead-name" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+                  <label htmlFor="drawer-lead-name" className="text-xs font-medium text-[color:var(--portal-muted)]">
                     Full name
                   </label>
                   <input
@@ -229,13 +229,13 @@ export function NewLeadDrawer({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Client name..."
-                    className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
+                    className="w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10"
                   />
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <label htmlFor="drawer-lead-email" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+                    <label htmlFor="drawer-lead-email" className="text-xs font-medium text-[color:var(--portal-muted)]">
                       Email address
                     </label>
                     <input
@@ -244,11 +244,11 @@ export function NewLeadDrawer({
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="name@example.com"
-                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
+                      className="w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="drawer-lead-phone" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+                    <label htmlFor="drawer-lead-phone" className="text-xs font-medium text-[color:var(--portal-muted)]">
                       Phone number
                     </label>
                     <input
@@ -257,20 +257,20 @@ export function NewLeadDrawer({
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="214-555-0199"
-                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
+                      className="w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10"
                     />
                   </div>
 
                   <LuxorEventTypeCombobox
-                    label="Event Type"
+                    label="Event type"
                     required
                     value={eventType}
                     onChange={setEventType}
                     className="space-y-1.5"
-                    labelClassName="mb-1.5 text-[10px] font-bold tracking-widest"
+                    labelClassName="mb-1.5 text-xs font-medium"
                   />
                   <div className="space-y-1.5">
-                    <label htmlFor="drawer-lead-guests" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+                    <label htmlFor="drawer-lead-guests" className="text-xs font-medium text-[color:var(--portal-muted)]">
                       Guest count
                     </label>
                     <input
@@ -282,11 +282,11 @@ export function NewLeadDrawer({
                       max={LUXOR_MAX_GUESTS}
                       step={1}
                       placeholder="180"
-                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-center text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
+                      className="w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-center text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10"
                     />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label htmlFor="drawer-lead-target-date" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+                    <label htmlFor="drawer-lead-target-date" className="text-xs font-medium text-[color:var(--portal-muted)]">
                       Target month / date
                     </label>
                     <input
@@ -295,13 +295,13 @@ export function NewLeadDrawer({
                       value={targetDate}
                       onChange={(e) => setTargetDate(e.target.value)}
                       placeholder="Oct 2026"
-                      className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
+                      className="w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="drawer-lead-message" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+                  <label htmlFor="drawer-lead-message" className="text-xs font-medium text-[color:var(--portal-muted)]">
                     Initial inquiry details / message
                   </label>
                   <textarea
@@ -309,17 +309,17 @@ export function NewLeadDrawer({
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="Include setup, package needs, or specific booking parameters..."
-                    className="h-28 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/65 focus:ring-2 focus:ring-[#b98a3e]/15"
+                    className="h-28 w-full resize-y rounded-xl border border-transparent bg-[color:var(--portal-soft)] p-3.5 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="mt-auto inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 py-2.5 text-xs font-bold uppercase tracking-widest !text-white shadow-lg shadow-[#8c6529]/20 transition-colors hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[#b98a3e]/45 disabled:!text-white/80 cursor-pointer"
+                  className="mt-auto inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-4 py-2.5 text-xs font-semibold !text-white shadow-xs transition-colors hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[#b98a3e]/45 disabled:!text-white/80 cursor-pointer"
                 >
                   <Plus size={14} aria-hidden="true" />
-                  Add Client Lead
+                  Add client lead
                 </button>
               </form>
             </div>

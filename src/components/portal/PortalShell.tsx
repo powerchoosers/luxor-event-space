@@ -14,20 +14,10 @@ import {
   Search,
   Settings,
   Users,
-  CalendarRange,
   CalendarDays,
   DollarSign,
-  ChevronDown,
-  Gauge,
-  Receipt,
-  Wrench,
-  Package,
   Handshake,
-  Zap,
-  Brush,
-  BarChart3,
   Phone,
-  TrendingUp,
   Megaphone,
   MoreHorizontal,
   SlidersHorizontal,
@@ -152,10 +142,9 @@ const navItems = [
   { href: '/portal/emails', icon: <Mail size={18} />, label: 'Emails', permission: 'emails' },
   { href: '/portal/messages', icon: <MessageSquare size={18} />, label: 'Text Messages', permission: 'messages' },
   { href: '/portal/calendar', icon: <Calendar size={18} />, label: 'Calendar', permission: 'calendar' },
-  { href: '/portal/events', icon: <CalendarRange size={18} />, label: 'Events', permission: 'events' },
   { href: '/portal/finances', icon: <DollarSign size={18} />, label: 'Finances', permission: 'finances' },
-  { href: '/portal/operations', icon: <SlidersHorizontal size={18} />, label: 'Operations', isDropdown: true, permission: 'operations' },
-  { href: '/portal/marketing', icon: <Megaphone size={18} />, label: 'Marketing', isDropdown: true, permission: 'marketing' },
+  { href: '/portal/operations', icon: <SlidersHorizontal size={18} />, label: 'Operations', permission: 'operations' },
+  { href: '/portal/marketing', icon: <Megaphone size={18} />, label: 'Marketing', permission: 'marketing' },
   { href: '/portal/reports', icon: <FileText size={18} />, label: 'Reports', permission: 'reports' },
 ]
 
@@ -166,27 +155,6 @@ const mobilePrimaryNavItems = [
 ]
 const mobileEmailNavItem = { href: '/portal/emails', icon: <Mail size={19} />, label: 'Emails' }
 const mobileMessagesNavItem = { href: '/portal/messages', icon: <MessageSquare size={19} />, label: 'Messages' }
-
-const operationsSubItems = [
-  { href: '/portal/operations?tab=dashboard', label: 'Dashboard', icon: Gauge },
-  { href: '/portal/operations?tab=bills', label: 'Bills & Payments', icon: Receipt },
-  { href: '/portal/operations?tab=maintenance', label: 'Maintenance', icon: Wrench },
-  { href: '/portal/operations?tab=inventory', label: 'Inventory', icon: Package },
-  { href: '/portal/operations?tab=vendors', label: 'Vendors', icon: Handshake },
-  { href: '/portal/operations?tab=utilities', label: 'Utilities', icon: Zap },
-  { href: '/portal/operations?tab=cleaning', label: 'Cleaning', icon: Brush },
-  { href: '/portal/operations?tab=staff', label: 'Staff', icon: Users },
-]
-
-const marketingSubItems = [
-  { href: '/portal/marketing?tab=overview', label: 'Marketing Overview', icon: BarChart3 },
-  { href: '/portal/marketing?tab=sources', label: 'Lead Sources', icon: TrendingUp },
-  { href: '/portal/marketing?tab=email-campaigns', label: 'Email Campaigns', icon: Mail },
-  { href: '/portal/marketing?tab=text-campaigns', label: 'Text Campaigns', icon: MessageSquare },
-  { href: '/portal/marketing?tab=contact-lists', label: 'Contact Lists', icon: Users },
-  { href: '/portal/marketing?tab=call-center', label: 'Call Center', icon: Phone },
-  { href: '/portal/marketing?tab=calendar', label: 'Marketing Calendar', icon: Calendar },
-]
 
 const PORTAL_MOBILE_MEDIA_QUERY = '(max-width: 767px)'
 
@@ -246,13 +214,15 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const isCustomWorkflowEditor = pathname.startsWith('/portal/marketing/custom-workflows/')
   const usesInternalPaneScroll =
     (!isMobileViewport && pathname === '/portal/leads') ||
-    (isDesktopViewport && pathname === '/portal/events') ||
     pathname === '/portal/emails' ||
     pathname === '/portal/email-tools' ||
     pathname === '/portal/messages' ||
+    pathname === '/portal/calls' ||
     (!isDesktopViewport && isCustomWorkflowEditor) ||
     (pathname === '/portal/marketing' && ['contact-lists', 'emails', 'builder-automation', 'call-center'].includes(searchParams?.get('tab') || ''))
   const isEmailPage = pathname === '/portal/emails'
+  const isCallsPage = pathname === '/portal/calls'
+  const isMessagesPage = pathname === '/portal/messages'
   const closeViewportDiagnostics = useCallback(() => {
     const nextParams = new URLSearchParams(searchParams?.toString() ?? '')
     nextParams.delete('viewport-diagnostics')
@@ -260,11 +230,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
   }, [pathname, router, searchParams])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed)
-  const [sidebarHoverOpen, setSidebarHoverOpen] = useState(false)
-  const [operationsExpanded, setOperationsExpanded] = useState(pathname.startsWith('/portal/operations'))
-  const [marketingExpanded, setMarketingExpanded] = useState(pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails')
   const [elenaOpen, setElenaOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [accountHovered, setAccountHovered] = useState(false)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [pendingNavigationHref, setPendingNavigationHref] = useState<string | null>(null)
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
@@ -275,88 +243,54 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
     if (contentScrollRef.current) {
       contentScrollRef.current.scrollTop = 0
     }
-  }, [pathname])
-  const sidebarHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const sidebarHoverSuppressedRef = useRef(false)
+  }, [pathname, searchParams])
+
   const sidebarCollapsedRef = useRef(initialSidebarCollapsed)
-  const sidebarHoverOpenRef = useRef(false)
-  const sidebarIsCollapsed = sidebarCollapsed && !sidebarHoverOpen
-
-  const setSidebarHoverState = useCallback((open: boolean) => {
-    sidebarHoverOpenRef.current = open
-    setSidebarHoverOpen(open)
-  }, [])
-
-  const clearSidebarHoverTimer = useCallback(() => {
-    if (sidebarHoverTimerRef.current) {
-      clearTimeout(sidebarHoverTimerRef.current)
-      sidebarHoverTimerRef.current = null
-    }
-  }, [])
-
-  const handleSidebarHoverStart = useCallback(() => {
-    if (!sidebarCollapsed || sidebarHoverSuppressedRef.current) return
-    clearSidebarHoverTimer()
-    sidebarHoverTimerRef.current = setTimeout(() => {
-      setSidebarHoverState(true)
-      sidebarHoverTimerRef.current = null
-    }, 2000)
-  }, [clearSidebarHoverTimer, setSidebarHoverState, sidebarCollapsed])
-
-  const handleSidebarHoverEnd = useCallback(() => {
-    clearSidebarHoverTimer()
-    sidebarHoverSuppressedRef.current = false
-    if (sidebarHoverOpenRef.current) setSidebarHoverState(false)
-  }, [clearSidebarHoverTimer, setSidebarHoverState])
+  const sidebarIsCollapsed = sidebarCollapsed
 
   const handleSidebarNavigate = useCallback((href: string) => {
-    clearSidebarHoverTimer()
-    setSidebarHoverState(false)
-    sidebarHoverSuppressedRef.current = true
-    setPendingNavigationHref(href)
-    router.push(href)
-  }, [clearSidebarHoverTimer, router, setSidebarHoverState])
+    let targetHref = href
+    if (typeof window !== 'undefined') {
+      if (href === '/portal/operations') {
+        const lastTab = window.localStorage.getItem('luxor-portal-operations-last-tab')
+        if (lastTab) targetHref = `/portal/operations?tab=${lastTab}`
+      } else if (href === '/portal/marketing') {
+        const lastTab = window.localStorage.getItem('luxor-portal-marketing-last-tab')
+        if (lastTab) targetHref = `/portal/marketing?tab=${lastTab}`
+      }
+    }
+    setPendingNavigationHref(targetHref)
+    router.push(targetHref)
+  }, [router])
 
   const toggleSidebar = useCallback(() => {
-    clearSidebarHoverTimer()
-    const isVisiblyCollapsed = sidebarCollapsedRef.current && !sidebarHoverOpenRef.current
-    const next = !isVisiblyCollapsed
-    setSidebarHoverState(false)
-    sidebarCollapsedRef.current = next
-    // A deliberate collapse wins over hover until the pointer fully leaves
-    // the rail. This prevents the panel from reopening beneath the cursor.
-    sidebarHoverSuppressedRef.current = next
-    setSidebarCollapsed(next)
-    window.localStorage.setItem('luxor-portal-sidebar', next ? 'compact' : 'expanded')
-    persistPortalSidebarCookie(next)
+    setSidebarCollapsed((current) => {
+      const next = !current
+      sidebarCollapsedRef.current = next
+      window.localStorage.setItem('luxor-portal-sidebar', next ? 'compact' : 'expanded')
+      persistPortalSidebarCookie(next)
+      return next
+    })
     window.dispatchEvent(new Event('luxor-portal-sidebar'))
-  }, [clearSidebarHoverTimer, setSidebarHoverState])
+  }, [])
 
-  const handleSidebarEmptyClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+  const handleSidebarEmptyClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
+    if ((event.target as HTMLElement)?.closest?.('.portal-account-menu')) return
     // Inspect the complete event path because icon clicks may target a nested
     // SVG/path rather than the button itself. Any link or button in that path
     // owns the click and must not also trigger the empty-rail behavior.
-    const clickedControl = event.nativeEvent.composedPath().some((target) => {
+    const path = event.nativeEvent.composedPath()
+    const clickedControl = path.some((target) => {
       if (!target || typeof (target as Element).matches !== 'function') return false
-      return (target as Element).matches('a, button')
+      return (target as Element).matches('a, button, input, form')
     })
     if (clickedControl) return
-    if (sidebarHoverOpenRef.current) {
-      clearSidebarHoverTimer()
-      setSidebarHoverState(false)
-      sidebarHoverSuppressedRef.current = true
-      return
-    }
     toggleSidebar()
-  }, [clearSidebarHoverTimer, setSidebarHoverState, toggleSidebar])
-
-  useEffect(() => () => clearSidebarHoverTimer(), [clearSidebarHoverTimer])
+  }, [toggleSidebar])
 
   useEffect(() => {
     const destinations = [
       ...navItems.map((item) => item.href),
-      ...operationsSubItems.map((item) => item.href),
-      ...marketingSubItems.map((item) => item.href),
       '/portal/settings',
     ]
     const timer = window.setTimeout(() => {
@@ -386,8 +320,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   useEffect(() => {
     const applySidebarLayout = () => {
       const collapsed = window.localStorage.getItem('luxor-portal-sidebar') === 'compact'
-      sidebarCollapsedRef.current = collapsed
-      setSidebarCollapsed(collapsed)
+      if (sidebarCollapsedRef.current !== collapsed) {
+        sidebarCollapsedRef.current = collapsed
+        setSidebarCollapsed(collapsed)
+      }
     }
 
     window.addEventListener('luxor-portal-sidebar', applySidebarLayout)
@@ -428,11 +364,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const [prevPathname, setPrevPathname] = useState(pathname)
   if (pathname !== prevPathname) {
     setPrevPathname(pathname)
-    if (pathname.startsWith('/portal/operations')) {
-      setOperationsExpanded(true)
-    }
-    if (pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails') {
-      setMarketingExpanded(true)
+    if (pendingNavigationHref) {
+      setPendingNavigationHref(null)
     }
   }
 
@@ -764,23 +697,31 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   return (
     <body data-portal-theme={portalTheme} className="portal-shell h-[100dvh] overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
       <PortalVoiceProvider>
-      <aside onWheelCapture={handOffWheelToPage} onClick={handleSidebarEmptyClick} className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-visible ${
-        portalTheme === 'light'
-          ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 shadow-[24px_0_60px_-36px_rgba(0,0,0,0.18)]'
-          : 'border-transparent bg-[#050505]'
-      } ${sidebarIsCollapsed ? 'w-16' : 'w-60'}`}>
-        <div className="flex flex-col min-h-full px-2 py-5">
+      <aside
+        onWheelCapture={handOffWheelToPage}
+        onClick={handleSidebarEmptyClick}
+        title={sidebarIsCollapsed ? 'Click blank spot to expand navigation' : 'Click blank spot to collapse navigation'}
+        className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-visible cursor-pointer select-none border-0 border-none ${
+          portalTheme === 'light'
+            ? 'bg-[color:var(--portal-card)]/95 shadow-none'
+            : 'bg-[#050505]'
+        } ${sidebarIsCollapsed ? 'w-16' : 'w-60'}`}
+      >
+        <div className="flex flex-col h-full px-2 py-5 cursor-pointer">
           <div className={`mb-5 flex items-center justify-between transition-[padding] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
             sidebarIsCollapsed ? 'px-1.5' : 'px-1'
           }`}>
             <div className="group/logo relative flex min-w-0 items-center">
             <Link
               href="/portal"
-              onClick={() => {
-                if (!sidebarIsCollapsed) toggleSidebar()
+              onClick={(event) => {
+                if (sidebarIsCollapsed) {
+                  event.preventDefault()
+                  toggleSidebar()
+                }
               }}
               className="flex items-center gap-3 min-w-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
-              aria-label="Luxor portal overview"
+              aria-label={sidebarIsCollapsed ? 'Expand navigation panel' : 'Luxor portal overview'}
             >
               <div
                 className={`relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 shadow-[0_5px_16px_-9px_rgba(111,77,20,0.55)] ring-1 ring-[#caa24c]/10 transition-colors ${
@@ -812,7 +753,6 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               onClick={toggleSidebar}
               className="absolute left-0 top-0 z-10 flex h-10 w-10 items-center justify-center text-[#caa24c] opacity-0 transition-[opacity,transform,filter] duration-300 ease-out group-hover/logo:scale-110 group-hover/logo:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60"
               aria-label={sidebarIsCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              title={sidebarIsCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {sidebarIsCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
             </button>
@@ -822,131 +762,68 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               onClick={toggleSidebar}
               className={`h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${sidebarIsCollapsed ? 'hidden' : 'inline-flex'}`}
               aria-label="Collapse sidebar"
-              title="Collapse sidebar"
             >
               <PanelLeftClose size={17} />
             </button>
           </div>
 
-          <nav className="flex-1 space-y-1" onMouseEnter={handleSidebarHoverStart} onMouseLeave={handleSidebarHoverEnd}>
+          <nav className="flex flex-col space-y-1">
             {navItems.filter((item) => canAccess(item.permission as PortalPermission)).map((item) => {
-              if (item.isDropdown) {
-                const isCurrentGroup = item.href === '/portal/marketing'
-                  ? pathname.startsWith('/portal/marketing') && searchParams?.get('tab') !== 'emails'
-                  : pathname.startsWith(item.href)
-                const isExpanded = item.href === '/portal/operations'
-                  ? operationsExpanded
-                  : marketingExpanded && !(pathname.startsWith('/portal/marketing') && searchParams?.get('tab') === 'emails')
-                return (
-                  <div key={item.href} className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (sidebarIsCollapsed) {
-                          toggleSidebar()
-                          if (item.href === '/portal/operations') {
-                            setOperationsExpanded(true)
-                          } else if (item.href === '/portal/marketing') {
-                            setMarketingExpanded(true)
-                          }
-                        } else {
-                          if (item.href === '/portal/operations') {
-                            setOperationsExpanded(!operationsExpanded)
-                          } else if (item.href === '/portal/marketing') {
-                            setMarketingExpanded(!marketingExpanded)
-                          }
-                        }
-                      }}
-                      title={sidebarIsCollapsed ? item.label : undefined}
-                      aria-label={item.label}
-                      className={`group relative flex items-center justify-between rounded-lg border py-2.5 text-sm font-medium transition-all cursor-pointer ${
-                        sidebarIsCollapsed ? 'mx-auto h-11 w-11 justify-center p-0' : 'w-full px-3'
-                      } ${
-                        isCurrentGroup
-                          ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
-                          : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
-                      }`}
-                    >
-                      <div className={`flex min-w-0 items-center ${sidebarIsCollapsed ? 'gap-0' : 'gap-3'}`}>
-                        {isCurrentGroup && (
-                          <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c]" />
-                        )}
-                        <span className={`w-5 h-5 flex items-center justify-center shrink-0 ${isCurrentGroup ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors`}>
-                          {item.icon}
-                        </span>
-                        <span
-                          className={`whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                            sidebarIsCollapsed
-                              ? 'max-w-0 opacity-0 -translate-x-1 pointer-events-none'
-                              : 'max-w-[200px] opacity-100 translate-x-0'
-                          }`}
-                        >
-                          {item.label}
-                        </span>
-                      </div>
-                      <span
-                        className={`text-zinc-500 mr-1 shrink-0 transition-[max-width,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                          sidebarIsCollapsed
-                            ? 'hidden'
-                            : 'max-w-[20px] opacity-100'
-                        }`}
-                      >
-                        <ChevronDown size={14} className={`transform transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
-                      </span>
-                    </button>
-                    
-                    <AnimatePresence initial={false}>
-                      {isExpanded && !sidebarIsCollapsed && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-                          className="pl-6 space-y-1 border-l border-zinc-900/60 ml-5 mt-1 overflow-hidden"
-                        >
-                          {(item.href === '/portal/operations' ? operationsSubItems : marketingSubItems).map((sub) => {
-                            const tabParam = searchParams?.get('tab')
-                            const defaultTab = item.href === '/portal/operations' ? 'dashboard' : 'overview'
-                            const isSubActive = pathname === item.href && (
-                              (sub.href.includes(`tab=${defaultTab}`) && !tabParam) ||
-                              (!!tabParam && sub.href.includes(`tab=${tabParam}`))
-                            )
-                            return (
-                              <SidebarSubLink
-                                key={sub.href}
-                                href={sub.href}
-                                label={sub.label}
-                                icon={sub.icon}
-                                active={isSubActive}
-                                pending={pendingNavigationHref === sub.href}
-                                onNavigate={handleSidebarNavigate}
-                              />
-                            )
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )
-              }
+              const hasPendingTarget = Boolean(pendingNavigationHref)
+              const isItemPending = pendingNavigationHref
+                ? isActivePath(pendingNavigationHref.split('?')[0], item.href, searchParams)
+                : false
               return (
-                <SidebarLink key={item.href} {...item} active={isActivePath(pathname, item.href, searchParams)} collapsed={sidebarIsCollapsed} pending={pendingNavigationHref === item.href} onNavigate={handleSidebarNavigate} />
+                <SidebarLink
+                  key={item.href}
+                  {...item}
+                  active={isActivePath(pathname, item.href, searchParams)}
+                  collapsed={sidebarIsCollapsed}
+                  pending={isItemPending}
+                  hasPendingTarget={hasPendingTarget}
+                  onNavigate={handleSidebarNavigate}
+                />
               )
             })}
           </nav>
 
+          {/* Dedicated blank spot hit zone between nav items and bottom actions */}
+          <div
+            role="button"
+            tabIndex={-1}
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleSidebar()
+            }}
+            title={sidebarIsCollapsed ? 'Click blank spot to expand navigation' : 'Click blank spot to collapse navigation'}
+            aria-label={sidebarIsCollapsed ? 'Expand navigation panel' : 'Collapse navigation panel'}
+            className="flex-1 min-h-[3.5rem] w-full cursor-pointer select-none rounded-xl transition-colors hover:bg-[#caa24c]/[0.03]"
+          />
+
           <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
-            {canAccess('settings') ? <SidebarLink href="/portal/settings" icon={<Settings size={18} />} label="System Settings" active={isActivePath(pathname, '/portal/settings', searchParams)} collapsed={sidebarIsCollapsed} pending={pendingNavigationHref === '/portal/settings'} onNavigate={handleSidebarNavigate} /> : null}
+            {canAccess('settings') ? (
+              <SidebarLink
+                href="/portal/settings"
+                icon={<Settings size={18} />}
+                label="System Settings"
+                active={isActivePath(pathname, '/portal/settings', searchParams)}
+                collapsed={sidebarIsCollapsed}
+                pending={pendingNavigationHref ? isActivePath(pendingNavigationHref, '/portal/settings', searchParams) : false}
+                hasPendingTarget={Boolean(pendingNavigationHref)}
+                onNavigate={handleSidebarNavigate}
+              />
+            ) : null}
             <div className="relative">
               <AnimatePresence initial={false}>
                 {accountMenuOpen ? (
                   <motion.div
                     key="account-menu"
+                    onClick={(event) => event.stopPropagation()}
                     initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.98 }}
                     transition={{ duration: reduceMotion ? 0.01 : 0.2, ease: [0.23, 1, 0.32, 1] }}
-                    className={`absolute bottom-full z-20 mb-2 origin-bottom rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/88 p-2 shadow-2xl backdrop-blur-xl ${sidebarIsCollapsed ? 'left-0 w-56' : 'inset-x-0'}`}
+                    className={`portal-account-menu absolute bottom-full z-20 mb-2 origin-bottom rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/88 p-2 shadow-2xl backdrop-blur-xl ${sidebarIsCollapsed ? 'left-0 w-56' : 'inset-x-0'}`}
                   >
                     <div className="border-b border-[color:var(--portal-border)] px-3 py-2">
                       <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</p>
@@ -955,7 +832,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                     <form action="/api/auth/logout" method="post" className="mt-1">
                       <button
                         type="submit"
-                        className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-550 transition-all hover:bg-red-500/5 hover:text-red-400"
+                        className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[color:var(--portal-muted)] transition-all hover:bg-red-500/10 hover:text-red-400"
                       >
                         <LogOut size={17} className="transition-transform group-hover:translate-x-0.5" />
                         Log Out
@@ -970,10 +847,13 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   if (sidebarIsCollapsed) toggleSidebar()
                   setAccountMenuOpen((current) => !current)
                 }}
-                title={sidebarIsCollapsed ? userProfile.displayName : undefined}
+                onMouseEnter={() => setAccountHovered(true)}
+                onMouseLeave={() => setAccountHovered(false)}
+                onFocus={() => setAccountHovered(true)}
+                onBlur={() => setAccountHovered(false)}
                 aria-label="Open account menu"
                 aria-expanded={accountMenuOpen}
-              className={`group flex items-center rounded-lg border border-transparent transition-all ${sidebarIsCollapsed ? 'mx-auto h-10 w-10 justify-center gap-0 p-0 hover:border-transparent hover:bg-transparent' : 'w-full gap-3 px-2 py-2 hover:border-[#caa24c]/15 hover:bg-[#caa24c]/5'}`}
+                className={`group relative flex items-center rounded-lg border border-transparent transition-all ${sidebarIsCollapsed ? 'mx-auto h-10 w-10 justify-center gap-0 p-0 hover:bg-[color:var(--portal-soft)]/40' : 'w-full gap-3 px-2 py-2 hover:bg-[color:var(--portal-soft)]/40'}`}
               >
                 <div
                   className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#caa24c]/25 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-[11px] font-bold text-[#18130d] ring-2 ring-[color:var(--portal-soft)] transition-transform duration-200 ease-out group-hover:scale-110"
@@ -981,6 +861,19 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 >
                   {userProfile.avatarUrl ? null : userInitials}
                 </div>
+                <AnimatePresence>
+                  {sidebarIsCollapsed && accountHovered && !accountMenuOpen && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -6, scale: 0.96 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      exit={{ opacity: 0, x: -4, scale: 0.96 }}
+                      transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                      className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 z-50 whitespace-nowrap rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-2.5 py-1.5 text-[10px] font-bold text-[color:var(--portal-text)] shadow-xl backdrop-blur-xl"
+                    >
+                      {userProfile.displayName || 'Account'}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
                 <span className={`min-w-0 overflow-hidden text-left transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${sidebarIsCollapsed ? 'max-w-0 opacity-0 -translate-x-1' : 'max-w-[180px] opacity-100 translate-x-0'}`}>
                   <span className="block truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</span>
                   <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">Account</span>
@@ -1028,7 +921,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
           {/* Header Search Command Bar */}
           <div
-            className="group relative col-start-2 hidden w-full max-w-80 items-center justify-self-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-1.5 transition-[max-width,padding,border-color,box-shadow] duration-200 ease-out hover:max-w-[22rem] hover:border-[#caa24c]/35 hover:py-2 focus-within:!max-w-96 focus-within:border-[#caa24c]/50 focus-within:py-2 focus-within:shadow-[0_8px_24px_rgba(202,162,76,0.10)] sm:flex cursor-text"
+            className="group relative col-start-2 hidden h-9.5 w-full max-w-80 items-center justify-self-center rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 transition-all duration-200 ease-out hover:border-[color:var(--portal-border)] focus-within:!max-w-96 focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10 sm:flex cursor-text"
             onClick={() => {
               searchInputRef.current?.focus()
               setSearchFocused(true)
@@ -1050,7 +943,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               }}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search clients, events, or emails..."
-              className="portal-input-transparent w-full px-2 text-xs font-semibold text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
+              className="portal-input-transparent w-full px-2 text-xs font-medium text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
             />
             {searchQuery && (
               <button
@@ -1077,17 +970,17 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.98 }}
                   transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-                  className="portal-search-dropdown absolute left-0 top-12 z-[100] w-full min-w-[24rem] rounded-xl border p-2 space-y-1 shadow-2xl backdrop-blur-2xl"
+                  className="portal-search-dropdown absolute left-0 top-12 z-[100] w-full min-w-[24rem] rounded-xl border p-2 space-y-1 shadow-xl backdrop-blur-2xl"
                 >
                   {searchQuery.trim().length > 0 ? (
                     <>
-                      <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1.5 border-b mb-1 border-[color:var(--portal-border)]">
+                      <div className="flex items-center justify-between text-[11px] font-medium text-[color:var(--portal-muted)] px-3 py-1.5 border-b mb-1 border-[color:var(--portal-border)]">
                         <span className="flex items-center gap-1.5">
-                          <Search size={10} className="text-[#caa24c]" />
-                          Matching Dossier Records
+                          <Search size={11} className="text-[#caa24c]" />
+                          Matching leads
                         </span>
                         {searchResults.length > 0 && (
-                          <span className="font-mono text-[9px] text-[color:var(--portal-faint)]">
+                          <span className="tabular-nums text-[11px] text-[color:var(--portal-faint)]">
                             {searchResults.length} {searchResults.length === 1 ? 'match' : 'matches'}
                           </span>
                         )}
@@ -1109,10 +1002,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                                 size="sm"
                               />
                               <div className="truncate min-w-0 flex-1">
-                                <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate group-hover/item:text-[#caa24c] transition-colors">
+                                <p className="text-xs font-semibold text-[color:var(--portal-text)] leading-tight truncate group-hover/item:text-[#caa24c] transition-colors">
                                   {result.full_name}
                                 </p>
-                                <p className="text-[9px] text-[color:var(--portal-muted)] truncate mt-0.5">
+                                <p className="text-[11px] text-[color:var(--portal-muted)] truncate mt-0.5">
                                   {result.email || result.phone || 'No contact details registered'}
                                 </p>
                               </div>
@@ -1132,7 +1025,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                                   <Mail size={13} />
                                 </button>
                               )}
-                              <span className="text-[8px] font-bold uppercase tracking-widest text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded">
+                              <span className="text-[10px] font-medium text-[#9a6d26] dark:text-[#caa24c] bg-[#caa24c]/10 border border-[#caa24c]/20 px-2 py-0.5 rounded-md">
                                 {result.event_type || 'Booking'}
                               </span>
                             </div>
@@ -1146,10 +1039,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                     </>
                   ) : (
                     <>
-                      <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] px-3 py-1.5 border-b mb-1 border-[color:var(--portal-border)]">
+                      <div className="flex items-center justify-between text-[11px] font-medium text-[color:var(--portal-muted)] px-3 py-1.5 border-b mb-1 border-[color:var(--portal-border)]">
                         <span className="flex items-center gap-1.5">
-                          <Clock size={10} className="text-[#caa24c]" />
-                          {recentLeads.length > 0 ? 'Recently Opened Leads' : 'Recent Leads'}
+                          <Clock size={11} className="text-[#caa24c]" />
+                          {recentLeads.length > 0 ? 'Recently opened' : 'Recent leads'}
                         </span>
                         {recentLeads.length > 0 && (
                           <button
@@ -1158,7 +1051,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                               e.stopPropagation()
                               clearRecentLeads()
                             }}
-                            className="text-[8px] font-semibold text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors cursor-pointer"
+                            className="text-[11px] font-medium text-[color:var(--portal-muted)] hover:text-[#caa24c] transition-colors cursor-pointer"
                           >
                             Clear
                           </button>
@@ -1181,10 +1074,10 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                                 size="sm"
                               />
                               <div className="truncate min-w-0 flex-1">
-                                <p className="text-xs font-bold text-[color:var(--portal-text)] leading-tight truncate group-hover/item:text-[#caa24c] transition-colors">
+                                <p className="text-xs font-semibold text-[color:var(--portal-text)] leading-tight truncate group-hover/item:text-[#caa24c] transition-colors">
                                   {item.fullName}
                                 </p>
-                                <p className="text-[9px] text-[color:var(--portal-muted)] truncate mt-0.5">
+                                <p className="text-[11px] text-[color:var(--portal-muted)] truncate mt-0.5">
                                   {item.email || item.phone || 'Lead Dossier'}
                                 </p>
                               </div>
@@ -1541,7 +1434,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         </AnimatePresence>
 
         {/* The shell reserves the bottom bar; detail pages also reserve their action row. */}
-        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalPaneScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isCustomWorkflowEditor ? 'p-0 lg:p-8' : isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-44 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : pathname === '/portal/leads' ? 'p-4 max-md:pt-0 max-md:pb-[calc(4rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8' : 'p-4 sm:p-6 lg:p-8'} ${
+        <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalPaneScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isCallsPage || isMessagesPage ? 'p-0 lg:p-8' : isCustomWorkflowEditor ? 'p-0 lg:p-8' : isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-44 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : pathname === '/portal/leads' ? 'p-4 max-md:pt-0 max-md:pb-[calc(4rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8' : 'p-4 sm:p-6 lg:p-8'} ${
           portalTheme === 'light'
             ? 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.06),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
             : 'bg-[image:radial-gradient(circle_at_78%_0%,rgba(189,101,117,0.08),transparent_24rem),radial-gradient(circle_at_8%_12%,rgba(202,162,76,0.08),transparent_22rem)]'
@@ -1618,46 +1511,78 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 </div>
                 <PortalCloseButton onClick={() => setMobileMoreOpen(false)} aria-label="Close more sections" />
               </div>
-              {canAccess('planner') ? <Link
-                href="/portal/planner"
-                onClick={() => setMobileMoreOpen(false)}
-                className={`mb-3 flex min-h-14 items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${isActivePath(pathname, '/portal/planner', searchParams) ? 'border-[#caa24c]/45 bg-[#caa24c]/10' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:border-[#caa24c]/30'}`}
-                aria-current={isActivePath(pathname, '/portal/planner', searchParams) ? 'page' : undefined}
-              >
-                <span className="text-[#caa24c]">{navItems.find((item) => item.href === '/portal/planner')?.icon}</span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-[color:var(--portal-text)]">Planner</span>
-                  <span className="block text-xs text-[color:var(--portal-muted)]">Event plans, designs &amp; tasks</span>
-                </span>
-                <ArrowUpRight size={16} className="ml-auto text-[color:var(--portal-muted)]" aria-hidden="true" />
-              </Link> : null}
               <div className="grid grid-cols-3 gap-2">
-                {navItems.filter((item) => item.href !== '/portal/planner' && canAccess(item.permission as PortalPermission) && !accessibleMobilePrimaryNavItems.some((primary) => primary.href === item.href)).map((item) => {
-                  const active = isActivePath(pathname, item.href, searchParams)
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setMobileMoreOpen(false)}
-                      className={`flex min-h-20 flex-col items-start justify-between rounded-xl border p-3 text-xs font-bold transition-colors ${
-                        active ? 'border-[#caa24c]/45 bg-[#caa24c]/10 text-[#caa24c]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
-                      }`}
-                    >
-                      <span className="text-[#caa24c]">{item.icon}</span>
-                      <span className="leading-tight">{item.label}</span>
-                    </Link>
+                {navItems
+                  .filter(
+                    (item) =>
+                      item.href !== '/portal/planner' &&
+                      canAccess(item.permission as PortalPermission) &&
+                      !accessibleMobilePrimaryNavItems.some((primary) => primary.href === item.href)
                   )
-                })}
-                {canAccess('settings') ? <Link href="/portal/settings" onClick={() => setMobileMoreOpen(false)} className="flex min-h-20 flex-col items-start justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/30">
-                  <Settings size={18} className="text-[#caa24c]" />
-                  <span>Settings</span>
-                </Link> : null}
-                <button type="button" onClick={() => { setMobileMoreOpen(false); setElenaOpen(true) }} className="flex min-h-20 flex-col items-start justify-between rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/30">
-                  <span className="relative inline-flex h-[22px] w-[22px] overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-                    <Image src="/luxor-concierge.png" alt="Elena AI Assistant" fill sizes="22px" className="object-cover" />
+                  .map((item) => {
+                    const active = isActivePath(pathname, item.href, searchParams)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMobileMoreOpen(false)}
+                        className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center text-xs font-bold transition-colors ${
+                          active
+                            ? 'border-[#caa24c]/45 bg-[#caa24c]/10 text-[#caa24c]'
+                            : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
+                        }`}
+                      >
+                        <span className="flex items-center justify-center text-[#caa24c]">{item.icon}</span>
+                        <span className="leading-tight text-center">{item.label}</span>
+                      </Link>
+                    )
+                  })}
+                {canAccess('settings') ? (
+                  <Link
+                    href="/portal/settings"
+                    onClick={() => setMobileMoreOpen(false)}
+                    className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center text-xs font-bold transition-colors ${
+                      isActivePath(pathname, '/portal/settings', searchParams)
+                        ? 'border-[#caa24c]/45 bg-[#caa24c]/10 text-[#caa24c]'
+                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
+                    }`}
+                  >
+                    <span className="flex items-center justify-center text-[#caa24c]">
+                      <Settings size={18} />
+                    </span>
+                    <span className="leading-tight text-center">Settings</span>
+                  </Link>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
+                    setElenaOpen(true)
+                  }}
+                  className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-center text-xs font-bold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/30 cursor-pointer"
+                >
+                  <span className="relative flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xs">
+                    <Image src="/luxor-concierge.png" alt="Elena AI Assistant" fill sizes="24px" className="object-cover" />
                   </span>
-                  <span>Elena</span>
+                  <span className="leading-tight text-center">Elena</span>
                 </button>
+                {canAccess('planner') ? (
+                  <Link
+                    href="/portal/planner"
+                    onClick={() => setMobileMoreOpen(false)}
+                    className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center text-xs font-bold transition-colors ${
+                      isActivePath(pathname, '/portal/planner', searchParams)
+                        ? 'border-[#caa24c]/45 bg-[#caa24c]/10 text-[#caa24c]'
+                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
+                    }`}
+                    aria-current={isActivePath(pathname, '/portal/planner', searchParams) ? 'page' : undefined}
+                  >
+                    <span className="flex items-center justify-center text-[#caa24c]">
+                      <CalendarDays size={18} />
+                    </span>
+                    <span className="leading-tight text-center">Planner</span>
+                  </Link>
+                ) : null}
               </div>
               <div className="mt-4 flex items-center gap-3 border-t border-[color:var(--portal-border)] pt-4">
                 <div
@@ -1720,6 +1645,7 @@ function SidebarLink({
   active,
   collapsed,
   pending,
+  hasPendingTarget,
   onNavigate,
 }: {
   href: string
@@ -1728,9 +1654,11 @@ function SidebarLink({
   active: boolean
   collapsed: boolean
   pending: boolean
+  hasPendingTarget?: boolean
   onNavigate: (href: string) => void
 }) {
-  const isPending = pending && !active
+  const [isHovered, setIsHovered] = useState(false)
+  const isSelected = hasPendingTarget ? pending : active
 
   return (
     <Link
@@ -1739,31 +1667,51 @@ function SidebarLink({
       onClick={(event) => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
         event.preventDefault()
+        setIsHovered(false)
         onNavigate(href)
       }}
-      title={collapsed ? label : undefined}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocus={() => setIsHovered(true)}
+      onBlur={() => setIsHovered(false)}
       aria-label={label}
-      className={`group relative flex items-center rounded-lg border py-2.5 text-sm font-medium transition-all ${
+      className={`group relative flex items-center rounded-lg border border-transparent py-2.5 text-sm font-medium transition-colors ${
         collapsed ? 'mx-auto h-11 w-11 justify-center gap-0 p-0' : 'w-full gap-3 px-3'
       } ${
-        active || isPending
-          ? 'border-[#caa24c]/30 bg-[#caa24c]/5 text-[#f1d27a] shadow-[0_0_15px_rgba(202,162,76,0.08)] font-bold'
-          : 'border-transparent text-zinc-550 hover:bg-[#caa24c]/2 hover:border-[#caa24c]/10 hover:text-zinc-250'
+        isSelected
+          ? 'text-[#18130d] dark:text-[#f1d27a] font-semibold'
+          : 'text-[color:var(--portal-muted)] hover:bg-[#caa24c]/[0.08] hover:text-[#18130d] dark:hover:bg-[#caa24c]/[0.06] dark:hover:text-[#f4f4f5]'
       }`}
     >
-      {(active || isPending) && (
-        <span className="absolute left-0 top-1/4 h-1/2 w-1.5 rounded-r bg-[#caa24c] shadow-[0_0_8px_rgba(202,162,76,0.6)]" />
+      {isSelected && (
+        <motion.span
+          layoutId="sidebar-active-pill"
+          className="absolute inset-0 rounded-lg bg-[#caa24c]/15 dark:bg-[#caa24c]/10 pointer-events-none"
+          transition={{
+            type: 'spring',
+            stiffness: 450,
+            damping: 35,
+          }}
+        />
       )}
-      <span className={`w-5 h-5 flex items-center justify-center shrink-0 ${active || isPending ? 'text-[#caa24c]' : 'text-zinc-650 group-hover:text-zinc-450'} transition-colors ${isPending ? 'animate-pulse' : ''}`}>
+      <span className={`relative z-10 w-5 h-5 flex items-center justify-center shrink-0 ${isSelected ? 'text-[#9e7627] dark:text-[#caa24c]' : 'text-[color:var(--portal-muted)] group-hover:text-[#9e7627] dark:group-hover:text-[#caa24c]'} transition-colors ${pending && !active ? 'animate-pulse' : ''}`}>
         {icon}
       </span>
-      {collapsed && (
-        <span className="pointer-events-none absolute left-[calc(100%+0.75rem)] z-30 whitespace-nowrap rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-2.5 py-1.5 text-[10px] font-bold text-[color:var(--portal-text)] opacity-0 shadow-xl backdrop-blur-xl -translate-x-1 transition-[opacity,transform] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
-          {label}
-        </span>
-      )}
+      <AnimatePresence>
+        {collapsed && isHovered && (
+          <motion.span
+            initial={{ opacity: 0, x: -6, scale: 0.96 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -4, scale: 0.96 }}
+            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 z-50 whitespace-nowrap rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-2.5 py-1.5 text-[10px] font-bold text-[color:var(--portal-text)] shadow-xl backdrop-blur-xl"
+          >
+            {label}
+          </motion.span>
+        )}
+      </AnimatePresence>
       <span
-        className={`whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+        className={`relative z-10 whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${
           collapsed
             ? 'max-w-0 opacity-0 -translate-x-1 pointer-events-none'
             : 'max-w-[200px] opacity-100 translate-x-0'
@@ -1771,7 +1719,7 @@ function SidebarLink({
       >
         {label}
       </span>
-      {isPending && !collapsed ? <Loader2 size={13} className="ml-auto shrink-0 animate-spin text-[#caa24c]" aria-hidden="true" /> : null}
+      {pending && !active && !collapsed ? <Loader2 size={13} className="relative z-10 ml-auto shrink-0 animate-spin text-[#9e7627] dark:text-[#caa24c]" aria-hidden="true" /> : null}
     </Link>
   )
 }
@@ -1782,50 +1730,12 @@ function isActivePath(pathname: string, href: string, searchParams?: ReturnType<
     const expectedTab = new URLSearchParams(query).get('tab')
     return pathname === basePath && searchParams?.get('tab') === expectedTab
   }
+  if (href === '/portal/operations') {
+    return pathname === href || pathname.startsWith('/portal/operations/')
+  }
   if (href === '/portal/marketing') {
-    return pathname === href && searchParams?.get('tab') !== 'emails'
+    return pathname === href || pathname.startsWith('/portal/marketing/')
   }
   if (href === '/portal') return pathname === href
   return pathname === href || pathname.startsWith(`${href}/`)
-}
-
-function SidebarSubLink({
-  href,
-  label,
-  icon: Icon,
-  active,
-  pending,
-  onNavigate,
-}: {
-  href: string
-  label: string
-  icon: React.ComponentType<{ size?: number; className?: string }>
-  active: boolean
-  pending: boolean
-  onNavigate: (href: string) => void
-}) {
-  const isPending = pending && !active
-
-  return (
-    <Link
-      href={href}
-      prefetch
-      onClick={(event) => {
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-        event.preventDefault()
-        onNavigate(href)
-      }}
-      className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs transition-colors cursor-pointer ${
-        active || isPending
-          ? 'text-[#f1d27a] font-bold bg-[#caa24c]/5'
-          : 'text-zinc-550 hover:text-zinc-300 hover:bg-zinc-950/20'
-      }`}
-    >
-      <span className={active || isPending ? 'text-[#caa24c]' : 'text-zinc-650'}>
-        <Icon size={14} />
-      </span>
-      <span>{label}</span>
-      {isPending ? <Loader2 size={12} className="ml-auto animate-spin text-[#caa24c]" aria-hidden="true" /> : null}
-    </Link>
-  )
 }

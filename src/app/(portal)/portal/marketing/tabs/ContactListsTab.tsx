@@ -529,8 +529,9 @@ export function ContactListsTab({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
-      <div className="flex shrink-0 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2 portal-scrollbar">
+      <div className="flex shrink-0 overflow-x-auto portal-scrollbar">
         <PortalAnimatedTabs
+          variant="slider"
           tabs={categoryTabs}
           activeTab={view}
           onTabChange={handleCategoryChange}

@@ -1431,7 +1431,7 @@ async function buildDeepPageContext(activePath: string): Promise<string> {
     } catch (err) {
       console.warn('[Elena Chat] Pre-fetch pipeline context error:', err)
     }
-  } else if (activePath.startsWith('/portal/calendar') || activePath.startsWith('/portal/events')) {
+  } else if (activePath.startsWith('/portal/calendar') || activePath.startsWith('/portal/planner')) {
     try {
       const upcomingBookings = await supabaseRest<Array<{ client_name: string; event_type: string; event_date: string; status: string }>>('luxor_bookings?select=client_name,event_type,event_date,status&order=event_date.asc&limit=10')
       contextParts.push(`ACTIVE CALENDAR SCREEN CONTEXT:

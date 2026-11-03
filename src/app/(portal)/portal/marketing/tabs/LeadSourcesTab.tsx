@@ -208,7 +208,7 @@ export function LeadSourcesTab({ inquiries, loading = false, onFilterSource }: L
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-border)]">
                       <motion.div
-                        className="h-full rounded-full bg-[color:var(--portal-accent)]"
+                        className="h-full w-0 rounded-full bg-[color:var(--portal-accent)]"
                         initial={{ width: '0%' }}
                         whileInView={{ width: `${maxLeads ? (row.leads / maxLeads) * 100 : 0}%` }}
                         viewport={{ once: true, margin: '0px 0px -30px 0px' }}

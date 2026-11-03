@@ -49,7 +49,7 @@ function EmailToolsContent({ activeTab, onTabChange }: { activeTab: ToolsTab; on
     <PortalPageFrame className="h-full min-h-0 flex-1 overflow-clip">
       <PortalPageHeader icon={<Wrench size={18} />} title="Email Tools" description="Queue health, saved templates, recent mailbox activity, and the isolated test workflow." />
       <div className="shrink-0 overflow-x-auto portal-scrollbar">
-        <PortalAnimatedTabs tabs={tabs} activeTab={activeTab} onTabChange={(tab) => onTabChange(tab as ToolsTab)} ariaLabel="Email tools" />
+        <PortalAnimatedTabs variant="slider" tabs={tabs} activeTab={activeTab} onTabChange={(tab) => onTabChange(tab as ToolsTab)} ariaLabel="Email tools" />
       </div>
       <PortalTabTransition activeKey={activeTab} className="min-h-0 flex-1 overflow-y-auto portal-scrollbar pb-4">
         {activeTab === 'queue' ? <EmailQueueHealthWidget /> : null}

@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
       await sendLuxorWebPush('booking', {
         title: 'New Luxor event booking',
         body: 'A new event booking is ready to review in the owner portal.',
-        url: booking.inquiry_id ? `/portal/leads/${booking.inquiry_id}` : '/portal/events',
+        url: booking.inquiry_id ? `/portal/leads/${booking.inquiry_id}` : '/portal/planner/events',
         tag: `luxor-booking-${booking.id}`,
       }).catch((pushError) => {
         console.error('Booking created, but Web Push delivery failed:', pushError)

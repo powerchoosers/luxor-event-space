@@ -4,7 +4,8 @@ import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 const LUXOR_PORTAL_EASE = [0.22, 1, 0.36, 1] as const
-import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check, Search, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check, Search, SlidersHorizontal, Menu } from 'lucide-react'
+import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useToast } from '@/components/portal/ToastProvider'
 import { LuxorDatePicker } from '@/components/LuxorDatePicker'
@@ -26,6 +27,7 @@ export function PortalPageFrame({
 export function PortalPageHeader({
   icon,
   title,
+  titleHref,
   titleAccessory,
   description,
   actions,
@@ -35,6 +37,7 @@ export function PortalPageHeader({
 }: {
   icon?: React.ReactNode
   title: string
+  titleHref?: string
   titleAccessory?: React.ReactNode
   description?: string
   actions?: React.ReactNode
@@ -57,26 +60,34 @@ export function PortalPageHeader({
 
   return (
     <div className={`flex shrink-0 gap-2 sm:gap-3 ${mobileActionsInline ? 'flex-wrap items-center justify-between gap-x-2 sm:flex-nowrap sm:gap-3' : 'flex-col md:flex-row md:items-start md:justify-between'}`}>
-      <div className={`${description ? 'space-y-1 sm:space-y-1.5' : ''} ${mobileActionsInline ? 'min-w-0 shrink-0' : ''}`}>
-        <div className={`flex items-center ${mobileActionsInline ? 'gap-2 sm:gap-3' : 'gap-2.5 sm:gap-3'}`}>
+      <div className={`${description ? 'space-y-1' : ''} ${mobileActionsInline ? 'min-w-0 shrink-0' : ''}`}>
+        <div className={`flex items-center ${mobileActionsInline ? 'gap-2 sm:gap-2.5' : 'gap-2.5'}`}>
           {canGoBack && !hideBackButton ? (
             <button
               type="button"
               onClick={goBack}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
               aria-label="Go back"
               title="Go back"
             >
-              <ArrowLeft size={14} />
+              <ArrowLeft size={15} />
             </button>
           ) : null}
           {icon ? <span className="shrink-0 text-[#caa24c]">{icon}</span> : null}
-          <h1 className={`font-serif font-semibold leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-3xl' : 'text-2xl sm:text-3xl')}`}>{title}</h1>
+          <h1 className={`font-sans font-bold tracking-tight leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-2xl' : 'text-xl sm:text-2xl')}`}>
+            {titleHref ? (
+              <Link href={titleHref} className="no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
+                {title}
+              </Link>
+            ) : (
+              title
+            )}
+          </h1>
           {titleAccessory}
         </div>
-        {description ? <p className="max-w-2xl text-xs sm:text-sm font-medium leading-relaxed sm:leading-6 text-zinc-500">{description}</p> : null}
+        {description ? <p className="max-w-2xl text-xs sm:text-sm font-normal leading-relaxed text-[color:var(--portal-muted)]">{description}</p> : null}
       </div>
-      {actions ? <div className={`flex flex-wrap items-center gap-3 ${mobileActionsInline ? 'ml-auto shrink-0' : ''}`}>{actions}</div> : null}
+      {actions ? <div className={`flex flex-wrap items-center gap-2.5 ${mobileActionsInline ? 'ml-auto shrink-0' : ''}`}>{actions}</div> : null}
     </div>
   )
 }
@@ -96,20 +107,20 @@ export function PortalButton({
   size?: PortalButtonSize
 }) {
   const variantClasses: Record<PortalButtonVariant, string> = {
-    primary: 'border-[#caa24c] bg-[#caa24c] text-white shadow-lg shadow-[#caa24c]/15 hover:border-[#dfbd68] hover:bg-[#dfbd68]',
-    secondary: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/25 hover:text-[color:var(--portal-text)]',
+    primary: 'border-[#caa24c] bg-[#caa24c] text-white shadow-2xs hover:border-[#b98a3d] hover:bg-[#b98a3d]',
+    secondary: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/30 hover:bg-[color:var(--portal-border)]/40',
     ghost: 'border-transparent bg-transparent text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]',
-    danger: 'border-red-500/25 bg-red-500/10 text-red-300 hover:border-red-500/40 hover:bg-red-500/15',
+    danger: 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-300 hover:border-red-500/35 hover:bg-red-500/15',
   }
   const sizeClasses: Record<PortalButtonSize, string> = {
-    sm: 'min-h-9 px-3 py-2 text-[9px]',
-    md: 'min-h-10 px-4 py-2.5 text-[10px]',
+    sm: 'min-h-8.5 px-3 py-1.5 text-xs',
+    md: 'min-h-9.5 px-4 py-2 text-xs',
   }
 
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center gap-2 rounded-lg border font-black uppercase tracking-[0.12em] transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:pointer-events-none disabled:opacity-40 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl border font-semibold tracking-normal transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:pointer-events-none disabled:opacity-40 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
       {...props}
     >
       {children}
@@ -170,6 +181,223 @@ type PortalAnimatedTabItem<T extends string> = {
   count?: number
 }
 
+export type PortalMobileTabItem<T extends string = string> = {
+  id: T
+  label: string
+  description?: string
+  icon?: React.ReactNode
+  group?: string
+  count?: number
+}
+
+export function PortalMobileTabTrigger<T extends string>({
+  tabs,
+  activeTab,
+  onClick,
+  triggerLabel = 'Browse views',
+  className = '',
+}: {
+  tabs: readonly PortalMobileTabItem<T>[]
+  activeTab: T
+  onClick: () => void
+  triggerLabel?: string
+  className?: string
+}) {
+  const activeItem = tabs.find((t) => t.id === activeTab) || tabs[0]
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-haspopup="dialog"
+      aria-label={`${triggerLabel}. Currently viewing ${activeItem?.label || 'Overview'}`}
+      className={`hidden md:inline-flex xl:hidden min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${className}`}
+    >
+      <Menu size={16} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[10px] font-medium text-[color:var(--portal-muted)] leading-none">{triggerLabel}</span>
+        <span className="mt-0.5 block truncate text-xs font-semibold leading-tight max-w-[130px] lg:max-w-[170px]">
+          {activeItem?.label || 'Overview'}
+        </span>
+      </span>
+      <ChevronDown size={15} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
+    </button>
+  )
+}
+
+export function PortalMobileTabPicker<T extends string>({
+  tabs,
+  activeTab,
+  onTabChange,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  title = 'Browse views',
+  subtitle = 'Choose a workspace view.',
+  triggerLabel = 'Browse views',
+  className = '',
+}: {
+  tabs: readonly PortalMobileTabItem<T>[]
+  activeTab: T
+  onTabChange: (tab: T) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  title?: string
+  subtitle?: string
+  triggerLabel?: string
+  className?: string
+}) {
+  const [internalOpen, setInternalOpen] = React.useState(false)
+  const isControlled = typeof controlledOpen === 'boolean'
+  const open = isControlled ? controlledOpen : internalOpen
+  const setOpen = React.useCallback(
+    (nextOpen: boolean) => {
+      if (isControlled) {
+        controlledOnOpenChange?.(nextOpen)
+      } else {
+        setInternalOpen(nextOpen)
+      }
+    },
+    [isControlled, controlledOnOpenChange]
+  )
+  const activeItem = tabs.find((t) => t.id === activeTab) || tabs[0]
+
+  React.useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, setOpen])
+
+  const groupedTabs = React.useMemo(() => {
+    const hasGroups = tabs.some((t) => Boolean(t.group))
+    if (!hasGroups) {
+      return [{ title: null, items: tabs }]
+    }
+    const groupsMap = new Map<string, PortalMobileTabItem<T>[]>()
+    for (const tab of tabs) {
+      const g = tab.group || 'General'
+      if (!groupsMap.has(g)) groupsMap.set(g, [])
+      groupsMap.get(g)!.push(tab)
+    }
+    return Array.from(groupsMap.entries()).map(([title, items]) => ({ title, items }))
+  }, [tabs])
+
+  return (
+    <div className={`md:hidden w-full ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`${triggerLabel}. Currently viewing ${activeItem?.label || 'Overview'}`}
+        className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+      >
+        <Menu size={18} className="text-[#a8792f] shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-medium text-[color:var(--portal-muted)]">{triggerLabel}</span>
+          <span className="mt-0.5 flex items-center gap-2 truncate text-sm font-semibold">
+            <span>{activeItem?.label || 'Overview'}</span>
+            {typeof activeItem?.count === 'number' ? (
+              <span className="rounded-full bg-[#caa24c]/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[#a8792f] dark:text-[#f1d27a]">
+                {activeItem.count}
+              </span>
+            ) : null}
+          </span>
+        </span>
+        <ChevronDown size={17} className="text-[color:var(--portal-muted)] shrink-0" aria-hidden="true" />
+      </button>
+
+      {typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence initial={false}>
+          {open ? (
+            <motion.div
+              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onMouseDown={() => setOpen(false)}
+            >
+              <motion.section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="portal-mobile-tab-picker-title"
+                className="flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+                initial={{ opacity: 0, y: 56, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 40, scale: 0.985 }}
+                transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-5 py-4 backdrop-blur-xl">
+                  <div>
+                    <h2 id="portal-mobile-tab-picker-title" className="text-base font-bold text-[color:var(--portal-text)]">{title}</h2>
+                    <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">{subtitle}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    aria-label="Close views menu"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
+                  <nav aria-label={title} className="space-y-4">
+                    {groupedTabs.map((group, groupIdx) => (
+                      <section key={group.title || groupIdx}>
+                        {group.title ? (
+                          <h3 className="mb-2 px-1 text-[11px] font-medium text-[color:var(--portal-muted)]">{group.title}</h3>
+                        ) : null}
+                        <div className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] divide-y divide-[color:var(--portal-border)]">
+                          {group.items.map((item) => {
+                            const selected = activeTab === item.id
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                aria-current={selected ? 'page' : undefined}
+                                onClick={() => {
+                                  onTabChange(item.id)
+                                  setOpen(false)
+                                }}
+                                className={`flex min-h-16 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}
+                              >
+                                {item.icon ? <span className="shrink-0">{item.icon}</span> : null}
+                                <span className="min-w-0 flex-1">
+                                  <span className="flex items-center gap-2 text-sm font-bold">
+                                    <span>{item.label}</span>
+                                    {typeof item.count === 'number' ? (
+                                      <span className="rounded-full bg-[#caa24c]/15 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-[#a8792f] dark:text-[#f1d27a]">
+                                        {item.count}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                  {item.description ? (
+                                    <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{item.description}</span>
+                                  ) : null}
+                                </span>
+                                <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  </nav>
+                </div>
+              </motion.section>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>,
+        document.body,
+      ) : null}
+    </div>
+  )
+}
+
 export function PortalAnimatedTabs<T extends string>({
   tabs,
   activeTab,
@@ -177,7 +405,7 @@ export function PortalAnimatedTabs<T extends string>({
   className = '',
   buttonClassName = '',
   ariaLabel = 'Portal tabs',
-  variant = 'underline',
+  variant = 'slider',
   trailing,
 }: {
   tabs: readonly PortalAnimatedTabItem<T>[]
@@ -249,12 +477,13 @@ export function PortalAnimatedTabs<T extends string>({
   }, [activeTab, tabsSignature])
 
   const isSlider = variant === 'slider'
+  const sliderLayoutId = `portal-tab-slider-${ariaLabel.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()}`
 
   return (
     <nav
       ref={containerRef}
       aria-label={ariaLabel}
-      className={`${isSlider ? `flex w-full ${trailing ? 'min-w-0' : 'min-w-max'} items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1` : 'relative inline-flex shrink-0 min-w-max items-stretch gap-5'} ${className}`}
+      className={`${isSlider ? `flex w-full ${trailing ? 'min-w-0' : 'min-w-max'} items-center gap-1 rounded-xl border border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)] p-1` : 'relative inline-flex shrink-0 min-w-max items-stretch gap-5'} ${className}`}
     >
       {!isSlider ? (
         <span
@@ -277,13 +506,13 @@ export function PortalAnimatedTabs<T extends string>({
             type="button"
             onClick={() => onTabChange(tab.id)}
             className={`${isSlider
-              ? `relative isolate inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:px-4 sm:text-xs ${isActive ? 'text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`
-              : `relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-0 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${isActive ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`} ${buttonClassName}`}
+              ? `relative isolate inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${isActive ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`
+              : `relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-0 py-1.5 text-xs font-semibold transition-colors ${isActive ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`} ${buttonClassName}`}
           >
             {isSlider && isActive ? (
               <motion.span
-                layoutId={`portal-tab-slider-${ariaLabel}`}
-                className="absolute inset-0 rounded-lg bg-[#caa24c]/15"
+                layoutId={sliderLayoutId}
+                className="absolute inset-0 rounded-lg border border-[color:var(--portal-border)]/50 bg-[color:var(--portal-card)] shadow-2xs"
                 transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
                 aria-hidden="true"
               />
@@ -293,8 +522,8 @@ export function PortalAnimatedTabs<T extends string>({
               {tab.label}
               {typeof tab.count === 'number' ? (
                 <span
-                  className={`rounded-full px-1.5 py-0.5 tabular-nums font-bold text-[9px] ${
-                    isActive ? 'bg-[#caa24c]/12 text-[#a8792f]' : 'bg-black/5 text-[color:var(--portal-muted)]'
+                  className={`rounded-full px-1.5 py-0.5 tabular-nums font-semibold text-[10px] ${
+                    isActive ? 'bg-[#caa24c]/15 text-[#9a6d26] dark:text-[#f1d27a]' : 'bg-black/5 text-[color:var(--portal-muted)] dark:bg-white/10'
                   }`}
                 >
                   {tab.count}
@@ -378,11 +607,11 @@ export function PortalTableCard({
     : ''
 
   return (
-    <section className={`nodal-void-card flex min-h-0 flex-1 flex-col ${mobileOverflowClass} rounded-none sm:rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 ${mobilePageScroll ? 'md:backdrop-blur-xl md:portal-render-surface' : 'backdrop-blur-xl portal-render-surface'} ${mobilePageScrollContainerClass} ${className}`}>
+    <section className={`nodal-void-card flex min-h-0 flex-1 flex-col ${mobileOverflowClass} rounded-none sm:rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xs ${mobilePageScroll ? 'md:backdrop-blur-xl md:portal-render-surface' : 'backdrop-blur-xl portal-render-surface'} ${mobilePageScrollContainerClass} ${className}`}>
       {controls ? (
         <div
           style={{ WebkitBackdropFilter: isStickyMobile ? 'blur(24px)' : undefined }}
-          className={`shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-3 px-4 sm:px-6 transition-shadow ${mobileStickyControlsClass}`}
+          className={`shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] py-3 px-4 sm:px-6 transition-shadow ${mobileStickyControlsClass}`}
         >
           {controls}
         </div>
@@ -390,7 +619,7 @@ export function PortalTableCard({
       <div className={`portal-scrollbar flex-1 overflow-auto ${mobilePageScrollContentClass}`} data-portal-table-scroller>
         {children}
       </div>
-      {footer ? <div className={`shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] py-4 px-4 sm:px-6 flex items-center ${footerClassName}`}>{footer}</div> : null}
+      {footer ? <div className={`shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] py-3.5 px-4 sm:px-6 flex items-center ${footerClassName}`}>{footer}</div> : null}
     </section>
   )
 }
@@ -441,7 +670,7 @@ export function PortalFilterBar({
               value={searchValue}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder={searchPlaceholder}
-              className={`h-9 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] pl-9 text-xs font-semibold text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/45 focus:ring-2 focus:ring-[#caa24c]/10 ${
+              className={`h-9.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] pl-9 text-xs font-medium text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10 ${
                 searchValue && hasFilterControls ? 'pr-16' : hasFilterControls || searchValue ? 'pr-10' : 'pr-4'
               }`}
             />
@@ -480,7 +709,7 @@ export function PortalFilterBar({
                         exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.55, y: -2 }}
                         transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.23, 1, 0.32, 1] }}
                         aria-hidden="true"
-                        className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#caa24c] px-0.5 text-[8px] font-black text-[#18130d] leading-none shadow-xs"
+                        className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#caa24c] px-0.5 text-[8px] font-bold text-[#18130d] leading-none shadow-xs"
                       >
                         {activeFilters.length}
                       </motion.span>
@@ -494,7 +723,7 @@ export function PortalFilterBar({
         </div>
 
         {resultLabel ? (
-          <span className="shrink-0 px-1 tabular-nums text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+          <span className="shrink-0 px-1 tabular-nums text-xs font-medium text-[color:var(--portal-muted)]">
             {resultLabel}
           </span>
         ) : null}
@@ -535,7 +764,7 @@ export function PortalFilterBar({
                     animate={{ opacity: 1, width: 'auto', scale: 1 }}
                     exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, width: 0, scale: 0.96 }}
                     transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.23, 1, 0.32, 1] }}
-                    className="inline-flex h-7 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-md border border-[#caa24c]/20 bg-[#caa24c]/8 pl-2.5 pr-1.5 text-[10px] font-semibold text-[#8a652b] dark:text-[#dfbd68]"
+                    className="inline-flex h-7 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 pl-2.5 pr-1.5 text-xs font-medium text-[#8a652b] dark:text-[#dfbd68]"
                   >
               {filter.label}
               <button
@@ -558,7 +787,7 @@ export function PortalFilterBar({
                     animate={{ opacity: 1, width: 'auto' }}
                     exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, width: 0 }}
                     transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.23, 1, 0.32, 1] }}
-                    className="h-7 overflow-hidden whitespace-nowrap px-2 text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
+                    className="h-7 overflow-hidden whitespace-nowrap px-2 text-xs font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
                   >
                     Clear all
                   </motion.button>
@@ -622,7 +851,7 @@ export function PortalPagination({
     }
   }
 
-  const buttonClass = 'flex h-11 w-11 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-35 sm:h-8 sm:w-8'
+  const buttonClass = 'flex h-10 w-10 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:pointer-events-none disabled:opacity-35 sm:h-8.5 sm:w-8.5'
   const pageOptions = Array.from({ length: totalPages }, (_, index) => {
     const page = index + 1
     return { value: String(page), label: `Page ${page} of ${totalPages}` }
@@ -637,8 +866,8 @@ export function PortalPagination({
         value={String(currentPage)}
         onChange={(value) => handlePageSelect(Number(value))}
         options={pageOptions}
-        className="!min-w-0 w-28 sm:w-[124px]"
-        buttonClassName="h-11 rounded-md bg-[color:var(--portal-card)] px-2 tabular-nums text-[10px] font-semibold sm:h-8"
+        className="!min-w-0 w-28 sm:w-[132px]"
+        buttonClassName="h-10 rounded-xl bg-[color:var(--portal-soft)] px-2.5 tabular-nums text-xs font-medium sm:h-8.5"
       />
       <button type="button" aria-label="Next page" title="Next page" disabled={currentPage === totalPages} onClick={() => handlePageSelect(currentPage + 1)} className={buttonClass}>
         <ChevronRight size={15} strokeWidth={2.25} aria-hidden="true" />
@@ -659,12 +888,12 @@ export function PortalBridgeCard({
   action?: React.ReactNode
 }) {
   return (
-    <section className="portal-render-surface relative isolate overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-2xl shadow-black/20">
+    <section className="portal-render-surface relative isolate overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xs">
       <div className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-[#caa24c]/10 blur-3xl" />
       <div className="relative">
-        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#caa24c]">{label}</p>
-        <h2 className="mt-2 text-xl font-bold tracking-tight text-[color:var(--portal-text)]">{title}</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--portal-muted)]">{description}</p>
+        <p className="text-xs font-semibold text-[#a8792f] dark:text-[#caa24c]">{label}</p>
+        <h2 className="mt-1.5 text-xl font-bold tracking-tight text-[color:var(--portal-text)]">{title}</h2>
+        <p className="mt-1.5 max-w-3xl text-sm leading-6 text-[color:var(--portal-muted)]">{description}</p>
         {action ? <div className="mt-4">{action}</div> : null}
       </div>
     </section>
@@ -704,11 +933,11 @@ const STATUS_TONES: Record<string, PortalStatusTone> = {
 }
 
 const STATUS_TONE_STYLES: Record<PortalStatusTone, string> = {
-  red: 'border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300',
-  blue: 'border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-500/10 dark:text-sky-300',
-  gold: 'border-[#dfc98f] bg-[#fbf5e7] text-[#76591f] dark:border-[#caa24c]/35 dark:bg-[#caa24c]/10 dark:text-[#f1d27a]',
-  green: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300',
-  purple: 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300',
+  red: 'border-rose-200/80 bg-rose-50/90 text-rose-800 dark:border-rose-400/25 dark:bg-rose-500/10 dark:text-rose-300',
+  blue: 'border-sky-200/80 bg-sky-50/90 text-sky-800 dark:border-sky-400/25 dark:bg-sky-500/10 dark:text-sky-300',
+  gold: 'border-[#dfc98f]/80 bg-[#fbf5e7] text-[#76591f] dark:border-[#caa24c]/30 dark:bg-[#caa24c]/10 dark:text-[#f1d27a]',
+  green: 'border-emerald-200/80 bg-emerald-50/90 text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-300',
+  purple: 'border-violet-200/80 bg-violet-50/90 text-violet-800 dark:border-violet-400/25 dark:bg-violet-500/10 dark:text-violet-300',
   neutral: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]',
 }
 
@@ -725,7 +954,7 @@ export const PortalStatusBadge = React.memo(function PortalStatusBadge({ status,
   const warningStyle = 'border-dashed border-amber-700 bg-amber-100 text-amber-950 ring-1 ring-amber-500/60 dark:border-amber-300 dark:bg-amber-500/20 dark:text-amber-200'
 
   return (
-    <span aria-label={warning ? `Warning: ${formatStatusText(status)}` : undefined} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] ${warning ? warningStyle : badgeStyle}`}>
+    <span aria-label={warning ? `Warning: ${formatStatusText(status)}` : undefined} className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium ${warning ? warningStyle : badgeStyle}`}>
       {warning ? <AlertTriangle size={11} aria-hidden="true" /> : null}
       {formatStatusText(status)}
     </span>
@@ -760,8 +989,8 @@ export function PortalTimelineItem({
       </div>
       <div>
         <div className="flex flex-wrap items-baseline gap-2">
-          <h4 className="text-xs font-bold text-[color:var(--portal-text)] uppercase tracking-widest">{title}</h4>
-          <span className="text-[10px] text-[color:var(--portal-muted)] tabular-nums font-semibold">{time}</span>
+          <h4 className="text-xs font-semibold text-[color:var(--portal-text)]">{title}</h4>
+          <span className="text-[11px] text-[color:var(--portal-muted)] tabular-nums font-medium">{time}</span>
           {badge ? <div className="ml-auto">{badge}</div> : null}
         </div>
         {children ? <div className="mt-2 text-xs leading-relaxed text-[color:var(--portal-muted)]">{children}</div> : null}
@@ -959,10 +1188,10 @@ export function PortalModal({
           >
             <ModalDepthContext.Provider value={depth + 1}>
               {title ? (
-                <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
+                <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
                   <div className="min-w-0">
-                    <h3 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">{title}</h3>
-                    {description ? <p className="mt-1 max-w-xl text-[11px] leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
+                    <h3 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">{title}</h3>
+                    {description ? <p className="mt-0.5 max-w-xl text-xs leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
                   </div>
                   <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} />
                 </div>
@@ -998,9 +1227,9 @@ export function PortalDetailSection({
   action?: React.ReactNode
 }) {
   return (
-    <div className="nodal-void-card portal-render-surface rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl backdrop-blur-xl">
+    <div className="nodal-void-card portal-render-surface rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xs backdrop-blur-xl">
       <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500">{title}</h3>
+        <h3 className="text-xs font-semibold text-[color:var(--portal-muted)]">{title}</h3>
         {action}
       </div>
       {children}
@@ -1111,7 +1340,7 @@ export function PortalSelect({
         }}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className={`portal-select-trigger flex min-h-11 w-full cursor-pointer items-center justify-between gap-2.5 rounded-lg border px-3 py-1.5 text-xs transition-all duration-150 hover:border-[#caa24c]/40 focus:outline-none focus:ring-1 focus:ring-[#caa24c]/30 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-8 ${isLight ? 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${buttonClassName}`}
+        className={`portal-select-trigger flex min-h-11 w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2 text-xs font-medium transition-all duration-150 hover:border-[#caa24c]/35 focus:outline-none focus:ring-2 focus:ring-[#caa24c]/15 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-9 ${isLight ? 'border-[#d8c4a4]/80 bg-[#f6efe2] text-[#3b2b1d]' : 'border-transparent bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'} ${buttonClassName}`}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         <ChevronDown size={14} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -1138,13 +1367,13 @@ export function PortalSelect({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.985 }}
                 transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                className={`portal-scrollbar fixed z-[9999] max-h-[380px] overflow-y-auto overscroll-contain rounded-md border p-1.5 shadow-2xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/15' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/35'}`}
+                className={`portal-scrollbar fixed z-[9999] max-h-[380px] overflow-y-auto overscroll-contain rounded-xl border p-1.5 shadow-xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/12' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/25'}`}
                 style={{
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,
                   width: `${coords.width}px`,
                   maxHeight: `${coords.maxHeight}px`,
-                  backgroundColor: isLight ? '#fffdfa' : 'color-mix(in srgb, var(--portal-bg, #080706) 82%, transparent)',
+                  backgroundColor: isLight ? '#fffdfa' : 'color-mix(in srgb, var(--portal-bg, #080706) 88%, transparent)',
                   backdropFilter: isLight ? 'none' : 'blur(24px)',
                   WebkitBackdropFilter: 'blur(24px)'
                 }}
@@ -1162,10 +1391,10 @@ export function PortalSelect({
                             onChange(opt.value)
                             setIsOpen(false)
                           }}
-                            className={`group flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                            className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-all duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                             isSelected
-                              ? isLight ? 'border-[#b98a3d]/40 bg-[#f5ead8] text-[#6f4d1f]' : 'border-[#caa24c]/24 bg-[#caa24c]/12 text-[#f1d27a] shadow-[0_0_0_1px_rgba(202,162,76,0.08)]'
-                              : isLight ? 'border-transparent text-[#5b4632] hover:border-[#d8c4a4] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:border-[color:var(--portal-border,rgba(202,162,76,0.16))] hover:bg-white/5 hover:text-[color:var(--portal-text,#f7efe3)]'
+                              ? isLight ? 'border-[#b98a3d]/30 bg-[#f5ead8] font-semibold text-[#6f4d1f]' : 'border-[#caa24c]/20 bg-[#caa24c]/12 font-semibold text-[#f1d27a]'
+                              : isLight ? 'border-transparent text-[#5b4632] hover:bg-[#f8f1e6] hover:text-[#3b2b1d]' : 'border-transparent text-[color:var(--portal-muted,#d7c29a)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text,#f7efe3)]'
                           }`}
                         >
                           <span>{opt.label}</span>

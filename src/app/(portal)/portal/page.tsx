@@ -617,9 +617,7 @@ async function PortalOverviewContent() {
                     <Calendar size={22} strokeWidth={1.5} />
                   </span>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
-                  <p data-home-reveal className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">
-                    {nextBookingDisplayTitle}
-                  </p>
+                  {nextBooking.inquiry_id ? <Link href={`/portal/leads/${nextBooking.inquiry_id}`} data-home-reveal className="line-clamp-2 text-lg font-bold leading-snug tracking-tight text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{nextBookingDisplayTitle}</Link> : <p data-home-reveal className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">{nextBookingDisplayTitle}</p>}
                   <p data-home-reveal className="text-xs font-bold text-[#caa24c] mt-1">{nextBookingRelativeStr}</p>
                 </div>
                 <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">

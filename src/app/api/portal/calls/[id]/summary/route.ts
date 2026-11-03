@@ -14,7 +14,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const inquiryId = new URL(request.url).searchParams.get('inquiryId') || ''
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'Call not found.' }, { status: 404 })
   const call = await getLuxorCallById(id)
-  if (!call || call.inquiry_id !== inquiryId) return NextResponse.json({ error: 'Call not found for this lead.' }, { status: 404 })
+  if (!call || (inquiryId && call.inquiry_id !== inquiryId)) return NextResponse.json({ error: 'Call not found for this lead.' }, { status: 404 })
   return NextResponse.json({ status: call.summary_status, summary: call.summary_text }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
@@ -25,10 +25,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'Call not found.' }, { status: 404 })
 
   try {
-    const body = await request.json() as { inquiryId?: unknown }
+    const body = await request.json().catch(() => ({})) as { inquiryId?: unknown }
     const inquiryId = String(body.inquiryId || '')
     const call = await getLuxorCallById(id)
-    if (!call || !inquiryId || call.inquiry_id !== inquiryId) return NextResponse.json({ error: 'Call not found for this lead.' }, { status: 404 })
+    if (!call || (inquiryId && call.inquiry_id !== inquiryId)) return NextResponse.json({ error: 'Call not found for this lead.' }, { status: 404 })
     if (call.recording_consent_status !== 'consented') return NextResponse.json({ error: 'A summary is available only for calls recorded with caller consent.' }, { status: 409 })
     if (call.summary_status === 'completed' && call.summary_text) return NextResponse.json({ status: 'completed', summary: call.summary_text, cached: true })
     const segments = await getLuxorTranscriptSegments(call.id)
@@ -43,7 +43,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       })
     }
 
-    const claimed = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(call.id)}&inquiry_id=eq.${encodeURIComponent(inquiryId)}&summary_status=in.(not_generated,failed)`, {
+    const claimed = await supabaseRest<LuxorCall[]>(`luxor_calls?select=*&id=eq.${encodeURIComponent(call.id)}&summary_status=in.(not_generated,failed)`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' },
       body: JSON.stringify({ summary_status: 'generating', summary_text: null, updated_at: new Date().toISOString() }),
     })

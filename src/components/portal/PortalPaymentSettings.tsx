@@ -60,23 +60,23 @@ export function PortalPaymentSettings() {
       <div className="flex items-start gap-3">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]"><WalletCards size={17} /></span>
         <div>
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">In-person payment</h3>
+          <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">In-person payment</h3>
           <p className="mt-1.5 text-xs leading-5 text-[color:var(--portal-muted)]">Give clients the Zelle details they need after signing, without storing them inside an individual proposal.</p>
         </div>
       </div>
 
       <div className="mt-5 space-y-4">
         <label className="block">
-          <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Zelle recipient</span>
-          <input value={recipient} onChange={(event) => setRecipient(event.target.value)} maxLength={160} placeholder="Business email, phone, or recipient name" className="mt-2 h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none transition placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/60 focus:ring-2 focus:ring-[#caa24c]/12" />
-          <span className="mt-1.5 block text-[10px] leading-4 text-[color:var(--portal-muted)]">Shown only to a client who has completed the secure agreement step.</span>
+          <span className="text-xs font-medium text-[color:var(--portal-muted)]">Zelle recipient</span>
+          <input value={recipient} onChange={(event) => setRecipient(event.target.value)} maxLength={160} placeholder="Business email, phone, or recipient name" className="mt-1.5 h-10.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10" />
+          <span className="mt-1.5 block text-xs leading-4 text-[color:var(--portal-muted)]">Shown only to a client who has completed the secure agreement step.</span>
         </label>
         <label className="block">
-          <span className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]"><QrCode size={13} /> Zelle QR image URL</span>
-          <input value={qrCodeUrl} onChange={(event) => setQrCodeUrl(event.target.value)} inputMode="url" placeholder="https://…" className="mt-2 h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none transition placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/60 focus:ring-2 focus:ring-[#caa24c]/12" />
-          <span className="mt-1.5 block text-[10px] leading-4 text-[color:var(--portal-muted)]">Optional. Paste a secure image URL for the QR code the client can scan with their phone.</span>
+          <span className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--portal-muted)]"><QrCode size={13} /> Zelle QR image URL</span>
+          <input value={qrCodeUrl} onChange={(event) => setQrCodeUrl(event.target.value)} inputMode="url" placeholder="https://…" className="mt-1.5 h-10.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10" />
+          <span className="mt-1.5 block text-xs leading-4 text-[color:var(--portal-muted)]">Optional. Paste a secure image URL for the QR code the client can scan with their phone.</span>
         </label>
-        <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-[#dfbd68] disabled:cursor-wait disabled:opacity-45">
+        <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-xs font-semibold text-white shadow-2xs transition hover:bg-[#b8903f] disabled:cursor-wait disabled:opacity-45">
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
           {saving ? 'Saving payment details' : 'Save Zelle details'}
         </button>

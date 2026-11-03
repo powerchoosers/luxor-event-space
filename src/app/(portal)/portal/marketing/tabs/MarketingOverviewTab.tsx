@@ -1,9 +1,10 @@
 'use client'
 
-import React from 'react'
-import { motion } from 'framer-motion'
+import React, { useRef } from 'react'
+import { motion, useInView, AnimatePresence } from 'framer-motion'
 import { ArrowUpRight, CalendarClock, MailPlus, Users, Workflow } from 'lucide-react'
 import { PortalSelect, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
+import { NumberTicker } from '@/components/ui/number-ticker'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import type { MarketingOverviewData } from '@/lib/luxorMarketingOverview'
 import type { MarketingTab } from '../page'
@@ -223,6 +224,9 @@ function MetricCard({ label, value, detail, loading }: { label: string; value?: 
 }
 
 function InquiryChart({ points }: { points: MarketingOverviewData['inquiriesByDay'] }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isInView = useInView(containerRef, { once: true, margin: '-20px' })
+  const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null)
   const width = 100
   const height = 100
   const max = Math.max(1, ...points.map((point) => point.count))
@@ -230,14 +234,112 @@ function InquiryChart({ points }: { points: MarketingOverviewData['inquiriesByDa
   const barWidth = Math.max(0.35, bandWidth * 0.68)
   const labelIndexes = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])]
 
+  const hoveredPoint = hoveredIndex !== null ? points[hoveredIndex] : null
+  const hoveredBarHeight = hoveredPoint && hoveredPoint.count ? Math.max(1.5, (hoveredPoint.count / max) * 82) : 0
+  const tooltipXPercent = hoveredIndex !== null ? (hoveredIndex * bandWidth + bandWidth / 2) : 50
+  const tooltipYPercent = hoveredPoint ? Math.max(16, 98 - hoveredBarHeight - 6) : 50
+
   return (
-    <div className="mt-5">
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={`Daily non-test inquiries from ${formatDate(points[0]?.date || '')} through ${formatDate(points[points.length - 1]?.date || '')}`} className="h-44 w-full overflow-visible">
+    <div
+      ref={containerRef}
+      className="relative mt-5"
+      onMouseLeave={() => setHoveredIndex(null)}
+    >
+      {/* Magic UI Animated Spring Tooltip */}
+      <AnimatePresence>
+        {hoveredPoint && hoveredIndex !== null && (
+          <motion.div
+            key={hoveredPoint.date}
+            initial={{ opacity: 0, y: 8, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+            className="pointer-events-none absolute z-30 flex flex-col gap-1 rounded-xl border border-[#caa24c]/30 bg-[color:var(--portal-card)]/95 px-3 py-2 text-left shadow-2xl backdrop-blur-xl ring-1 ring-[#caa24c]/15"
+            style={{
+              left: `${Math.max(12, Math.min(88, tooltipXPercent))}%`,
+              top: `${tooltipYPercent}%`,
+              transform: 'translate(-50%, -100%)',
+            }}
+          >
+            <div className="flex items-center gap-1.5 whitespace-nowrap text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#caa24c]" />
+              <span>{formatDate(hoveredPoint.date)}</span>
+            </div>
+            <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+              <span className="font-mono text-base font-extrabold text-[color:var(--portal-text)]">
+                {hoveredPoint.count}
+              </span>
+              <span className="text-[10px] font-semibold text-[color:var(--portal-muted)]">
+                {hoveredPoint.count === 1 ? 'inquiry' : 'inquiries'}
+              </span>
+            </div>
+            {/* Pointer arrow notch */}
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 border-r border-b border-[#caa24c]/30 bg-[color:var(--portal-card)]" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`Daily non-test inquiries from ${formatDate(points[0]?.date || '')} through ${formatDate(points[points.length - 1]?.date || '')}`}
+        className="h-44 w-full overflow-visible"
+      >
         <line x1="0" y1="99" x2="100" y2="99" stroke="var(--portal-border)" strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
         {points.map((point, index) => {
           const barHeight = point.count ? Math.max(1.5, (point.count / max) * 82) : 0
           const x = index * bandWidth + (bandWidth - barWidth) / 2
-          return <g key={point.date}><title>{`${point.count} ${point.count === 1 ? 'inquiry' : 'inquiries'} · ${formatDate(point.date)}`}</title><rect x={x} y={98 - barHeight} width={barWidth} height={barHeight} rx="0.5" fill="#caa24c" opacity="0.88" /></g>
+          const isHovered = hoveredIndex === index
+          return (
+            <g key={point.date}>
+              {/* Highlight guideline beam behind active column */}
+              {isHovered ? (
+                <line
+                  x1={x + barWidth / 2}
+                  y1={0}
+                  x2={x + barWidth / 2}
+                  y2={98}
+                  stroke="#caa24c"
+                  strokeWidth="0.5"
+                  strokeDasharray="1.5 1.5"
+                  opacity="0.45"
+                />
+              ) : null}
+
+              {/* Animated bar */}
+              <motion.rect
+                x={x}
+                width={barWidth}
+                rx="0.5"
+                fill={isHovered ? '#e5c46e' : '#caa24c'}
+                opacity={isHovered ? 1 : 0.88}
+                initial={{ height: 0, y: 98 }}
+                animate={isInView ? { height: barHeight, y: 98 - barHeight } : { height: 0, y: 98 }}
+                transition={{
+                  duration: 0.6,
+                  delay: Math.min(index * 0.015, 0.4),
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+              />
+
+              {/* Full height hit target for smooth, effortless hover targeting */}
+              <rect
+                x={index * bandWidth}
+                y={0}
+                width={bandWidth}
+                height={100}
+                fill="transparent"
+                className="cursor-pointer"
+                onMouseEnter={() => setHoveredIndex(index)}
+                tabIndex={0}
+                role="button"
+                aria-label={`${point.count} ${point.count === 1 ? 'inquiry' : 'inquiries'} on ${formatDate(point.date)}`}
+                onFocus={() => setHoveredIndex(index)}
+                onBlur={() => setHoveredIndex(null)}
+              />
+            </g>
+          )
         })}
       </svg>
       <div className="mt-2 flex items-center justify-between text-[9px] font-mono text-[color:var(--portal-muted)]">
@@ -249,23 +351,27 @@ function InquiryChart({ points }: { points: MarketingOverviewData['inquiriesByDa
 }
 
 function SourceBreakdown({ sources, total }: { sources: MarketingOverviewData['sourceBreakdown']; total: number }) {
+  const containerRef = useRef<HTMLUListElement>(null)
+  const isInView = useInView(containerRef, { once: true, margin: '-20px' })
+
   return (
-    <ul className="mt-5 space-y-4">
-      {sources.map((source) => {
+    <ul ref={containerRef} className="mt-5 space-y-4">
+      {sources.map((source, index) => {
         const width = total ? Math.min(100, (source.count / total) * 100) : 0
         return (
           <li key={source.source}>
             <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px]">
               <span className="truncate font-semibold text-[color:var(--portal-text)]">{source.source}</span>
-              <span className="shrink-0 font-mono text-[color:var(--portal-muted)]">{source.count.toLocaleString()}</span>
+              <span className="shrink-0 font-mono text-[color:var(--portal-muted)]">
+                {isInView ? <NumberTicker value={source.count} delay={index * 0.08} /> : 0}
+              </span>
             </div>
             <div aria-label={`${source.source}: ${source.count} of ${total} inquiries`} role="img" className="h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-soft)]">
               <motion.span
-                className="block h-full rounded-full bg-[#caa24c]"
+                className="block h-full w-0 rounded-full bg-[#caa24c]"
                 initial={{ width: '0%' }}
-                whileInView={{ width: `${width}%` }}
-                viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-                transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+                animate={isInView ? { width: `${width}%` } : { width: '0%' }}
+                transition={{ duration: 0.85, delay: index * 0.08, ease: [0.22, 1, 0.36, 1] }}
               />
             </div>
           </li>
@@ -295,7 +401,16 @@ function ChartSkeleton() {
 }
 
 function SourceSkeleton() {
-  return <div role="status" aria-label="Loading inquiry sources" className="mt-5 space-y-4">{[1, 2, 3, 4].map((item) => <div key={item}><div className="h-3 w-3/4 rounded luxor-skeleton" /><div className="mt-2 h-1.5 w-full rounded-full luxor-skeleton" /></div>)}</div>
+  return (
+    <div role="status" aria-label="Loading inquiry sources" className="mt-5 space-y-4">
+      {[1, 2, 3, 4].map((item) => (
+        <div key={item}>
+          <div className="h-3 w-3/4 rounded luxor-skeleton" />
+          <div className="mt-2 h-1.5 w-full rounded-full bg-[color:var(--portal-soft)]" />
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function UpcomingSkeleton() {

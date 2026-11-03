@@ -341,7 +341,7 @@ function getSuggestionsForPath(path: string): SmartSuggestion[] {
       makeSuggestion('leads-pipeline', 'Pipeline health', 'See where active leads are getting stuck.', 'Check active leads by pipeline stage.', 'lead'),
     ]
   }
-  if (path.startsWith('/portal/calendar') || path.startsWith('/portal/events')) {
+  if (path.startsWith('/portal/calendar') || path.startsWith('/portal/planner')) {
     return [
       makeSuggestion('events-upcoming', 'Upcoming bookings', 'Review the next events on the calendar.', 'Show upcoming bookings for this month.', 'event'),
       makeSuggestion('events-tours', 'Tours this week', 'Check what needs preparation for scheduled tours.', 'Are there any tours scheduled this week?', 'event'),

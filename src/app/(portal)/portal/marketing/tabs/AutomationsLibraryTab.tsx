@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { CalendarClock, ChevronDown, ChevronRight, Clock3, Compass, Mail, Phone, Search, Workflow, Zap, ArrowRight } from 'lucide-react'
+import { CalendarClock, ChevronDown, ChevronRight, Clock3, Compass, Mail, MessageSquare, Phone, Search, SlidersHorizontal, Workflow, Zap, ArrowRight } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { PREBUILT_WORKFLOWS, type PrebuiltWorkflow } from '@/lib/luxorPrebuiltWorkflows'
@@ -15,7 +15,7 @@ import {
   type AutomationStatus,
   type AutomationStatusFilter,
 } from '@/lib/luxorAutomationsLibrary'
-import type { CustomWorkflowDefinition, CustomWorkflowStatus } from '@/lib/luxorCustomWorkflowDefinition'
+import type { CustomWorkflowDefinition, CustomWorkflowStatus, CustomWorkflowStep } from '@/lib/luxorCustomWorkflowDefinition'
 
 type LibraryResponse = {
   workflows: AutomationLibraryEntry[]
@@ -40,6 +40,75 @@ const STATUS_FILTERS: Array<{ id: AutomationStatusFilter; label: string }> = [
   { id: 'draft', label: 'Draft' },
   { id: 'paused', label: 'Paused' },
 ]
+
+function StepIcon({ type, className = '' }: { type: CustomWorkflowStep['type']; className?: string }) {
+  switch (type) {
+    case 'email':
+      return <Mail size={12} className={className} aria-hidden="true" />
+    case 'text':
+      return <MessageSquare size={12} className={className} aria-hidden="true" />
+    case 'call_task':
+      return <Phone size={12} className={className} aria-hidden="true" />
+    case 'wait':
+      return <Clock3 size={12} className={className} aria-hidden="true" />
+    case 'condition':
+      return <SlidersHorizontal size={12} className={className} aria-hidden="true" />
+    default:
+      return <Workflow size={12} className={className} aria-hidden="true" />
+  }
+}
+
+function stepTypeLabel(step: CustomWorkflowStep): string {
+  switch (step.type) {
+    case 'email':
+      return step.name || 'Email message'
+    case 'text':
+      return step.name || 'Text message'
+    case 'call_task':
+      return step.name || 'Call task'
+    case 'wait':
+      return step.amount ? `Wait ${step.amount} ${step.unit}` : 'Wait delay'
+    case 'condition':
+      return step.name || 'Condition check'
+    default:
+      return step.name || 'Step'
+  }
+}
+
+function WorkflowStepIcons({ steps, label }: { steps: CustomWorkflowStep[]; label?: string }) {
+  const activeSteps = steps.filter((s) => s.type !== 'end')
+  if (!activeSteps.length) return null
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1.5 pt-1.5"
+      role="group"
+      aria-label={label || 'Workflow steps sequence'}
+    >
+      {activeSteps.map((step, index) => {
+        const stepName = stepTypeLabel(step)
+        return (
+          <React.Fragment key={step.id || index}>
+            <span
+              title={stepName}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[#a8792f] shadow-2xs transition-colors hover:border-[#caa24c]/60"
+            >
+              <StepIcon type={step.type} />
+              <span className="sr-only">{stepName}</span>
+            </span>
+            {index < activeSteps.length - 1 && (
+              <ArrowRight
+                size={10}
+                className="shrink-0 text-[color:var(--portal-faint)]"
+                aria-hidden="true"
+              />
+            )}
+          </React.Fragment>
+        )
+      })}
+    </div>
+  )
+}
 
 export function AutomationsLibraryTab() {
   const [data, setData] = React.useState<LibraryResponse | null>(null)
@@ -203,9 +272,7 @@ export function AutomationsLibraryTab() {
                 <p className="text-xs leading-5 text-[color:var(--portal-muted)]">
                   {pb.description}
                 </p>
-                <div className="pt-1 text-[11px] font-medium text-[#8c6424] dark:text-[#f1d27a]">
-                  {pb.stepsSummary}
-                </div>
+                <WorkflowStepIcons steps={pb.definition.steps} label={`${pb.name} steps`} />
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[color:var(--portal-border)] pt-3">

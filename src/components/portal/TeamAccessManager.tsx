@@ -7,7 +7,7 @@ import { Check, KeyRound, LogOut, Plus, Send, X } from 'lucide-react'
 import { useToast } from '@/components/portal/ToastProvider'
 
 const GROUPS = [
-  { label: 'CRM', items: [['leads', 'Leads & clients'], ['emails', 'Booking inbox'], ['calls', 'Phone & calls'], ['messages', 'Text messages'], ['calendar', 'Calendar'], ['events', 'Events']] },
+  { label: 'CRM', items: [['leads', 'Leads & clients'], ['emails', 'Booking inbox'], ['calls', 'Phone & calls'], ['messages', 'Text messages'], ['calendar', 'Calendar']] },
   { label: 'Planning', items: [['planner', 'Planner · all event workspaces']] },
   { label: 'Business', items: [['marketing', 'Marketing'], ['finances', 'Finances'], ['operations', 'Operations'], ['reports', 'Reports']] },
   { label: 'Workspace', items: [['settings', 'Settings'], ['team_access', 'Team access'], ['email_identity', 'Email sender identity'], ['phone_assignment', 'Phone line assignment']] },
@@ -15,7 +15,7 @@ const GROUPS = [
 
 type Member = { id: string; email: string; recovery_email: string | null; auth_user_id: string | null; display_name: string; role_title: string; avatar_url: string | null; role: 'owner' | 'admin' | 'agent'; status: 'pending' | 'active' | 'suspended'; permissions: string[]; sender_email: string | null; assigned_phone_number_id: string | null; invited_at: string | null; password_set_at: string | null; password_reset_sent_at: string | null; sessions_revoked_at: string | null }
 type Phone = { id: string; phone_number: string; friendly_name: string | null }
-const defaults = { admin: GROUPS.flatMap((group) => group.items.map(([id]) => id)), agent: ['leads', 'emails', 'calls', 'messages', 'calendar', 'events', 'planner'] }
+const defaults = { admin: GROUPS.flatMap((group) => group.items.map(([id]) => id)), agent: ['leads', 'emails', 'calls', 'messages', 'calendar', 'planner'] }
 
 export function TeamAccessManager() {
   const { notify } = useToast()

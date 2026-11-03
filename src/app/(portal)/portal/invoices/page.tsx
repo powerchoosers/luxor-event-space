@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   FileText,
   Search,
-  ExternalLink,
   Ban,
   Trash2,
   Sparkles
@@ -335,9 +334,9 @@ export default function InvoicesPage() {
                       {inv.inquiry_id ? (
                         <Link
                           href={`/portal/leads/${inv.inquiry_id}`}
-                          className="text-sm font-bold text-[color:var(--portal-text)] leading-none mb-1 hover:text-[#caa24c] inline-flex items-center gap-1.5"
+                          className="mb-1 inline-block text-sm font-bold leading-none text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
                         >
-                          {inv.client_name} <ExternalLink size={12} className="text-[color:var(--portal-muted)]" />
+                          {inv.client_name}
                         </Link>
                       ) : (
                         <p className="text-sm font-bold text-[color:var(--portal-text)] leading-none mb-1">{inv.client_name}</p>

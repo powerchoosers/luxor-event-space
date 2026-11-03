@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
 import { LeadPaymentsDashboard } from '@/components/portal/LeadPaymentsDashboard'
+import { PortalAudioPlayer } from '@/components/portal/PortalAudioPlayer'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft,
@@ -5601,11 +5602,7 @@ export default function LeadDetailPage({
         {/* Full tab bar for wide desktop layouts. */}
         <div className="hidden bg-transparent px-4 xl:block">
           <div className="flex items-center justify-between gap-3">
-            <div role="tablist" aria-label="Client sections" className="relative flex min-w-0 flex-1 gap-5 overflow-x-auto portal-scrollbar">
-              <span
-                className="absolute bottom-0 h-0.5 rounded-full bg-[#caa24c] transition-[left,width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
-                style={{ left: tabIndicator.left, width: tabIndicator.width }}
-              />
+            <div role="tablist" aria-label="Client sections" className="relative flex min-w-0 flex-1 items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 overflow-x-auto portal-scrollbar">
               {primaryLeadTabs.map((item) => {
                 const isActive = activeLeadTab === item.id
                 return (
@@ -5618,10 +5615,20 @@ export default function LeadDetailPage({
                     role="tab"
                     aria-selected={isActive}
                     onClick={() => selectLeadTab(item)}
-                    className={`relative inline-flex shrink-0 items-center gap-2 px-0 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-colors ${isActive ? 'text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
+                    className={`relative isolate inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:px-4 sm:text-xs ${isActive ? 'text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
                   >
-                    {item.label}
-                    {typeof item.count === 'number' ? <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold tabular-nums ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{item.count}</span> : null}
+                    {isActive ? (
+                      <motion.span
+                        layoutId="active-lead-dossier-tab-pill"
+                        className="absolute inset-0 rounded-lg bg-[#caa24c]/15 dark:bg-[#caa24c]/10"
+                        transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    <span className="relative z-10 inline-flex items-center gap-2">
+                      {item.label}
+                      {typeof item.count === 'number' ? <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold tabular-nums ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{item.count}</span> : null}
+                    </span>
                   </button>
                 )
               })}
@@ -8316,9 +8323,13 @@ export default function LeadDetailPage({
                           <p className="text-xs font-bold text-zinc-200">{describeActivityEntry(entry)}</p>
                           <p className="mt-1 font-mono text-[10px] text-zinc-600">{otherNumber} · {call.duration_seconds === null ? call.status : formatCallDuration(call.duration_seconds)}</p>
                           {call.recording_sid ? (
-                            <div className="mt-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
-                              <p className="mb-2 text-[10px] font-semibold text-[color:var(--portal-muted)]">{call.is_voicemail ? 'Voicemail recording' : 'Call recording'}</p>
-                              <audio id={`luxor-call-audio-${call.id}`} controls preload="none" className="w-full" src={`/api/twilio/recordings/${call.recording_sid}?inquiryId=${encodeURIComponent(id)}`}>Your browser does not support audio playback.</audio>
+                            <div className="mt-3">
+                              <PortalAudioPlayer
+                                variant="compact"
+                                audioId={`luxor-call-audio-${call.id}`}
+                                durationSeconds={call.recording_duration_seconds}
+                                src={`/api/twilio/recordings/${call.recording_sid}?inquiryId=${encodeURIComponent(id)}`}
+                              />
                             </div>
                           ) : call.status === 'completed' ? (
                             <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">No recording is available for this call.</p>

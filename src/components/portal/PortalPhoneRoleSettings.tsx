@@ -98,25 +98,25 @@ export function PortalPhoneRoleSettings({ mode }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Website Phone Line</h3>
-        <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">This number stays on the public website even when the active CRM calling number changes.</p>
+        <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Website phone line</h3>
+        <p className="mt-1.5 text-xs leading-5 text-[color:var(--portal-muted)]">This number stays on the public website even when the active CRM calling number changes.</p>
       </div>
-      <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-4">
-        <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#caa24c]">Currently published</p>
-        <p className="mt-1.5 font-mono text-lg font-bold text-[color:var(--portal-text)]">{publicNumber ? formatPhone(publicNumber.phoneNumber) : 'Not selected'}</p>
-        <p className="mt-2 text-[10px] leading-4 text-[color:var(--portal-muted)]">Incoming calls use Luxor&apos;s CRM webhook, call history, and saved browser/phone ring settings.</p>
+      <div className="rounded-xl bg-[color:var(--portal-soft)] p-4">
+        <p className="text-[11px] font-medium text-[#a8792f] dark:text-[#caa24c]">Currently published</p>
+        <p className="mt-1 tabular-nums text-lg font-bold text-[color:var(--portal-text)]">{publicNumber ? formatPhone(publicNumber.phoneNumber) : 'Not selected'}</p>
+        <p className="mt-1.5 text-xs leading-5 text-[color:var(--portal-muted)]">Incoming calls use Luxor&apos;s CRM webhook, call history, and saved browser/phone ring settings.</p>
       </div>
       {numbers.length > 0 ? (
-        <div className="space-y-2">
-          <label className="text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Choose website number</label>
+        <div className="space-y-2.5">
+          <label className="block text-xs font-medium text-[color:var(--portal-muted)]">Choose website number</label>
           <PortalSelect value={selectedSid} options={numbers.map((number) => ({ value: number.sid, label: `${formatPhone(number.phoneNumber)}${number.isActive ? ' — CRM active' : ''}` }))} onChange={setSelectedSid} />
-          <button type="button" onClick={() => void savePublicNumber()} disabled={!selectedSid || selectedSid === publicNumber?.sid || saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-wider text-white transition-colors hover:bg-[#b8903f] disabled:cursor-not-allowed disabled:opacity-40">
+          <button type="button" onClick={() => void savePublicNumber()} disabled={!selectedSid || selectedSid === publicNumber?.sid || saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#b8903f] disabled:cursor-not-allowed disabled:opacity-40">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
             {saving ? 'Updating website' : 'Use on public website'}
           </button>
         </div>
       ) : (
-        <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-4 text-[10px] leading-4 text-[color:var(--portal-muted)]">No owned Twilio numbers are available yet. Arianna can add one from Integrations.</p>
+        <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-4 text-xs leading-5 text-[color:var(--portal-muted)]">No owned Twilio numbers are available yet. Arianna can add one from Integrations.</p>
       )}
     </div>
   )

@@ -782,9 +782,9 @@ export default function LeadsPage() {
             </PortalFilterBar>
           }
           footer={
-            <div className="hidden w-full items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)] select-none md:flex">
+            <div className="hidden w-full items-center justify-between gap-4 text-xs font-medium text-[color:var(--portal-muted)] select-none md:flex">
               {loading ? <PortalSkeleton className="h-4 w-44 rounded" /> : <>
-              <div>Showing <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}</span> - <span className="tabular-nums text-[color:var(--portal-text)]">{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums text-[color:var(--portal-text)]">{totalCount}</span> leads</div>
+              <div>Showing <span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{totalCount ? startIndex + 1 : 0}</span> – <span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{Math.min(startIndex + 25, totalCount)}</span> of <span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{totalCount}</span> leads</div>
               <PortalPagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
               </>}
             </div>
@@ -793,7 +793,7 @@ export default function LeadsPage() {
           <div className="hidden overflow-x-auto md:block">
           <PortalStickyTable minWidth="1170px">
             <PortalStickyThead>
-              <tr className="whitespace-nowrap bg-[color:var(--portal-soft)] text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">
+              <tr className="whitespace-nowrap bg-[color:var(--portal-soft)] text-xs font-semibold text-[color:var(--portal-muted)]">
                 <th className="w-14 px-4 py-3.5 text-center">
                   <PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(pageLeadIds)} onChange={() => bulkSelection.selectPage(pageLeadIds)} />
                 </th>
@@ -922,8 +922,8 @@ export default function LeadsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-3">
-                      <span className={`text-[10px] font-bold uppercase tracking-widest ${isGrandOpeningRsvp(lead) ? 'text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}>
-                        {formatSourceLabel(lead)}
+                      <span className={`text-xs font-medium capitalize ${isGrandOpeningRsvp(lead) ? 'text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'}`}>
+                        {formatSourceLabel(lead)?.toLowerCase()}
                       </span>
                     </td>
                     <td className="px-8 py-3 text-right">

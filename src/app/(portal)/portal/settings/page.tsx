@@ -437,11 +437,11 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex min-h-0 flex-1 gap-6">
-        <aside className="hidden w-56 shrink-0 self-start rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 shadow-sm md:sticky md:top-0 md:block md:max-h-[calc(100dvh-11rem)] md:overflow-y-auto lg:w-64">
-          <nav aria-label="Settings categories" className="space-y-6">
+        <aside className="hidden w-56 shrink-0 self-start rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 shadow-xs md:sticky md:top-0 md:block md:max-h-[calc(100dvh-11rem)] md:overflow-y-auto lg:w-64">
+          <nav aria-label="Settings categories" className="space-y-5">
             {settingsNavigation.map((group) => (
               <section key={group.label} aria-labelledby={`settings-group-${group.label.replaceAll(' ', '-').toLowerCase()}`}>
-                <h2 id={`settings-group-${group.label.replaceAll(' ', '-').toLowerCase()}`} className="mb-2 px-3 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.label}</h2>
+                <h2 id={`settings-group-${group.label.replaceAll(' ', '-').toLowerCase()}`} className="mb-1.5 px-3 text-[11px] font-medium text-[color:var(--portal-muted)]">{group.label}</h2>
                 <div className="space-y-1">
                   {group.items.map((item) => {
                     const selected = activeTab === item.id
@@ -455,8 +455,8 @@ export default function SettingsPage() {
                       >
                         <span className="mt-0.5 shrink-0">{item.icon}</span>
                         <span className="min-w-0">
-                          <span className="block text-xs font-bold">{item.label}</span>
-                          <span className="mt-0.5 block text-[10px] leading-4 text-[color:var(--portal-faint)]">{item.description}</span>
+                          <span className="block text-xs font-semibold">{item.label}</span>
+                          <span className="mt-0.5 block text-[11px] leading-4 text-[color:var(--portal-faint)]">{item.description}</span>
                         </span>
                       </button>
                     )
@@ -466,7 +466,7 @@ export default function SettingsPage() {
             ))}
           </nav>
           <form action="/api/auth/logout" method="post" className="mt-5 border-t border-[color:var(--portal-border)] pt-3 lg:hidden">
-            <button type="submit" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-bold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
+            <button type="submit" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-semibold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-300">
               <LogOut size={16} />
               Log out
             </button>
@@ -483,8 +483,8 @@ export default function SettingsPage() {
           >
             <Menu size={18} className="text-[#a8792f]" aria-hidden="true" />
             <span className="min-w-0 flex-1">
-              <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse settings</span>
-              <span className="mt-0.5 block truncate text-sm font-bold">{activeSettingsItem?.label}</span>
+              <span className="block text-[11px] font-medium text-[color:var(--portal-muted)]">Browse settings</span>
+              <span className="mt-0.5 block truncate text-sm font-semibold">{activeSettingsItem?.label}</span>
             </span>
             <ChevronDown size={17} className="text-[color:var(--portal-muted)]" aria-hidden="true" />
           </button>
@@ -503,8 +503,8 @@ export default function SettingsPage() {
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)_minmax(20rem,0.85fr)]">
               <div className="luxor-glass-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 space-y-5">
                 <div>
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Venue Record</h3>
-                  <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">The venue record keeps the public-facing identity separate from day-to-day CRM calling choices.</p>
+                  <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Venue record</h3>
+                  <p className="mt-1.5 text-xs leading-5 text-[color:var(--portal-muted)]">The venue record keeps the public-facing identity separate from day-to-day CRM calling choices.</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {[
@@ -514,9 +514,9 @@ export default function SettingsPage() {
                     ['Primary mailbox', 'booking@luxoratlaspalmas.com'],
                     ['Public website', 'www.luxoratlaspalmas.com'],
                   ].map(([label, value]) => (
-                    <div key={label} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{label}</p>
-                      <p title={value} className="mt-1.5 break-words text-sm font-semibold text-[color:var(--portal-text)]">{value}</p>
+                    <div key={label} className="min-w-0 rounded-xl bg-[color:var(--portal-soft)] p-3.5">
+                      <p className="text-[11px] font-medium text-[color:var(--portal-muted)]">{label}</p>
+                      <p title={value} className="mt-1 break-words text-sm font-semibold text-[color:var(--portal-text)]">{value}</p>
                     </div>
                   ))}
                 </div>

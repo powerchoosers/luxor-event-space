@@ -25,6 +25,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: '/portal/events',
+        destination: '/portal/planner',
+        permanent: true,
+      },
+      {
         source: '/pricing',
         destination: '/visit',
         permanent: true,

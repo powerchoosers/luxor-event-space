@@ -904,13 +904,13 @@ export default function CustomWorkflowEditorPage() {
           {/* Inspector Header */}
           <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] px-5 py-3.5 portal-inspector-surface lg:!static lg:z-auto lg:rounded-t-[15px]">
             <PortalAnimatedTabs
+              variant="slider"
               tabs={[
                 { id: 'edit', label: 'Step Configuration' },
                 { id: 'preview', label: 'Live Preview' },
               ]}
               activeTab={inspectorTab}
               onTabChange={setInspectorTab}
-              className="gap-3"
               buttonClassName="normal-case tracking-normal text-xs font-bold"
               ariaLabel="Step inspector views"
             />

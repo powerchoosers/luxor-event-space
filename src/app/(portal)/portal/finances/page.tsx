@@ -20,6 +20,8 @@ import {
   PortalPageFrame,
   PortalPageHeader,
   PortalAnimatedTabs,
+  PortalMobileTabPicker,
+  PortalMobileTabTrigger,
   PortalTabTransition,
   PortalStickyTable,
   PortalStickyThead,
@@ -48,8 +50,17 @@ type FinanceTransaction = { kind: 'payment'; payment: LuxorPayment } | { kind: '
 
 type Tab = 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports'
 
+const FINANCE_TABS: Array<{ id: Tab; label: string; description: string; icon: React.ReactNode; group: string }> = [
+  { id: 'dashboard', label: 'Finances Dashboard', description: 'Revenue pacing, profit metrics, and ledger KPIs', icon: <TrendingUp size={15} />, group: 'Financial Overview' },
+  { id: 'invoices', label: 'Invoices Ledger', description: 'Client billing, draft agreements, and payment requests', icon: <FileText size={15} />, group: 'Billing & Payments' },
+  { id: 'payments', label: 'Payments Log', description: 'Card charges, bank wires, and recorded deposits', icon: <CreditCard size={15} />, group: 'Billing & Payments' },
+  { id: 'expenses', label: 'Expenses Tracking', description: 'Facility costs, operating bills, and vendor payouts', icon: <TrendingDown size={15} />, group: 'Ledgers & Records' },
+  { id: 'reports', label: 'Financial Reports', description: 'Monthly summaries, tax reports, and performance charts', icon: <Eye size={15} />, group: 'Ledgers & Records' },
+]
+
 export default function FinancesPage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+  const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
@@ -245,9 +256,16 @@ type LuxorBookingExpense = {
         icon={<DollarSign size={18} />}
         title="Finances"
         actions={
-          <PortalButton onClick={fetchFinanceData}>
-            <RefreshCw size={13} /> Refresh Ledger
-          </PortalButton>
+          <div className="flex items-center gap-2">
+            <PortalMobileTabTrigger
+              tabs={FINANCE_TABS}
+              activeTab={activeTab}
+              onClick={() => setIsViewPickerOpen(true)}
+            />
+            <PortalButton onClick={fetchFinanceData}>
+              <RefreshCw size={13} /> Refresh Ledger
+            </PortalButton>
+          </div>
         }
       />
 
@@ -257,15 +275,28 @@ type LuxorBookingExpense = {
         </div>
       )}
 
-      {/* Sub-tab navigation */}
-      <div className="flex shrink-0 gap-2 border-b border-[color:var(--portal-border)] pb-2 overflow-x-auto portal-scrollbar">
+      {/* Mobile view picker modal */}
+      <PortalMobileTabPicker
+        tabs={FINANCE_TABS}
+        activeTab={activeTab}
+        open={isViewPickerOpen}
+        onOpenChange={setIsViewPickerOpen}
+        onTabChange={(tab) => { setActiveTab(tab as Tab); setSearchTerm('') }}
+        title="Finances views"
+        subtitle="Choose a financial ledger or report."
+      />
+
+      {/* Desktop rectangular sliding tabs */}
+      <div className="hidden shrink-0 xl:flex">
         <PortalAnimatedTabs
+          variant="slider"
+          ariaLabel="Finances sections"
           tabs={[
-          { id: 'dashboard', label: 'Finances Dashboard', icon: <TrendingUp size={15} /> },
-          { id: 'invoices', label: 'Invoices Ledger', icon: <FileText size={15} /> },
-          { id: 'payments', label: 'Payments Log', icon: <CreditCard size={15} /> },
-          { id: 'expenses', label: 'Expenses Tracking', icon: <TrendingDown size={15} /> },
-          { id: 'reports', label: 'Financial Reports', icon: <Eye size={15} /> },
+            { id: 'dashboard', label: 'Finances Dashboard', icon: <TrendingUp size={15} /> },
+            { id: 'invoices', label: 'Invoices Ledger', icon: <FileText size={15} /> },
+            { id: 'payments', label: 'Payments Log', icon: <CreditCard size={15} /> },
+            { id: 'expenses', label: 'Expenses Tracking', icon: <TrendingDown size={15} /> },
+            { id: 'reports', label: 'Financial Reports', icon: <Eye size={15} /> },
           ]}
           activeTab={activeTab}
           onTabChange={(tab) => { setActiveTab(tab as Tab); setSearchTerm('') }}
@@ -477,7 +508,16 @@ type LuxorBookingExpense = {
                       <tr key={inv.id} className="hover:bg-[color:var(--portal-soft)]/50 transition-colors">
                         <td className="px-8 py-5 tabular-nums font-bold text-xs text-[color:var(--portal-muted)]">#{inv.id.slice(0, 8)}</td>
                         <td className="px-6 py-5">
-                          <p className="text-xs font-bold text-[color:var(--portal-text)] leading-none">{inv.client_name}</p>
+                          {inv.inquiry_id ? (
+                            <Link
+                              href={`/portal/leads/${inv.inquiry_id}`}
+                              className="inline-block text-xs font-bold leading-none text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
+                            >
+                              {inv.client_name}
+                            </Link>
+                          ) : (
+                            <p className="text-xs font-bold text-[color:var(--portal-text)] leading-none">{inv.client_name}</p>
+                          )}
                           <p className="text-[10px] text-[color:var(--portal-muted)] mt-1">{inv.event_type || 'Quinceañera'}</p>
                         </td>
                         <td className="px-6 py-5 tabular-nums font-bold text-[color:var(--portal-text)]">${Number(inv.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>

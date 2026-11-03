@@ -1,6 +1,7 @@
 'use client'
 
 import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, MoreHorizontal } from 'lucide-react'
+import Link from 'next/link'
 import React from 'react'
 import { PortalModal, PortalSkeleton, PortalSkeletonTransition } from './PortalUI'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -96,7 +97,7 @@ function TaskContext({ item, compact = false }: { item: PortalCalendarItem; comp
 
   return (
     <span className={`block min-w-0 ${compact ? 'mt-0.5 text-[10px] leading-4 sm:text-xs sm:leading-5' : 'mt-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs leading-5'}`}>
-      <span className={`block font-semibold text-[color:var(--portal-text)] ${compact ? 'truncate' : 'break-words'}`}>{leadName}</span>
+      {!compact && context.leadHref ? <Link href={context.leadHref} className="block break-words font-semibold text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{leadName}</Link> : <span className={`block font-semibold text-[color:var(--portal-text)] ${compact ? 'truncate' : 'break-words'}`}>{leadName}</span>}
       <span className="block break-words text-[color:var(--portal-muted)]">{compact ? <>{eventType} <span aria-hidden="true">·</span> Event {eventDate}</> : <>{eventType} <span aria-hidden="true">·</span> Requested event date: {eventDate}</>}</span>
       {!context.linked ? <span className="sr-only">{context.unavailable ? 'Lead details could not be loaded.' : 'This task has no linked lead record.'}</span> : null}
     </span>
