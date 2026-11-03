@@ -790,6 +790,17 @@ export function PortalCloseButton({
 }
 
 const ModalDepthContext = React.createContext(0)
+const PORTAL_MODAL_COMPACT_QUERY = '(max-width: 1023px)'
+
+function subscribeToPortalModalCompactLayout(callback: () => void) {
+  const mediaQuery = window.matchMedia(PORTAL_MODAL_COMPACT_QUERY)
+  mediaQuery.addEventListener('change', callback)
+  return () => mediaQuery.removeEventListener('change', callback)
+}
+
+function getPortalModalCompactLayoutSnapshot() {
+  return window.matchMedia(PORTAL_MODAL_COMPACT_QUERY).matches
+}
 
 export function PortalModal({
   isOpen,
@@ -802,6 +813,7 @@ export function PortalModal({
   maxWidth = 'max-w-lg',
   zIndex,
   className = '',
+  fullScreenOnCompact = false,
 }: {
   isOpen: boolean
   onClose: () => void
@@ -813,6 +825,7 @@ export function PortalModal({
   maxWidth?: string
   zIndex?: number
   className?: string
+  fullScreenOnCompact?: boolean
 }) {
   const depth = React.useContext(ModalDepthContext)
   const computedZIndex = zIndex ?? (200 + depth * 10)
@@ -821,6 +834,22 @@ export function PortalModal({
   const previouslyFocusedRef = React.useRef<HTMLElement | null>(null)
   const onCloseRef = React.useRef(onClose)
   const titleId = React.useId()
+  const reduceMotion = useReducedMotion()
+  const isCompactFullScreen = React.useSyncExternalStore(
+    subscribeToPortalModalCompactLayout,
+    getPortalModalCompactLayoutSnapshot,
+    () => false,
+  ) && fullScreenOnCompact
+
+  const dialogInitial = isCompactFullScreen
+    ? reduceMotion ? { opacity: 0 } : { x: '100%' }
+    : { opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }
+  const dialogAnimate = isCompactFullScreen
+    ? { opacity: 1, x: 0 }
+    : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
+  const dialogExit = isCompactFullScreen
+    ? reduceMotion ? { opacity: 0 } : { x: '100%' }
+    : { opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }
 
   React.useEffect(() => {
     onCloseRef.current = onClose
@@ -900,19 +929,19 @@ export function PortalModal({
     <AnimatePresence initial={false} mode="wait">
       {isOpen && (
         <motion.div
-          initial={{ opacity: 0 }}
+          initial={isCompactFullScreen ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          exit={isCompactFullScreen ? {} : { opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
           style={{ zIndex: computedZIndex }}
-          className="fixed inset-0 flex items-center justify-center p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4"
+          className={`fixed inset-0 flex items-center justify-center p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4 ${fullScreenOnCompact ? 'max-lg:!p-0' : ''}`}
         >
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className="absolute inset-0 bg-black/75 backdrop-blur-md cursor-default"
+            className={`absolute inset-0 cursor-default ${isCompactFullScreen ? 'bg-transparent' : 'bg-black/75 backdrop-blur-md'}`}
             onClick={onClose}
           />
           <motion.div
@@ -922,15 +951,15 @@ export function PortalModal({
             aria-labelledby={title ? titleId : undefined}
             aria-label={title ? undefined : ariaLabel ?? 'Portal dialog'}
             tabIndex={-1}
-            initial={{ opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }}
-            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }}
-            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className={`relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full ${maxWidth} ${className} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh]`}
+            initial={dialogInitial}
+            animate={dialogAnimate}
+            exit={dialogExit}
+            transition={{ duration: reduceMotion && isCompactFullScreen ? 0 : isCompactFullScreen ? 0.36 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className={`relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full ${maxWidth} ${className} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''}`}
           >
             <ModalDepthContext.Provider value={depth + 1}>
               {title ? (
-                <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6 sm:py-4">
+                <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
                   <div className="min-w-0">
                     <h3 id={titleId} className="text-sm font-bold uppercase tracking-widest text-[color:var(--portal-text)]">{title}</h3>
                     {description ? <p className="mt-1 max-w-xl text-[11px] leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
@@ -940,7 +969,7 @@ export function PortalModal({
               ) : null}
               {title || footer ? (
                 <>
-                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6">
+                  <div data-portal-modal-scroller className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6 ${fullScreenOnCompact ? 'max-lg:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''}`}>
                     {children}
                   </div>
                   {footer ? (

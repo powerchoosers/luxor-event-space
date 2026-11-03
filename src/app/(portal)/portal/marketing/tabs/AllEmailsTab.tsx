@@ -348,7 +348,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const readerOpenedFromList = useRef(false)
   const [selectedMessageKey, setSelectedMessageKey] = useState<string | null>(null)
   const [messageDetail, setMessageDetail] = useState<EmailMessageItem | null>(null)
-  const [loadingDetail, setLoadingDetail] = useState(false)
+  const messageDetailRef = useRef<EmailMessageItem | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(Boolean(initialMessageId))
   const [detailError, setDetailError] = useState<string | null>(null)
   const [detailRetry, setDetailRetry] = useState(0)
   const [readRequestedId, setReadRequestedId] = useState<string | null>(initialMessageId || null)
@@ -826,6 +827,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     }
   }, [])
 
+  React.useLayoutEffect(() => { messageDetailRef.current = messageDetail }, [messageDetail])
+
   // Fetch full message detail when selection changes
   useEffect(() => {
     if (!selectedId) {
@@ -837,9 +840,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     const fetchDetail = async () => {
       const cacheKey = detailCacheKey(selectedId, selectedFolderId)
       const cached = messageDetailCache.get(cacheKey)
-      setMessageDetail(cached || null)
+      const current = messageDetailRef.current
+      const retained = current?.id === selectedId && (!selectedFolderId || !current.folderId || current.folderId === selectedFolderId) ? current : null
+      setMessageDetail(cached || retained)
       setDetailError(null)
-      setLoadingDetail(!cached)
+      setLoadingDetail(!cached && !retained)
       try {
         const detail = await requestMessageDetail(selectedId, selectedFolderId)
         if (isCurrent) {
@@ -880,7 +885,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     return () => {
       isCurrent = false
     }
-  }, [selectedId, selectedFolderId, selectedMessageKey, readRequestedId, detailRetry, persistReadState])
+  }, [selectedId, selectedFolderId, readRequestedId, detailRetry, persistReadState])
 
   useEffect(() => {
     const threadId = messageDetail?.threadId
@@ -1059,8 +1064,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
   const userInteractedScrollRef = useRef(false)
   const activeTargetIdRef = useRef<string | null>(null)
+  const targetViewportOffsetRef = useRef<number | null>(null)
+  const threadResizeObserverRef = useRef<ResizeObserver | null>(null)
+  const markThreadInteraction = useCallback(() => { userInteractedScrollRef.current = true }, [])
 
-  const scrollToMessage = useCallback((targetId: string, smooth = false) => {
+  const scrollToMessage = useCallback((targetId: string) => {
     const scrollPane = threadScrollRef.current
     if (!scrollPane || !targetId) return false
     const target = scrollPane.querySelector<HTMLElement>(`[data-message-id="${targetId}"]`)
@@ -1069,44 +1077,41 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     const targetRect = target.getBoundingClientRect()
     const containerRect = scrollPane.getBoundingClientRect()
     const offsetTop = targetRect.top - containerRect.top + scrollPane.scrollTop
-    scrollPane.scrollTo({
-      top: Math.max(0, offsetTop - 16),
-      behavior: smooth && !reduceMotion ? 'smooth' : 'auto',
-    })
+    scrollPane.scrollTop = Math.max(0, offsetTop - (targetViewportOffsetRef.current ?? 16))
+    if (targetViewportOffsetRef.current === null) {
+      targetViewportOffsetRef.current = offsetTop - scrollPane.scrollTop
+    }
     return true
-  }, [reduceMotion])
+  }, [])
 
-  useEffect(() => {
-    if (!messageDetail?.id) return
-    const targetId = messageDetail.id
-    activeTargetIdRef.current = targetId
-    userInteractedScrollRef.current = false
+  const setThreadScrollPane = useCallback((node: HTMLDivElement | null) => {
+    threadResizeObserverRef.current?.disconnect()
+    threadResizeObserverRef.current = null
+    threadScrollRef.current = node
+    if (!node) return
 
-    let canceled = false
-    let attempts = 0
-
-    const tryScroll = () => {
-      if (canceled || userInteractedScrollRef.current || activeTargetIdRef.current !== targetId) return
-      const scrolled = scrollToMessage(targetId, attempts > 1)
-      if (attempts < 6) {
-        attempts += 1
-        window.setTimeout(() => {
-          if (!canceled && !userInteractedScrollRef.current && activeTargetIdRef.current === targetId) {
-            window.requestAnimationFrame(tryScroll)
-          }
-        }, attempts === 1 ? 40 : attempts * 80)
+    const positionSelected = () => {
+      if (!userInteractedScrollRef.current && activeTargetIdRef.current) {
+        scrollToMessage(activeTargetIdRef.current)
       }
     }
-
-    const frameId = window.requestAnimationFrame(() => {
-      tryScroll()
-    })
-
-    return () => {
-      canceled = true
-      window.cancelAnimationFrame(frameId)
+    positionSelected()
+    if (typeof ResizeObserver !== 'undefined' && node.firstElementChild) {
+      const observer = new ResizeObserver(positionSelected)
+      observer.observe(node.firstElementChild)
+      threadResizeObserverRef.current = observer
     }
-  }, [messageDetail?.id, thread?.messages.length, scrollToMessage])
+  }, [scrollToMessage])
+
+  React.useLayoutEffect(() => {
+    const targetId = messageDetail?.id || null
+    if (activeTargetIdRef.current !== targetId) {
+      activeTargetIdRef.current = targetId
+      userInteractedScrollRef.current = false
+      targetViewportOffsetRef.current = null
+    }
+    if (targetId && !userInteractedScrollRef.current) scrollToMessage(targetId)
+  }, [messageDetail?.id, thread, scrollToMessage])
 
   useEffect(() => {
     if (!hasUnsentReply) return
@@ -1755,7 +1760,36 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         </motion.aside>
       )}
       </AnimatePresence>
-      {!compactReaderOpen ? <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 lg:hidden">
+      <div className="relative flex min-h-0 flex-1 w-full overflow-hidden rounded-none border-x border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)] shadow-none lg:rounded-2xl lg:border lg:shadow-sm">
+      {/* PANE 1: Mailbox Navigation (Desktop collapsible column) */}
+      <AnimatePresence initial={false}>
+      {mailboxDrawerOpen && !readerExpanded && (
+        <motion.aside
+          key="mailbox-nav-desktop"
+          role="region"
+          aria-label="Mailbox navigation"
+          initial={{ width: 0, opacity: 0 }}
+          animate={{ width: 'var(--mailbox-nav-width)', opacity: 1 }}
+          exit={{ width: 0, opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0.08 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+          className="hidden lg:flex min-h-0 shrink-0 w-60 [--mailbox-nav-width:15rem] xl:w-64 xl:[--mailbox-nav-width:16rem] border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex-col overflow-hidden"
+        >
+          {renderMailboxNav(false)}
+        </motion.aside>
+      )}
+      </AnimatePresence>
+      {/* PANE 2: Message Threads List */}
+      <AnimatePresence initial={false}>
+      {!readerExpanded && <motion.div
+        key="message-list"
+        initial={{ width: 0, opacity: 0, x: -12 }}
+        animate={{ width: 'var(--message-list-width)', opacity: 1, x: 0 }}
+        exit={{ width: 0, opacity: 0, x: -12 }}
+        transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
+        inert={isMobileReader && compactReaderOpen ? true : undefined}
+        className="flex min-h-0 min-w-0 w-full [--message-list-width:100%] lg:w-80 lg:[--message-list-width:20rem] xl:w-96 xl:[--message-list-width:24rem] shrink-0 lg:border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex-col overflow-hidden"
+      >
+      <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 lg:hidden">
         <button
           type="button"
           onClick={() => onMailboxDrawerOpenChange(true)}
@@ -1786,35 +1820,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         >
           <SquarePen size={19} aria-hidden="true" />
         </button>
-      </div> : null}
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-none border-x border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)] shadow-none lg:rounded-2xl lg:border lg:shadow-sm">
-      {/* PANE 1: Mailbox Navigation (Desktop collapsible column) */}
-      <AnimatePresence initial={false}>
-      {mailboxDrawerOpen && !readerExpanded && (
-        <motion.aside
-          key="mailbox-nav-desktop"
-          role="region"
-          aria-label="Mailbox navigation"
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width: 'var(--mailbox-nav-width)', opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0.08 : 0.22, ease: [0.23, 1, 0.32, 1] }}
-          className="hidden lg:flex min-h-0 shrink-0 w-60 [--mailbox-nav-width:15rem] xl:w-64 xl:[--mailbox-nav-width:16rem] border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex-col overflow-hidden"
-        >
-          {renderMailboxNav(false)}
-        </motion.aside>
-      )}
-      </AnimatePresence>
-      {/* PANE 2: Message Threads List */}
-      <AnimatePresence initial={false}>
-      {!readerExpanded && <motion.div
-        key="message-list"
-        initial={{ width: 0, opacity: 0, x: -12 }}
-        animate={{ width: 'var(--message-list-width)', opacity: 1, x: 0 }}
-        exit={{ width: 0, opacity: 0, x: -12 }}
-        transition={{ duration: reduceMotion ? 0.08 : 0.24, ease: [0.23, 1, 0.32, 1] }}
-        className={`min-h-0 min-w-0 w-full [--message-list-width:100%] lg:w-80 lg:[--message-list-width:20rem] xl:w-96 xl:[--message-list-width:24rem] shrink-0 lg:border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex-col overflow-hidden ${compactReaderOpen ? 'hidden lg:flex' : 'flex'}`}
-      >
+      </div>
         <div className="shrink-0 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 sm:px-4">
           <div className="hidden items-center gap-2 lg:flex">
             <button
@@ -1969,7 +1975,16 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       </AnimatePresence>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
-      <div className={`min-h-0 min-w-0 flex-1 overflow-hidden bg-[color:var(--portal-card)] flex-col ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}>
+      <AnimatePresence initial={false}>
+      {(compactReaderOpen || !isMobileReader) && <motion.div
+        key="email-reader-pane"
+        initial={reduceMotion ? { opacity: 0 } : isMobileReader ? { x: '100%' } : false}
+        animate={{ opacity: 1, x: 0 }}
+        exit={reduceMotion ? { opacity: 0 } : { x: '100%' }}
+        transition={{ duration: reduceMotion ? 0 : 0.36, ease: [0.22, 1, 0.36, 1] }}
+        onAnimationComplete={() => { if (isMobileReader && compactReaderOpen) syncReplyBounds() }}
+        className={`absolute inset-0 z-20 w-full min-h-0 min-w-0 flex-1 overflow-hidden bg-[color:var(--portal-card)] flex-col lg:static lg:z-auto lg:w-auto ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}
+      >
         <div className="flex min-h-11 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-1.5 sm:px-4">
           <button type="button" onClick={closeReader} aria-label="Back to email list" title="Back to email list" className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${readerExpanded ? '' : 'lg:hidden'}`}>
             <ArrowLeft size={17} aria-hidden="true" /> <span className={readerExpanded ? 'hidden lg:inline' : 'hidden'}>Back to list</span>
@@ -2169,7 +2184,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           </motion.div>
         ) : selectedId && messageDetail ? (
           <motion.div
-            key={selectedMessageKey || detailCacheKey(messageDetail.id, messageDetail.folderId)}
+            key={`detail:${selectedId}`}
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(8px)' }}
             animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(8px)' }}
@@ -2272,20 +2287,15 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             <div className="flex min-h-0 flex-1 flex-col">
             {/* Scrollable email thread — grows to fill, reply pinned below */}
             <div
-              ref={threadScrollRef}
+              ref={setThreadScrollPane}
               data-email-thread-scroll
-              onPointerDown={() => { userInteractedScrollRef.current = true }}
-              onTouchStart={() => { userInteractedScrollRef.current = true }}
-              onWheel={() => { userInteractedScrollRef.current = true }}
+              onPointerDown={markThreadInteraction}
+              onTouchStart={markThreadInteraction}
+              onWheel={markThreadInteraction}
+              onKeyDown={(event) => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) userInteractedScrollRef.current = true }}
               className={`portal-scrollbar min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain bg-[color:var(--portal-bg)] [overflow-anchor:none] ${isShortLandscape ? 'p-2' : 'p-3.5 sm:px-6 sm:py-4 lg:px-8'} ${replyOpen && isMobileReader ? 'pb-48' : ''}`}
             >
               <div className={`mx-auto w-full space-y-3 transition-all duration-300 ${viewportWidth === 'mobile' ? 'max-w-[375px]' : viewportWidth === 'tablet' ? 'max-w-[768px]' : 'max-w-5xl'}`}>
-                {loadingThread && !thread && (
-                  <div className="flex items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] text-[color:var(--portal-muted)]">
-                    <Loader2 size={12} className="animate-spin text-[#caa24c]" />
-                    Loading earlier messages in the background. This email is ready now.
-                  </div>
-                )}
                 {threadError && !loadingThread && !thread && (
                   <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] text-amber-700 dark:text-amber-300">
                     <span className="truncate">This email is available, but the rest of the conversation could not load.</span>
@@ -2304,7 +2314,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                   const grouped = Boolean(previous && isOutgoingEmailMessage(previous) === outgoing && messagesShareVisualGroup(previous, message))
                   const currentMessage = message.id === messageDetail.id
                   return (
-                    <React.Fragment key={`${messageKey(message)}:${index}`}>
+                    <React.Fragment key={message.id}>
                       {index === 0 || !sameConversationDay(orderedMessages[index - 1], message) ? (
                         <div className="flex items-center gap-3 py-2" aria-label={formatConversationDate(message.receivedAt)}>
                           <span className="h-px flex-1 bg-[color:var(--portal-border)]" />
@@ -2326,6 +2336,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                           viewMode={viewMode}
                           blockExternalImages={blockExternalImages}
                           inquiryByEmail={inquiryByEmail}
+                          onThreadInteraction={markThreadInteraction}
                           onOpenAttachment={openAttachmentPreview}
                           openingAttachment={openingAttachment}
                         />
@@ -2443,17 +2454,19 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             </motion.div>,
             document.body,
           ) : null}
-      </div>
+      </motion.div>}
+      </AnimatePresence>
     </div>
   </div>
-    {isMobileReader && compactReaderOpen && mobileReplyAnchor && messageDetail && messageDetail.category !== 'Website Inquiry' && messageDetail.direction !== 'campaign' && mobileReplyBounds && typeof document !== 'undefined' ? createPortal(
-      <>
+    {typeof document !== 'undefined' ? createPortal(
+      <AnimatePresence initial={false}>
+      {isMobileReader && compactReaderOpen && mobileReplyAnchor && messageDetail && messageDetail.category !== 'Website Inquiry' && messageDetail.direction !== 'campaign' && mobileReplyBounds ? (
       <motion.div
         key="mobile-reply-container"
         id="mobile-reply-container"
         role={replyOpen ? 'region' : undefined}
         aria-label={replyOpen ? 'Write email reply' : undefined}
-        initial={false}
+        initial={reduceMotion ? { opacity: 0 } : { x: '100%' }}
         animate={(() => {
           const keyboardOpen = replyViewport.height < window.innerHeight - 120
           const openBottom = keyboardOpen
@@ -2470,9 +2483,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             width: mobileReplyBounds.width,
             height: replyOpen ? Math.max(140, Math.min(targetHeight, openBottom - (replyViewport.top + 8))) : mobileReplyBounds.height,
             borderRadius: 24,
+            x: 0,
+            opacity: 1,
           }
         })()}
-        transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32 }}
+        exit={reduceMotion ? { opacity: 0 } : { x: '100%' }}
+        transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32, x: { duration: 0.36, ease: [0.22, 1, 0.36, 1] } }}
         onAnimationComplete={() => {
           if (!replyOpen) syncReplyBounds()
         }}
@@ -2508,7 +2524,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           )}
         </AnimatePresence>
       </motion.div>
-      </>,
+      ) : null}
+      </AnimatePresence>,
       document.body,
     ) : null}
     {/* React confirmation modal for unsent reply draft */}
@@ -2630,6 +2647,108 @@ function ElenaAiDraftingState({ mobile = false }: { mobile?: boolean }) {
   )
 }
 
+function FullEmailFrame({ srcDoc, title }: { srcDoc: string; title: string }) {
+  const [height, setHeight] = useState(256)
+  const cleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => () => cleanupRef.current?.(), [])
+
+  const onLoad = (frame: HTMLIFrameElement) => {
+    cleanupRef.current?.()
+    const doc = frame.contentDocument
+    const scroller = frame.closest<HTMLElement>('[data-portal-modal-scroller]')
+    if (!doc?.body || !scroller) return
+
+    let resizeFrame = 0
+    let momentumFrame = 0
+    let lastY: number | null = null
+    let lastX: number | null = null
+    let lastTime = 0
+    let velocity = 0
+    let momentumTime = 0
+    let active = true
+    const stopMomentum = () => { window.cancelAnimationFrame(momentumFrame); momentumFrame = 0 }
+    const updateHeight = () => {
+      if (!active || resizeFrame) return
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = 0
+        const body = doc.body
+        if (body) setHeight(Math.max(64, body.scrollHeight, Math.ceil(body.getBoundingClientRect().height)) + 8)
+      })
+    }
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(doc.body)
+    updateHeight()
+    void doc.fonts?.ready.then(updateHeight)
+
+    const wheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
+      stopMomentum()
+      scroller.scrollTop += event.deltaY
+      event.preventDefault()
+    }
+    const touchStart = (event: TouchEvent) => {
+      stopMomentum()
+      lastY = event.touches.length === 1 ? event.touches[0].screenY : null
+      lastX = event.touches.length === 1 ? event.touches[0].screenX : null
+      lastTime = event.timeStamp
+      velocity = 0
+    }
+    const touchMove = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || lastY === null || lastX === null) return
+      const nextY = event.touches[0].screenY
+      const nextX = event.touches[0].screenX
+      const delta = lastY - nextY
+      const horizontal = lastX - nextX
+      lastX = nextX
+      if (Math.abs(horizontal) > Math.abs(delta)) { lastY = nextY; velocity = 0; return }
+      const elapsed = event.timeStamp - lastTime
+      scroller.scrollTop += delta
+      velocity = elapsed > 0 && elapsed < 160 ? Math.max(-3, Math.min(3, delta / elapsed)) : 0
+      lastY = nextY
+      lastTime = event.timeStamp
+      if (event.cancelable) event.preventDefault()
+    }
+    const touchEnd = (event: TouchEvent) => {
+      lastY = null
+      if (event.timeStamp - lastTime >= 160 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      const step = (now: number) => {
+        if (!momentumTime) momentumTime = now
+        const elapsed = Math.min(now - momentumTime, 40)
+        momentumTime = now
+        const previous = scroller.scrollTop
+        scroller.scrollTop += velocity * elapsed
+        velocity *= Math.pow(0.92, elapsed / 16)
+        if (Math.abs(velocity) >= 0.02 && (elapsed === 0 || scroller.scrollTop !== previous)) momentumFrame = window.requestAnimationFrame(step)
+      }
+      momentumTime = 0
+      momentumFrame = window.requestAnimationFrame(step)
+    }
+    doc.addEventListener('wheel', wheel, { passive: false })
+    doc.addEventListener('touchstart', touchStart, { passive: true })
+    doc.addEventListener('touchmove', touchMove, { passive: false })
+    doc.addEventListener('touchend', touchEnd, { passive: true })
+    doc.addEventListener('touchcancel', stopMomentum, { passive: true })
+    scroller.addEventListener('wheel', stopMomentum, { passive: true })
+    scroller.addEventListener('touchstart', stopMomentum, { passive: true })
+    cleanupRef.current = () => {
+      active = false
+      observer.disconnect()
+      window.cancelAnimationFrame(resizeFrame)
+      stopMomentum()
+      doc.removeEventListener('wheel', wheel)
+      doc.removeEventListener('touchstart', touchStart)
+      doc.removeEventListener('touchmove', touchMove)
+      doc.removeEventListener('touchend', touchEnd)
+      doc.removeEventListener('touchcancel', stopMomentum)
+      scroller.removeEventListener('wheel', stopMomentum)
+      scroller.removeEventListener('touchstart', stopMomentum)
+    }
+  }
+
+  return <iframe srcDoc={srcDoc} title={title} className="block w-full border-0 bg-white" style={{ height }} scrolling="no" onLoad={(event) => onLoad(event.currentTarget)} sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin" />
+}
+
 function ThreadMessage({
   message,
   expanded: initiallyExpanded,
@@ -2639,6 +2758,7 @@ function ThreadMessage({
   viewMode,
   blockExternalImages,
   inquiryByEmail,
+  onThreadInteraction,
   onOpenAttachment,
   openingAttachment,
 }: {
@@ -2650,6 +2770,7 @@ function ThreadMessage({
   viewMode: 'html' | 'text'
   blockExternalImages: boolean
   inquiryByEmail: Map<string, LuxorInquiry>
+  onThreadInteraction: () => void
   onOpenAttachment: (attachment: EmailAttachment, message: EmailMessageItem) => void
   openingAttachment: string | null
 }) {
@@ -2715,7 +2836,7 @@ function ThreadMessage({
     || (message.htmlContent ? collapsedQuoteBody?.collapsedCount ? collapsedQuoteBody.html : message.htmlContent : null)
     || (conversationText ? plainTextToEmailHtml(conversationText, true) : null)
   const fullEmailDocument = useMemo(
-    () => buildMessageDocument({ ...message, htmlContent: originalEmailHtml, content: '' }, blockExternalImages, portalTheme, false, true),
+    () => buildMessageDocument({ ...message, htmlContent: originalEmailHtml, content: '' }, blockExternalImages, portalTheme),
     [message, originalEmailHtml, blockExternalImages, portalTheme],
   )
   const displayedMessage = useMemo(() => ({
@@ -2788,6 +2909,8 @@ function ThreadMessage({
     const observer = new ResizeObserver(updateHeight)
     if (document.documentElement) observer.observe(document.documentElement)
     if (document.body) observer.observe(document.body)
+    const fitContent = chat ? document.getElementById('luxor-email-fit-content') : null
+    if (fitContent) observer.observe(fitContent)
     frameObserverRef.current = observer
     updateHeight()
     void document.fonts?.ready.then(updateHeight)
@@ -2841,6 +2964,7 @@ function ThreadMessage({
         momentumFrame = window.requestAnimationFrame(step)
       }
       const handOffWheel = (event: WheelEvent) => {
+        onThreadInteraction()
         cancelContainerMomentum()
         const tableScroll = (event.target as Element | null)?.closest?.<HTMLElement>('[data-luxor-table-scroll]')
         if (tableScroll && (Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey)) {
@@ -2870,6 +2994,7 @@ function ThreadMessage({
         return typeof touch.clientX === 'number' && Number.isFinite(touch.clientX) ? touch.clientX : null
       }
       const beginTouch = (event: TouchEvent) => {
+        onThreadInteraction()
         cancelContainerMomentum()
         touchVelocity = 0
         lastTouchY = event.touches.length === 1 ? getTouchScreenY(event.touches[0]) : null
@@ -2935,6 +3060,8 @@ function ThreadMessage({
       }
       const cancelFromContainerInput = () => cancelContainerMomentum()
 
+      document.addEventListener('pointerdown', onThreadInteraction, { passive: true })
+      document.addEventListener('keydown', onThreadInteraction)
       document.addEventListener('wheel', handOffWheel, { passive: false })
       document.addEventListener('touchstart', beginTouch, { passive: true })
       document.addEventListener('touchmove', handOffTouch, { passive: false })
@@ -2944,6 +3071,8 @@ function ThreadMessage({
       scrollContainer.addEventListener('touchstart', cancelFromContainerInput, { passive: true })
       frameInteractionCleanupRef.current = () => {
         cancelOwnMomentum()
+        document.removeEventListener('pointerdown', onThreadInteraction)
+        document.removeEventListener('keydown', onThreadInteraction)
         document.removeEventListener('wheel', handOffWheel)
         document.removeEventListener('touchstart', beginTouch)
         document.removeEventListener('touchmove', handOffTouch)
@@ -3013,13 +3142,13 @@ function ThreadMessage({
                     {fullEmailSize ? 'Fit email to screen' : 'View email at full size'}
                   </button>
                 </div> : null}
-                <div className="min-w-0 max-w-full overflow-x-auto">
+                <div className="min-w-0 max-w-full overflow-x-auto rounded-xl">
                 <iframe
                   key={frameKey}
                   srcDoc={html}
                   title={`${decodeHtmlEntities(message.subject)} — ${message.id}`}
                   ref={cleanupMessageFrame}
-                  className={`block max-w-none border-0 bg-transparent ${fullEmailSize ? 'touch-auto' : 'touch-pan-y'}`}
+                  className={`block max-w-none rounded-xl border-0 bg-transparent ${fullEmailSize ? 'touch-auto' : 'touch-pan-y'}`}
                   style={{ width: chat && fullEmailSize && emailLayout ? `${fullEmailFrameWidth}px` : '100%', height: frameHeight, opacity: readyFrameKey === frameKey ? 1 : 0, transition: reduceMotion ? 'none' : 'opacity 160ms ease-out' }}
                   scrolling="no"
                   onLoad={(event) => {
@@ -3078,6 +3207,7 @@ function ThreadMessage({
         maxWidth="max-w-5xl"
         className="h-[min(92dvh,60rem)]"
         zIndex={90}
+        fullScreenOnCompact
       >
         <div className="space-y-4">
           <dl className="grid gap-x-5 gap-y-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-xs sm:grid-cols-[minmax(5rem,auto)_minmax(0,1fr)] sm:p-4">
@@ -3092,13 +3222,10 @@ function ThreadMessage({
             <dd className="min-w-0 text-[color:var(--portal-text)]"><time dateTime={message.receivedAt || undefined}>{formatEmailDateDetailed(message.receivedAt)}</time></dd>
           </dl>
           <section aria-label="Original email body" className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-white">
-            {originalEmailHtml ? <iframe
+            {originalEmailHtml ? <FullEmailFrame
               key={`full:${messageKey(message)}:${blockExternalImages ? 'images-blocked' : 'images-visible'}`}
               srcDoc={fullEmailDocument}
               title={`${decodeHtmlEntities(message.subject)} — full email`}
-              className="block h-[min(58dvh,44rem)] min-h-64 w-full border-0 bg-white"
-              scrolling="yes"
-              sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
             /> : <p className="whitespace-pre-wrap break-words bg-[color:var(--portal-card)] p-4 text-sm leading-6 text-[color:var(--portal-text)]">No message body available.</p>}
           </section>
           {message.attachments?.length ? <section aria-label="Email attachments" className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 sm:p-4">
@@ -3547,6 +3674,14 @@ function applyIntrinsicEmailTableWidths(root: HTMLElement, document: Document, a
     const hasTableSemantics = table.getAttribute('role') === 'table' || table.getAttribute('role') === 'grid' || table.hasAttribute('aria-label')
     const isPresentationTable = table.getAttribute('role') === 'presentation' || table.getAttribute('role') === 'none'
     const rows = Array.from(table.querySelectorAll('tr')).filter((row) => row.closest('table') === table)
+    const labelCells = rows.flatMap((row) => {
+      const cells = Array.from(row.children).filter((cell): cell is HTMLElement => cell.tagName === 'TD' || cell.tagName === 'TH')
+      if (cells.length !== 2) return []
+      const label = cells[0]
+      const text = label.textContent?.trim().replace(/\s+/g, ' ') || ''
+      return text && text.length <= 40 && text.split(' ').every((word) => word.length <= 18) && !label.querySelector('table, img, a, input, button') ? [label] : []
+    })
+    if (labelCells.length >= 2) labelCells.forEach((cell) => cell.setAttribute('data-luxor-label-cell', 'true'))
     const hasDenseRows = !isPresentationTable && rows.length >= 3 && rows.some((row) => row.children.length >= 3)
     const hasRepeatedColumns = !isPresentationTable && rows.filter((row) => Array.from(row.children).filter((cell) => cell.tagName === 'TD' || cell.tagName === 'TH').length >= 2).length >= 3
 
@@ -3608,7 +3743,8 @@ function buildMessageDocument(message: EmailMessageItem, blockExternalImages: bo
   const chatFitRules = chat ? '#luxor-email-fit-viewport{position:relative;width:100%;height:auto;overflow:visible}#luxor-email-fit-content{position:absolute;top:0;left:0;width:100%;min-width:0;max-width:none;transform:none!important;overflow:visible}@media(max-width:639px){html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>table:not([data-luxor-wide-table]),html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>div,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>section,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content>article,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content table:not([data-luxor-wide-table]){width:100%!important;min-width:0!important;max-width:100%!important;table-layout:auto!important}html:not([data-luxor-full-size="true"]) #luxor-email-fit-content table:not([data-luxor-wide-table]) td,html:not([data-luxor-full-size="true"]) #luxor-email-fit-content table:not([data-luxor-wide-table]) th{max-width:100%!important;overflow-wrap:anywhere!important;word-break:normal!important}html:not([data-luxor-full-size="true"]) #luxor-email-fit-content [data-luxor-table-scroll]{width:100%!important;max-width:100%!important;overflow-x:auto!important;touch-action:pan-x pan-y!important}}' : ''
   const documentContent = chat ? `<div id="luxor-email-fit-viewport"><div id="luxor-email-fit-content">${content}</div></div>` : content
   const chatBodyAttribute = chat ? ' data-luxor-chat="true"' : ''
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:${scrollableBody ? 'auto' : 'hidden'};overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}${tableRules}table.luxor-card{border-radius:16px!important;overflow:hidden!important}${cellRules}pre{white-space:pre-wrap;overflow-wrap:anywhere}${chatFitRules}${darkThemeFilter}</style></head><body${chatBodyAttribute}>${documentContent}</body></html>`
+  const labelRules = chat ? '@media(max-width:639px){html:not([data-luxor-full-size="true"]) #luxor-email-fit-content table:not([data-luxor-wide-table]) td[data-luxor-label-cell],html:not([data-luxor-full-size="true"]) #luxor-email-fit-content table:not([data-luxor-wide-table]) th[data-luxor-label-cell]{overflow-wrap:normal!important;word-break:normal!important}}' : ''
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{width:100%;max-width:100%;overflow-x:hidden;touch-action:pan-y;background:${documentBackground}}*{box-sizing:border-box}body{width:100%;max-width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:14px 16px 18px;color:${textColor};background:transparent;font-size:14px;line-height:1.6;overflow:${scrollableBody ? 'auto' : 'hidden'};overflow-wrap:anywhere;touch-action:pan-y}@media (min-width: 640px){body{padding:18px 20px 22px}}img,svg,video{max-width:100%!important;height:auto!important}a{color:#a8792f}blockquote{border-left:3px solid #caa24c;margin:12px 0;padding-left:12px;color:#52525b}${tableRules}table.luxor-card{border-radius:16px!important;overflow:hidden!important}${cellRules}pre{white-space:pre-wrap;overflow-wrap:anywhere}${chatFitRules}${labelRules}${darkThemeFilter}</style></head><body${chatBodyAttribute}>${documentContent}</body></html>`
 }
 
 function hasDarkEmailSurface(html: string) {
