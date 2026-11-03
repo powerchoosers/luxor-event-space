@@ -59,8 +59,10 @@ function stepDescription(step: CustomWorkflowStep) {
 function StepDetails({ step }: { step: CustomWorkflowStep }) {
   if (step.type === 'email' && step.mode !== 'existing_inquiry_acknowledgment') {
     return <div className="mt-2 space-y-1.5 whitespace-pre-wrap break-words text-xs leading-5 text-[color:var(--portal-muted)]">
+      <p>{step.emailStyle === 'template' ? `HTML design · ${step.emailDocument?.blocks.length || 0} editable elements` : 'Personal email · lightly styled'}{step.generationMode === 'ai' ? ' · written fresh for each client' : ' · saved copy'}</p>
+      {step.generationMode === 'ai' && step.aiPrompt ? <p>Instructions for each client: <WorkflowVariableText value={step.aiPrompt} /></p> : null}
       {step.previewText ? <p>Preview: <WorkflowVariableText value={step.previewText} /></p> : null}
-      {step.body ? <p><WorkflowVariableText value={step.body} /></p> : step.aiPrompt ? <p>AI copy instructions: <WorkflowVariableText value={step.aiPrompt} /></p> : null}
+      {step.body && step.emailStyle !== 'template' ? <p><WorkflowVariableText value={step.body} /></p> : null}
       {step.ctaText ? <p>Button: <WorkflowVariableText value={step.ctaText} /> · <WorkflowVariableText value={step.ctaUrl} /></p> : null}
     </div>
   }
@@ -120,6 +122,7 @@ export function ElenaWorkflowDraftCard({ draft, onSaved }: ElenaWorkflowDraftCar
           <p className="mt-2 break-words text-[11px] font-medium text-[color:var(--portal-text)]">
             Trigger: {CUSTOM_WORKFLOW_TRIGGER_LABELS[draft.definition.trigger].label} · {draft.definition.steps.length} steps
           </p>
+          {draft.definition.emailSettings ? <p className="mt-1 break-words text-[11px] leading-5 text-[color:var(--portal-muted)]">Send as {draft.definition.emailSettings.senderMode === 'elena' ? 'Elena' : 'the signed-in user'} · {draft.definition.emailSettings.senderEmail}</p> : null}
         </div>
       </div>
 

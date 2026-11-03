@@ -177,7 +177,7 @@ export function AutomationsLibraryTab() {
               Pre-built Workflows
             </h2>
             <p className="mt-0.5 text-xs text-[color:var(--portal-muted)] max-w-2xl">
-              These are templates, not running workflows. Use one for selected leads or customize it to create a saved workflow with its own on/off control.
+              Start with a draft, review the sender and messages, then activate it before enrolling leads.
             </p>
           </div>
         </div>
@@ -214,7 +214,7 @@ export function AutomationsLibraryTab() {
                   onClick={() => setEnrollingWorkflowId(pb.id)}
                   className="rounded-lg bg-[#caa24c] px-3 py-1.5 text-xs font-bold text-[#17130b] transition hover:bg-[#d6b45f]"
                 >
-                  Use Default (Enroll)
+                  Prepare draft
                 </button>
                 <Link
                   href={`/portal/marketing/custom-workflows/new?from=${encodeURIComponent(pb.id)}`}
@@ -241,6 +241,7 @@ export function AutomationsLibraryTab() {
       {/* Enroll In Workflow Modal */}
       <EnrollInWorkflowModal
         isOpen={Boolean(enrollingWorkflowId)}
+        initialWorkflowId={enrollingWorkflowId}
         onClose={() => setEnrollingWorkflowId(null)}
         inquiryIds={[]}
       />

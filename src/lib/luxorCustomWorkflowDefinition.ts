@@ -1,3 +1,6 @@
+import type { LuxorEmailDocument } from '@/app/(portal)/portal/marketing/emailTemplates'
+import { validateWorkflowEmailDocument } from './luxorWorkflowEmailDocument'
+
 export const CUSTOM_WORKFLOW_TRIGGER = 'contact_form_inquiry_created' as const
 
 export const CUSTOM_WORKFLOW_TRIGGERS = [
@@ -11,6 +14,9 @@ export const CUSTOM_WORKFLOW_TRIGGERS = [
 ] as const
 
 export type CustomWorkflowTrigger = (typeof CUSTOM_WORKFLOW_TRIGGERS)[number]
+
+/** Automatic producers beyond new contact inquiries have not been connected yet. */
+export const CUSTOM_WORKFLOW_RUNTIME_TRIGGERS: readonly CustomWorkflowTrigger[] = ['contact_form_inquiry_created', 'manual']
 
 export const CUSTOM_WORKFLOW_TRIGGER_LABELS: Record<CustomWorkflowTrigger, { label: string; description: string }> = {
   contact_form_inquiry_created: {
@@ -59,6 +65,8 @@ export type CustomWorkflowEmailStep = {
   generationMode?: 'manual' | 'ai'
   aiPrompt?: string
   templateId?: string
+  emailStyle?: 'personal' | 'template'
+  emailDocument?: LuxorEmailDocument
 }
 
 export type CustomWorkflowTextStep = {
@@ -111,10 +119,18 @@ export type CustomWorkflowStep =
   | CustomWorkflowConditionStep
   | CustomWorkflowEndStep
 
+export type CustomWorkflowEmailSettings = {
+  senderMode: 'operator' | 'elena'
+  senderEmail: string
+  /** Set by the server from the authenticated operator; never trusted from input. */
+  senderActorEmail?: string
+}
+
 export type CustomWorkflowDefinition = {
   schemaVersion: 1
   trigger: CustomWorkflowTrigger
   steps: CustomWorkflowStep[]
+  emailSettings?: CustomWorkflowEmailSettings
 }
 
 export type CustomWorkflowDefinitionError = {
@@ -132,6 +148,7 @@ export const CUSTOM_WORKFLOW_ALLOWED_MERGE_FIELDS = [
   'tour_time',
   'venue_phone',
   'venue_email',
+  'venue_address',
 ] as const
 
 export type CustomWorkflowMergeField = (typeof CUSTOM_WORKFLOW_ALLOWED_MERGE_FIELDS)[number]
@@ -149,8 +166,9 @@ export const DYNAMIC_VARIABLE_CHIPS: Array<{
   { label: 'Guest Count', token: '{{guest_count}}', preview: '150 guests', category: 'event' },
   { label: 'Tour Date', token: '{{tour_date}}', preview: 'Saturday, Nov 7', category: 'tour' },
   { label: 'Tour Time', token: '{{tour_time}}', preview: '2:00 PM', category: 'tour' },
-  { label: 'Venue Phone', token: '{{venue_phone}}', preview: '(956) 555-0199', category: 'venue' },
+  { label: 'Venue Phone', token: '{{venue_phone}}', preview: 'Current number from venue Settings', category: 'venue' },
   { label: 'Venue Email', token: '{{venue_email}}', preview: 'hello@luxoratlaspalmas.com', category: 'venue' },
+  { label: 'Venue Address', token: '{{venue_address}}', preview: '803 Castroville Rd #402, San Antonio, TX 78237', category: 'venue' },
 ]
 
 const MAX_STEPS = 25
@@ -251,7 +269,16 @@ export function validateCustomWorkflowDefinition(
 
   const definition = input as Partial<CustomWorkflowDefinition>
   const errors: CustomWorkflowDefinitionError[] = []
-  rejectUnexpectedKeys(definition, ['schemaVersion', 'trigger', 'steps', 'metadata'], 'definition', errors)
+  rejectUnexpectedKeys(definition, ['schemaVersion', 'trigger', 'steps', 'metadata', 'emailSettings'], 'definition', errors)
+  if (definition.emailSettings !== undefined) {
+    const settings = definition.emailSettings
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)
+      || !['operator', 'elena'].includes(settings.senderMode)
+      || typeof settings.senderEmail !== 'string' || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(settings.senderEmail)
+      || (settings.senderActorEmail !== undefined && typeof settings.senderActorEmail !== 'string')) {
+      errors.push({ path: 'emailSettings', message: 'Choose a sender identity and an approved email address.' })
+    } else rejectUnexpectedKeys(settings, ['senderMode', 'senderEmail', 'senderActorEmail'], 'emailSettings', errors)
+  }
   if (definition.schemaVersion !== 1) errors.push({ path: 'schemaVersion', message: 'This workflow version is not supported.' })
   if (!definition.trigger || !CUSTOM_WORKFLOW_TRIGGERS.includes(definition.trigger)) {
     errors.push({ path: 'trigger', message: 'Choose a supported workflow trigger.' })
@@ -269,7 +296,7 @@ export function validateCustomWorkflowDefinition(
       continue
     }
     const allowedStepKeys = step.type === 'email'
-      ? ['id', 'type', 'mode', 'name', 'subject', 'previewText', 'body', 'ctaText', 'ctaUrl', 'generationMode', 'aiPrompt', 'templateId']
+      ? ['id', 'type', 'mode', 'name', 'subject', 'previewText', 'body', 'ctaText', 'ctaUrl', 'generationMode', 'aiPrompt', 'templateId', 'emailStyle', 'emailDocument']
       : step.type === 'text'
         ? ['id', 'type', 'name', 'body', 'requiredConsentScope', 'generationMode', 'aiPrompt']
         : step.type === 'call_task'
@@ -310,14 +337,23 @@ export function validateCustomWorkflowDefinition(
         errors.push({ path, message: 'The existing contact acknowledgment is a read-only marker; its content remains managed by the existing inquiry path.' })
       }
       const isAi = step.generationMode === 'ai'
+      if (step.emailStyle !== undefined && !['personal', 'template'].includes(step.emailStyle)) errors.push({ path: `${path}.emailStyle`, message: 'Choose a personal email or an HTML template.' })
+      if (step.emailDocument !== undefined) {
+        const documentError = validateWorkflowEmailDocument(step.emailDocument)
+        if (documentError) errors.push({ path: `${path}.emailDocument`, message: documentError })
+        else for (const block of step.emailDocument.blocks) for (const [field, value] of Object.entries(block)) if (typeof value === 'string') validateMergeFields(value, `${path}.emailDocument.${block.id}.${field}`, errors)
+      }
+      if (step.emailStyle === 'template' && !step.emailDocument && !allowIncompleteDraft) errors.push({ path: `${path}.emailDocument`, message: 'Choose an HTML template for this email.' })
+      if (step.generationMode !== undefined && !['manual', 'ai'].includes(step.generationMode)) errors.push({ path: `${path}.generationMode`, message: 'Choose saved content or per-client generation.' })
+      if (step.aiPrompt !== undefined && (typeof step.aiPrompt !== 'string' || step.aiPrompt.length > 6000)) errors.push({ path: `${path}.aiPrompt`, message: 'Email instructions must be text under 6,000 characters.' })
       if (isAi) {
-        if (!allowIncompleteDraft && (!step.aiPrompt || !step.aiPrompt.trim())) {
+        if (!allowIncompleteDraft && (typeof step.aiPrompt !== 'string' || !step.aiPrompt.trim())) {
           errors.push({ path: `${path}.aiPrompt`, message: 'Describe the email instructions for Elena AI.' })
         }
       } else if (step.mode !== 'existing_inquiry_acknowledgment') {
         if (step.subject.length > 500 || (!allowIncompleteDraft && !step.subject.trim()) || /[\r\n]/.test(step.subject)) errors.push({ path: `${path}.subject`, message: 'Enter a one-line subject of 1 to 500 characters.' })
         if (step.previewText.length > 500) errors.push({ path: `${path}.previewText`, message: 'Preview text is too long.' })
-        if (step.body.length > MAX_BODY_LENGTH || (!allowIncompleteDraft && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Email body must be 1 to ${MAX_BODY_LENGTH} characters.` })
+        if (step.body.length > MAX_BODY_LENGTH || (!allowIncompleteDraft && step.emailStyle !== 'template' && !step.body.trim())) errors.push({ path: `${path}.body`, message: `Email body must be 1 to ${MAX_BODY_LENGTH} characters.` })
         validateMergeFields(step.subject, `${path}.subject`, errors)
         validateMergeFields(step.previewText, `${path}.previewText`, errors)
         validateMergeFields(step.body, `${path}.body`, errors)
@@ -328,8 +364,10 @@ export function validateCustomWorkflowDefinition(
     } else if (step.type === 'text') {
       if (step.requiredConsentScope !== 'marketing') errors.push({ path: `${path}.requiredConsentScope`, message: 'Automated workflow texts require marketing consent.' })
       const isAi = step.generationMode === 'ai'
+      if (step.generationMode !== undefined && !['manual', 'ai'].includes(step.generationMode)) errors.push({ path: `${path}.generationMode`, message: 'Choose saved content or per-client generation.' })
+      if (step.aiPrompt !== undefined && (typeof step.aiPrompt !== 'string' || step.aiPrompt.length > 6000)) errors.push({ path: `${path}.aiPrompt`, message: 'SMS instructions must be text under 6,000 characters.' })
       if (isAi) {
-        if (!allowIncompleteDraft && (!step.aiPrompt || !step.aiPrompt.trim())) {
+        if (!allowIncompleteDraft && (typeof step.aiPrompt !== 'string' || !step.aiPrompt.trim())) {
           errors.push({ path: `${path}.aiPrompt`, message: 'Describe the SMS prompt for Elena AI.' })
         }
       } else {

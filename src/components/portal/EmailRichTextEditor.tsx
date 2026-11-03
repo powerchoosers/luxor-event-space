@@ -21,11 +21,16 @@ interface EmailRichTextEditorProps {
   initialCommand?: string | null
   onInitialCommandApplied?: () => void
   className?: string
+  basicFormatting?: boolean
+}
+
+export interface EmailRichTextEditorHandle {
+  insertText: (value: string) => void
 }
 
 const EMPTY_EDITOR_HTML = /^(?:\s|&nbsp;|<br\s*\/?\s*>|<div><br\s*\/?\s*><\/div>|<p><br\s*\/?\s*><\/p>)*$/i
 
-export function EmailRichTextEditor({
+export const EmailRichTextEditor = React.forwardRef<EmailRichTextEditorHandle, EmailRichTextEditorProps>(function EmailRichTextEditor({
   value,
   onChange,
   placeholder = 'Write your message…',
@@ -41,7 +46,8 @@ export function EmailRichTextEditor({
   initialCommand = null,
   onInitialCommandApplied,
   className = '',
-}: EmailRichTextEditorProps) {
+  basicFormatting = false,
+}, ref) {
   const editorRef = useRef<HTMLDivElement>(null)
   const savedSelectionRef = useRef<Range | null>(null)
   const [assetPickerOpen, setAssetPickerOpen] = useState(false)
@@ -51,6 +57,32 @@ export function EmailRichTextEditor({
     const empty = EMPTY_EDITOR_HTML.test(next)
     onChange(empty ? '' : next)
   }, [onChange])
+
+  React.useImperativeHandle(ref, () => ({
+    insertText(text) {
+      const editor = editorRef.current
+      if (!editor || readOnly) return
+      editor.focus({ preventScroll: true })
+      const selection = window.getSelection()
+      if (selection) {
+        const range = savedSelectionRef.current
+        if (range && editor.contains(range.commonAncestorContainer)) {
+          selection.removeAllRanges()
+          selection.addRange(range)
+        } else if (!editor.contains(selection.anchorNode)) {
+          const end = document.createRange()
+          end.selectNodeContents(editor)
+          end.collapse(false)
+          selection.removeAllRanges()
+          selection.addRange(end)
+        }
+      }
+      document.execCommand('insertText', false, text)
+      syncValue()
+      const updatedSelection = window.getSelection()
+      if (updatedSelection && updatedSelection.rangeCount > 0) savedSelectionRef.current = updatedSelection.getRangeAt(0).cloneRange()
+    },
+  }), [readOnly, syncValue])
 
   useEffect(() => {
     const editor = editorRef.current
@@ -143,12 +175,14 @@ export function EmailRichTextEditor({
         <FormatButton label="Underline" icon={<Underline size={15} />} onClick={() => runCommand('underline')} />
         <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-[color:var(--portal-border)]" />
         <FormatButton label="Bulleted list" icon={<List size={15} />} onClick={() => runCommand('insertUnorderedList')} />
-        <FormatButton label="Align left" icon={<AlignLeft size={15} />} onClick={() => runCommand('justifyLeft')} />
-        <FormatButton label="Align center" icon={<AlignCenter size={15} />} onClick={() => runCommand('justifyCenter')} />
-        <FormatButton label="Align right" icon={<AlignRight size={15} />} onClick={() => runCommand('justifyRight')} />
+        {!basicFormatting && <>
+          <FormatButton label="Align left" icon={<AlignLeft size={15} />} onClick={() => runCommand('justifyLeft')} />
+          <FormatButton label="Align center" icon={<AlignCenter size={15} />} onClick={() => runCommand('justifyCenter')} />
+          <FormatButton label="Align right" icon={<AlignRight size={15} />} onClick={() => runCommand('justifyRight')} />
+        </>}
         <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-[color:var(--portal-border)]" />
         <FormatButton label="Insert link" icon={<Link size={15} />} onClick={requestLink} />
-        <button
+        {!basicFormatting && <button
           type="button"
           title="Insert image"
           aria-label="Insert image"
@@ -157,7 +191,7 @@ export function EmailRichTextEditor({
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
         >
           <ImageIcon size={15} />
-        </button>
+        </button>}
       </div>}
       <div className={`relative flex min-h-0 flex-1 flex-col ${focusMode || compact ? 'bg-[color:var(--portal-bg)]' : ''}`}>
         <div
@@ -171,6 +205,8 @@ export function EmailRichTextEditor({
           tabIndex={readOnly ? (onReadOnlyBodyClick ? 0 : -1) : undefined}
           onInput={readOnly ? undefined : syncValue}
           onBlur={readOnly ? undefined : syncValue}
+          onKeyUp={readOnly ? undefined : saveSelection}
+          onMouseUp={readOnly ? undefined : saveSelection}
           onFocus={readOnly || focusMode || compact ? undefined : (event) => event.currentTarget.scrollIntoView({ block: 'nearest' })}
           onClick={readOnly ? onReadOnlyBodyClick : undefined}
           onKeyDown={readOnly && onReadOnlyBodyClick ? (event) => {
@@ -210,7 +246,7 @@ export function EmailRichTextEditor({
       </AnimatePresence>
     </div>
   )
-}
+})
 
 function FormatButton({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick: () => void }) {
   return (

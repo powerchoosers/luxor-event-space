@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { ELENA_VOICE_GREETING } from '@/lib/elenaVoiceGreeting'
+import { getLuxorAiVenueContext } from '@/lib/luxorAiContextServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         session: {
           model: 'gpt-live-1',
-          instructions: voiceInstructions,
+          instructions: `${voiceInstructions}\n\n${await getLuxorAiVenueContext()}`,
           input: [{ type: 'message', role: 'developer', content: [{ type: 'input_text', text: ELENA_VOICE_GREETING }] }, ...input],
           store: false,
           audio: { output: { voice: 'marin' } },

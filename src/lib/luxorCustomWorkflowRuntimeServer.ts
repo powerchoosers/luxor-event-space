@@ -2,11 +2,15 @@ import 'server-only'
 
 import crypto from 'crypto'
 import { CUSTOM_WORKFLOW_EXECUTION_ENABLED } from './luxorCustomWorkflowFeatureGates'
-import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 import { normalizePhoneNumber } from './luxorCallsServer'
 import { estimateSmsSegments } from './luxorTextCampaignsServer'
-import type { CustomWorkflowEmailStep, CustomWorkflowStep, CustomWorkflowTextStep } from './luxorCustomWorkflowDefinition'
+import type { CustomWorkflowDefinition, CustomWorkflowStep, CustomWorkflowTextStep } from './luxorCustomWorkflowDefinition'
+import { hydrateWorkflowEmailTemplates, renderCustomWorkflowEmail, mergeWorkflowFields, resolveWorkflowEmailSender } from './luxorWorkflowEmailServer'
+import { generateWorkflowMessage } from './luxorWorkflowAiServer'
+import { getPublicLuxorPhoneNumber } from './luxorPhoneNumbersServer'
+import { luxorEmailHtmlToPlainText } from './luxorConversationalEmailServer'
 import { supabaseRest } from './supabaseRestServer'
+import { getWorkflowRecentClientMessages } from './luxorWorkflowClientContextServer'
 
 export type CustomWorkflowRuntimeSummary = {
   enabled: boolean
@@ -97,11 +101,45 @@ export async function processDueLuxorCustomWorkflowOrchestration(limit = 20): Pr
     { method: 'POST', body: JSON.stringify({ p_limit: batchSize }) },
   )
   const enqueued = { email: 0, text: 0 }
+  let generatedMessages = 0
   for (const item of messageSteps) {
     try {
+      // Leave time for the existing queue worker to deliver its one-message
+      // budget. Additional AI steps stay due for the next scheduled minute.
+      const needsGeneration = (item.step_definition.type === 'email' || item.step_definition.type === 'text') && item.step_definition.generationMode === 'ai'
+      if (needsGeneration && generatedMessages >= 1) continue
+      if (needsGeneration) generatedMessages += 1
+      // Read current client details at execution, rather than generating from a
+      // generic example or the event payload captured days earlier.
+      const [currentInquiry] = await supabaseRest<Array<Record<string, unknown>>>(`luxor_inquiries?select=full_name,event_type,guest_count,target_date,preferred_tour_date,preferred_tour_time,budget,package_interest,message,status&id=eq.${encodeURIComponent(item.inquiry_id)}&limit=1`)
+      const clientContext = { ...item.inquiry_context, ...currentInquiry }
+      if (needsGeneration) {
+        const [notes, priorEmails, clientMessages] = await Promise.all([
+          supabaseRest<Array<{ created_at: string; content: string; note_type: string }>>(`luxor_notes?select=created_at,content,note_type&inquiry_id=eq.${encodeURIComponent(item.inquiry_id)}&order=created_at.desc&limit=4`),
+          supabaseRest<Array<{ sent_at: string; subject: string; body: string }>>(`luxor_email_jobs?select=sent_at,subject,body&inquiry_id=eq.${encodeURIComponent(item.inquiry_id)}&status=eq.sent&order=sent_at.desc&limit=3`),
+          getWorkflowRecentClientMessages(item.inquiry_id, clientContext.email),
+        ])
+        Object.assign(clientContext, {
+          ...clientMessages,
+          internal_notes: notes.map((note) => ({ ...note, content: note.content.slice(0, 2000) })),
+          recent_sent_email: priorEmails.map((email) => ({ sent_at: email.sent_at, subject: email.subject, body: luxorEmailHtmlToPlainText(email.body).slice(0, 2000) })),
+        })
+      }
       if (item.channel === 'email' && item.step_definition.type === 'email' && item.step_definition.mode === 'marketing') {
+        const [version] = await supabaseRest<Array<{ definition: CustomWorkflowDefinition }>>(`luxor_custom_workflow_versions?select=definition&id=eq.${encodeURIComponent(item.workflow_version_id)}&limit=1`)
+        if (!version) throw new Error('The pinned workflow version is unavailable.')
+        await hydrateWorkflowEmailTemplates(version.definition)
+        let step = item.step_definition
+        const pinned = version.definition.steps.find((candidate) => candidate.id === step.id)
+        if (pinned?.type === 'email') step = pinned
+        if (step.generationMode === 'ai') {
+          const sender = await resolveWorkflowEmailSender(version.definition.emailSettings)
+          const generated = await generateWorkflowMessage(step, clientContext, sender)
+          if (generated.step.type !== 'email') throw new Error('The generated message is not an email.')
+          step = generated.step
+        }
         const token = crypto.randomBytes(32).toString('hex')
-        const rendered = renderCustomWorkflowEmail(item.step_definition, item.inquiry_context, token)
+        const rendered = await renderCustomWorkflowEmail(step, clientContext, absoluteUrl(`/api/marketing/unsubscribe/${token}`), version.definition.emailSettings)
         const [result] = await supabaseRest<CustomWorkflowEnqueueResult[]>(
           'rpc/luxor_custom_workflow_enqueue_email_step',
           {
@@ -119,7 +157,13 @@ export async function processDueLuxorCustomWorkflowOrchestration(limit = 20): Pr
         if (result?.disposition === 'queued') enqueued.email += 1
         if (result?.disposition === 'held') await stopMalformedStep(item.step_run_id, result.reason)
       } else if (item.channel === 'text' && item.step_definition.type === 'text') {
-        const rendered = renderCustomWorkflowText(item.step_definition, item.inquiry_context)
+        let step = item.step_definition
+        if (step.generationMode === 'ai') {
+          const generated = await generateWorkflowMessage(step, clientContext)
+          if (generated.step.type !== 'text') throw new Error('The generated message is not a text.')
+          step = generated.step
+        }
+        const rendered = await renderCustomWorkflowText(step, clientContext)
         const phone = normalizePhoneNumber(item.inquiry_context.phone) || ''
         const [result] = await supabaseRest<CustomWorkflowEnqueueResult[]>(
           'rpc/luxor_custom_workflow_enqueue_text_step',
@@ -192,60 +236,14 @@ type DueCustomWorkflowMessageStep = {
 
 type CustomWorkflowEnqueueResult = { job_id: string | null; disposition: string; reason: string | null }
 
-function renderCustomWorkflowEmail(step: CustomWorkflowEmailStep, inquiry: InquiryContext, token: string) {
-  const merge = (value: string) => replaceMergeFields(value, inquiry)
-  const escape = (value: string) => escapeHtml(value)
-  const unsubscribeUrl = absoluteUrl(`/api/marketing/unsubscribe/${token}`)
-  const bodyHtml = merge(step.body).split(/\r?\n/).map((line) => {
-    const safeLine = escape(line)
-    return safeLine.trim() ? `<p style="margin:0 0 14px;white-space:pre-line">${safeLine}</p>` : ''
-  }).join('') + `<p style="margin:20px 0 0;font-size:12px;color:#68635a">If you no longer want these emails, <a href="${escapeHtml(unsubscribeUrl)}">unsubscribe here</a>.</p>`
-  const subject = merge(step.subject).trim()
-  const previewText = merge(step.previewText).trim()
-  const body = renderLuxorSystemEmail({
-    previewText: escape(previewText),
-    eyebrow: 'A note from Luxor',
-    title: escape(subject),
-    greeting: `Hi ${escape((inquiry.full_name || 'there').trim().split(/\s+/)[0])},`,
-    actions: step.ctaText && step.ctaUrl
-      ? [{ label: escape(merge(step.ctaText)), url: absoluteLuxorLink(step.ctaUrl) }]
-      : [],
-    bodyHtml,
-    note: 'Reply to this email if you have questions.',
-    theme: 'brand',
-  })
-  return { subject, previewText, body }
-}
-
-function renderCustomWorkflowText(step: CustomWorkflowTextStep, inquiry: InquiryContext) {
-  return replaceMergeFields(step.body, inquiry).replace(/\s+/g, ' ').trim()
-}
-
-function replaceMergeFields(value: string, inquiry: InquiryContext) {
-  const firstName = inquiry.full_name?.trim().split(/\s+/)[0] || 'there'
-  const fields: Record<string, string> = {
-    first_name: firstName,
-    full_name: inquiry.full_name?.trim() || 'Guest',
-    event_type: inquiry.event_type?.trim() || 'celebration',
-    guest_count: inquiry.guest_count == null ? 'To be determined' : String(inquiry.guest_count),
-    target_date: inquiry.target_date || inquiry.preferred_tour_date || 'To be determined',
-  }
-  return value.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_match, name: string) => fields[name] ?? '')
-}
-
-function absoluteLuxorLink(value: string) {
-  if (value.startsWith('/') && !value.startsWith('//')) return absoluteUrl(value)
-  return value
+async function renderCustomWorkflowText(step: CustomWorkflowTextStep, inquiry: Record<string, unknown>) {
+  return mergeWorkflowFields(step.body, inquiry, { phone: await getPublicLuxorPhoneNumber() }).replace(/\s+/g, ' ').trim()
 }
 
 function absoluteUrl(path: string) {
   const base = process.env.NEXT_PUBLIC_SITE_URL
     || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'https://www.luxoratlaspalmas.com')
   return `${base.replace(/\/$/, '')}${path}`
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
 async function stopMalformedStep(stepRunId: string, reason: string | null) {

@@ -299,6 +299,7 @@ function MarketingPageContent() {
   const [builderCanvasOpen, setBuilderCanvasOpen] = useState(false)
   const [campaignModalOpen, setCampaignModalOpen] = useState(activeTab === 'builder-automation')
   const [campaignModalView, setCampaignModalView] = useState<'start' | 'templates'>('start')
+  const [savedDeviceDraftName, setSavedDeviceDraftName] = useState<string | null>(null)
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false)
   const [mobileViewPickerOpen, setMobileViewPickerOpen] = useState(false)
 
@@ -306,6 +307,17 @@ function MarketingPageContent() {
   const latestActivityAtRef = useRef<string | null>(null)
   const seenActivityIdsRef = useRef<Set<string>>(new Set())
   const selectedCampaignIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!campaignModalOpen || builderCanvasOpen) return
+    try {
+      const stored = localStorage.getItem('luxor_email_builder_working_draft')
+      const draft = stored ? JSON.parse(stored) : null
+      setSavedDeviceDraftName(Array.isArray(draft?.blocks) && draft.blocks.length > 0 ? String(draft.campaignName || draft.name || draft.subject || 'Your in-progress email') : null)
+    } catch {
+      setSavedDeviceDraftName(null)
+    }
+  }, [campaignModalOpen, builderCanvasOpen])
 
   // 1. Fetch campaigns from DB
   const loadCampaigns = useCallback(async (options: { silent?: boolean } = {}) => {
@@ -575,7 +587,13 @@ function MarketingPageContent() {
   }, [refreshAllData])
 
   // Email Builder specific triggers
+  function preserveCurrentEmailDraft() {
+    const currentDraft = localStorage.getItem('luxor_email_builder_working_draft')
+    if (currentDraft) localStorage.setItem('luxor_email_builder_previous_draft', currentDraft)
+  }
+
   function openTemplateInBuilder(template: EmailTemplate) {
+    preserveCurrentEmailDraft()
     localStorage.removeItem('luxor_email_builder_working_draft')
     setBuilderTemplate(template)
     setBuilderSession((current) => current + 1)
@@ -585,8 +603,18 @@ function MarketingPageContent() {
   }
 
   function openBlankBuilder() {
+    preserveCurrentEmailDraft()
     localStorage.removeItem('elena_active_campaign_draft')
     localStorage.removeItem('luxor_email_builder_working_draft')
+    setBuilderTemplate(null)
+    setBuilderSession((current) => current + 1)
+    setCampaignModalOpen(false)
+    setBuilderCanvasOpen(true)
+    router.push('/portal/marketing?tab=builder-automation')
+  }
+
+  function continueSavedEmailDraft() {
+    sessionStorage.setItem('luxor_email_builder_resume_device', 'true')
     setBuilderTemplate(null)
     setBuilderSession((current) => current + 1)
     setCampaignModalOpen(false)
@@ -826,7 +854,9 @@ function MarketingPageContent() {
             <PortalCloseButton onClick={() => setCampaignModalOpen(false)} aria-label="Close campaign start dialog" />
           </div>
         </div>
-        {campaignModalView === 'start' ? <div className="grid gap-3 p-6 sm:grid-cols-3 sm:p-8">
+        {campaignModalView === 'start' ? <>
+          {savedDeviceDraftName && <div className="px-6 pt-6 sm:px-8"><button type="button" onClick={continueSavedEmailDraft} className="flex min-h-16 w-full items-center justify-between gap-4 rounded-xl border border-[#a8792f]/45 bg-[#a8792f]/5 px-4 py-3 text-left text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a8792f]/45"><span className="min-w-0"><span className="block text-sm font-semibold">Continue saved draft</span><span className="mt-1 block truncate text-xs text-[color:var(--portal-muted)]">{savedDeviceDraftName} · saved on this device</span></span><ChevronRight size={18} className="shrink-0 text-[#a8792f]" /></button></div>}
+          <div className="grid gap-3 p-6 sm:grid-cols-3 sm:p-8">
           <button type="button" onClick={() => openTemplateInBuilder(EMAIL_TEMPLATES[0])} className="group rounded-xl border border-[#caa24c]/45 bg-[#caa24c]/10 p-4 text-left transition hover:-translate-y-0.5 hover:bg-[#caa24c]/15">
             <LayoutTemplate size={20} className="text-[#a8792f]" />
             <span className="mt-5 block text-sm font-bold text-[color:var(--portal-text)]">Use a Luxor template</span>
@@ -845,7 +875,7 @@ function MarketingPageContent() {
             <span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">Describe the audience and purpose.</span>
             <span className="mt-4 block text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f]">Generate a draft →</span>
           </button>
-        </div> : <div className="grid max-h-[min(32rem,60vh)] gap-3 overflow-y-auto p-6 sm:grid-cols-2 sm:p-8 lg:grid-cols-3">
+          </div></> : <div className="grid max-h-[min(32rem,60vh)] gap-3 overflow-y-auto p-6 sm:grid-cols-2 sm:p-8 lg:grid-cols-3">
           {EMAIL_TEMPLATES.map((template) => (
             <button key={template.id} type="button" onClick={() => openTemplateInBuilder(template)} className="group overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-left transition hover:-translate-y-0.5 hover:border-[#caa24c]/50">
               <div className="h-1.5" style={{ backgroundColor: template.previewColor || '#caa24c' }} />

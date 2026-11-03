@@ -17,6 +17,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Copy, GripVertical, Trash2, ChevronUp, ChevronDown, Plus } from 'lucide-react'
+import { decodeLuxorEmailTextEntities, normalizeLuxorReplyHtml } from '@/lib/luxorConversationalEmailServer'
+import { getLuxorEmailHeroOverlay, getLuxorEmailReadableText, LUXOR_EMAIL_HERO_COLORS } from './emailRenderer'
 import type {
   EmailBlock,
   HeroBlock,
@@ -41,6 +43,18 @@ const BG_DARK    = 'var(--email-surface-alt)'
 const BORDER     = 'var(--email-border)'
 const SERIF      = 'var(--email-heading-font)'
 const SANS       = 'var(--email-body-font)'
+const CanvasThemeContext = React.createContext<LuxorEmailTheme | null>(null)
+
+function canvasColor(value: string, theme: LuxorEmailTheme | null) {
+  if (!theme) return value
+  if (['#f7efe3'].includes(value)) return theme.text
+  if (value === '#d7c29a' || /^rgba\(215,\s*194,\s*154,/i.test(value)) return theme.muted
+  if (['#caa24c', '#f1d27a'].includes(value)) return theme.accent
+  if (value === '#050505') return theme.canvas
+  if (value === '#0a0807') return theme.surface
+  if (['#080605', '#120d0a', '#0b0a08'].includes(value)) return theme.surfaceAlt
+  return value
+}
 
 // ─── Inline-editable text primitive ──────────────────────────────────────────
 
@@ -52,26 +66,31 @@ interface EditableProps {
   multiline?: boolean
   placeholder?: string
   'data-field'?: string
+  rich?: boolean
 }
 
-function Editable({ value, onChange, style, className, multiline, placeholder, 'data-field': dataField }: EditableProps) {
+function Editable({ value, onChange, style, className, multiline, placeholder, rich = false, 'data-field': dataField }: EditableProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   const lastValue = useRef(value)
   React.useEffect(() => {
-    if (ref.current && ref.current.innerText !== value) {
-      if (document.activeElement !== ref.current) {
+    if (ref.current && document.activeElement !== ref.current) {
+      if (rich) {
+        const normalized = value.replace(/&nbsp;|&#0*160;|&#x0*a0;|\u00a0/gi, ' ')
+        const html = /<\/?[a-z][^>]*>/i.test(normalized) ? normalizeLuxorReplyHtml(normalized, { preserveWhitespace: true }) : decodeLuxorEmailTextEntities(normalized).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br />')
+        if (ref.current.innerHTML !== html) ref.current.innerHTML = html
+      } else if (ref.current.innerText !== value) {
         ref.current.innerText = value
         lastValue.current = value
       }
     }
-  }, [value])
+  }, [value, rich])
 
   const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
-    const text = e.currentTarget.innerText
+    const text = rich ? e.currentTarget.innerHTML : e.currentTarget.innerText
     lastValue.current = text
     onChange(text)
-  }, [onChange])
+  }, [onChange, rich])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     // Prevent Enter from creating <div> elements in single-line mode
@@ -84,6 +103,9 @@ function Editable({ value, onChange, style, className, multiline, placeholder, '
     <div
       ref={ref}
       contentEditable
+      role="textbox"
+      aria-label={dataField || placeholder || 'Email text'}
+      aria-multiline={Boolean(multiline)}
       suppressContentEditableWarning
       data-field={dataField}
       onInput={handleInput}
@@ -94,7 +116,8 @@ function Editable({ value, onChange, style, className, multiline, placeholder, '
         outline: 'none',
         cursor: 'text',
         minHeight: '1em',
-        whiteSpace: multiline ? 'pre-wrap' : 'nowrap',
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
         wordBreak: 'break-word',
         ...style,
       }}
@@ -134,17 +157,19 @@ function EditHint({ show }: { show: boolean }) {
 // ─── HERO Block ───────────────────────────────────────────────────────────────
 
 function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChange: (b: HeroBlock) => void; selected: boolean }) {
+  const theme = React.useContext(CanvasThemeContext)
   const u = (patch: Partial<HeroBlock>) => onChange({ ...block, ...patch })
+  const overlay = getLuxorEmailHeroOverlay(block.overlayOpacity)
   const bg = block.backgroundImage
-    ? `linear-gradient(rgba(5,5,5,${block.overlayOpacity}),rgba(5,5,5,${block.overlayOpacity + 0.1})),url('${block.backgroundImage}') center/cover`
-    : 'radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,#120d0a,#050505)'
+    ? `linear-gradient(rgba(5,5,5,${overlay}),rgba(5,5,5,${Math.min(1, overlay + 0.1)})),url('${block.backgroundImage}') center/cover`
+    : 'linear-gradient(180deg,#120d0a,#050505)'
   const align = block.textAlign as React.CSSProperties['textAlign']
 
   return (
-    <div style={{ background: bg, padding: '38px 44px 32px', textAlign: align, position: 'relative' }}>
+    <div className="luxor-email-block-content luxor-email-hero" style={{ background: bg, padding: '72px 48px 64px', textAlign: align, position: 'relative' }}>
       <EditHint show={selected} />
       {/* Label */}
-      <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 700, letterSpacing: '0.38em', textTransform: 'uppercase', color: GOLD, marginBottom: 14 }}>
+      <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 700, letterSpacing: '0.38em', textTransform: 'uppercase', color: LUXOR_EMAIL_HERO_COLORS.text, marginBottom: 16 }}>
         LUXOR EVENT SPACE
       </div>
       {/* Headline */}
@@ -153,7 +178,8 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
         onChange={(v) => u({ headline: v })}
         placeholder="Headline"
         data-field="Hero headline"
-        style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 600, lineHeight: 1.05, color: '#ffffff', letterSpacing: '0.02em', marginBottom: 12 }}
+        className="luxor-email-hero-title"
+        style={{ fontFamily: SERIF, fontSize: 46, fontWeight: 600, lineHeight: 1.05, color: LUXOR_EMAIL_HERO_COLORS.text, letterSpacing: '0.02em', marginBottom: 16 }}
       />
       {/* Subheadline */}
       <Editable
@@ -162,7 +188,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
         placeholder="Sub-headline"
         data-field="Hero supporting text"
         multiline
-        style={{ fontFamily: SANS, fontSize: 14, fontWeight: 400, lineHeight: 1.55, color: 'rgba(255,255,255,0.86)', maxWidth: 460, margin: align === 'center' ? '0 auto' : undefined }}
+        style={{ fontFamily: SANS, fontSize: 15, fontWeight: 400, lineHeight: 1.75, color: LUXOR_EMAIL_HERO_COLORS.muted, maxWidth: 480, margin: align === 'center' ? '0 auto' : undefined }}
       />
       {/* CTA button */}
       {block.ctaVisible && (
@@ -174,7 +200,7 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
             style={{
               display: 'inline-block',
               background: GOLD,
-              color: '#050505',
+              color: theme ? getLuxorEmailReadableText(theme.accent, theme.accentText) : '#050505',
               fontFamily: SANS,
               fontSize: 11,
               fontWeight: 800,
@@ -198,9 +224,10 @@ function HeroBlockView({ block, onChange, selected }: { block: HeroBlock; onChan
 // ─── TEXT Block ───────────────────────────────────────────────────────────────
 
 function TextBlockView({ block, onChange, selected }: { block: TextBlock; onChange: (b: TextBlock) => void; selected: boolean }) {
+  const theme = React.useContext(CanvasThemeContext)
   const u = (patch: Partial<TextBlock>) => onChange({ ...block, ...patch })
   return (
-    <div style={{ padding: '28px 48px', position: 'relative' }}>
+    <div className="luxor-email-block-content" style={{ padding: '36px 48px', position: 'relative' }}>
       <EditHint show={selected} />
       <Editable
         value={block.content}
@@ -208,12 +235,13 @@ function TextBlockView({ block, onChange, selected }: { block: TextBlock; onChan
         multiline
         placeholder="Type your text here..."
         data-field="Paragraph text"
+        rich
         style={{
           fontFamily: SANS,
           fontSize: block.fontSize,
           fontWeight: 400,
           lineHeight: 1.8,
-          color: block.color,
+          color: canvasColor(block.color, theme),
           textAlign: block.textAlign as React.CSSProperties['textAlign'],
         }}
       />
@@ -224,15 +252,16 @@ function TextBlockView({ block, onChange, selected }: { block: TextBlock; onChan
 // ─── IMAGE + TEXT Block ───────────────────────────────────────────────────────
 
 function ImageTextBlockView({ block, onChange, selected }: { block: ImageTextBlock; onChange: (b: ImageTextBlock) => void; selected: boolean }) {
+  const theme = React.useContext(CanvasThemeContext)
   const u = (patch: Partial<ImageTextBlock>) => onChange({ ...block, ...patch })
   const isRight = block.imagePosition === 'right'
 
   const imgSlot = (
-    <div style={{ width: 180, flexShrink: 0 }}>
+    <div className="luxor-email-image-slot" style={{ width: 220, flexShrink: 0 }}>
       {block.imageUrl
-        ? <img src={block.imageUrl} alt={block.imageAlt} style={{ width: 180, borderRadius: 3, border: '1px solid rgba(202,162,76,0.14)', display: 'block' }} />
+        ? <img src={block.imageUrl} alt={block.imageAlt} style={{ width: 220, maxWidth: '100%', borderRadius: 3, border: '1px solid rgba(202,162,76,0.14)', display: 'block' }} />
         : (
-          <div style={{ width: 180, height: 140, background: 'linear-gradient(135deg,#120d0a,#1e1409)', border: '1px solid rgba(202,162,76,0.14)', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 220, maxWidth: '100%', height: 160, background: 'linear-gradient(135deg,#120d0a,#1e1409)', border: '1px solid rgba(202,162,76,0.14)', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontFamily: SERIF, fontSize: 16, color: 'rgba(202,162,76,0.4)', letterSpacing: '0.2em' }}>IMAGE</span>
           </div>
         )
@@ -241,14 +270,14 @@ function ImageTextBlockView({ block, onChange, selected }: { block: ImageTextBlo
   )
 
   const textSlot = (
-    <div style={{ flex: 1, paddingLeft: isRight ? 0 : 28, paddingRight: isRight ? 28 : 0 }}>
+    <div className="luxor-email-image-copy" style={{ flex: 1, minWidth: 0, paddingLeft: isRight ? 0 : 28, paddingRight: isRight ? 28 : 0 }}>
       <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 700, letterSpacing: '0.38em', textTransform: 'uppercase', color: GOLD, marginBottom: 10 }}>FEATURED</div>
       <Editable
         value={block.headline}
         onChange={(v) => u({ headline: v })}
         placeholder="Headline"
         data-field="Image-text headline"
-        style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 600, lineHeight: 1.1, color: CREAM, marginBottom: 12 }}
+        style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 600, lineHeight: 1.1, color: CREAM, marginBottom: 14 }}
       />
       <Editable
         value={block.body}
@@ -256,7 +285,7 @@ function ImageTextBlockView({ block, onChange, selected }: { block: ImageTextBlo
         multiline
         placeholder="Body text..."
         data-field="Image-text body"
-        style={{ fontFamily: SANS, fontSize: 13, fontWeight: 400, lineHeight: 1.8, color: MUTED, marginBottom: 20 }}
+        style={{ fontFamily: SANS, fontSize: 14, fontWeight: 400, lineHeight: 1.8, color: MUTED, marginBottom: 24 }}
       />
       <Editable
         value={block.ctaLabel}
@@ -265,7 +294,7 @@ function ImageTextBlockView({ block, onChange, selected }: { block: ImageTextBlo
         style={{
           display: 'inline-block',
           background: GOLD,
-          color: '#050505',
+          color: theme ? getLuxorEmailReadableText(theme.accent, theme.accentText) : '#050505',
           fontFamily: SANS,
           fontSize: 10,
           fontWeight: 800,
@@ -281,7 +310,7 @@ function ImageTextBlockView({ block, onChange, selected }: { block: ImageTextBlo
   )
 
   return (
-    <div style={{ padding: '28px 48px', display: 'flex', flexDirection: isRight ? 'row-reverse' : 'row', gap: 0, position: 'relative', alignItems: 'flex-start' }}>
+    <div className="luxor-email-block-content luxor-email-image-text" style={{ padding: '36px 48px', display: 'flex', flexDirection: isRight ? 'row-reverse' : 'row', gap: 0, position: 'relative', alignItems: 'flex-start' }}>
       <EditHint show={selected} />
       {imgSlot}
       {textSlot}
@@ -292,11 +321,15 @@ function ImageTextBlockView({ block, onChange, selected }: { block: ImageTextBlo
 // ─── BUTTON Block ─────────────────────────────────────────────────────────────
 
 function ButtonBlockView({ block, onChange, selected }: { block: ButtonBlock; onChange: (b: ButtonBlock) => void; selected: boolean }) {
+  const theme = React.useContext(CanvasThemeContext)
+  const isGold = !block.bgColor || ['#caa24c', '#b8924a'].includes(block.bgColor)
+  const background = isGold && theme ? theme.accent : block.bgColor
+  const foreground = getLuxorEmailReadableText(background, isGold && theme ? theme.accentText : block.textColor)
   const u = (patch: Partial<ButtonBlock>) => onChange({ ...block, ...patch })
   const justifyMap = { left: 'flex-start', center: 'center', right: 'flex-end' }
 
   return (
-    <div style={{ padding: '14px 48px 24px', display: 'flex', justifyContent: justifyMap[block.align] ?? 'center', position: 'relative' }}>
+    <div className="luxor-email-block-content" style={{ padding: '16px 48px 28px', display: 'flex', justifyContent: justifyMap[block.align] ?? 'center', position: 'relative' }}>
       <EditHint show={selected} />
       <Editable
         value={block.label}
@@ -304,8 +337,8 @@ function ButtonBlockView({ block, onChange, selected }: { block: ButtonBlock; on
         data-field="Button label"
         style={{
           display: 'inline-block',
-          background: block.bgColor,
-          color: block.textColor,
+          background,
+          color: foreground,
           fontFamily: SANS,
           fontSize: 11,
           fontWeight: 800,
@@ -327,7 +360,7 @@ function ButtonBlockView({ block, onChange, selected }: { block: ButtonBlock; on
 function TwoColumnBlockView({ block, onChange, selected }: { block: TwoColumnBlock; onChange: (b: TwoColumnBlock) => void; selected: boolean }) {
   const u = (patch: Partial<TwoColumnBlock>) => onChange({ ...block, ...patch })
   return (
-    <div style={{ padding: '28px 48px', display: 'grid', gridTemplateColumns: '1fr 1px 1fr', gap: '0 20px', position: 'relative' }}>
+    <div className="luxor-email-block-content luxor-email-two-column" style={{ padding: '28px 48px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 1px minmax(0,1fr)', gap: '0 20px', position: 'relative' }}>
       <EditHint show={selected} />
       {/* Left */}
       <div>
@@ -336,7 +369,7 @@ function TwoColumnBlockView({ block, onChange, selected }: { block: TwoColumnBlo
         <Editable value={block.leftBody} onChange={(v) => u({ leftBody: v })} data-field="Left column body" multiline style={{ fontFamily: SANS, fontSize: 13, lineHeight: 1.8, color: MUTED }} />
       </div>
       {/* Divider */}
-      <div style={{ background: BORDER }} />
+      <div className="luxor-email-column-divider" style={{ background: BORDER }} />
       {/* Right */}
       <div>
         <div style={{ fontFamily: SANS, fontSize: 9, fontWeight: 700, letterSpacing: '0.34em', textTransform: 'uppercase', color: GOLD, marginBottom: 10 }}>02</div>
@@ -384,23 +417,26 @@ function SpacerBlockView({ block }: { block: SpacerBlock }) {
 
 // ─── FOOTER Block ─────────────────────────────────────────────────────────────
 
-const SITE_BASE_URL = 'https://luxor-event-space.vercel.app'
+const SITE_BASE_URL = 'https://www.luxoratlaspalmas.com'
 
 function FooterBlockView({ block, onChange, selected }: { block: FooterBlock; onChange: (b: FooterBlock) => void; selected: boolean }) {
+  const theme = React.useContext(CanvasThemeContext)
+  const footerMuted = theme ? getLuxorEmailReadableText(theme.surfaceAlt, theme.muted) : MUTED
+  const footerAccent = theme ? getLuxorEmailReadableText(theme.surfaceAlt, theme.accent, 3) : GOLD
   const u = (patch: Partial<FooterBlock>) => onChange({ ...block, ...patch })
 
   return (
-    <div style={{ background: BG_DARK, padding: '40px 48px 32px', borderTop: '1px solid rgba(202,162,76,0.22)', position: 'relative', textAlign: 'center' }}>
+    <div className="luxor-email-block-content" style={{ background: BG_DARK, padding: '44px 48px 36px', borderTop: '1px solid rgba(202,162,76,0.22)', position: 'relative', textAlign: 'center' }}>
       <EditHint show={selected} />
       {/* Palm mark */}
       <div style={{ marginBottom: 14 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`${SITE_BASE_URL}/luxor-portal-mark-gold-tight.png`} alt="" width={48} height={48} style={{ display: 'inline-block', width: 48, height: 48, objectFit: 'contain', border: '2px solid #caa24c', borderRadius: '999px', padding: 2, backgroundColor: '#080605', boxSizing: 'border-box' }} />
+        <img src={`${SITE_BASE_URL}/luxor-portal-mark-gold-tight.png`} alt="" width={64} height={64} style={{ display: 'inline-block', width: 64, height: 64, objectFit: 'contain', border: '2px solid #caa24c', borderRadius: '999px', padding: 2, backgroundColor: BG_DARK, boxSizing: 'border-box' }} />
       </div>
       {/* LUXOR wordmark */}
-      <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 500, letterSpacing: '0.14em', color: GOLD, textTransform: 'uppercase', lineHeight: 1, marginBottom: 5 }}>LUXOR</div>
+      <Editable value={block.companyName === 'Luxor Event Space' ? 'LUXOR' : block.companyName} onChange={(value) => u({ companyName: value })} data-field="Footer business name" style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 500, letterSpacing: '0.14em', color: footerAccent, textTransform: 'uppercase', lineHeight: 1.2, marginBottom: 6 }} />
       {/* Subline */}
-      <div style={{ fontFamily: SERIF, fontSize: 7.5, fontWeight: 500, letterSpacing: '0.52em', color: GOLD_DIM, textTransform: 'uppercase', marginBottom: 22 }}>AT LAS PALMAS EVENTS</div>
+      <div style={{ fontFamily: SERIF, fontSize: 8, fontWeight: 500, letterSpacing: '0.55em', color: footerMuted, textTransform: 'uppercase', marginBottom: 24 }}>AT LAS PALMAS EVENTS</div>
       {/* Gold divider */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
         <div style={{ flex: 1, height: 1, background: 'rgba(202,162,76,0.2)' }} />
@@ -412,15 +448,16 @@ function FooterBlockView({ block, onChange, selected }: { block: FooterBlock; on
         value={block.address}
         onChange={(v) => u({ address: v })}
         data-field="Footer address"
-        style={{ fontFamily: SANS, fontSize: 11, fontWeight: 400, color: 'rgba(215,194,154,0.52)', lineHeight: 1.9, display: 'block', textAlign: 'center' }}
+        style={{ fontFamily: SANS, fontSize: 11, fontWeight: 400, color: footerMuted, lineHeight: 1.9, display: 'block', textAlign: 'center' }}
       />
       <Editable
         value={block.phone}
         onChange={(v) => u({ phone: v })}
         data-field="Footer details"
-        style={{ fontFamily: SANS, fontSize: 11, fontWeight: 400, color: 'rgba(215,194,154,0.40)', lineHeight: 1.9, display: 'block', textAlign: 'center' }}
+        style={{ fontFamily: SANS, fontSize: 11, fontWeight: 400, color: footerMuted, lineHeight: 1.9, display: 'block', textAlign: 'center' }}
       />
-      <div style={{ fontFamily: SANS, fontSize: 11, color: 'rgba(202,162,76,0.55)', marginTop: 2 }}>
+      <div style={{ fontFamily: SANS, fontSize: 11, color: footerMuted, marginTop: 2 }}>
+        <div>booking@luxoratlaspalmas.com</div>
         <span style={{ textDecoration: 'underline' }}>{block.website}</span>
       </div>
       {/* Social */}
@@ -430,13 +467,13 @@ function FooterBlockView({ block, onChange, selected }: { block: FooterBlock; on
         </div>
       )}
       {/* Tagline */}
-      <div style={{ marginTop: 18, fontFamily: SANS, fontSize: 8, fontWeight: 600, letterSpacing: '0.45em', textTransform: 'uppercase', color: 'rgba(202,162,76,0.32)' }}>
+      <div style={{ marginTop: 20, fontFamily: SANS, fontSize: 8, fontWeight: 600, letterSpacing: '0.46em', textTransform: 'uppercase', color: footerMuted }}>
         Timeless ◆ Elegant ◆ Celebratory ◆ Luxurious
       </div>
       {/* Unsubscribe */}
-      <div style={{ marginTop: 16, fontFamily: SANS, fontSize: 9, color: 'rgba(215,194,154,0.25)', lineHeight: 1.7 }}>
+      <div style={{ marginTop: 20, fontFamily: SANS, fontSize: 9, color: footerMuted, lineHeight: 1.7 }}>
         You received this because you expressed interest in Luxor Event Space.{' '}
-        <span style={{ color: 'rgba(202,162,76,0.35)', textDecoration: 'underline' }}>Unsubscribe</span>
+        <span style={{ color: footerMuted, textDecoration: 'underline' }}>Unsubscribe</span>
       </div>
     </div>
   )
@@ -480,10 +517,11 @@ interface SortableBlockProps {
   canMoveDown: boolean
   onChange: (b: EmailBlock) => void
   onActivateField: (field: string) => void
+  showControls?: boolean
 }
 
 function SortableBlock({
-  block, isSelected, onSelect, onDelete, onDuplicate, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onChange, onActivateField,
+  block, isSelected, onSelect, onDelete, onDuplicate, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onChange, onActivateField, showControls = true,
 }: SortableBlockProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
 
@@ -495,7 +533,7 @@ function SortableBlock({
   }
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} data-email-block-id={block.id}>
       {/* Floating controls bar — only visible on hover/selection */}
       <div
         className="group/block relative"
@@ -503,7 +541,6 @@ function SortableBlock({
           border: `2px solid ${isSelected ? GOLD : 'transparent'}`,
           borderRadius: 4,
           transition: 'border-color 0.15s',
-          boxShadow: isSelected ? `0 0 0 1px rgba(202,162,76,0.12), 0 8px 32px -8px rgba(202,162,76,0.12)` : undefined,
         }}
         onMouseEnter={(e) => {
           if (!isSelected) (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(202,162,76,0.3)'
@@ -516,21 +553,26 @@ function SortableBlock({
           onSelect()
           if (field) onActivateField(field)
         }}
+        onFocusCapture={(event) => {
+          const field = (event.target as HTMLElement).closest<HTMLElement>('[contenteditable]')?.dataset.field
+          onSelect()
+          if (field) onActivateField(field)
+        }}
       >
         {/* Controls toolbar */}
-        <div
-          className="opacity-0 group-hover/block:opacity-100 transition-opacity"
+        {showControls && <div
+          className={`luxor-email-block-tools transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover/block:opacity-100 group-focus-within/block:opacity-100'}`}
           style={{
             position: 'absolute',
-            top: -28,
+            top: -46,
             right: 0,
             display: 'flex',
             alignItems: 'center',
             gap: 2,
-            background: '#0a0807',
-            border: '1px solid rgba(202,162,76,0.22)',
+            background: 'var(--portal-card)',
+            border: '1px solid var(--portal-border)',
             borderRadius: '4px 4px 0 0',
-            padding: '3px 6px',
+            padding: '1px',
             zIndex: 10,
           }}
           onClick={(e) => e.stopPropagation()}
@@ -540,45 +582,53 @@ function SortableBlock({
             {...attributes}
             {...listeners}
             className="touch-none cursor-grab active:cursor-grabbing"
-            style={{ color: 'rgba(202,162,76,0.5)', padding: '0 4px', display: 'flex', alignItems: 'center' }}
+            style={{ color: 'var(--portal-muted)', padding: '0 4px', display: 'flex', alignItems: 'center', minWidth: 44, minHeight: 44, justifyContent: 'center' }}
             title="Drag to reorder"
           >
             <GripVertical size={13} />
           </div>
           <div style={{ width: 1, height: 14, background: 'rgba(202,162,76,0.15)', margin: '0 2px' }} />
           <button
+            type="button"
             onClick={onDuplicate}
             title="Duplicate block"
-            style={{ color: 'rgba(215,194,154,0.55)', padding: '0 3px', cursor: 'pointer', background: 'none', border: 'none', display: 'flex' }}
+            aria-label="Duplicate email element"
+            style={{ color: 'var(--portal-muted)', padding: '0 3px', cursor: 'pointer', background: 'none', border: 'none', display: 'flex' }}
           >
             <Copy size={13} />
           </button>
           <button
+            type="button"
             onClick={onMoveUp}
             disabled={!canMoveUp}
             title="Move up"
-            style={{ color: canMoveUp ? 'rgba(215,194,154,0.6)' : 'rgba(215,194,154,0.2)', padding: '0 3px', cursor: canMoveUp ? 'pointer' : 'not-allowed', background: 'none', border: 'none', display: 'flex' }}
+            aria-label="Move email element up"
+            style={{ color: canMoveUp ? 'var(--portal-muted)' : 'var(--portal-faint)', padding: '0 3px', cursor: canMoveUp ? 'pointer' : 'not-allowed', background: 'none', border: 'none', display: 'flex' }}
           >
             <ChevronUp size={13} />
           </button>
           <button
+            type="button"
             onClick={onMoveDown}
             disabled={!canMoveDown}
             title="Move down"
-            style={{ color: canMoveDown ? 'rgba(215,194,154,0.6)' : 'rgba(215,194,154,0.2)', padding: '0 3px', cursor: canMoveDown ? 'pointer' : 'not-allowed', background: 'none', border: 'none', display: 'flex' }}
+            aria-label="Move email element down"
+            style={{ color: canMoveDown ? 'var(--portal-muted)' : 'var(--portal-faint)', padding: '0 3px', cursor: canMoveDown ? 'pointer' : 'not-allowed', background: 'none', border: 'none', display: 'flex' }}
           >
             <ChevronDown size={13} />
           </button>
           <div style={{ width: 1, height: 14, background: 'rgba(202,162,76,0.15)', margin: '0 2px' }} />
           <button
+            type="button"
             onClick={onDelete}
             title="Delete block"
-            style={{ color: 'rgba(215,194,154,0.4)', padding: '0 3px', cursor: 'pointer', background: 'none', border: 'none', display: 'flex' }}
+            aria-label="Remove email element"
+            style={{ color: 'var(--portal-muted)', padding: '0 3px', cursor: 'pointer', background: 'none', border: 'none', display: 'flex' }}
             className="hover:text-red-400"
           >
             <Trash2 size={13} />
           </button>
-        </div>
+        </div>}
 
         {/* Actual email block preview */}
         <div
@@ -605,9 +655,11 @@ interface BlockCanvasProps {
   onAddBlock?: (type: BlockType) => void
   theme: LuxorEmailTheme
   previewMode?: 'desktop' | 'mobile'
+  quietChrome?: boolean
+  showBlockControls?: boolean
 }
 
-export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onDuplicate, onReorder, onChange, onAddBlock, onActivateField, theme, previewMode = 'desktop' }: BlockCanvasProps) {
+export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onDuplicate, onReorder, onChange, onAddBlock, onActivateField, theme, previewMode = 'desktop', quietChrome = true, showBlockControls = true }: BlockCanvasProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   )
@@ -666,28 +718,30 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onDuplicat
 
   return (
     <div
-      className="flex min-h-0 flex-1"
+      className="luxor-email-canvas flex min-h-0 min-w-0 flex-1"
       style={themeVariables}
       onDragOver={(event) => event.preventDefault()}
       onDrop={handlePaletteDrop}
     >
+    <CanvasThemeContext.Provider value={theme}>
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
         {/* Email at 600px, centred, scrollable */}
-        <div className="flex-1 overflow-y-auto portal-scrollbar" style={{ padding: '32px 24px' }}>
+        <div className="luxor-email-canvas-scroll min-w-0 flex-1 overflow-y-auto portal-scrollbar" style={{ padding: quietChrome ? '16px 12px' : '32px 24px' }}>
+          <div style={{ maxWidth: previewMode === 'mobile' ? Math.min(390, theme.contentWidth) : theme.contentWidth, margin: '0 auto', containerType: 'inline-size', containerName: 'luxor-email' }}>
           {/* Email chrome header */}
-          <div style={{ maxWidth: previewMode === 'mobile' ? 390 : 600, margin: '0 auto', marginBottom: 4, transition: 'max-width .2s ease' }}>
-            <div style={{ background: '#0a0807', border: '1px solid rgba(202,162,76,0.22)', borderBottom: 'none', borderRadius: '4px 4px 0 0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ margin: '0 auto', marginBottom: 4 }}>
+            {!quietChrome && <div style={{ background: '#0a0807', border: '1px solid rgba(202,162,76,0.22)', borderBottom: 'none', borderRadius: '4px 4px 0 0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(202,162,76,0.25)' }} />
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(202,162,76,0.15)' }} />
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(202,162,76,0.1)' }} />
               <div style={{ flex: 1, height: 1, background: 'rgba(202,162,76,0.1)', margin: '0 8px' }} />
               <span style={{ fontFamily: SANS, fontSize: 9, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(202,162,76,0.35)' }}>Email Preview — 600px</span>
-            </div>
+            </div>}
             {/* Gold shimmer top bar */}
-            <div style={{ height: 3, background: 'linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24)' }} />
+            {!quietChrome && <div style={{ height: 3, background: 'linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24)' }} />}
             {/* Logo header band */}
-            <div style={{ background: '#080605', padding: '18px 48px', borderLeft: '1px solid rgba(202,162,76,0.22)', borderRight: '1px solid rgba(202,162,76,0.22)', borderBottom: '1px solid rgba(202,162,76,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+            <div style={{ background: quietChrome ? theme.surfaceAlt : '#080605', padding: '18px 24px', border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={`${SITE_BASE_URL}/luxor-portal-mark-gold-tight.png`} alt="" width={52} height={52} style={{ width: 52, height: 52, objectFit: 'contain', display: 'block', border: '2px solid #caa24c', borderRadius: '999px', padding: 2, backgroundColor: '#080605', boxSizing: 'border-box' }} />
               <div>
@@ -698,7 +752,7 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onDuplicat
           </div>
 
           {/* Blocks */}
-          <div style={{ maxWidth: previewMode === 'mobile' ? 390 : 600, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 2, transition: 'max-width .2s ease' }}>
+          <div style={{ margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
             {blocks.map((block, idx) => (
               <SortableBlock
                 key={block.id}
@@ -713,20 +767,38 @@ export function BlockCanvas({ blocks, selectedId, onSelect, onDelete, onDuplicat
                 canMoveDown={idx < blocks.length - 1}
                 onChange={onChange}
                 onActivateField={(field) => onActivateField?.(block.id, field)}
+                showControls={showBlockControls}
               />
             ))}
           </div>
 
           {/* Email chrome footer bar */}
-          <div style={{ maxWidth: previewMode === 'mobile' ? 390 : 600, margin: '0 auto', marginTop: 4, transition: 'max-width .2s ease' }}>
+          {!quietChrome && <div style={{ margin: '0 auto', marginTop: 4 }}>
             <div style={{ height: 3, background: 'linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24)' }} />
             <div style={{ background: '#0a0807', border: '1px solid rgba(202,162,76,0.22)', borderTop: 'none', borderRadius: '0 0 4px 4px', padding: '8px 16px', textAlign: 'center' }}>
               <span style={{ fontFamily: SANS, fontSize: 8, fontWeight: 600, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(202,162,76,0.25)' }}>End of email</span>
             </div>
+          </div>}
           </div>
         </div>
       </SortableContext>
     </DndContext>
+    </CanvasThemeContext.Provider>
+    <style jsx global>{`
+      .luxor-email-block-tools button { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+      .luxor-email-block-tools button:focus-visible { outline: 2px solid var(--portal-gold, #a8792f); outline-offset: -2px; }
+      @container luxor-email (max-width: 600px) {
+        .luxor-email-canvas .luxor-email-block-content { padding-left: 22px !important; padding-right: 22px !important; }
+        .luxor-email-canvas .luxor-email-hero { padding: 42px 22px 38px !important; }
+        .luxor-email-canvas .luxor-email-hero-title { font-size: 34px !important; line-height: 1.12 !important; }
+        .luxor-email-canvas .luxor-email-image-text { flex-direction: column !important; gap: 20px !important; }
+        .luxor-email-canvas .luxor-email-image-slot { width: 100% !important; }
+        .luxor-email-canvas .luxor-email-image-slot > img, .luxor-email-canvas .luxor-email-image-slot > div { width: 100% !important; }
+        .luxor-email-canvas .luxor-email-image-copy { padding: 0 !important; }
+        .luxor-email-canvas .luxor-email-two-column { grid-template-columns: minmax(0, 1fr) !important; gap: 20px !important; }
+        .luxor-email-canvas .luxor-email-column-divider { display: none; }
+      }
+    `}</style>
     </div>
   )
 }

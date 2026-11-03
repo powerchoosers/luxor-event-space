@@ -36,7 +36,7 @@ import {
   createNewContactFollowUpDefinition,
   CUSTOM_WORKFLOW_TEXT_MAX_LENGTH,
   CUSTOM_WORKFLOW_TEXT_OPT_OUT_FOOTER,
-  CUSTOM_WORKFLOW_TRIGGERS,
+  CUSTOM_WORKFLOW_RUNTIME_TRIGGERS,
   CUSTOM_WORKFLOW_TRIGGER_LABELS,
   getCustomWorkflowTextBrand,
   getCustomWorkflowTextEditorContent,
@@ -53,6 +53,8 @@ import { PREBUILT_WORKFLOWS } from '@/lib/luxorPrebuiltWorkflows'
 import { ElenaWorkflowArchitectModal } from '@/components/portal/ElenaWorkflowArchitectModal'
 import { WorkflowVariableChipsBar } from '@/components/portal/WorkflowVariableChipsBar'
 import { WorkflowTokenEditor, WorkflowVariableText, type WorkflowTokenEditorHandle } from '@/components/portal/WorkflowTokenEditor'
+import { WorkflowEmailPreview, WorkflowEmailTemplateControls } from '@/components/portal/WorkflowEmailEditor'
+import type { LuxorEmailDocument } from '@/app/(portal)/portal/marketing/emailTemplates'
 
 type WorkflowRow = {
   id: string
@@ -88,6 +90,12 @@ type WorkflowPayload = {
   activity: ActivityRow[]
   capabilities?: WorkflowCapabilities
   error?: string
+}
+
+type WorkflowEmailOptions = {
+  senders: string[]
+  operator: { displayName: string; email: string; roleTitle?: string }
+  venue: { address: string; phone: string; email: string }
 }
 
 const ADDABLE_STEPS: Array<{ type: Exclude<CustomWorkflowChannel, 'end'>; label: string; icon: React.ReactNode }> = [
@@ -154,6 +162,10 @@ export default function CustomWorkflowEditorPage() {
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [mobileInspectorOpen, setMobileInspectorOpen] = React.useState(false)
   const [inspectorBodyHeight, setInspectorBodyHeight] = React.useState<number | null>(null)
+  const [emailOptions, setEmailOptions] = React.useState<WorkflowEmailOptions | null>(null)
+  const [emailOptionsError, setEmailOptionsError] = React.useState<string | null>(null)
+  const [emailOptionsRetry, setEmailOptionsRetry] = React.useState(0)
+  const [duplicating, setDuplicating] = React.useState(false)
   const isDesktopViewport = React.useSyncExternalStore(
     subscribeToWorkflowDesktopViewport,
     getWorkflowDesktopViewportSnapshot,
@@ -164,6 +176,24 @@ export default function CustomWorkflowEditorPage() {
   const inspectorRef = React.useRef<HTMLDivElement>(null)
   const inspectorContentRef = React.useRef<HTMLDivElement>(null)
   const callScriptEditorRef = React.useRef<WorkflowTokenEditorHandle>(null)
+
+  React.useEffect(() => {
+    if (!isNew || prebuiltTemplateId) return
+    const savedDraft = sessionStorage.getItem('luxor_architect_draft')
+    if (!savedDraft) return
+    try {
+      const draft = JSON.parse(savedDraft) as { name?: unknown; definition?: unknown }
+      if (typeof draft.name !== 'string' || validateCustomWorkflowDefinition(draft.definition, { allowIncompleteDraft: true }).length) throw new Error('The Elena workflow draft could not be opened. Generate it again from the workflow builder.')
+      const definition = cloneCustomWorkflowDefinition(draft.definition as CustomWorkflowDefinition)
+      setNameDraft(draft.name)
+      setDefinitionDraft(definition)
+      setSelectedStepId(definition.steps[0]?.id || '')
+      setFeedback('Elena draft loaded. Review the sender, content, and timing before saving.')
+      sessionStorage.removeItem('luxor_architect_draft')
+    } catch (draftError) {
+      setError(draftError instanceof Error ? draftError.message : 'The Elena workflow draft could not be opened.')
+    }
+  }, [isNew, prebuiltTemplateId])
 
   React.useEffect(() => {
     const scrollport = workspaceRef.current?.closest<HTMLElement>('.portal-scrollbar')
@@ -196,6 +226,29 @@ export default function CustomWorkflowEditorPage() {
 
   const selectedStep = definitionDraft.steps.find((s) => s.id === selectedStepId) || null
   const validationErrors = React.useMemo(() => validateCustomWorkflowDefinition(definitionDraft), [definitionDraft])
+  const editable = enabled === true && (isNew || workflow?.status === 'draft')
+  const readOnlyVersion = Boolean(workflow && workflow.status !== 'draft')
+  const canChangeLifecycle = workflow?.status === 'active' ? capabilities?.canPause : workflow?.status === 'paused' ? capabilities?.canResume : capabilities?.canActivate
+  const triggerConnected = CUSTOM_WORKFLOW_RUNTIME_TRIGGERS.includes(definitionDraft.trigger)
+
+  React.useEffect(() => {
+    const controller = new AbortController()
+    fetch('/api/marketing/custom-workflows/email-options', { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json() as WorkflowEmailOptions & { error?: string }
+        if (!response.ok || !Array.isArray(payload.senders)) throw new Error(payload.error || 'Approved email senders could not load.')
+        setEmailOptions(payload)
+        setEmailOptionsError(null)
+      })
+      .catch((requestError: unknown) => { if (!controller.signal.aborted) setEmailOptionsError(requestError instanceof Error ? requestError.message : 'Approved email senders could not load.') })
+    return () => controller.abort()
+  }, [emailOptionsRetry])
+
+  function updateEmailSettings(patch: Partial<NonNullable<CustomWorkflowDefinition['emailSettings']>>) {
+    if (!editable) return
+    setDefinitionDraft((current) => ({ ...current, emailSettings: { senderMode: 'operator', senderEmail: emailOptions?.senders[0] || '', ...current.emailSettings, ...patch } }))
+    setFeedback(null)
+  }
 
   React.useLayoutEffect(() => {
     const content = inspectorContentRef.current
@@ -273,6 +326,7 @@ export default function CustomWorkflowEditorPage() {
 
   // Step operations
   function changeStep(stepId: string, update: (step: CustomWorkflowStep) => CustomWorkflowStep) {
+    if (!editable) return
     setDefinitionDraft((current) => ({
       ...current,
       steps: current.steps.map((step) => (step.id === stepId ? update(step) : step)),
@@ -290,6 +344,7 @@ export default function CustomWorkflowEditorPage() {
   }
 
   function addStep(type: Exclude<CustomWorkflowChannel, 'end'>) {
+    if (!editable) return
     const id = `${type}-${crypto.randomUUID().slice(0, 8)}`
     const next = addCustomWorkflowStep(definitionDraft, type, id)
     setDefinitionDraft(next)
@@ -298,10 +353,12 @@ export default function CustomWorkflowEditorPage() {
   }
 
   function moveStep(stepId: string, direction: -1 | 1) {
+    if (!editable) return
     setDefinitionDraft((current) => moveCustomWorkflowStep(current, stepId, direction))
   }
 
   function removeStep(stepId: string) {
+    if (!editable) return
     const step = definitionDraft.steps.find((c) => c.id === stepId)
     if (!step || !canEditCustomWorkflowStep(step)) return
     if (!window.confirm(`Remove “${step.name}” from this workflow?`)) return
@@ -325,7 +382,7 @@ export default function CustomWorkflowEditorPage() {
 
   // AI Message Copilot
   async function handleGenerateAiCopy(channel: 'email' | 'text') {
-    if (!selectedStep) return
+    if (!selectedStep || (selectedStep.type !== 'email' && selectedStep.type !== 'text')) return
     setGeneratingAiCopy(true)
     setError(null)
 
@@ -341,6 +398,9 @@ export default function CustomWorkflowEditorPage() {
         body: JSON.stringify({
           channel,
           prompt,
+          step: selectedStep,
+          senderMode: definitionDraft.emailSettings?.senderMode || 'operator',
+          senderEmail: definitionDraft.emailSettings?.senderEmail || emailOptions?.senders[0],
           leadContext: {
             eventType: '{{event_type}}',
             firstName: '{{first_name}}',
@@ -353,10 +413,12 @@ export default function CustomWorkflowEditorPage() {
         previewText?: string
         body?: string
         ctaText?: string
+        ctaUrl?: string
+        emailDocument?: LuxorEmailDocument
         error?: string
       }
 
-      if (!response.ok || !data.body) {
+      if (!response.ok || (!data.body && !data.emailDocument)) {
         throw new Error(data.error || 'Elena could not generate copy.')
       }
 
@@ -369,6 +431,8 @@ export default function CustomWorkflowEditorPage() {
             previewText: data.previewText || step.previewText,
             body: data.body || step.body,
             ctaText: data.ctaText || step.ctaText,
+            ctaUrl: data.ctaUrl || step.ctaUrl,
+            ...(data.emailDocument ? { emailDocument: data.emailDocument } : {}),
           }
         })
       } else {
@@ -380,7 +444,7 @@ export default function CustomWorkflowEditorPage() {
           }
         })
       }
-      setFeedback('Generated with Elena AI.')
+      setFeedback('Sample generated with Elena. Each eligible client receives a fresh version when the workflow runs.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI generation failed.')
     } finally {
@@ -439,7 +503,7 @@ export default function CustomWorkflowEditorPage() {
   // Activate workflow
   async function handleToggleActivate() {
     if (!workflow) return
-    const nextAction = workflow.status === 'active' ? 'pause' : 'activate'
+    const nextAction = workflow.status === 'active' ? 'pause' : workflow.status === 'paused' ? 'resume' : 'activate'
     setActivating(true)
     setError(null)
 
@@ -461,6 +525,20 @@ export default function CustomWorkflowEditorPage() {
     }
   }
 
+  async function duplicateToEdit() {
+    if (!workflow || duplicating) return
+    setDuplicating(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/marketing/custom-workflows/${encodeURIComponent(workflow.id)}/duplicate`, { method: 'POST' })
+      const payload = await response.json() as { workflow?: WorkflowRow; error?: string }
+      if (!response.ok || !payload.workflow) throw new Error(payload.error || 'Could not duplicate this workflow.')
+      router.push(`/portal/marketing/custom-workflows/${encodeURIComponent(payload.workflow.id)}`)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not duplicate this workflow.')
+    } finally { setDuplicating(false) }
+  }
+
   if (loading && !workflow && !isNew) {
     return (
       <PortalPageFrame>
@@ -477,6 +555,8 @@ export default function CustomWorkflowEditorPage() {
       <ElenaWorkflowArchitectModal
         isOpen={isArchitectOpen}
         onClose={() => setIsArchitectOpen(false)}
+        definition={definitionDraft}
+        workflowName={nameDraft}
         onApplyWorkflow={({ name, definition }) => {
           setNameDraft(name)
           setDefinitionDraft(definition)
@@ -501,6 +581,7 @@ export default function CustomWorkflowEditorPage() {
               <input
                 type="text"
                 value={nameDraft}
+                readOnly={!editable}
                 onChange={(e) => setNameDraft(e.target.value)}
                 placeholder="Workflow name"
                 className="min-w-0 truncate font-serif text-lg font-semibold text-[color:var(--portal-text)] bg-transparent outline-none focus:ring-1 focus:ring-[#caa24c]/50 rounded px-1 -mx-1"
@@ -526,6 +607,7 @@ export default function CustomWorkflowEditorPage() {
           <button
             type="button"
             onClick={() => setIsArchitectOpen(true)}
+            disabled={!editable}
             aria-haspopup="dialog"
             className="inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-[color:var(--portal-border)] px-2 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:min-h-9 lg:flex-none lg:border-0 lg:px-2"
           >
@@ -537,7 +619,7 @@ export default function CustomWorkflowEditorPage() {
           <PortalButton
             variant="primary"
             onClick={saveDraft}
-            disabled={saving || (!dirty && !isNew)}
+            disabled={!editable || saving || (!dirty && !isNew)}
             className="min-h-9 min-w-0 flex-1 px-2 text-xs lg:flex-none lg:px-4"
           >
             {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
@@ -545,17 +627,19 @@ export default function CustomWorkflowEditorPage() {
           </PortalButton>
 
           {/* Activate / Pause Toggle (for saved workflows) */}
-          {!isNew && workflow ? (
+          {!isNew && workflow && workflow.status !== 'archived' ? (
             <PortalButton
               variant="secondary"
               onClick={handleToggleActivate}
-              disabled={activating || validationErrors.length > 0}
+              disabled={activating || !canChangeLifecycle || (workflow.status !== 'active' && !triggerConnected) || (workflow.status === 'draft' && (dirty || validationErrors.length > 0))}
               className="min-h-9 min-w-0 flex-1 text-xs lg:flex-none"
             >
               {activating ? (
                 <RefreshCw size={13} className="animate-spin" />
               ) : workflow.status === 'active' ? (
                 'Pause Workflow'
+              ) : workflow.status === 'paused' ? (
+                'Resume Workflow'
               ) : (
                 'Activate Workflow'
               )}
@@ -583,6 +667,18 @@ export default function CustomWorkflowEditorPage() {
         </div>
       ) : null}
 
+      {readOnlyVersion ? <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4"><p className="text-xs leading-5 text-[color:var(--portal-muted)]">This {workflow?.status} version is read-only. Duplicate it to make changes in a new draft.</p><button type="button" onClick={() => void duplicateToEdit()} disabled={duplicating || enabled !== true} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">{duplicating ? <RefreshCw size={14} className="animate-spin" /> : <Copy size={14} />} Duplicate to edit</button></div> : null}
+      <section aria-label="Workflow email sender" className="shrink-0 space-y-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-4 lg:rounded-xl lg:border lg:px-5">
+        <div><h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Email sender</h2><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Applies to the email steps in this workflow. Replies return to the selected approved mailbox.</p></div>
+        {emailOptions && !(readOnlyVersion && !definitionDraft.emailSettings) ? <div className="grid gap-3 sm:grid-cols-2">
+          <div><label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Send as</label><PortalSelect disabled={!editable} value={definitionDraft.emailSettings?.senderMode || 'operator'} onChange={(value) => updateEmailSettings({ senderMode: value as 'operator' | 'elena' })} options={[{ value: 'operator', label: readOnlyVersion && definitionDraft.emailSettings?.senderActorEmail ? `Saved user · ${definitionDraft.emailSettings.senderActorEmail}` : `${emailOptions.operator.displayName} · signed-in user` }, { value: 'elena', label: 'Elena · Luxor concierge' }]} /></div>
+          <div><label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">From email address</label><PortalSelect disabled={!editable} value={definitionDraft.emailSettings?.senderEmail || emailOptions.senders[0] || ''} onChange={(value) => updateEmailSettings({ senderEmail: value })} placeholder="No approved sender available" options={emailOptions.senders.map((email) => ({ value: email, label: email }))} /></div>
+        </div> : readOnlyVersion && !definitionDraft.emailSettings ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Uses the existing Luxor business sender. Duplicate this workflow to choose a user or Elena and a sending address.</p> : <p role="status" className="text-xs text-[color:var(--portal-muted)]">{emailOptionsError ? 'Sender options unavailable.' : 'Loading approved sender options…'}</p>}
+        {emailOptionsError ? <p role="alert" className="text-xs leading-5 text-rose-600 dark:text-rose-400">{emailOptionsError} <button type="button" onClick={() => setEmailOptionsRetry((value) => value + 1)} className="underline">Retry</button></p> : null}
+        {emailOptions && !emailOptions.senders.length ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">Configure an approved sending address in Settings before activating email steps.</p> : null}
+        {emailOptions?.venue.address ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Venue context from Settings: {emailOptions.venue.address}</p> : null}
+      </section>
+
       {/* Main Workspace Frame: Two Columns (Canvas + Inspector) */}
       <div ref={workspaceRef} className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-none lg:flex-row lg:items-start lg:overflow-visible">
         {/* Left Column: Visual Sequencer Canvas */}
@@ -608,15 +704,16 @@ export default function CustomWorkflowEditorPage() {
               <div className="w-full lg:w-64">
                 <PortalSelect
                   value={definitionDraft.trigger}
+                  disabled={!editable}
                   onChange={(val) => {
                     setDefinitionDraft((curr) => ({
                       ...curr,
                       trigger: val as CustomWorkflowTrigger,
                     }))
                   }}
-                  options={CUSTOM_WORKFLOW_TRIGGERS.map((t) => ({
+                  options={[...CUSTOM_WORKFLOW_RUNTIME_TRIGGERS, ...(triggerConnected ? [] : [definitionDraft.trigger])].map((t) => ({
                     value: t,
-                    label: CUSTOM_WORKFLOW_TRIGGER_LABELS[t]?.label || t,
+                    label: `${CUSTOM_WORKFLOW_TRIGGER_LABELS[t]?.label || t}${CUSTOM_WORKFLOW_RUNTIME_TRIGGERS.includes(t) ? '' : ' · automatic enrollment not connected'}`,
                   }))}
                 />
               </div>
@@ -624,6 +721,7 @@ export default function CustomWorkflowEditorPage() {
             <p className="mt-2 text-xs text-[color:var(--portal-muted)]">
               {CUSTOM_WORKFLOW_TRIGGER_LABELS[definitionDraft.trigger]?.description}
             </p>
+            {!triggerConnected ? <p role="alert" className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Automatic enrollment for this trigger is not connected yet. {readOnlyVersion ? 'Duplicate this workflow and choose Manual enrollment or Contact form inquiry before activating a revised draft.' : 'Choose Manual enrollment or Contact form inquiry before activating this draft.'}</p> : null}
           </div>
 
           {/* Step Timeline Nodes */}
@@ -714,7 +812,7 @@ export default function CustomWorkflowEditorPage() {
                       </div>
 
                       {/* Step Action Buttons (move, delete) */}
-                      {canEdit && !isEnd ? (
+                      {editable && canEdit && !isEnd ? (
                         <div
                           className="flex items-center gap-1 opacity-80 group-hover:opacity-100"
                           onClick={(e) => e.stopPropagation()}
@@ -722,23 +820,26 @@ export default function CustomWorkflowEditorPage() {
                           <button
                             type="button"
                             onClick={() => moveStep(step.id, -1)}
+                            aria-label={`Move ${step.name} up`}
                             disabled={idx <= (definitionDraft.steps[0]?.type === 'email' && definitionDraft.steps[0].mode === 'existing_inquiry_acknowledgment' ? 1 : 0)}
-                            className="rounded p-1 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-30"
+                            className="grid size-10 place-items-center rounded text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-30"
                           >
                             <ArrowUp size={14} />
                           </button>
                           <button
                             type="button"
                             onClick={() => moveStep(step.id, 1)}
+                            aria-label={`Move ${step.name} down`}
                             disabled={idx >= definitionDraft.steps.length - 2}
-                            className="rounded p-1 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-30"
+                            className="grid size-10 place-items-center rounded text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-30"
                           >
                             <ArrowDown size={14} />
                           </button>
                           <button
                             type="button"
                             onClick={() => removeStep(step.id)}
-                            className="rounded p-1 text-rose-500 hover:bg-rose-500/10"
+                            aria-label={`Remove ${step.name}`}
+                            className="grid size-10 place-items-center rounded text-rose-500 hover:bg-rose-500/10"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -769,6 +870,7 @@ export default function CustomWorkflowEditorPage() {
                   key={addable.type}
                   type="button"
                   onClick={() => addStep(addable.type)}
+                  disabled={!editable}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c] hover:bg-[#caa24c]/10"
                 >
                   {addable.icon}
@@ -840,7 +942,7 @@ export default function CustomWorkflowEditorPage() {
               /* Live Preview with Real Lead Mock Context */
               <PortalStaggerGroup className="space-y-4" delayChildren={0.07} staggerDelay={0.05}>
                 <PortalStaggerCard className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-muted)]">
-                  Previewing with sample lead: <span className="font-semibold text-[color:var(--portal-text)]">Sarah Jenkins · Wedding Reception (150 guests)</span>
+                  Previewing with sample lead: <span className="font-semibold text-[color:var(--portal-text)]">{selectedStep.type === 'email' ? 'Sample Guest · Private celebration (80 guests)' : 'Sarah Jenkins · Wedding Reception (150 guests)'}</span>
                 </PortalStaggerCard>
 
                 {selectedStep.type === 'call_task' ? (
@@ -865,30 +967,7 @@ export default function CustomWorkflowEditorPage() {
                     </div>
                   </PortalStaggerCard>
                 ) : selectedStep.type === 'email' ? (
-                  <PortalStaggerCard className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 space-y-4 shadow-sm">
-                    <div className="border-b border-[color:var(--portal-border)] pb-3">
-                      <p className="text-[10px] font-bold text-[color:var(--portal-muted)] uppercase">Subject</p>
-                      <h4 className="font-serif text-base font-semibold text-[color:var(--portal-text)]">
-                        {selectedStep.subject?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah') || 'No subject'}
-                      </h4>
-                      <p className="text-xs text-[color:var(--portal-muted)] mt-1">
-                        {selectedStep.previewText?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')}
-                      </p>
-                    </div>
-                    <div className="text-xs text-[color:var(--portal-text)] whitespace-pre-wrap leading-5">
-                      {selectedStep.body
-                        ?.replace(/\{\{\s*first_name\s*\}\}/g, 'Sarah')
-                        ?.replace(/\{\{\s*event_type\s*\}\}/g, 'Wedding Reception')
-                        ?.replace(/\{\{\s*guest_count\s*\}\}/g, '150 guests') || 'Email body content goes here.'}
-                    </div>
-                    {selectedStep.ctaText ? (
-                      <div className="pt-2">
-                        <button type="button" disabled className="rounded-xl bg-[#caa24c] px-4 py-2 text-xs font-bold text-[#17130b]">
-                          {selectedStep.ctaText}
-                        </button>
-                      </div>
-                    ) : null}
-                  </PortalStaggerCard>
+                  selectedStep.mode === 'existing_inquiry_acknowledgment' ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">The inquiry form sends the existing acknowledgment once. Its sender and content follow the inquiry acknowledgment settings.</p> : <WorkflowEmailPreview step={selectedStep} emailSettings={definitionDraft.emailSettings || (editable && emailOptions?.senders[0] ? { senderMode: 'operator', senderEmail: emailOptions.senders[0] } : undefined)} />
                 ) : selectedStep.type === 'text' ? (
                   <PortalStaggerCard className="rounded-2xl border border-sky-500/40 bg-[color:var(--portal-card)] p-5 space-y-3">
                     <div className="flex items-center gap-2 text-sky-500 font-bold text-xs">
@@ -906,6 +985,14 @@ export default function CustomWorkflowEditorPage() {
                   </PortalStaggerCard>
                 )}
               </PortalStaggerGroup>
+            ) : readOnlyVersion ? (
+              <div className="space-y-3 py-3 text-xs leading-5 text-[color:var(--portal-muted)]"><h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Read-only workflow version</h3><p>Use Live Preview to review this step. Duplicate the workflow to edit its content or sender in a new draft.</p></div>
+            ) : !canEditCustomWorkflowStep(selectedStep) ? (
+              <div className="space-y-3 py-3 text-xs leading-5 text-[color:var(--portal-muted)]">
+                <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Existing inquiry acknowledgment</h3>
+                <p>The inquiry form already sends this acknowledgment. This step records that message without sending a second email.</p>
+                <p>Its copy and sender follow the inquiry acknowledgment settings. Add a new email step to choose a template, sender, or client-specific instructions.</p>
+              </div>
             ) : (
               /* Step Configuration Form */
               <PortalStaggerGroup className="space-y-4" delayChildren={0.06} staggerDelay={0.045}>
@@ -998,129 +1085,41 @@ export default function CustomWorkflowEditorPage() {
                 {/* EMAIL SPECIFIC CONFIGURATION */}
                 {selectedStep.type === 'email' ? (
                   <PortalStaggerCard className="space-y-4 border-t border-[color:var(--portal-border)] pt-4">
-                    {/* Mode toggle */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
-                        Authoring Mode
-                      </span>
-                      <div className="flex gap-1 rounded-lg border border-[color:var(--portal-border)] p-0.5 bg-[color:var(--portal-soft)]">
-                        <button
-                          type="button"
-                          onClick={() => updateStepField(selectedStep.id, 'generationMode', 'manual')}
-                          className={`rounded px-2 py-1 text-[10px] font-bold transition ${
-                            selectedStep.type === 'email' && selectedStep.generationMode !== 'ai'
-                              ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-xs'
-                              : 'text-[color:var(--portal-muted)]'
-                          }`}
-                        >
-                          Manual Draft
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => updateStepField(selectedStep.id, 'generationMode', 'ai')}
-                          className={`rounded px-2 py-1 text-[10px] font-bold transition ${
-                            selectedStep.type === 'email' && selectedStep.generationMode === 'ai'
-                              ? 'bg-[#caa24c] text-[#17130b] shadow-xs'
-                              : 'text-[color:var(--portal-muted)]'
-                          }`}
-                        >
-                          Elena AI
-                        </button>
-                      </div>
+                    <WorkflowEmailTemplateControls step={selectedStep} onChange={(next) => changeStep(selectedStep.id, () => next)} venueAddress={emailOptions?.venue.address} />
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Writing method</label>
+                      <PortalSelect value={selectedStep.generationMode || 'manual'} onChange={(value) => updateStepField(selectedStep.id, 'generationMode', value)} options={[{ value: 'manual', label: 'Use this saved copy' }, { value: 'ai', label: 'Elena writes fresh for each client' }]} />
                     </div>
-
-                    {selectedStep.type === 'email' && selectedStep.generationMode === 'ai' ? (
-                      <div className="rounded-xl border border-[#caa24c]/40 bg-[#caa24c]/5 p-3.5 space-y-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#8c6424] dark:text-[#f1d27a]">
-                          Elena Prompt Instructions
-                        </span>
-                        <textarea
-                          value={selectedStep.aiPrompt || ''}
-                          onChange={(e) => updateStepField(selectedStep.id, 'aiPrompt', e.target.value)}
-                          rows={3}
-                          placeholder="Instructions for Elena AI: e.g. Write a warm congratulations referencing their event type and guest count..."
-                          className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-xs text-[color:var(--portal-text)] outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateAiCopy('email')}
-                          disabled={generatingAiCopy}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#caa24c] px-3 py-1.5 text-xs font-bold text-[#17130b]"
-                        >
-                          {generatingAiCopy ? <RefreshCw size={12} className="animate-spin" /> : <Bot size={12} />}
-                          <span>Generate Copy with Elena</span>
+                    {selectedStep.generationMode === 'ai' ? (
+                      <div className="space-y-3 rounded-xl border border-[color:var(--portal-border)] p-3.5">
+                        <label htmlFor="workflow-email-ai-prompt" className="block text-xs font-semibold text-[color:var(--portal-text)]">Instructions for each client</label>
+                        <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Elena uses the client&apos;s inquiry, event details, previous conversations, and current venue settings at this step. {selectedStep.emailStyle === 'template' ? 'She can rewrite and rearrange the HTML elements.' : 'She writes a personal email directly from your instructions.'} Review a sample before activating.</p>
+                        <textarea id="workflow-email-ai-prompt" value={selectedStep.aiPrompt || ''} onChange={(event) => updateStepField(selectedStep.id, 'aiPrompt', event.target.value)} rows={4} placeholder="Write a warm, personal invitation to tour. Refer to what this client told us. Ask one easy question. Do not invent availability, pricing, or offers." className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#a8792f]" />
+                        <button type="button" onClick={() => handleGenerateAiCopy('email')} disabled={generatingAiCopy || !selectedStep.aiPrompt?.trim() || (selectedStep.emailStyle === 'template' && !selectedStep.emailDocument)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-50">
+                          {generatingAiCopy ? <RefreshCw size={14} className="animate-spin" /> : <Bot size={14} />} Generate sample · no sending
                         </button>
                       </div>
                     ) : null}
-
-                    {/* Dynamic Variable Chips */}
-                    <WorkflowVariableChipsBar onInsert={handleInsertChip} />
-
+                    {selectedStep.emailStyle !== 'template' ? <WorkflowVariableChipsBar onInsert={handleInsertChip} /> : null}
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
-                        Subject Line
-                      </label>
-                      <input
-                        type="text"
-                        value={selectedStep.type === 'email' ? (selectedStep.subject || '') : ''}
-                        onChange={(e) => updateStepField(selectedStep.id, 'subject', e.target.value)}
-                        placeholder="e.g. Planning your {{event_type}} at Luxor"
-                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
-                      />
+                      <label htmlFor="workflow-email-subject" className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{selectedStep.generationMode === 'ai' ? 'Sample subject line' : 'Subject line'}</label>
+                      <input id="workflow-email-subject" value={selectedStep.subject || ''} onChange={(event) => updateStepField(selectedStep.id, 'subject', event.target.value)} placeholder="Planning your {{event_type}} at Luxor" className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#a8792f]" />
                     </div>
-
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
-                        Preview Snippet
-                      </label>
-                      <input
-                        type="text"
-                        value={selectedStep.type === 'email' ? (selectedStep.previewText || '') : ''}
-                        onChange={(e) => updateStepField(selectedStep.id, 'previewText', e.target.value)}
-                        placeholder="Short preview text for client inboxes..."
-                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
-                      />
+                      <label htmlFor="workflow-email-preheader" className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Inbox preview text</label>
+                      <input id="workflow-email-preheader" value={selectedStep.previewText || ''} onChange={(event) => updateStepField(selectedStep.id, 'previewText', event.target.value)} placeholder="A short preview for the client's inbox" className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#a8792f]" />
                     </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
-                        Email Body
-                      </label>
-                      <textarea
-                        value={selectedStep.type === 'email' ? (selectedStep.body || '') : ''}
-                        onChange={(e) => updateStepField(selectedStep.id, 'body', e.target.value)}
-                        rows={6}
-                        placeholder="Dear {{first_name}}..."
-                        className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
+                    {selectedStep.emailStyle !== 'template' ? <>
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
-                          CTA Button Label
-                        </label>
-                        <input
-                          type="text"
-                          value={selectedStep.type === 'email' ? (selectedStep.ctaText || '') : ''}
-                          onChange={(e) => updateStepField(selectedStep.id, 'ctaText', e.target.value)}
-                          placeholder="e.g. Schedule a Tour"
-                          className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
-                        />
+                        <label htmlFor="workflow-email-body" className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{selectedStep.generationMode === 'ai' ? 'Sample email copy' : 'Email copy'}</label>
+                        <textarea id="workflow-email-body" value={selectedStep.body || ''} onChange={(event) => updateStepField(selectedStep.id, 'body', event.target.value)} rows={7} placeholder="Hi {{first_name}}," className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#a8792f]" />
+                        <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">The selected sender&apos;s signature is added automatically.</p>
                       </div>
-                      <div>
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block mb-1">
-                          Destination URL
-                        </label>
-                        <input
-                          type="text"
-                          value={selectedStep.type === 'email' ? (selectedStep.ctaUrl || '') : ''}
-                          onChange={(e) => updateStepField(selectedStep.id, 'ctaUrl', e.target.value)}
-                          placeholder="https://www.luxoratlaspalmas.com/tour"
-                          className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]"
-                        />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div><label htmlFor="workflow-email-button-label" className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Optional button label</label><input id="workflow-email-button-label" value={selectedStep.ctaText || ''} onChange={(event) => updateStepField(selectedStep.id, 'ctaText', event.target.value)} placeholder="Schedule a tour" className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#a8792f]" /></div>
+                        <div><label htmlFor="workflow-email-button-url" className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Destination</label><input id="workflow-email-button-url" value={selectedStep.ctaUrl || ''} onChange={(event) => updateStepField(selectedStep.id, 'ctaUrl', event.target.value)} placeholder="/tour" className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#a8792f]" /></div>
                       </div>
-                    </div>
+                    </> : null}
                   </PortalStaggerCard>
                 ) : null}
 

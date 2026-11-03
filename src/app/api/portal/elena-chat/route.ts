@@ -13,6 +13,7 @@ import { getDefaultLuxorProposalPricing } from '@/lib/luxorProposalPricingServer
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { getCustomWorkflowFeatureStatus } from '@/lib/luxorCustomWorkflowsServer'
 import { validateCustomWorkflowDefinition, type CustomWorkflowDefinition } from '@/lib/luxorCustomWorkflowDefinition'
+import { getLuxorAiVenueContext } from '@/lib/luxorAiContextServer'
 
 type ToolCall = {
   id: string
@@ -480,7 +481,7 @@ Use the live CRM context supplied by the portal when it already contains the exa
 - Present answers in a clean, readable layout (use markdown tables or bulleted lists for query results).
 - Limit output results when necessary (e.g. "LIMIT 10" or "LIMIT 5") to avoid blowing up context, unless requested.
 - When the owner asks you to create or draft a text campaign, call "create_text_campaign_draft". This prepares the Text Campaigns builder but never sends anything. Include "Luxor Event Space" and end the body with "Reply STOP to opt out." Never invent balances, dates, availability, or payment status.
-- When the owner asks you to create, build, or design a custom automation workflow, call "prepare_custom_workflow_draft". Return its reviewable workflow card in Elena Chat and keep it unsaved until the owner clicks Save draft. Explain that Save draft only stores an inactive draft; it does not activate the workflow, enroll leads, or send messages. Never say or imply that saving a draft activates it. Activation remains a separate owner action in the workflow library.
+- When the owner asks you to create, build, or design a custom automation workflow, call "prepare_custom_workflow_draft". Include the full request: existing HTML template name, element copy and placement changes, chosen operator/Elena sender and approved delivery address, and whether each client needs a freshly generated message from a prompt. Workflow emails support both lightly styled personal notes and editable HTML designs. A per-client AI prompt is generated anew when each client reaches the step; it is separate from writing one fixed template. Return its reviewable workflow card in Elena Chat and keep it unsaved until the owner clicks Save draft. Explain that Save draft only stores an inactive draft; it does not activate the workflow, enroll leads, or send messages. Never say or imply that saving a draft activates it. Activation remains a separate owner action in the workflow library.
 - Marketing email, newsletter, broadcast, promotion, nurture sequence, or email campaign requests are NOT one-to-one email drafts. Call "open_marketing_email_builder" immediately, even when the owner says only "write a campaign" or "make a marketing email." That tool opens the existing block-based Email Builder and asks its generator to produce an editable template with hero/content/CTA/footer blocks. Do not satisfy these requests with prose alone and do not call "prepare_email_draft" for them. A direct email to one lead whose saved address matches the record remains "prepare_email_draft".
 - When the owner asks to add, create, or save a new person, contact, or lead, call "prepare_new_contact_card". Put all known details into the editable card. The owner must review and click Add contact; do not use raw SQL. Creating a CRM contact does not grant marketing or SMS consent.
 - When the owner asks you to text one specific client, first query the lead so you have the correct inquiry ID, name, phone, status, and relevant event/tour context. Then call "request_text_message_confirmation". The owner must confirm before the message is sent. Never use this tool for bulk sends.
@@ -1012,7 +1013,7 @@ async function processElenaChatRequest(request: Request, onToolActivity?: (text:
     } catch (pricingError) {
       console.warn('[Elena Chat] Proposal catalog context unavailable:', pricingError)
     }
-    const senderProfile = await getLuxorUserProfile(session.email)
+    const [senderProfile, venueContext] = await Promise.all([getLuxorUserProfile(session.email), getLuxorAiVenueContext()])
 
     // 1. If this is a direct confirmation execute request
     if (confirmQuery && confirmSummary) {
@@ -1053,7 +1054,7 @@ async function processElenaChatRequest(request: Request, onToolActivity?: (text:
 
       // Feed confirmation result back to Gemini so Elena can report the success
       const confirmationMessages: ChatMessage[] = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: `${SYSTEM_PROMPT}\n\n${venueContext}` },
         ...messages.slice(-15).map(({ role, content }) => ({ role, content })),
         {
           role: 'system',
@@ -2169,7 +2170,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
 
     // 2. Normal assistant request
     const openrouterMessages: ChatMessage[] = [
-      { role: 'system', content: `${SYSTEM_PROMPT}${proposalCatalogContext}` },
+      { role: 'system', content: `${SYSTEM_PROMPT}${proposalCatalogContext}\n\n${venueContext}` },
       {
         role: 'system',
         content: `SIGNED-IN SENDER PROFILE: Name: "${senderProfile.displayName}". Title: "${senderProfile.roleTitle}". Email: "${senderProfile.email}". When drafting an email, use this identity for any sign-off and never invent a different sender. The rendered email adds this saved signature automatically.`

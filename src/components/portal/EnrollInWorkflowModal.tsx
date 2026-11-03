@@ -1,27 +1,15 @@
 'use client'
 
 import React from 'react'
-import { Check, Clock, Mail, MessageSquare, Phone, Search, User, Workflow, X } from 'lucide-react'
+import Link from 'next/link'
+import { Check, ExternalLink, LoaderCircle, Search, Workflow, X } from 'lucide-react'
 import { PortalModal, PortalButton } from '@/components/portal/PortalUI'
 import { PREBUILT_WORKFLOWS } from '@/lib/luxorPrebuiltWorkflows'
 import type { CustomWorkflowDefinition, CustomWorkflowStatus } from '@/lib/luxorCustomWorkflowDefinition'
 
-type CustomWorkflowOption = {
-  id: string
-  name: string
-  trigger_type: string
-  status: CustomWorkflowStatus
-  draft_definition: CustomWorkflowDefinition
-}
-
-type AvailableInquiry = {
-  id: string
-  full_name: string | null
-  email: string | null
-  phone: string | null
-  event_type: string | null
-  target_date: string | null
-}
+type CustomWorkflowOption = { id: string; name: string; trigger_type: string; status: CustomWorkflowStatus; draft_definition: CustomWorkflowDefinition }
+type AvailableInquiry = { id: string; full_name: string | null; email: string | null; phone: string | null; event_type: string | null; target_date: string | null }
+type EnrollmentResult = { text: string; error?: boolean; workflow?: { id: string; name: string } }
 
 export interface EnrollInWorkflowModalProps {
   isOpen: boolean
@@ -29,343 +17,119 @@ export interface EnrollInWorkflowModalProps {
   inquiryIds?: string[]
   leadNames?: string[]
   onSuccess?: () => void
+  initialWorkflowId?: string | null
 }
 
-export function EnrollInWorkflowModal({
-  isOpen,
-  onClose,
-  inquiryIds = [],
-  leadNames = [],
-  onSuccess,
-}: EnrollInWorkflowModalProps) {
-  const [selectedWorkflowId, setSelectedWorkflowId] = React.useState<string>(PREBUILT_WORKFLOWS[0]?.id || '')
+export function EnrollInWorkflowModal({ isOpen, onClose, inquiryIds = [], leadNames = [], onSuccess, initialWorkflowId }: EnrollInWorkflowModalProps) {
+  const [filterTab, setFilterTab] = React.useState<'custom' | 'starter'>('custom')
+  const [selectedWorkflowId, setSelectedWorkflowId] = React.useState('')
   const [customWorkflows, setCustomWorkflows] = React.useState<CustomWorkflowOption[]>([])
   const [availableLeads, setAvailableLeads] = React.useState<AvailableInquiry[]>([])
-  const [selectedLeadId, setSelectedLeadId] = React.useState<string>('')
+  const [selectedLeadId, setSelectedLeadId] = React.useState('')
   const [leadSearch, setLeadSearch] = React.useState('')
-  const [loadingCustom, setLoadingCustom] = React.useState(false)
+  const [loadingCustom, setLoadingCustom] = React.useState(true)
+  const [loadingLeads, setLoadingLeads] = React.useState(false)
+  const [executionAvailable, setExecutionAvailable] = React.useState(false)
+  const [workflowError, setWorkflowError] = React.useState<string | null>(null)
+  const [leadError, setLeadError] = React.useState<string | null>(null)
+  const [retry, setRetry] = React.useState(0)
   const [enrolling, setEnrolling] = React.useState(false)
-  const [resultMessage, setResultMessage] = React.useState<{ text: string; error?: boolean } | null>(null)
-  const [filterTab, setFilterTab] = React.useState<'prebuilt' | 'custom'>('prebuilt')
-
+  const [resultMessage, setResultMessage] = React.useState<EnrollmentResult | null>(null)
   const hasPresetInquiries = inquiryIds.length > 0
+  const completed = Boolean(resultMessage && !resultMessage.error)
+
+  React.useEffect(() => {
+    if (!isOpen || !initialWorkflowId) return
+    setFilterTab(PREBUILT_WORKFLOWS.some((workflow) => workflow.id === initialWorkflowId) ? 'starter' : 'custom')
+    setSelectedWorkflowId(initialWorkflowId)
+  }, [isOpen, initialWorkflowId])
 
   React.useEffect(() => {
     if (!isOpen) {
       setResultMessage(null)
       setLeadSearch('')
+      setSelectedLeadId('')
       return
     }
-
+    const controller = new AbortController()
     setLoadingCustom(true)
-    fetch('/api/marketing/custom-workflows', { cache: 'no-store' })
-      .then(async (res) => {
-        const payload = (await res.json().catch(() => ({}))) as { workflows?: CustomWorkflowOption[] }
-        if (Array.isArray(payload.workflows)) {
-          setCustomWorkflows(payload.workflows)
-        }
-      })
-      .catch((err) => console.warn('Could not load custom workflows:', err))
-      .finally(() => setLoadingCustom(false))
-
-    // If no preset inquiry IDs, fetch recent leads so user can choose one
+    setWorkflowError(null)
+    fetch('/api/marketing/custom-workflows', { cache: 'no-store', signal: controller.signal }).then(async (response) => {
+      const payload = await response.json() as { workflows?: CustomWorkflowOption[]; executionEnabled?: boolean; enabled?: boolean; error?: string }
+      if (!response.ok || !Array.isArray(payload.workflows)) throw new Error(payload.error || 'Active workflows could not load.')
+      setCustomWorkflows(payload.workflows.filter((workflow) => workflow.status === 'active'))
+      setExecutionAvailable(payload.executionEnabled === true && payload.enabled === true)
+    }).catch((requestError: unknown) => {
+      if (!controller.signal.aborted) { setCustomWorkflows([]); setWorkflowError(requestError instanceof Error ? requestError.message : 'Active workflows could not load.') }
+    }).finally(() => { if (!controller.signal.aborted) setLoadingCustom(false) })
     if (!hasPresetInquiries) {
-      fetch('/api/portal/marketing/leads', { cache: 'no-store' })
-        .then(async (res) => {
-          const payload = (await res.json().catch(() => ({}))) as { inquiries?: AvailableInquiry[] }
-          if (Array.isArray(payload.inquiries)) {
-            setAvailableLeads(payload.inquiries)
-            if (payload.inquiries[0]?.id) setSelectedLeadId(payload.inquiries[0].id)
-          }
-        })
-        .catch((err) => console.warn('Could not load leads:', err))
+      setLoadingLeads(true)
+      setLeadError(null)
+      fetch('/api/portal/marketing/leads', { cache: 'no-store', signal: controller.signal }).then(async (response) => {
+        const payload = await response.json() as { inquiries?: AvailableInquiry[]; error?: string }
+        if (!response.ok || !Array.isArray(payload.inquiries)) throw new Error(payload.error || 'Leads could not load.')
+        setAvailableLeads(payload.inquiries)
+      }).catch((requestError: unknown) => { if (!controller.signal.aborted) setLeadError(requestError instanceof Error ? requestError.message : 'Leads could not load.') }).finally(() => { if (!controller.signal.aborted) setLoadingLeads(false) })
     }
-  }, [isOpen, hasPresetInquiries])
+    return () => controller.abort()
+  }, [isOpen, hasPresetInquiries, retry])
 
-  const allOptions = React.useMemo(() => {
-    if (filterTab === 'prebuilt') {
-      return PREBUILT_WORKFLOWS.map((p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        triggerBadge: p.triggerBadge,
-        stepsSummary: p.stepsSummary,
-        isPrebuilt: true,
-      }))
-    }
-    return customWorkflows.map((c) => ({
-      id: c.id,
-      name: c.name,
-      description: `Custom workflow (${c.status})`,
-      triggerBadge: c.trigger_type.replace(/_/g, ' '),
-      stepsSummary: `${c.draft_definition.steps.length} steps configured`,
-      isPrebuilt: false,
-    }))
-  }, [filterTab, customWorkflows])
+  React.useEffect(() => {
+    if (!isOpen) return
+    const options = filterTab === 'custom' ? customWorkflows : PREBUILT_WORKFLOWS
+    setSelectedWorkflowId((current) => options.some((workflow) => workflow.id === current) ? current : options.some((workflow) => workflow.id === initialWorkflowId) ? initialWorkflowId || '' : options[0]?.id || '')
+  }, [isOpen, filterTab, customWorkflows, initialWorkflowId])
 
-  const effectiveInquiryIds = React.useMemo(() => {
-    if (hasPresetInquiries) return inquiryIds
-    return selectedLeadId ? [selectedLeadId] : []
-  }, [hasPresetInquiries, inquiryIds, selectedLeadId])
-
-  const filteredAvailableLeads = React.useMemo(() => {
-    if (!leadSearch.trim()) return availableLeads
-    const term = leadSearch.toLowerCase()
-    return availableLeads.filter(
-      (l) =>
-        (l.full_name || '').toLowerCase().includes(term) ||
-        (l.email || '').toLowerCase().includes(term) ||
-        (l.event_type || '').toLowerCase().includes(term),
-    )
-  }, [availableLeads, leadSearch])
+  const allOptions = filterTab === 'custom'
+    ? customWorkflows.map((workflow) => ({ id: workflow.id, name: workflow.name, description: 'Runs the active saved version, including its delays, eligibility checks, and messages.', stepsSummary: `${workflow.draft_definition.steps.length} steps · ${workflow.trigger_type.replaceAll('_', ' ')}` }))
+    : PREBUILT_WORKFLOWS.map((workflow) => ({ id: workflow.id, name: workflow.name, description: workflow.description, stepsSummary: workflow.stepsSummary }))
+  const effectiveInquiryIds = hasPresetInquiries ? [...new Set(inquiryIds)] : selectedLeadId ? [selectedLeadId] : []
+  const filteredLeads = availableLeads.filter((lead) => !leadSearch.trim() || `${lead.full_name || ''} ${lead.email || ''} ${lead.event_type || ''}`.toLowerCase().includes(leadSearch.trim().toLowerCase()))
 
   async function handleEnroll() {
-    if (!selectedWorkflowId || effectiveInquiryIds.length === 0) return
+    if (!selectedWorkflowId || !allOptions.some((workflow) => workflow.id === selectedWorkflowId) || enrolling || completed || (filterTab === 'custom' && (!executionAvailable || !effectiveInquiryIds.length))) return
     setEnrolling(true)
     setResultMessage(null)
-
     try {
-      const response = await fetch('/api/marketing/custom-workflows/enroll', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workflowId: selectedWorkflowId,
-          inquiryIds: effectiveInquiryIds,
-        }),
-      })
-
-      const data = (await response.json().catch(() => ({}))) as {
-        success?: boolean
-        workflowName?: string
-        tasksCreated?: number
-        error?: string
+      const response = await fetch('/api/marketing/custom-workflows/enroll', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflowId: selectedWorkflowId, inquiryIds: filterTab === 'starter' ? [] : effectiveInquiryIds }) })
+      const payload = await response.json() as { success?: boolean; draftCreated?: boolean; workflow?: { id: string; name: string }; workflowName?: string; enrolledCount?: number; alreadyEnrolledCount?: number; skippedCount?: number; message?: string; error?: string }
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'This action could not be completed.')
+      if (payload.draftCreated && payload.workflow) {
+        setResultMessage({ text: payload.message || 'Draft created. Review and activate it before enrolling leads. No messages were scheduled or sent.', workflow: payload.workflow })
+      } else {
+        const enrolled = payload.enrolledCount || 0
+        const existing = payload.alreadyEnrolledCount || 0
+        const skipped = payload.skippedCount || 0
+        setResultMessage({ text: `${enrolled} lead${enrolled === 1 ? '' : 's'} enrolled in “${payload.workflowName || 'the workflow'}”.${existing ? ` ${existing} already enrolled.` : ''}${skipped ? ` ${skipped} ineligible or unavailable and skipped.` : ''} Messages follow the saved schedule and consent rules.` })
       }
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to enroll in workflow.')
-      }
-
-      setResultMessage({
-        text: `Successfully enrolled in "${data.workflowName}"! ${
-          data.tasksCreated ? `${data.tasksCreated} call task(s) created.` : ''
-        }`,
-      })
-
-      setTimeout(() => {
-        onSuccess?.()
-        onClose()
-      }, 1500)
-    } catch (err) {
-      setResultMessage({
-        text: err instanceof Error ? err.message : 'Could not complete enrollment.',
-        error: true,
-      })
-    } finally {
-      setEnrolling(false)
-    }
+      onSuccess?.()
+    } catch (requestError) {
+      setResultMessage({ text: requestError instanceof Error ? requestError.message : 'This action could not be completed.', error: true })
+    } finally { setEnrolling(false) }
   }
 
-  const leadSubtitle = hasPresetInquiries
-    ? leadNames.length === 1
-      ? leadNames[0]
-      : leadNames.length > 1
-      ? `${leadNames.length} selected leads (${leadNames.slice(0, 2).join(', ')}${leadNames.length > 2 ? '...' : ''})`
-      : `${inquiryIds.length} lead${inquiryIds.length === 1 ? '' : 's'}`
-    : 'Choose a lead below'
-
-  return (
-    <PortalModal isOpen={isOpen} onClose={onClose} maxWidth="max-w-2xl" ariaLabel="Enroll lead in workflow">
-      <div className="border-b border-[color:var(--portal-border)] px-5 py-4 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/15 text-[#8c6424] dark:text-[#f1d27a]">
-              <Workflow size={20} />
-            </div>
-            <div>
-              <h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">
-                Enroll in Workflow
-              </h2>
-              <p className="text-xs text-[color:var(--portal-muted)]">
-                Target: <span className="font-semibold text-[color:var(--portal-text)]">{leadSubtitle}</span>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Tab selection */}
-        <div className="mt-4 flex gap-2 border-b border-[color:var(--portal-border)]">
-          <button
-            type="button"
-            onClick={() => {
-              setFilterTab('prebuilt')
-              setSelectedWorkflowId(PREBUILT_WORKFLOWS[0]?.id || '')
-            }}
-            className={`pb-2.5 text-xs font-bold transition border-b-2 ${
-              filterTab === 'prebuilt'
-                ? 'border-[#caa24c] text-[#8c6424] dark:text-[#f1d27a]'
-                : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-            }`}
-          >
-            Pre-built Workflows ({PREBUILT_WORKFLOWS.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setFilterTab('custom')
-              if (customWorkflows[0]?.id) setSelectedWorkflowId(customWorkflows[0].id)
-            }}
-            className={`pb-2.5 text-xs font-bold transition border-b-2 ${
-              filterTab === 'custom'
-                ? 'border-[#caa24c] text-[#8c6424] dark:text-[#f1d27a]'
-                : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-            }`}
-          >
-            Custom Workflows ({customWorkflows.length})
-          </button>
-        </div>
+  const targetLabel = leadNames.length ? leadNames.join(', ') : `${effectiveInquiryIds.length} selected lead${effectiveInquiryIds.length === 1 ? '' : 's'}`
+  return <PortalModal isOpen={isOpen} onClose={enrolling ? () => undefined : onClose} maxWidth="max-w-2xl" ariaLabel="Enroll in a workflow">
+    <div className="border-b border-[color:var(--portal-border)] px-5 py-4 sm:px-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3"><Workflow size={20} className="shrink-0 text-[#a8792f]" /><div><h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Enroll in a workflow</h2><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Choose an active workflow, or prepare a starter as a draft.</p></div></div>
+        <button type="button" onClick={onClose} disabled={enrolling} aria-label="Close workflow enrollment" className="grid size-10 shrink-0 place-items-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><X size={18} /></button>
       </div>
-
-      <div className="max-h-[62vh] overflow-y-auto portal-scrollbar p-5 sm:p-6 space-y-4">
-        {resultMessage ? (
-          <div
-            className={`rounded-xl p-3.5 text-xs font-medium ${
-              resultMessage.error
-                ? 'border border-rose-500/25 bg-rose-500/10 text-rose-500'
-                : 'border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-            }`}
-          >
-            {resultMessage.text}
-          </div>
-        ) : null}
-
-        {/* Lead Picker when opening without preset lead */}
-        {!hasPresetInquiries ? (
-          <div className="space-y-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-3.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block">
-              Step 1: Select Lead to Enroll
-            </span>
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
-              <input
-                type="search"
-                value={leadSearch}
-                onChange={(e) => setLeadSearch(e.target.value)}
-                placeholder="Search leads by name or event type..."
-                className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] pl-9 pr-3 py-1.5 text-xs text-[color:var(--portal-text)] outline-none"
-              />
-            </div>
-            <div className="max-h-28 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)] rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-              {filteredAvailableLeads.length === 0 ? (
-                <div className="p-3 text-center text-xs text-[color:var(--portal-muted)]">
-                  No leads found.
-                </div>
-              ) : (
-                filteredAvailableLeads.map((lead) => {
-                  const isLeadSelected = selectedLeadId === lead.id
-                  return (
-                    <div
-                      key={lead.id}
-                      onClick={() => setSelectedLeadId(lead.id)}
-                      className={`flex cursor-pointer items-center justify-between p-2 text-xs transition ${
-                        isLeadSelected ? 'bg-[#caa24c]/15 text-[#8c6424] dark:text-[#f1d27a]' : 'hover:bg-[color:var(--portal-soft)]'
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <span className="font-semibold text-[color:var(--portal-text)] block truncate">
-                          {lead.full_name || 'Unnamed Client'}
-                        </span>
-                        <span className="text-[11px] text-[color:var(--portal-muted)]">
-                          {lead.event_type || 'Event'} · {lead.target_date || 'Date TBD'}
-                        </span>
-                      </div>
-                      {isLeadSelected ? <Check size={14} className="text-[#caa24c] shrink-0" /> : null}
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        ) : null}
-
-        {/* Workflow selection */}
-        <div className="space-y-2">
-          {!hasPresetInquiries ? (
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] block">
-              Step 2: Choose Workflow
-            </span>
-          ) : null}
-
-          {allOptions.length === 0 ? (
-            <div className="py-8 text-center text-xs text-[color:var(--portal-muted)]">
-              {filterTab === 'custom'
-                ? 'No custom workflows authored yet. Create one or pick a Pre-built Workflow.'
-                : 'No workflows available.'}
-            </div>
-          ) : (
-            allOptions.map((wf) => {
-              const isSelected = selectedWorkflowId === wf.id
-              return (
-                <div
-                  key={wf.id}
-                  onClick={() => setSelectedWorkflowId(wf.id)}
-                  className={`group relative flex cursor-pointer items-start justify-between gap-4 rounded-xl border p-3.5 transition ${
-                    isSelected
-                      ? 'border-[#caa24c] bg-[#caa24c]/10 shadow-sm ring-1 ring-[#caa24c]/40'
-                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] hover:border-[#caa24c]/40 hover:bg-[color:var(--portal-soft)]'
-                  }`}
-                >
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-serif text-sm font-semibold text-[color:var(--portal-text)]">
-                        {wf.name}
-                      </span>
-                      <span className="rounded-full bg-[color:var(--portal-soft)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">
-                        {wf.triggerBadge}
-                      </span>
-                    </div>
-                    <p className="text-xs leading-5 text-[color:var(--portal-muted)]">
-                      {wf.description}
-                    </p>
-                    <p className="text-[11px] font-medium text-[#8c6424] dark:text-[#f1d27a]">
-                      {wf.stepsSummary}
-                    </p>
-                  </div>
-
-                  <div
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
-                      isSelected
-                        ? 'border-[#caa24c] bg-[#caa24c] text-white'
-                        : 'border-[color:var(--portal-border)] text-transparent group-hover:border-[#caa24c]/50'
-                    }`}
-                  >
-                    <Check size={12} strokeWidth={3} />
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-end gap-3 border-t border-[color:var(--portal-border)] px-5 py-4 sm:px-6">
-        <PortalButton variant="secondary" onClick={onClose} disabled={enrolling}>
-          Cancel
-        </PortalButton>
-        <PortalButton
-          variant="primary"
-          onClick={handleEnroll}
-          disabled={!selectedWorkflowId || effectiveInquiryIds.length === 0 || enrolling || allOptions.length === 0}
-        >
-          {enrolling ? 'Enrolling...' : `Enroll in Workflow`}
-        </PortalButton>
-      </div>
-    </PortalModal>
-  )
+      <div className="mt-4 flex flex-wrap gap-3" role="tablist" aria-label="Workflow types">{([{ id: 'custom', label: `Active workflows (${customWorkflows.length})` }, { id: 'starter', label: 'Workflow starters' }] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={filterTab === tab.id} onClick={() => { setFilterTab(tab.id); setResultMessage(null) }} disabled={enrolling || completed} className={`min-h-11 border-b-2 px-1 text-xs font-semibold ${filterTab === tab.id ? 'border-[#a8792f] text-[#8c6424] dark:text-[#f1d27a]' : 'border-transparent text-[color:var(--portal-muted)]'}`}>{tab.label}</button>)}</div>
+    </div>
+    <div className="portal-scrollbar max-h-[62dvh] space-y-4 overflow-y-auto p-5 sm:p-6">
+      {resultMessage ? <div role={resultMessage.error ? 'alert' : 'status'} className={`rounded-xl border p-3.5 text-xs leading-5 ${resultMessage.error ? 'border-rose-500/25 text-rose-600 dark:text-rose-400' : 'border-[color:var(--portal-border)] text-[color:var(--portal-text)]'}`}><p>{resultMessage.text}</p>{resultMessage.workflow ? <Link href={`/portal/marketing/custom-workflows/${encodeURIComponent(resultMessage.workflow.id)}`} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 font-semibold text-[#8c6424] dark:text-[#f1d27a]">Review {resultMessage.workflow.name}<ExternalLink size={13} /></Link> : null}</div> : null}
+      {filterTab === 'custom' ? <>
+        <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Enrollment starts the saved workflow for eligible leads. Email and text steps require their current consent; replies and booking activity can stop follow-ups.</p>
+        {hasPresetInquiries ? <p className="break-words text-xs leading-5 text-[color:var(--portal-text)]"><span className="font-semibold">Selected recipients:</span> {targetLabel}</p> : <div className="space-y-2">
+          <label htmlFor="workflow-enrollment-lead-search" className="block text-xs font-semibold text-[color:var(--portal-text)]">Select a lead</label>
+          <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" /><input id="workflow-enrollment-lead-search" type="search" value={leadSearch} onChange={(event) => setLeadSearch(event.target.value)} placeholder="Search by name, email, or event" disabled={enrolling || completed} className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] pl-9 pr-3 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#a8792f]" /></div>
+          {loadingLeads ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Loading leads…</p> : leadError ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{leadError} <button type="button" onClick={() => setRetry((value) => value + 1)} className="underline">Retry</button></p> : <div className="portal-scrollbar max-h-40 divide-y divide-[color:var(--portal-border)] overflow-y-auto rounded-xl border border-[color:var(--portal-border)]">{filteredLeads.length ? filteredLeads.map((lead) => <button key={lead.id} type="button" onClick={() => setSelectedLeadId(lead.id)} aria-pressed={selectedLeadId === lead.id} disabled={enrolling || completed} className={`flex min-h-12 w-full items-center justify-between gap-3 p-3 text-left ${selectedLeadId === lead.id ? 'bg-[color:var(--portal-soft)]' : 'hover:bg-[color:var(--portal-soft)]'}`}><span className="min-w-0"><span className="block break-words text-xs font-semibold text-[color:var(--portal-text)]">{lead.full_name || 'Unnamed client'}</span><span className="block break-words text-xs leading-5 text-[color:var(--portal-muted)]">{lead.email || lead.phone || 'No contact details'} · {lead.event_type || 'Event'}</span></span>{selectedLeadId === lead.id ? <Check size={15} className="shrink-0 text-[#a8792f]" /> : null}</button>) : <p className="p-3 text-xs text-[color:var(--portal-muted)]">No leads match this search.</p>}</div>}
+        </div>}
+      </> : <p className="text-xs leading-5 text-[color:var(--portal-muted)]">A starter creates an inactive draft. Review the templates, sender, timing, and consent checks, then activate it before enrolling leads. Creating a draft schedules no messages.</p>}
+      {filterTab === 'custom' && loadingCustom ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Loading active workflows…</p> : filterTab === 'custom' && workflowError ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{workflowError} <button type="button" onClick={() => setRetry((value) => value + 1)} className="underline">Retry</button></p> : <div className="space-y-2" aria-label="Available workflows">{allOptions.length ? allOptions.map((workflow) => <button key={workflow.id} type="button" onClick={() => setSelectedWorkflowId(workflow.id)} aria-pressed={selectedWorkflowId === workflow.id} disabled={enrolling || completed} className={`flex min-h-12 w-full items-start justify-between gap-3 rounded-xl border p-3.5 text-left ${selectedWorkflowId === workflow.id ? 'border-[#a8792f] bg-[color:var(--portal-soft)]' : 'border-[color:var(--portal-border)] hover:bg-[color:var(--portal-soft)]'}`}><span className="min-w-0 space-y-1"><span className="block break-words font-serif text-sm font-semibold text-[color:var(--portal-text)]">{workflow.name}</span><span className="block text-xs leading-5 text-[color:var(--portal-muted)]">{workflow.description}</span><span className="block text-xs leading-5 text-[color:var(--portal-muted)]">{workflow.stepsSummary}</span></span>{selectedWorkflowId === workflow.id ? <Check size={16} className="mt-0.5 shrink-0 text-[#a8792f]" /> : null}</button>) : <p className="py-4 text-xs leading-5 text-[color:var(--portal-muted)]">No active workflows are available. Choose a starter or <Link href="/portal/marketing/custom-workflows/new" className="font-semibold text-[#8c6424] underline dark:text-[#f1d27a]">create a workflow</Link>, then review and activate it.</p>}</div>}
+      {filterTab === 'custom' && !loadingCustom && !workflowError && !executionAvailable ? <p role="alert" className="text-xs leading-5 text-[color:var(--portal-muted)]">Workflow execution is disabled by the current Luxor controls. Enrollment is unavailable.</p> : null}
+    </div>
+    <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[color:var(--portal-border)] px-5 py-4 sm:px-6"><PortalButton variant="secondary" onClick={onClose} disabled={enrolling}>{completed ? 'Done' : 'Cancel'}</PortalButton>{!completed ? <PortalButton variant="primary" onClick={() => void handleEnroll()} disabled={enrolling || !selectedWorkflowId || !allOptions.some((workflow) => workflow.id === selectedWorkflowId) || (filterTab === 'custom' && (!executionAvailable || !effectiveInquiryIds.length || loadingCustom))}>{enrolling ? <LoaderCircle size={14} className="animate-spin" /> : null}{enrolling ? (filterTab === 'starter' ? 'Creating draft…' : 'Enrolling…') : filterTab === 'starter' ? 'Create draft to review' : `Enroll ${effectiveInquiryIds.length || ''} selected lead${effectiveInquiryIds.length === 1 ? '' : 's'}`}</PortalButton> : null}</div>
+  </PortalModal>
 }

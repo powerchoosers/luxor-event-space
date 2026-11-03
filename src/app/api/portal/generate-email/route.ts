@@ -1,205 +1,36 @@
 import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { requireCustomWorkflowOperator, CustomWorkflowServiceError } from '@/lib/luxorCustomWorkflowsServer'
+import { generateWorkflowMessage } from '@/lib/luxorWorkflowAiServer'
+import { getLuxorUserProfile } from '@/lib/luxorUserProfileServer'
+import { normalizeLuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
+import { validateWorkflowEmailDocument } from '@/lib/luxorWorkflowEmailDocument'
+import { EMAIL_TEMPLATES, type LuxorEmailDocument } from '@/app/(portal)/portal/marketing/emailTemplates'
+import type { CustomWorkflowEmailStep } from '@/lib/luxorCustomWorkflowDefinition'
 
 export async function POST(request: Request) {
+  const session = await getLuxorPortalSession()
+  if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
   try {
-    const session = await getLuxorPortalSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    await requireCustomWorkflowOperator(session.email)
+    const payload = await request.json() as { prompt?: unknown; tone?: unknown; leadContext?: Record<string, unknown>; emailDocument?: unknown }
+    if (typeof payload.prompt !== 'string' || !payload.prompt.trim() || payload.prompt.length > 5000) return NextResponse.json({ error: 'Enter email instructions of 1 to 5000 characters.' }, { status: 400 })
+    const base = EMAIL_TEMPLATES.find((template) => template.id === 'welcome') || EMAIL_TEMPLATES[0]
+    const document = payload.emailDocument || { schemaVersion: 2, subject: '', preheader: '', theme: normalizeLuxorEmailTheme('light'), blocks: base.blocks }
+    const documentError = validateWorkflowEmailDocument(document)
+    if (documentError) return NextResponse.json({ error: documentError }, { status: 400 })
+    const tones: Record<string, string> = { professional: 'clear and professional', urgent: 'direct and timely, without invented scarcity, deadlines or pressure', elegant: 'refined and restrained', friendly: 'warm and conversational' }
+    const tone = typeof payload.tone === 'string' ? tones[payload.tone] || tones.friendly : tones.friendly
+    const step: CustomWorkflowEmailStep = {
+      id: 'builder-email', type: 'email', mode: 'marketing', name: 'Email design', subject: '', previewText: '', body: '', ctaText: '', ctaUrl: '',
+      emailStyle: 'template', emailDocument: document as LuxorEmailDocument, generationMode: 'ai', aiPrompt: `${payload.prompt.trim()}\nTone: ${tone}. Use one clear CTA. Use {{first_name}}, {{event_type}}, {{guest_count}}, {{target_date}}, {{tour_date}}, or {{tour_time}} only when appropriate. Preserve the existing design only where it serves this request; all copy and block order are editable.`,
     }
-
-    interface LeadContextData {
-      full_name?: string
-      event_type?: string
-      target_date?: string
-      guest_count?: number | string
-    }
-
-    const { prompt, tone, leadContext } = (await request.json()) as { 
-      prompt?: string
-      tone?: string
-      leadContext?: LeadContextData
-    }
-
-    if (!prompt || !prompt.trim()) {
-      return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
-    }
-
-    const apiKey = process.env.OPEN_ROUTER_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'Missing OpenRouter API key' }, { status: 500 })
-    }
-
-    // Prepare tone instruction
-    let tonePrompt = 'friendly, warm, and conversational'
-    if (tone === 'professional') {
-      tonePrompt = 'corporate, respectful, clear, and professional'
-    } else if (tone === 'urgent') {
-      tonePrompt = 'urgent, highlighting scarce dates, creating high FOMO to prompt immediate bookings'
-    } else if (tone === 'elegant') {
-      tonePrompt = 'sophisticated, high-end, luxurious, and elegant'
-    }
-
-    // Prepare lead context instruction
-    let leadPrompt = ''
-    if (leadContext) {
-      leadPrompt = `This email is a direct, personalized follow-up to a lead in our database:
-- Client Name: ${leadContext.full_name || 'Valued Guest'}
-- Event Type: ${leadContext.event_type || 'celebration'}
-- Event Date: ${leadContext.target_date || 'requested date'}
-- Guest Count: ${leadContext.guest_count || 'open'}
-Use this context to draft a tailored marketing/follow-up email. You can weave these details directly into the copy.`
-    }
-
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://luxoreventspace.com',
-        'X-Title': 'Luxor Event Space Email Draft Generator',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        temperature: 0.7,
-        messages: [
-          {
-            role: 'system',
-            content: `You are Elena, the marketing coordinator and email copywriter for Luxor Event Space in San Antonio.
-Your task is to write a highly professional, beautifully copy-crafted marketing email draft based on the user's prompt instruction.
-
-You MUST respond ONLY with a valid Luxor Email Document v2 JSON object containing exactly these keys:
-1. "schemaVersion": Always the number 2.
-2. "subject": A catchy, professional email subject line.
-3. "preheader": A concise inbox preview sentence (40-90 characters).
-4. "name": A clean name for this generated template.
-5. "theme": One of "light", "dark", or "brand". Use brand unless the user's request clearly favors light or dark.
-6. "blocks": An array of content blocks (4-8 blocks) representing the layout structure of the email.
-
-Each block in the "blocks" array MUST match one of the following JSON structures:
-
-- Hero Block:
-{
-  "type": "hero",
-  "headline": "Main Hero Headline",
-  "subheadline": "Hero subheadline description text",
-  "backgroundImage": "",
-  "overlayOpacity": 0.55,
-  "textAlign": "center",
-  "ctaLabel": "Action Label",
-  "ctaUrl": "https://luxoratlaspalmas.com/tour",
-  "ctaVisible": true
-}
-
-- Text Block:
-{
-  "type": "text",
-  "content": "Paragraph content copy. Use \\n\\n for paragraph breaks.",
-  "fontSize": 15,
-  "textAlign": "left",
-  "color": "rgba(255, 255, 255, 0.85)"
-}
-
-- Button Block:
-{
-  "type": "button",
-  "label": "Button Label",
-  "url": "https://luxoratlaspalmas.com/visit",
-  "align": "center",
-  "bgColor": "#caa24c",
-  "textColor": "#050505"
-}
-
-- Two Column Block:
-{
-  "type": "two_column",
-  "leftHeadline": "Left column title",
-  "leftBody": "Left column body copy text",
-  "rightHeadline": "Right column title",
-  "rightBody": "Right column body copy text"
-}
-
-- Divider Block:
-{
-  "type": "divider",
-  "color": "#caa24c",
-  "thickness": 1,
-  "style": "solid"
-}
-
-- Spacer Block:
-{
-  "type": "spacer",
-  "height": 24
-}
-
-Guidelines for generating blocks:
-- Use Client Merge Tags: You are encouraged to include merge tags like {{client_name}}, {{event_type}}, {{event_date}}, or {{tour_time}} inside text and hero blocks where appropriate to make the template dynamic.
-- Tone of Voice: You must write the email copywriting using a ${tonePrompt} tone.
-- Keep the design clean, elegant, and focused. A standard layout begins with a 'hero' block, followed by a 'text' block explaining the details, a 'button' CTA block, and perhaps a 'divider' or 'two_column' section. Do not add a 'footer' block as the system appends it automatically.
-- The editor and renderer use this exact versioned structure. Never invent block type names or omit required block fields.
-- Favor one clear CTA, useful details, short paragraphs, and accessible button labels.
-
-JSON output structure:
-{
-  "schemaVersion": 2,
-  "subject": "Catchy Subject",
-  "preheader": "A polished preview of what this email contains.",
-  "name": "Template Name",
-  "theme": "brand",
-  "blocks": [
-    { "type": "hero", "headline": "Celebrate at Luxor", "subheadline": "Your milestone event awaits.", "backgroundImage": "", "overlayOpacity": 0.6, "textAlign": "center", "ctaLabel": "Book Tour", "ctaUrl": "https://luxoratlaspalmas.com/tour", "ctaVisible": true },
-    { "type": "text", "content": "We would love to host your next celebration.", "fontSize": 15, "textAlign": "left", "color": "rgba(255, 255, 255, 0.85)" }
-  ]
-}
-
-Do not include any markdown block formatting, backticks, or text before or after the JSON.`
-          },
-          {
-            role: 'user',
-            content: `Draft an email campaign for: ${prompt}.
-${leadPrompt}`
-          }
-        ]
-      })
-    })
-
-    if (!response.ok) {
-      const errText = await response.text()
-      console.error('Failed to call OpenRouter:', errText)
-      return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
-    }
-
-    const data = await response.json()
-    let responseText = data.choices?.[0]?.message?.content || ''
-    
-    // Clean codeblock formatting if returned
-    if (responseText.includes('```')) {
-      responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim()
-    }
-
-    try {
-      const emailContent = JSON.parse(responseText) as {
-        schemaVersion?: number
-        subject: string
-        preheader?: string
-        name: string
-        theme?: 'light' | 'dark' | 'brand'
-        blocks: Record<string, unknown>[]
-      }
-      return NextResponse.json({
-        ...emailContent,
-        schemaVersion: 2,
-        preheader: emailContent.preheader || '',
-        theme: emailContent.theme === 'light' || emailContent.theme === 'dark' ? emailContent.theme : 'brand',
-      })
-    } catch (parseErr) {
-      console.error('Failed to parse AI response as JSON:', responseText, parseErr)
-      return NextResponse.json({ error: 'AI response was not valid JSON' }, { status: 500 })
-    }
-  } catch (err: unknown) {
-    console.error('Generate Email API error:', err)
-    const errMsg = err instanceof Error ? err.message : 'Internal Server Error'
-    return NextResponse.json({ error: errMsg }, { status: 500 })
+    const profile = await getLuxorUserProfile(session.email)
+    const result = await generateWorkflowMessage(step, payload.leadContext || {}, profile, { preview: true })
+    if (result.step.type !== 'email' || !result.step.emailDocument) throw new Error('Elena returned no editable email document.')
+    const generated = result.step.emailDocument
+    return NextResponse.json({ ...generated, name: payload.prompt.trim().slice(0, 80), theme: generated.theme.mode, source: result.source }, { headers: { 'Cache-Control': 'no-store' } })
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Email generation failed.' }, { status: error instanceof CustomWorkflowServiceError ? error.status : 502 })
   }
 }

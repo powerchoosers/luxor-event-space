@@ -10,6 +10,7 @@ interface InspectorProps {
   onChange: (updated: EmailBlock) => void
   onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void
   activeField?: string | null
+  showCanvasGuidance?: boolean
 }
 
 const labelCls = 'block text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] mb-1.5'
@@ -41,11 +42,18 @@ const COLOR_SWATCHES = [
   { value: '#6e6254', label: 'Muted taupe' },
 ]
 
+const InspectorFieldLabel = React.createContext<string | undefined>(undefined)
+
+function InspectorInput(props: React.ComponentProps<'input'>) {
+  const fieldLabel = React.useContext(InspectorFieldLabel)
+  return <input {...props} aria-label={props['aria-label'] || fieldLabel} />
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className={fieldCls}>
       <label className={labelCls}>{label}</label>
-      {children}
+      <InspectorFieldLabel.Provider value={label}>{children}</InspectorFieldLabel.Provider>
     </div>
   )
 }
@@ -69,8 +77,8 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
         </div>
         <div className="flex items-center gap-2">
           <span className="size-6 shrink-0 rounded-md border border-[color:var(--portal-border)]" style={{ backgroundColor: value }} aria-hidden="true" />
-          <input aria-label={`${label} hex value`} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} />
-          <input aria-label={`Custom ${label}`} type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'} onChange={(e) => onChange(e.target.value)} className="size-7 cursor-pointer rounded border-0 bg-transparent p-0" />
+          <InspectorInput aria-label={`${label} hex value`} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} />
+          <InspectorInput aria-label={`Custom ${label}`} type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'} onChange={(e) => onChange(e.target.value)} className="size-7 cursor-pointer rounded border-0 bg-transparent p-0" />
         </div>
         <p className="text-[10px] text-[color:var(--portal-muted)]">Current: <span className="font-semibold text-[color:var(--portal-text)]">{selected?.label ?? 'Custom color'}</span></p>
       </div>
@@ -79,17 +87,17 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
 }
 
 // ─── Hero Inspector ──────────────────────────────────────────────────────────
-function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; onChange: (b: HeroBlock) => void; onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void }) {
+function HeroInspector({ block, onChange, onBrowseImage, showCanvasGuidance }: { block: HeroBlock; onChange: (b: HeroBlock) => void; onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void; showCanvasGuidance: boolean }) {
   const u = (patch: Partial<HeroBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className={helpCls}>
+      {showCanvasGuidance && <div className={helpCls}>
         <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Headline</strong> and <strong>sub-headline</strong> text can be typed directly on the canvas.</span>
-      </div>
+      </div>}
       <Field label="Background Image URL">
         <div className="flex gap-2">
-          <input className={inputCls} placeholder="https://..." value={block.backgroundImage} onChange={(e) => u({ backgroundImage: e.target.value })} />
+          <InspectorInput className={inputCls} placeholder="https://..." value={block.backgroundImage} onChange={(e) => u({ backgroundImage: e.target.value })} />
           {onBrowseImage && (
             <button
               type="button"
@@ -103,8 +111,9 @@ function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; o
       </Field>
       <RowFields>
         <Field label="Overlay Opacity">
-          <input type="range" min={0} max={1} step={0.05} value={block.overlayOpacity} onChange={(e) => u({ overlayOpacity: Number(e.target.value) })} className="w-full accent-[#caa24c]" />
-          <span className="font-mono text-[10px] text-[color:var(--portal-muted)]">{Math.round(block.overlayOpacity * 100)}%</span>
+          <InspectorInput type="range" min={0.65} max={1} step={0.05} value={Math.max(0.65, block.overlayOpacity)} onChange={(e) => u({ overlayOpacity: Number(e.target.value) })} className="w-full accent-[#caa24c]" />
+          <span className="font-mono text-[10px] text-[color:var(--portal-muted)]">{Math.round(Math.max(0.65, block.overlayOpacity) * 100)}%</span>
+          <p className="text-[10px] leading-4 text-[color:var(--portal-muted)]">Minimum 65% keeps text readable over the image.</p>
         </Field>
         <Field label="Text Align">
           <PortalSelect
@@ -119,6 +128,10 @@ function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; o
         <div className="flex items-center justify-between">
           <label className={labelCls + ' mb-0'}>Show CTA Button</label>
           <button
+            type="button"
+            role="switch"
+            aria-checked={block.ctaVisible}
+            aria-label="Show CTA button"
             onClick={() => u({ ctaVisible: !block.ctaVisible })}
             className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${block.ctaVisible ? 'bg-[#caa24c]' : 'bg-[color:var(--portal-border)]'}`}
           >
@@ -127,7 +140,7 @@ function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; o
         </div>
         {block.ctaVisible && (
           <Field label="CTA URL">
-            <input className={inputCls} placeholder="https://..." value={block.ctaUrl} onChange={(e) => u({ ctaUrl: e.target.value })} />
+            <InspectorInput className={inputCls} placeholder="https://..." value={block.ctaUrl} onChange={(e) => u({ ctaUrl: e.target.value })} />
           </Field>
         )}
       </div>
@@ -136,17 +149,17 @@ function HeroInspector({ block, onChange, onBrowseImage }: { block: HeroBlock; o
 }
 
 // ─── Text Inspector ──────────────────────────────────────────────────────────
-function TextInspector({ block, onChange }: { block: TextBlock; onChange: (b: TextBlock) => void }) {
+function TextInspector({ block, onChange, showCanvasGuidance }: { block: TextBlock; onChange: (b: TextBlock) => void; showCanvasGuidance: boolean }) {
   const u = (patch: Partial<TextBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className={helpCls}>
+      {showCanvasGuidance && <div className={helpCls}>
         <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Paragraph text</strong> can be typed directly on the canvas.</span>
-      </div>
+      </div>}
       <RowFields>
         <Field label="Font Size (px)">
-          <input type="number" className={inputCls} min={10} max={60} value={block.fontSize} onChange={(e) => u({ fontSize: Number(e.target.value) })} />
+          <InspectorInput type="number" className={inputCls} min={10} max={60} value={block.fontSize} onChange={(e) => u({ fontSize: Number(e.target.value) })} />
         </Field>
         <Field label="Text Align">
           <PortalSelect
@@ -163,17 +176,17 @@ function TextInspector({ block, onChange }: { block: TextBlock; onChange: (b: Te
 }
 
 // ─── Image+Text Inspector ─────────────────────────────────────────────────────
-function ImageTextInspector({ block, onChange, onBrowseImage }: { block: ImageTextBlock; onChange: (b: ImageTextBlock) => void; onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void }) {
+function ImageTextInspector({ block, onChange, onBrowseImage, showCanvasGuidance }: { block: ImageTextBlock; onChange: (b: ImageTextBlock) => void; onBrowseImage?: (field: 'backgroundImage' | 'imageUrl') => void; showCanvasGuidance: boolean }) {
   const u = (patch: Partial<ImageTextBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className={helpCls}>
+      {showCanvasGuidance && <div className={helpCls}>
         <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Headline, body,</strong> and <strong>button text</strong> can be typed directly on the canvas.</span>
-      </div>
+      </div>}
       <Field label="Image URL">
         <div className="flex gap-2">
-          <input className={inputCls} placeholder="https://..." value={block.imageUrl} onChange={(e) => u({ imageUrl: e.target.value })} />
+          <InspectorInput className={inputCls} placeholder="https://..." value={block.imageUrl} onChange={(e) => u({ imageUrl: e.target.value })} />
           {onBrowseImage && (
             <button
               type="button"
@@ -187,7 +200,7 @@ function ImageTextInspector({ block, onChange, onBrowseImage }: { block: ImageTe
       </Field>
       <RowFields>
         <Field label="Image Alt">
-          <input className={inputCls} value={block.imageAlt} onChange={(e) => u({ imageAlt: e.target.value })} />
+          <InspectorInput className={inputCls} value={block.imageAlt} onChange={(e) => u({ imageAlt: e.target.value })} />
         </Field>
         <Field label="Image Position">
           <PortalSelect
@@ -199,23 +212,23 @@ function ImageTextInspector({ block, onChange, onBrowseImage }: { block: ImageTe
         </Field>
       </RowFields>
       <Field label="CTA URL">
-        <input className={inputCls} placeholder="https://..." value={block.ctaUrl} onChange={(e) => u({ ctaUrl: e.target.value })} />
+        <InspectorInput className={inputCls} placeholder="https://..." value={block.ctaUrl} onChange={(e) => u({ ctaUrl: e.target.value })} />
       </Field>
     </div>
   )
 }
 
 // ─── Button Inspector ─────────────────────────────────────────────────────────
-function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b: ButtonBlock) => void }) {
+function ButtonInspector({ block, onChange, showCanvasGuidance }: { block: ButtonBlock; onChange: (b: ButtonBlock) => void; showCanvasGuidance: boolean }) {
   const u = (patch: Partial<ButtonBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className={helpCls}>
+      {showCanvasGuidance && <div className={helpCls}>
         <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Button text</strong> can be typed directly on the button on the canvas.</span>
-      </div>
+      </div>}
       <Field label="URL">
-        <input className={inputCls} placeholder="https://..." value={block.url} onChange={(e) => u({ url: e.target.value })} />
+        <InspectorInput className={inputCls} placeholder="https://..." value={block.url} onChange={(e) => u({ url: e.target.value })} />
       </Field>
       <Field label="Alignment">
         <PortalSelect
@@ -234,13 +247,13 @@ function ButtonInspector({ block, onChange }: { block: ButtonBlock; onChange: (b
 }
 
 // ─── Two Column Inspector ─────────────────────────────────────────────────────
-function TwoColumnInspector() {
+function TwoColumnInspector({ showCanvasGuidance }: { showCanvasGuidance: boolean }) {
   return (
     <div className="space-y-4">
-      <div className={helpCls}>
+      {showCanvasGuidance && <div className={helpCls}>
         <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Two Columns</strong> content is edited entirely in-place — click any text area on the canvas and start typing.</span>
-      </div>
+      </div>}
     </div>
   )
 }
@@ -253,7 +266,7 @@ function DividerInspector({ block, onChange }: { block: DividerBlock; onChange: 
       <RowFields>
         <ColorField label="Divider color" value={block.color} onChange={(color) => u({ color })} />
         <Field label="Thickness (px)">
-          <input type="number" className={inputCls} min={1} max={8} value={block.thickness} onChange={(e) => u({ thickness: Number(e.target.value) })} />
+          <InspectorInput type="number" className={inputCls} min={1} max={8} value={block.thickness} onChange={(e) => u({ thickness: Number(e.target.value) })} />
         </Field>
       </RowFields>
       <Field label="Style">
@@ -273,31 +286,35 @@ function SpacerInspector({ block, onChange }: { block: SpacerBlock; onChange: (b
   return (
     <div className="space-y-4">
       <Field label="Height (px)">
-        <input type="number" className={inputCls} min={8} max={120} value={block.height} onChange={(e) => onChange({ ...block, height: Number(e.target.value) })} />
-        <input type="range" min={8} max={120} step={4} value={block.height} onChange={(e) => onChange({ ...block, height: Number(e.target.value) })} className="w-full accent-[#caa24c] mt-2" />
+        <InspectorInput type="number" className={inputCls} min={8} max={120} value={block.height} onChange={(e) => onChange({ ...block, height: Number(e.target.value) })} />
+        <InspectorInput type="range" min={8} max={120} step={4} value={block.height} onChange={(e) => onChange({ ...block, height: Number(e.target.value) })} className="w-full accent-[#caa24c] mt-2" />
       </Field>
     </div>
   )
 }
 
 // ─── Footer Inspector ─────────────────────────────────────────────────────────
-function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b: FooterBlock) => void }) {
+function FooterInspector({ block, onChange, showCanvasGuidance }: { block: FooterBlock; onChange: (b: FooterBlock) => void; showCanvasGuidance: boolean }) {
   const u = (patch: Partial<FooterBlock>) => onChange({ ...block, ...patch })
   return (
     <div className="space-y-4">
-      <div className={helpCls}>
+      {showCanvasGuidance && <div className={helpCls}>
         <Info size={13} className="mt-0.5 shrink-0" />
         <span><strong>Address</strong> and <strong>phone/details</strong> can be typed directly on the footer on the canvas.</span>
-      </div>
+      </div>}
       <Field label="Website">
-        <input className={inputCls} value={block.website} onChange={(e) => u({ website: e.target.value })} />
+        <InspectorInput className={inputCls} value={block.website} onChange={(e) => u({ website: e.target.value })} />
       </Field>
       <Field label="Unsubscribe URL">
-        <input className={inputCls} placeholder="#unsubscribe" value={block.unsubscribeUrl} onChange={(e) => u({ unsubscribeUrl: e.target.value })} />
+        <InspectorInput className={inputCls} placeholder="#unsubscribe" value={block.unsubscribeUrl} onChange={(e) => u({ unsubscribeUrl: e.target.value })} />
       </Field>
       <div className="flex items-center justify-between border-t border-[color:var(--portal-border)] pt-4">
         <label className={labelCls + ' mb-0'}>Show Social Links</label>
         <button
+          type="button"
+          role="switch"
+          aria-checked={block.showSocial}
+          aria-label="Show social links"
           onClick={() => u({ showSocial: !block.showSocial })}
           className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${block.showSocial ? 'bg-[#caa24c]' : 'bg-[color:var(--portal-border)]'}`}
         >
@@ -307,13 +324,13 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
       {block.showSocial && (
         <RowFields>
           <Field label="Instagram URL">
-            <input className={inputCls} placeholder="https://instagram.com/..." value={block.instagramUrl} onChange={(e) => u({ instagramUrl: e.target.value })} />
+            <InspectorInput className={inputCls} placeholder="https://instagram.com/..." value={block.instagramUrl} onChange={(e) => u({ instagramUrl: e.target.value })} />
           </Field>
           <Field label="Facebook URL">
-            <input className={inputCls} placeholder="https://facebook.com/..." value={block.facebookUrl} onChange={(e) => u({ facebookUrl: e.target.value })} />
+            <InspectorInput className={inputCls} placeholder="https://facebook.com/..." value={block.facebookUrl} onChange={(e) => u({ facebookUrl: e.target.value })} />
           </Field>
           <Field label="TikTok URL">
-            <input className={inputCls} placeholder="https://tiktok.com/@..." value={block.tiktokUrl || ''} onChange={(e) => u({ tiktokUrl: e.target.value })} />
+            <InspectorInput className={inputCls} placeholder="https://tiktok.com/@..." value={block.tiktokUrl || ''} onChange={(e) => u({ tiktokUrl: e.target.value })} />
           </Field>
         </RowFields>
       )}
@@ -322,7 +339,7 @@ function FooterInspector({ block, onChange }: { block: FooterBlock; onChange: (b
 }
 
 // ─── Main Inspector ───────────────────────────────────────────────────────────
-export function BlockInspector({ block, onChange, onBrowseImage, activeField }: InspectorProps) {
+export function BlockInspector({ block, onChange, onBrowseImage, activeField, showCanvasGuidance = true }: InspectorProps) {
   const titles: Record<string, string> = {
     hero: 'Hero Block',
     text: 'Text Block',
@@ -339,17 +356,17 @@ export function BlockInspector({ block, onChange, onBrowseImage, activeField }: 
       <div className="border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 px-5 py-3.5">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Editing</p>
         <h3 className="text-sm font-bold text-[color:var(--portal-text)] mt-0.5">{titles[block.type] ?? 'Block'}</h3>
-        <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">{activeField ? `Selected on canvas: ${activeField}` : 'Select a text area or element on the canvas to edit it.'}</p>
+        {showCanvasGuidance && <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">{activeField ? `Selected on canvas: ${activeField}` : 'Select a text area or element on the canvas to edit it.'}</p>}
       </div>
       <div className="flex-1 overflow-y-auto portal-scrollbar px-5 py-5 space-y-4">
-        {block.type === 'hero'        && <HeroInspector block={block} onChange={onChange as (b: HeroBlock) => void} onBrowseImage={onBrowseImage} />}
-        {block.type === 'text'        && <TextInspector block={block} onChange={onChange as (b: TextBlock) => void} />}
-        {block.type === 'image_text'  && <ImageTextInspector block={block} onChange={onChange as (b: ImageTextBlock) => void} onBrowseImage={onBrowseImage} />}
-        {block.type === 'button'      && <ButtonInspector block={block} onChange={onChange as (b: ButtonBlock) => void} />}
-        {block.type === 'two_column'  && <TwoColumnInspector />}
+        {block.type === 'hero'        && <HeroInspector block={block} onChange={onChange as (b: HeroBlock) => void} onBrowseImage={onBrowseImage} showCanvasGuidance={showCanvasGuidance} />}
+        {block.type === 'text'        && <TextInspector block={block} onChange={onChange as (b: TextBlock) => void} showCanvasGuidance={showCanvasGuidance} />}
+        {block.type === 'image_text'  && <ImageTextInspector block={block} onChange={onChange as (b: ImageTextBlock) => void} onBrowseImage={onBrowseImage} showCanvasGuidance={showCanvasGuidance} />}
+        {block.type === 'button'      && <ButtonInspector block={block} onChange={onChange as (b: ButtonBlock) => void} showCanvasGuidance={showCanvasGuidance} />}
+        {block.type === 'two_column'  && <TwoColumnInspector showCanvasGuidance={showCanvasGuidance} />}
         {block.type === 'divider'     && <DividerInspector block={block} onChange={onChange as (b: DividerBlock) => void} />}
         {block.type === 'spacer'      && <SpacerInspector block={block} onChange={onChange as (b: SpacerBlock) => void} />}
-        {block.type === 'footer'      && <FooterInspector block={block} onChange={onChange as (b: FooterBlock) => void} />}
+        {block.type === 'footer'      && <FooterInspector block={block} onChange={onChange as (b: FooterBlock) => void} showCanvasGuidance={showCanvasGuidance} />}
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
+import { hydrateWorkflowEmailTemplates, pinWorkflowEmailSettings, renderCustomWorkflowEmail } from './luxorWorkflowEmailServer'
+import { luxorMailFrom } from './luxorMailConfig'
 import { supabaseRest } from './supabaseRestServer'
 import { getAllowedZohoPortalEmails, isAuthorizedLuxorPortalEmail } from './luxorPortalAuth'
 import { getLuxorPortalMember, memberCan } from './luxorPortalAccess'
@@ -8,8 +9,10 @@ import {
   cloneCustomWorkflowDefinition,
   createNewContactFollowUpDefinition,
   type CustomWorkflowDefinition,
+  type CustomWorkflowEmailSettings,
   type CustomWorkflowStep,
   validateCustomWorkflowDefinition,
+  CUSTOM_WORKFLOW_RUNTIME_TRIGGERS,
 } from './luxorCustomWorkflowDefinition'
 import {
   CUSTOM_WORKFLOW_AUTHORING_ENABLED,
@@ -173,6 +176,10 @@ export async function changeCustomWorkflowLifecycle(input: {
   const verifiedActorEmail = await requireCustomWorkflowOperator(input.actorEmail)
   await requireCustomWorkflowAuthoringControl()
   assertId(input.id)
+  if (input.action === 'activate' || input.action === 'resume') {
+    const { definition } = await getCustomWorkflow(input.id, verifiedActorEmail)
+    if (!CUSTOM_WORKFLOW_RUNTIME_TRIGGERS.includes(definition.trigger)) throw new CustomWorkflowServiceError('Automatic enrollment for this trigger is not connected yet. Change the draft to Manual enrollment or Contact form inquiry before activating.', 409)
+  }
   const controls = await getCustomWorkflowRuntimeControls()
   const decision = evaluateCustomWorkflowLifecycleAction({
     actorEmail: verifiedActorEmail,
@@ -213,6 +220,8 @@ export async function createCustomWorkflow(input: { name: unknown; definition?: 
   await requireCustomWorkflowAuthoringControl()
   const name = normalizeName(input.name)
   const definition = input.definition === undefined ? createNewContactFollowUpDefinition() : cloneAndValidateDraft(input.definition)
+  await hydrateWorkflowEmailTemplates(definition)
+  definition.emailSettings = await pinWorkflowEmailSettings(definition.emailSettings || { senderMode: 'operator', senderEmail: luxorMailFrom() }, verifiedActorEmail)
   const [workflow] = await supabaseRest<CustomWorkflowRow[]>('rpc/luxor_custom_workflow_create_draft', {
     method: 'POST',
     body: JSON.stringify({ p_name: name, p_definition: definition, p_actor_email: verifiedActorEmail }),
@@ -236,6 +245,8 @@ export async function saveCustomWorkflowDraft(input: {
   }
   const name = normalizeName(input.name)
   const definition = cloneAndValidateDraft(input.definition)
+  await hydrateWorkflowEmailTemplates(definition)
+  if (definition.emailSettings) definition.emailSettings = await pinWorkflowEmailSettings(definition.emailSettings, verifiedActorEmail)
   let rows: CustomWorkflowRow[]
   try {
     rows = await supabaseRest<CustomWorkflowRow[]>('rpc/luxor_custom_workflow_save_draft', {
@@ -286,7 +297,7 @@ export async function archiveCustomWorkflowDraft(id: string, actorEmail: string)
   return workflow
 }
 
-export function previewCustomWorkflowEmail(step: CustomWorkflowStep) {
+export async function previewCustomWorkflowEmail(step: CustomWorkflowStep, emailSettings?: CustomWorkflowEmailSettings, actorEmail?: string) {
   if (step.type !== 'email' || step.mode !== 'marketing') throw new CustomWorkflowServiceError('Choose an editable email step to preview.')
   const errors = validateCustomWorkflowDefinition({
     schemaVersion: 1,
@@ -295,20 +306,9 @@ export function previewCustomWorkflowEmail(step: CustomWorkflowStep) {
   }).filter((error) => !['steps.0.id', 'steps.0.name'].includes(error.path))
   if (errors.length) throw new CustomWorkflowServiceError(errors[0].message)
 
-  const renderedBody = replaceMergeFields(step.body)
-    .split(/\r?\n/)
-    .map((line) => line.trim() ? `<p style="margin:0 0 14px;white-space:pre-line">${escapeHtml(line)}</p>` : '')
-    .join('')
-  const unsubscribe = '<p style="margin:22px 0 0;font-size:12px;color:#6f6456">Unsubscribe link is inserted for each eligible recipient before delivery.</p>'
-  return renderLuxorSystemEmail({
-    previewText: replaceMergeFields(step.previewText),
-    eyebrow: 'Message from Luxor',
-    title: replaceMergeFields(step.subject),
-    greeting: 'Hi Sample,',
-    bodyHtml: renderedBody + unsubscribe,
-    actions: step.ctaText && step.ctaUrl ? [{ label: step.ctaText, url: step.ctaUrl, tone: 'primary' }] : [],
-    theme: 'light',
-  })
+  await hydrateWorkflowEmailTemplates({ schemaVersion: 1, trigger: 'manual', steps: [step] })
+  const rendered = await renderCustomWorkflowEmail(step, { full_name: 'Sample Guest', email: 'sample@example.invalid', event_type: 'Private celebration', guest_count: 80 }, 'https://www.luxoratlaspalmas.com/#preview-unsubscribe', emailSettings, actorEmail)
+  return rendered.body
 }
 
 function cloneAndValidateDraft(input: unknown) {
@@ -322,10 +322,10 @@ function cloneAndValidateDraft(input: unknown) {
 function validateDraftShape(input: unknown) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return [{ message: 'Workflow definition must be an object.' }]
   const value = input as Partial<CustomWorkflowDefinition>
-  if (value.schemaVersion !== 1 || value.trigger !== 'contact_form_inquiry_created' || !Array.isArray(value.steps)) {
-    return [{ message: 'Only the verified new contact-form inquiry trigger is supported.' }]
+  if (value.schemaVersion !== 1 || !Array.isArray(value.steps)) {
+    return [{ message: 'Choose a supported workflow definition.' }]
   }
-  if (value.steps.length < 2 || value.steps.length > 20) return [{ message: 'Add between 2 and 20 workflow steps.' }]
+  if (value.steps.length < 2 || value.steps.length > 25) return [{ message: 'Add between 2 and 25 workflow steps.' }]
   const ids = new Set<string>()
   const invalid = value.steps.find((step, index) => {
     if (!step || typeof step !== 'object' || Array.isArray(step) || typeof step.id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(step.id) || ids.has(step.id)) return true
@@ -347,12 +347,12 @@ function validateDraftShape(input: unknown) {
       || !['low', 'medium', 'high', 'urgent'].includes(step.priority)
       || (step.assignee !== undefined && typeof step.assignee !== 'string')
     if (step.type === 'wait') return !['minutes', 'hours', 'days'].includes(step.unit) || (step.amount !== null && (!Number.isInteger(step.amount) || step.amount < 0 || step.amount > 365))
-    if (step.type === 'condition') return !['follow_up_eligible', 'marketing_email_consent', 'marketing_sms_consent'].includes(step.condition) || step.whenFalse !== 'stop'
+    if (step.type === 'condition') return !['follow_up_eligible', 'marketing_email_consent', 'marketing_sms_consent', 'tour_scheduled', 'tour_attended', 'unresponsive'].includes(step.condition) || step.whenFalse !== 'stop'
     return step.type !== 'end'
   })
   if (invalid) return [{ message: 'The workflow contains an unsupported or malformed step.' }]
   const steps = value.steps as CustomWorkflowStep[]
-  if (steps[0]?.type !== 'email' || steps[0].mode !== 'existing_inquiry_acknowledgment') {
+  if (value.trigger === 'contact_form_inquiry_created' && (steps[0]?.type !== 'email' || steps[0].mode !== 'existing_inquiry_acknowledgment')) {
     return [{ message: 'The existing contact acknowledgment must remain the first workflow step so the flow cannot send a duplicate receipt.' }]
   }
   if (steps.filter((step) => step.type === 'end').length !== 1 || steps.at(-1)?.type !== 'end') {
@@ -373,21 +373,4 @@ function normalizeName(value: unknown) {
 
 function assertId(value: string) {
   if (!/^[0-9a-f-]{36}$/i.test(value)) throw new CustomWorkflowServiceError('Invalid custom workflow id.', 400)
-}
-
-function replaceMergeFields(value: string) {
-  return value.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_match, field: string) => {
-    const samples: Record<string, string> = {
-      first_name: 'Sample',
-      full_name: 'Sample Guest',
-      event_type: 'Private celebration',
-      guest_count: '80',
-      target_date: 'To be determined',
-    }
-    return samples[field] || ''
-  })
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }

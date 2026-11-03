@@ -16,12 +16,43 @@ import type {
 import type { LuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
 import { normalizeLuxorEmailTheme } from '@/lib/luxorEmailDesignSystem'
 
-const SITE_BASE_URL = 'https://luxor-event-space.vercel.app'
+const SITE_BASE_URL = 'https://www.luxoratlaspalmas.com'
+
+export const LUXOR_EMAIL_HERO_COLORS = { background: '#120d0a', text: '#f7efe3', muted: '#ebe0cc' } as const
+
+export function getLuxorEmailHeroOverlay(value: number) {
+  return Math.max(0.65, Math.min(1, Number.isFinite(value) ? value : 0.65))
+}
+
+function rgbColor(value: string) {
+  const match = /^#([\da-f]{6})$/i.exec(value)
+  return match ? `rgb(${[0, 2, 4].map((offset) => parseInt(match[1].slice(offset, offset + 2), 16)).join(', ')})` : value
+}
+
+function luminance(value: string) {
+  const match = /^#([\da-f]{6})$/i.exec(value)
+  if (!match) return null
+  const channels = [0, 2, 4].map((offset) => {
+    const channel = parseInt(match[1].slice(offset, offset + 2), 16) / 255
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  })
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+}
+
+export function getLuxorEmailReadableText(background: string, preferred: string, minimum = 4.5) {
+  const backgroundLuminance = luminance(background)
+  const preferredLuminance = luminance(preferred)
+  if (backgroundLuminance === null || preferredLuminance === null) return preferred
+  const contrast = (color: number) => (Math.max(backgroundLuminance, color) + 0.05) / (Math.min(backgroundLuminance, color) + 0.05)
+  if (contrast(preferredLuminance) >= minimum) return preferred
+  return contrast(luminance('#17120c')!) >= contrast(luminance('#fffdf9')!) ? '#17120c' : '#fffdf9'
+}
 
 function ensureAbsoluteUrl(url: string | null | undefined): string {
   if (!url) return ''
   const trimmed = url.trim()
   if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (/^(?:www\.)?[\w.-]+\.[a-z]{2,}(?:\/|$)/i.test(trimmed)) return `https://${trimmed}`
   const productionUrl = process.env.NEXT_PUBLIC_SITE_URL || 
     (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : SITE_BASE_URL)
   return `${productionUrl.replace(/\/$/, '')}/${trimmed.replace(/^\//, '')}`
@@ -51,7 +82,7 @@ const B = {
 // ─── Email chrome ─────────────────────────────────────────────────────────────
 
 /** Wraps a table row with the outer email container. Not used per-block — used in renderEmailToHtml. */
-function wrapEmail(rows: string): string {
+function wrapEmail(rows: string, contentWidth = 600): string {
   return `<!DOCTYPE html>
 <html lang="en" xmlns:v="urn:schemas-microsoft-com:vml">
 <head>
@@ -70,7 +101,22 @@ function wrapEmail(rows: string): string {
     :root { color-scheme: light dark; supported-color-schemes: light dark; }
     body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-    img { -ms-interpolation-mode: bicubic; border: 0; display: block; }
+    img { -ms-interpolation-mode: bicubic; border: 0; display: block; max-width: 100%; }
+    .luxor-card { width: 100%; table-layout: fixed; }
+    .luxor-card p, .luxor-card h1, .luxor-card h2, .luxor-card h3, .luxor-card a { overflow-wrap: anywhere; word-wrap: break-word; }
+    @media only screen and (max-width: 600px) {
+      .luxor-outer-pad { padding: 12px 8px !important; }
+      .luxor-content-pad { padding-left: 22px !important; padding-right: 22px !important; }
+      .luxor-hero-pad { padding: 42px 22px 38px !important; }
+      .luxor-hero-title { font-size: 34px !important; line-height: 1.12 !important; }
+      .luxor-stack { display: block !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
+      .luxor-stack-copy { padding: 24px 0 0 !important; border: 0 !important; }
+      .luxor-column { padding: 0 !important; border: 0 !important; }
+      .luxor-column-gap { display: block !important; width: 100% !important; height: 24px !important; }
+      .luxor-email-button { max-width: 100% !important; box-sizing: border-box !important; padding: 14px 22px !important; letter-spacing: 0.14em !important; }
+      .luxor-header-mark { width: 48px !important; height: 48px !important; }
+      .luxor-wordmark { font-size: 28px !important; letter-spacing: 0.16em !important; }
+    }
     a { color: #caa24c; }
     @media (prefers-color-scheme: dark) {
       body, .luxor-bg { background-color: #050505 !important; color: #f7efe3 !important; }
@@ -91,12 +137,14 @@ function wrapEmail(rows: string): string {
   <!-- Outer wrapper -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505" class="luxor-bg" style="background-color:#050505;">
     <tr>
-      <td align="center" style="padding:28px 16px;">
+      <td align="center" class="luxor-outer-pad" style="padding:28px 16px;">
         <!-- Email container: 600px, dark-and-gold brand -->
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="luxor-card"
-          style="width:600px;max-width:600px;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
+        <!--[if mso]><table role="presentation" width="${contentWidth}" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="luxor-card"
+          style="width:100%;max-width:${contentWidth}px;table-layout:fixed;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
           ${rows}
         </table>
+        <!--[if mso]></td></tr></table><![endif]-->
       </td>
     </tr>
   </table>
@@ -106,38 +154,42 @@ function wrapEmail(rows: string): string {
 
 // ─── Block renderers ──────────────────────────────────────────────────────────
 
-function renderHero(block: HeroBlock): string {
+function renderHero(block: HeroBlock, theme?: LuxorEmailTheme): string {
   const absBgImage = ensureAbsoluteUrl(block.backgroundImage)
+  // Keep the copy readable even over the brightest possible source photo.
+  const overlay = getLuxorEmailHeroOverlay(block.overlayOpacity)
+  const accent = theme?.accent || '#caa24c'
+  const buttonText = rgbColor(getLuxorEmailReadableText(accent, theme?.accentText || '#050505'))
   const bg = absBgImage
-    ? `background-image:linear-gradient(rgba(5,5,5,${block.overlayOpacity}),rgba(5,5,5,${block.overlayOpacity + 0.1})),url('${absBgImage}');background-size:cover;background-position:center;background-color:#0b0a08;`
-    : `background:radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,#120d0a,#050505);`
+    ? `background-image:linear-gradient(rgba(5,5,5,${overlay}),rgba(5,5,5,${Math.min(1, overlay + 0.1)})),url('${absBgImage}');background-size:cover;background-position:center;background-color:rgb(11, 10, 8);`
+    : `background-color:rgb(18, 13, 10);background-image:radial-gradient(circle at 50% 0%,rgba(202,162,76,0.18),transparent 70%),linear-gradient(180deg,rgb(18, 13, 10),rgb(5, 5, 5));`
 
   const align = block.textAlign
 
   const absCtaUrl = ensureAbsoluteUrl(block.ctaUrl)
   const cta = block.ctaVisible
     ? `<tr><td align="${align}" style="padding-top:28px;">
-        <a href="${absCtaUrl}" target="_blank"
-          style="display:inline-block;background-color:#caa24c;color:#050505;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;text-decoration:none;padding:14px 36px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);box-shadow:0 18px 36px -20px rgba(202,162,76,0.6);">
+        <a href="${absCtaUrl}" target="_blank" class="luxor-email-button"
+          style="display:inline-block;max-width:100%;box-sizing:border-box;background-color:${rgbColor(accent)};color:${buttonText};font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;text-decoration:none;padding:14px 36px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);box-shadow:0 18px 36px -20px rgba(202,162,76,0.6);">
           ${block.ctaLabel}
         </a>
       </td></tr>`
     : ''
 
-  const labelHtml = `<p style="margin:0 0 16px;font-family:'Manrope','Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:0.38em;text-transform:uppercase;color:#caa24c;">LUXOR EVENT SPACE</p>`
+  const labelHtml = `<p style="margin:0 0 16px;font-family:'Manrope','Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:0.38em;text-transform:uppercase;color:${rgbColor(LUXOR_EMAIL_HERO_COLORS.text)};">LUXOR EVENT SPACE</p>`
 
   const headlineAlign = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left'
 
   return `
   <!-- Hero Block -->
   <tr>
-    <td style="${bg}padding:72px 48px 64px;text-align:${headlineAlign};">
+    <td class="luxor-hero-pad" style="${bg}padding:72px 48px 64px;text-align:${headlineAlign};">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr><td align="${headlineAlign}">${labelHtml}</td></tr>
         <tr>
           <td>
-            <h1 style="margin:0 0 16px;font-family:'Cormorant Garamond',Georgia,serif;font-size:46px;font-weight:600;line-height:1.05;color:#f7efe3;letter-spacing:0.02em;text-align:${headlineAlign};">${block.headline}</h1>
-            <p style="margin:0;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:400;line-height:1.75;color:rgba(215,194,154,0.82);text-align:${headlineAlign};max-width:480px;${align === 'center' ? 'margin-left:auto;margin-right:auto;' : ''}">${block.subheadline}</p>
+            <h1 class="luxor-hero-title" style="margin:0 0 16px;font-family:'Cormorant Garamond',Georgia,serif;font-size:46px;font-weight:600;line-height:1.05;color:${rgbColor(LUXOR_EMAIL_HERO_COLORS.text)};letter-spacing:0.02em;text-align:${headlineAlign};">${block.headline}</h1>
+            <p style="margin:0;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:400;line-height:1.75;color:${rgbColor(LUXOR_EMAIL_HERO_COLORS.muted)};text-align:${headlineAlign};max-width:480px;${align === 'center' ? 'margin-left:auto;margin-right:auto;' : ''}">${block.subheadline}</p>
           </td>
         </tr>
         ${cta}
@@ -166,30 +218,32 @@ function renderText(block: TextBlock): string {
   return `
   <!-- Text Block -->
   <tr>
-    <td style="padding:36px 48px;">
+    <td class="luxor-content-pad" style="padding:36px 48px;">
       ${paragraphs}
     </td>
   </tr>`
 }
 
-function renderImageText(block: ImageTextBlock): string {
+function renderImageText(block: ImageTextBlock, theme?: LuxorEmailTheme): string {
   const absImgSrc = ensureAbsoluteUrl(block.imageUrl)
-  const imgCell = `<td width="220" style="width:220px;padding:0;vertical-align:top;">
+  const accent = theme?.accent || '#caa24c'
+  const buttonText = rgbColor(getLuxorEmailReadableText(accent, theme?.accentText || '#050505'))
+  const imgCell = `<td width="220" class="luxor-stack" style="width:220px;padding:0;vertical-align:top;">
     ${absImgSrc
-      ? `<img src="${absImgSrc}" alt="${block.imageAlt}" width="220" style="display:block;width:220px;border-radius:3px;border:1px solid rgba(202,162,76,0.14);" />`
-      : `<div style="width:220px;height:160px;background:linear-gradient(135deg,#120d0a,#1e1409);border:1px solid rgba(202,162,76,0.14);border-radius:3px;display:table-cell;text-align:center;vertical-align:middle;">
+      ? `<img src="${absImgSrc}" alt="${block.imageAlt}" width="220" style="display:block;width:220px;max-width:100%;height:auto;border-radius:3px;border:1px solid rgba(202,162,76,0.14);" />`
+      : `<div style="width:220px;max-width:100%;height:160px;background:linear-gradient(135deg,#120d0a,#1e1409);border:1px solid rgba(202,162,76,0.14);border-radius:3px;display:table-cell;text-align:center;vertical-align:middle;">
           <span style="font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;color:rgba(202,162,76,0.4);letter-spacing:0.2em;">LUXOR</span>
          </div>`
     }
   </td>`
 
   const absCtaUrl = ensureAbsoluteUrl(block.ctaUrl)
-  const textCell = `<td style="padding-${block.imagePosition === 'left' ? 'left' : 'right'}:28px;vertical-align:top;">
+  const textCell = `<td class="luxor-stack luxor-stack-copy" style="padding-${block.imagePosition === 'left' ? 'left' : 'right'}:28px;vertical-align:top;">
     <p style="margin:0 0 10px;font-family:'Manrope','Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:0.38em;text-transform:uppercase;color:#caa24c;">FEATURED</p>
     <h2 style="margin:0 0 14px;font-family:'Cormorant Garamond',Georgia,serif;font-size:26px;font-weight:600;line-height:1.1;color:#f7efe3;">${block.headline}</h2>
     <p style="margin:0 0 24px;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:14px;font-weight:400;line-height:1.8;color:rgba(215,194,154,0.78);">${block.body}</p>
-    <a href="${absCtaUrl}" target="_blank"
-      style="display:inline-block;background-color:#caa24c;color:#050505;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:11px 26px;border-radius:3px;border:1px solid rgba(241,210,122,0.45);">
+    <a href="${absCtaUrl}" target="_blank" class="luxor-email-button"
+      style="display:inline-block;max-width:100%;box-sizing:border-box;background-color:${rgbColor(accent)};color:${buttonText};font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:11px 26px;border-radius:3px;border:1px solid rgba(241,210,122,0.45);">
       ${block.ctaLabel}
     </a>
   </td>`
@@ -201,7 +255,7 @@ function renderImageText(block: ImageTextBlock): string {
   return `
   <!-- Image + Text Block -->
   <tr>
-    <td style="padding:36px 48px;">
+    <td class="luxor-content-pad" style="padding:36px 48px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>${cells}</tr>
       </table>
@@ -209,10 +263,10 @@ function renderImageText(block: ImageTextBlock): string {
   </tr>`
 }
 
-function renderButton(block: ButtonBlock): string {
+function renderButton(block: ButtonBlock, theme?: LuxorEmailTheme): string {
   const isGold = !block.bgColor || block.bgColor === '#caa24c' || block.bgColor === '#b8924a'
-  const bg = isGold ? '#caa24c' : block.bgColor
-  const fg = isGold ? '#050505' : block.textColor
+  const bg = isGold ? theme?.accent || '#caa24c' : block.bgColor
+  const fg = rgbColor(getLuxorEmailReadableText(bg, isGold ? theme?.accentText || '#050505' : block.textColor))
   const border = isGold ? '1px solid rgba(241,210,122,0.5)' : `1px solid ${bg}`
   const shadow = isGold ? 'box-shadow:0 18px 36px -20px rgba(202,162,76,0.5);' : ''
   const alignMap = { left: 'left', center: 'center', right: 'right' }
@@ -222,9 +276,9 @@ function renderButton(block: ButtonBlock): string {
   return `
   <!-- Button Block -->
   <tr>
-    <td align="${align}" style="padding:16px 48px 28px;">
-      <a href="${absUrl}" target="_blank"
-        style="display:inline-block;background-color:${bg};color:${fg};font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;text-decoration:none;padding:15px 42px;border-radius:3px;${border ? `border:${border};` : ''}${shadow}">
+    <td align="${align}" class="luxor-content-pad" style="padding:16px 48px 28px;">
+      <a href="${absUrl}" target="_blank" class="luxor-email-button"
+        style="display:inline-block;max-width:100%;box-sizing:border-box;background-color:${rgbColor(bg)};color:${fg};font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;text-decoration:none;padding:15px 42px;border-radius:3px;${border ? `border:${border};` : ''}${shadow}">
         ${block.label}
       </a>
     </td>
@@ -235,16 +289,16 @@ function renderTwoColumn(block: TwoColumnBlock): string {
   return `
   <!-- Two Column Block -->
   <tr>
-    <td style="padding:36px 48px;">
+    <td class="luxor-content-pad" style="padding:36px 48px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td width="48%" style="width:48%;vertical-align:top;padding-right:16px;border-right:1px solid rgba(202,162,76,0.18);">
+          <td width="48%" class="luxor-stack luxor-column" style="width:48%;vertical-align:top;padding-right:16px;border-right:1px solid rgba(202,162,76,0.18);">
             <p style="margin:0 0 10px;font-family:'Manrope','Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">01</p>
             <h3 style="margin:0 0 12px;font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;font-weight:600;line-height:1.15;color:#f7efe3;">${block.leftHeadline}</h3>
             <p style="margin:0;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:13px;font-weight:400;line-height:1.8;color:rgba(215,194,154,0.75);">${block.leftBody}</p>
           </td>
-          <td width="4%" style="width:4%;"></td>
-          <td width="48%" style="width:48%;vertical-align:top;padding-left:16px;">
+          <td width="4%" class="luxor-column-gap" style="width:4%;"></td>
+          <td width="48%" class="luxor-stack luxor-column" style="width:48%;vertical-align:top;padding-left:16px;">
             <p style="margin:0 0 10px;font-family:'Manrope','Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:#caa24c;">02</p>
             <h3 style="margin:0 0 12px;font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;font-weight:600;line-height:1.15;color:#f7efe3;">${block.rightHeadline}</h3>
             <p style="margin:0;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:13px;font-weight:400;line-height:1.8;color:rgba(215,194,154,0.75);">${block.rightBody}</p>
@@ -262,7 +316,7 @@ function renderDivider(block: DividerBlock): string {
     return `
   <!-- Decorative Gold Divider -->
   <tr>
-    <td style="padding:8px 48px;">
+    <td class="luxor-content-pad" style="padding:8px 48px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
           <td style="vertical-align:middle;">
@@ -285,7 +339,7 @@ function renderDivider(block: DividerBlock): string {
   return `
   <!-- Divider Block -->
   <tr>
-    <td style="padding:8px 48px;">
+    <td class="luxor-content-pad" style="padding:8px 48px;">
       <div style="height:${block.thickness}px;background-color:${block.color};border-style:${block.style};"></div>
     </td>
   </tr>`
@@ -297,11 +351,16 @@ function renderSpacer(block: SpacerBlock): string {
   <tr><td style="height:${block.height}px;line-height:${block.height}px;font-size:1px;">&nbsp;</td></tr>`
 }
 
-function renderFooter(block: FooterBlock): string {
+function renderFooter(block: FooterBlock, theme?: LuxorEmailTheme): string {
   const palmMarkUrl = `${SITE_BASE_URL}/luxor-portal-mark-gold-tight.png`
   const instagramIconUrl = `${SITE_BASE_URL}/social-instagram.png`
   const facebookIconUrl = `${SITE_BASE_URL}/social-facebook.png`
   const tiktokIconUrl = `${SITE_BASE_URL}/social-tiktok.png`
+  const surface = rgbColor(theme?.surfaceAlt || '#080605')
+  const muted = rgbColor(getLuxorEmailReadableText(theme?.surfaceAlt || '#080605', theme?.muted || '#d7c29a'))
+  const accent = rgbColor(getLuxorEmailReadableText(theme?.surfaceAlt || '#080605', theme?.accent || '#caa24c', 3))
+  const website = block.website.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+  const wordmark = block.companyName === 'Luxor Event Space' ? 'LUXOR' : block.companyName
 
   const social = block.showSocial
     ? `<tr><td align="center" style="padding-top:20px;">
@@ -334,7 +393,7 @@ function renderFooter(block: FooterBlock): string {
   </tr>
   <!-- Footer Block -->
   <tr>
-    <td style="background-color:#080605;padding:44px 48px 36px;">
+    <td class="luxor-content-pad" style="background-color:${surface};padding:44px 48px 36px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 
         <!-- Palm mark logo — same image used in the website header -->
@@ -342,10 +401,10 @@ function renderFooter(block: FooterBlock): string {
           <td align="center" style="padding-bottom:18px;">
             <img
               src="${palmMarkUrl}"
-              alt="Luxor Event Space"
+              alt="${block.companyName}"
               width="64"
               height="64"
-              style="display:inline-block;width:64px;height:64px;object-fit:contain;border:2px solid #caa24c;border-radius:999px;padding:2px;background-color:#080605;box-sizing:border-box;"
+              style="display:inline-block;width:64px;height:64px;object-fit:contain;border:2px solid #caa24c;border-radius:999px;padding:2px;background-color:${surface};box-sizing:border-box;"
             />
           </td>
         </tr>
@@ -353,25 +412,25 @@ function renderFooter(block: FooterBlock): string {
         <!-- LUXOR wordmark text — mirrors site luxor-wordmark class -->
         <tr>
           <td align="center" style="padding-bottom:6px;">
-            <p style="margin:0;font-family:'Cormorant Garamond','Cormorant',Georgia,'Times New Roman',serif;font-size:30px;font-weight:500;letter-spacing:0.14em;color:#caa24c;text-transform:uppercase;line-height:1;">LUXOR</p>
+            <p style="margin:0;font-family:'Cormorant Garamond','Cormorant',Georgia,'Times New Roman',serif;font-size:30px;font-weight:500;letter-spacing:0.14em;color:${accent};text-transform:uppercase;line-height:1.2;">${wordmark}</p>
           </td>
         </tr>
 
         <!-- AT LAS PALMAS EVENTS subline — mirrors site luxor-subline class -->
         <tr>
           <td align="center" style="padding-bottom:24px;">
-            <p style="margin:0;font-family:'Cormorant Garamond','Cormorant',Georgia,serif;font-size:8px;font-weight:500;letter-spacing:0.55em;color:rgba(202,162,76,0.72);text-transform:uppercase;">AT LAS PALMAS EVENTS</p>
+            <p style="margin:0;font-family:'Cormorant Garamond','Cormorant',Georgia,serif;font-size:8px;font-weight:500;letter-spacing:0.55em;color:${muted};text-transform:uppercase;">AT LAS PALMAS EVENTS</p>
           </td>
         </tr>
 
         <!-- Contact info — real address from the site footer -->
         <tr>
           <td align="center" style="padding-bottom:4px;">
-            <p style="margin:0;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:400;color:rgba(215,194,154,0.52);line-height:1.9;">
-              803 Castroville Rd #402, San Antonio, TX 78237<br />
-              Private venue tours by appointment.<br />
-              <a href="mailto:booking@luxoratlaspalmas.com" style="color:rgba(202,162,76,0.65);text-decoration:none;">booking@luxoratlaspalmas.com</a><br />
-              <a href="https://luxoratlaspalmas.com" style="color:rgba(202,162,76,0.65);text-decoration:none;">luxoratlaspalmas.com</a>
+            <p style="margin:0;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:400;color:${muted};line-height:1.9;">
+              ${block.address}<br />
+              ${block.phone}<br />
+              <a href="mailto:booking@luxoratlaspalmas.com" style="color:${muted};text-decoration:none;">booking@luxoratlaspalmas.com</a><br />
+              <a href="${ensureAbsoluteUrl(block.website)}" style="color:${muted};text-decoration:none;">${website}</a>
             </p>
           </td>
         </tr>
@@ -381,7 +440,7 @@ function renderFooter(block: FooterBlock): string {
         <!-- Tagline marquee (static in email) -->
         <tr>
           <td align="center" style="padding-top:20px;">
-            <p style="margin:0;font-family:'Manrope','Courier New',monospace;font-size:8px;font-weight:600;letter-spacing:0.46em;text-transform:uppercase;color:rgba(202,162,76,0.38);">
+            <p style="margin:0;font-family:'Manrope','Courier New',monospace;font-size:8px;font-weight:600;letter-spacing:0.46em;text-transform:uppercase;color:${muted};">
               Timeless &nbsp;&#9670;&nbsp; Elegant &nbsp;&#9670;&nbsp; Celebratory &nbsp;&#9670;&nbsp; Luxurious
             </p>
           </td>
@@ -390,9 +449,9 @@ function renderFooter(block: FooterBlock): string {
         <!-- Unsubscribe -->
         <tr>
           <td align="center" style="padding-top:20px;border-top:0;">
-            <p style="margin:0;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:9px;font-weight:400;color:rgba(215,194,154,0.28);line-height:1.7;">
+            <p style="margin:0;font-family:'Manrope','Helvetica Neue',Arial,sans-serif;font-size:9px;font-weight:400;color:${muted};line-height:1.7;">
               You received this email because you expressed interest in Luxor Event Space.
-              <a href="${block.unsubscribeUrl}" style="color:rgba(202,162,76,0.38);text-decoration:underline;">Unsubscribe</a>
+              <a href="${block.unsubscribeUrl}" style="color:${muted};text-decoration:underline;">Unsubscribe</a>
             </p>
           </td>
         </tr>
@@ -405,8 +464,11 @@ function renderFooter(block: FooterBlock): string {
 // ─── Preheader / header band ──────────────────────────────────────────────────
 
 
-function renderEmailHeader(): string {
+function renderEmailHeader(theme?: LuxorEmailTheme): string {
   const palmMarkUrl = `${SITE_BASE_URL}/luxor-portal-mark-gold-tight.png`
+  const surface = rgbColor(theme?.surfaceAlt || '#080605')
+  const muted = rgbColor(getLuxorEmailReadableText(theme?.surfaceAlt || '#080605', theme?.muted || '#d7c29a'))
+  const accent = rgbColor(getLuxorEmailReadableText(theme?.surfaceAlt || '#080605', theme?.accent || '#caa24c', 3))
   return `
   <!-- Top gold shimmer bar -->
   <tr>
@@ -414,7 +476,7 @@ function renderEmailHeader(): string {
   </tr>
   <!-- Header: Palm mark + LUXOR wordmark — mirrors site header lockup -->
   <tr>
-    <td style="background-color:#080605;padding:22px 48px 20px;border-bottom:1px solid rgba(202,162,76,0.14);">
+    <td class="luxor-content-pad" style="background-color:${surface};padding:22px 48px 20px;border-bottom:1px solid rgba(202,162,76,0.14);">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
           <td align="center">
@@ -427,13 +489,14 @@ function renderEmailHeader(): string {
                     alt=""
                     width="60"
                     height="60"
-                    style="display:block;width:60px;height:60px;object-fit:contain;border:2px solid #caa24c;border-radius:999px;padding:2px;background-color:#080605;box-sizing:border-box;"
+                    class="luxor-header-mark"
+                    style="display:block;width:60px;height:60px;object-fit:contain;border:2px solid #caa24c;border-radius:999px;padding:2px;background-color:${surface};box-sizing:border-box;"
                   />
                 </td>
                 <!-- LUXOR text + subline -->
                 <td style="vertical-align:middle;">
-                  <p style="margin:0;font-family:'Cormorant Garamond','Cormorant',Georgia,'Times New Roman',serif;font-size:32px;font-weight:500;letter-spacing:0.22em;color:#caa24c;text-transform:uppercase;line-height:1;">LUXOR</p>
-                  <p style="margin:4px 0 0;font-family:'Cormorant Garamond','Cormorant',Georgia,serif;font-size:7.2px;font-weight:500;letter-spacing:0.4em;color:rgba(202,162,76,0.6);text-transform:uppercase;">AT LAS PALMAS EVENTS</p>
+                  <p class="luxor-wordmark" style="margin:0;font-family:'Cormorant Garamond','Cormorant',Georgia,'Times New Roman',serif;font-size:32px;font-weight:500;letter-spacing:0.22em;color:${accent};text-transform:uppercase;line-height:1;">LUXOR</p>
+                  <p style="margin:4px 0 0;font-family:'Cormorant Garamond','Cormorant',Georgia,serif;font-size:7.2px;font-weight:500;letter-spacing:0.4em;color:${muted};text-transform:uppercase;">AT LAS PALMAS EVENTS</p>
                 </td>
               </tr>
             </table>
@@ -446,27 +509,27 @@ function renderEmailHeader(): string {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export function renderBlockToHtml(block: EmailBlock): string {
+export function renderBlockToHtml(block: EmailBlock, theme?: LuxorEmailTheme): string {
   switch (block.type) {
-    case 'hero':        return renderHero(block)
+    case 'hero':        return renderHero(block, theme)
     case 'text':        return renderText(block)
-    case 'image_text':  return renderImageText(block)
-    case 'button':      return renderButton(block)
+    case 'image_text':  return renderImageText(block, theme)
+    case 'button':      return renderButton(block, theme)
     case 'two_column':  return renderTwoColumn(block)
     case 'divider':     return renderDivider(block)
     case 'spacer':      return renderSpacer(block)
-    case 'footer':      return renderFooter(block)
+    case 'footer':      return renderFooter(block, theme)
     default:            return ''
   }
 }
 
-export function renderEmailToHtml(subject: string, blocks: EmailBlock[]): string {
+export function renderEmailToHtml(subject: string, blocks: EmailBlock[], theme?: LuxorEmailTheme): string {
   const rows = [
-    renderEmailHeader(),
-    ...blocks.map(renderBlockToHtml),
+    renderEmailHeader(theme),
+    ...blocks.map((block) => renderBlockToHtml(block, theme)),
   ].join('\n')
 
-  return wrapEmail(rows)
+  return wrapEmail(rows, theme?.contentWidth)
 }
 
 function replaceAllLiteral(value: string, search: string, replacement: string) {
@@ -485,7 +548,7 @@ export function renderThemedEmailToHtml(
   preheader = '',
 ): string {
   const theme = normalizeLuxorEmailTheme(themeValue)
-  let html = renderEmailToHtml(subject, blocks)
+  let html = renderEmailToHtml(subject, blocks, theme)
   const tokenPairs: Array<[string, string]> = [
     ['#050505', theme.canvas],
     ['#0a0807', theme.surface],

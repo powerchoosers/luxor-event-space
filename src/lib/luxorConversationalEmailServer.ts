@@ -37,9 +37,9 @@ const commonHtmlEntities: Record<string, string> = {
   rdquo: '”', ldquo: '“', ndash: '–', mdash: '—', hellip: '…', copy: '©', reg: '®', trade: '™',
 }
 
-function decodeEmailHtmlEntities(value: string) {
+function decodeEmailHtmlEntities(value: string, maxPasses = 3) {
   let decoded = value
-  for (let pass = 0; pass < 3; pass += 1) {
+  for (let pass = 0; pass < maxPasses; pass += 1) {
     const previous = decoded
     decoded = decoded.replace(/&(#(?:x[\da-f]+|\d+)|[a-z][\da-z]+);/gi, (entity, token: string) => {
       if (token[0] !== '#') return commonHtmlEntities[token.toLowerCase()] ?? entity
@@ -53,10 +53,17 @@ function decodeEmailHtmlEntities(value: string) {
   return decoded
 }
 
+/** Decode one editor-encoded text layer before escaping it for HTML output. */
+export function decodeLuxorEmailTextEntities(value: string) {
+  return decodeEmailHtmlEntities(value, 1)
+}
+
 /** Normalize rich-editor output without changing its formatting or leaking editor NBSP artifacts. */
-export function normalizeLuxorReplyHtml(content: string) {
-  return sanitizeRichEmailHtml(content)
+export function normalizeLuxorReplyHtml(content: string, options: { preserveWhitespace?: boolean } = {}) {
+  const sanitized = sanitizeRichEmailHtml(content)
     .replace(/&nbsp;|&#0*160;|&#x0*a0;/gi, ' ')
+  if (options.preserveWhitespace) return sanitized
+  return sanitized
     .replace(/[\u00a0\t ]+(?=<\/(?:p|div|li|td|th|h[1-6])\s*>)/gi, '')
     .trim()
 }

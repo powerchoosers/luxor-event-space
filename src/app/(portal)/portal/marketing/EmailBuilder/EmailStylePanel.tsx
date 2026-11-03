@@ -121,7 +121,7 @@ export function EmailStylePanel({ theme, onChange, activeField }: { theme: Luxor
             ) : null}
             {open && !['Email', 'Text'].includes(section) ? (
               <div className="px-4 pb-4 text-[9px] leading-4 text-[color:var(--portal-muted)]">
-                Uses your accent, border, radius, and text choices above. Select a block to override its individual styling.
+                Uses your accent, border, and text choices above. Select a block to override its individual styling.
               </div>
             ) : null}
           </section>
