@@ -485,13 +485,15 @@ export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName
     <PortalPageHeader
       icon={<CalendarDays size={23}/>}
       title={bookingId ? heading : section === 'design-library' ? 'Design Studio' : 'Planner'}
-      description={bookingId ? `${text(booking?.event_type) || 'Event'} · ${displayDate(booking?.event_date)} · ${labelStatus(booking?.status)}` : section === 'design-library' ? 'Build reusable event layouts, save design masters, and apply independent copies to confirmed events.' : 'Manage your events, designs, meetings, vendors, and planning tasks.'}
+      description={bookingId ? `${text(booking?.event_type) || 'Event'} · ${displayDate(booking?.event_date)} · ${labelStatus(booking?.status)}` : undefined}
+      mobileActionsInline={!bookingId}
+      titleClassName={!bookingId ? section === 'design-library' ? 'whitespace-nowrap text-base min-[380px]:text-2xl sm:text-3xl' : 'text-2xl sm:text-3xl' : undefined}
       actions={bookingId ? (
         <Link href="/portal/planner/events" className="text-xs font-bold text-[#a17b35] hover:underline">All events</Link>
       ) : (
         <div className="flex w-full flex-wrap items-center justify-end gap-3 md:w-auto">
           <div className="hidden md:flex xl:hidden">{browseViewsButton()}</div>
-          <Link href="/portal/events" className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-[#caa24c]/35 bg-[#caa24c] px-4 text-xs font-bold text-[#1a140a] shadow-sm hover:bg-[#d6b35b]"><Plus size={15}/>New Event</Link>
+          <Link href="/portal/events" className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-xl border border-[#caa24c]/35 bg-[#caa24c] px-1.5 text-xs font-bold text-[#1a140a] shadow-sm hover:bg-[#d6b35b] min-[380px]:gap-2 min-[380px]:px-3 sm:px-4"><Plus size={15}/>New Event</Link>
         </div>
       )}
     />
