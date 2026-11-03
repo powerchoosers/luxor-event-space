@@ -178,6 +178,7 @@ export function PortalAnimatedTabs<T extends string>({
   buttonClassName = '',
   ariaLabel = 'Portal tabs',
   variant = 'underline',
+  trailing,
 }: {
   tabs: readonly PortalAnimatedTabItem<T>[]
   activeTab: T
@@ -186,6 +187,7 @@ export function PortalAnimatedTabs<T extends string>({
   buttonClassName?: string
   ariaLabel?: string
   variant?: 'underline' | 'slider'
+  trailing?: React.ReactNode
 }) {
   const reduceMotion = useReducedMotion()
   const containerRef = React.useRef<HTMLDivElement | null>(null)
@@ -252,7 +254,7 @@ export function PortalAnimatedTabs<T extends string>({
     <nav
       ref={containerRef}
       aria-label={ariaLabel}
-      className={`${isSlider ? 'flex w-full min-w-max items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1' : 'relative inline-flex shrink-0 min-w-max items-stretch gap-5'} ${className}`}
+      className={`${isSlider ? `flex w-full ${trailing ? 'min-w-0' : 'min-w-max'} items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1` : 'relative inline-flex shrink-0 min-w-max items-stretch gap-5'} ${className}`}
     >
       {!isSlider ? (
         <span
@@ -302,6 +304,7 @@ export function PortalAnimatedTabs<T extends string>({
           </button>
         )
       })}
+      {trailing ? <div className="ml-auto min-w-0 shrink-0">{trailing}</div> : null}
     </nav>
   )
 }

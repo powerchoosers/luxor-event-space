@@ -451,6 +451,13 @@ export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName
     </button>
   )
 
+  const plannerSearch = (desktop = false) => (
+    <div className={`relative ${desktop ? 'w-56 2xl:w-60' : 'w-full sm:max-w-md'}`}>
+      <Search size={15} className={`absolute ${desktop ? 'left-2.5' : 'left-3'} top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]`} aria-hidden="true" />
+      <input className={`${inputClass()} ${desktop ? 'min-h-8 py-1 pl-8 text-xs' : 'pl-9'}`} value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search events, clients, vendors, files…" aria-label="Search Planner" />
+    </div>
+  )
+
   const nav = (
     <>
       <div className="hidden min-w-0 xl:block">
@@ -464,6 +471,7 @@ export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName
           activeTab={section}
           onTabChange={navigateSection}
           className="w-full"
+          trailing={!bookingId && section !== 'design-library' ? plannerSearch(true) : undefined}
         />
       </div>
       <div className="md:hidden">{browseViewsButton(true)}</div>
@@ -488,12 +496,7 @@ export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName
       )}
     />
     {!bookingId ? nav : <nav aria-label="Event planning sections" className="portal-scrollbar flex gap-1 overflow-x-auto border-b border-[color:var(--portal-border)] pb-2">{eventTabs.map(([tab,label]) => <button type="button" key={tab} onClick={()=>{setWorkspaceTab(tab); router.replace(`/portal/planner/event/${bookingId}?tab=${tab}`)}} className={`min-h-10 shrink-0 rounded-xl px-3 text-xs font-bold ${workspaceTab===tab?'bg-[#caa24c]/10 text-[#9a712e] dark:text-[#f1d27a]':'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]'}`}>{label}</button>)}</nav>}
-    {!bookingId && section !== 'design-library' ? (
-      <div className="relative w-full sm:max-w-md">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" aria-hidden="true" />
-        <input className={`${inputClass()} pl-9`} value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search events, clients, vendors, files…" aria-label="Search Planner" />
-      </div>
-    ) : null}
+    {!bookingId && section !== 'design-library' ? <div className="w-full xl:hidden">{plannerSearch()}</div> : null}
     {!bookingId && section !== 'design-library' && query.trim().length>=2 && searchResults ? <PlannerSearchResults results={searchResults}/> : null}
     {notice ? <div className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 px-4 py-3 text-sm text-[color:var(--portal-text)]" role="status">{notice}</div> : null}
     {error ? <div className="flex items-center gap-3 rounded-xl border border-red-500/25 bg-red-500/5 p-4 text-sm text-[color:var(--portal-text)]"><AlertCircle size={18} className="text-red-500"/><div className="min-w-0 flex-1">{error}</div><PortalButton size="sm" onClick={()=>void load()}>Retry</PortalButton></div> : null}
