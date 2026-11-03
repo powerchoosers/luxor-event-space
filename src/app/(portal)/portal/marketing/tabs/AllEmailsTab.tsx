@@ -766,10 +766,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     }
     // Preserve an open reader when paging. Deep links can load directly even
     // when the requested message is far outside the first page.
-    if (selectedId || loading) return
+    const mobileViewport = window.matchMedia(EMAIL_READER_MOBILE_QUERY).matches
+    if (selectedId || loading || isMobileReader || mobileViewport) return
     const target = messages[0]
     if (target) { setSelectedId(target.id); setSelectedMessageKey(messageKey(target)) }
-  }, [initialMessageId, loading, messages, selectedId])
+  }, [initialMessageId, isMobileReader, loading, messages, selectedId])
 
   const selectedMailboxSummary = messages.find((message) => messageKey(message) === selectedMessageKey)
     || messages.find((message) => message.id === selectedId)
