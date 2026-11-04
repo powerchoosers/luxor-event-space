@@ -321,7 +321,7 @@ export function LuxorMessenger() {
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">Messages</h1>
             <div className="flex items-center gap-1.5">
-              <button type="button" onClick={() => { setNewMessageOpen(true); setShowThreadOnMobile(true); setContactQuery(''); setContactResults([]) }} className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-[#caa24c] px-3 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#b88f3d]"><Plus size={14}/> New</button>
+              <button type="button" onClick={() => { setNewMessageOpen(true); setShowThreadOnMobile(true); setContactQuery(''); setContactResults([]) }} className="luxor-gold-raised inline-flex h-8.5 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white"><Plus size={14}/> New</button>
               <div className="relative" ref={lineOptionsRef}>
                 <button type="button" onClick={() => setLineOptionsOpen((current) => !current)} className="flex h-8.5 w-8.5 items-center justify-center rounded-xl text-[color:var(--portal-muted)] opacity-80 transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Message line options" aria-expanded={lineOptionsOpen}><MoreVertical size={16}/></button>
                 <AnimatePresence>{lineOptionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-10 z-30 w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl backdrop-blur-xl">
@@ -483,7 +483,7 @@ export function LuxorMessenger() {
                   </div>
                   <div className="mt-1 flex items-center justify-between gap-2"><p className="tabular-nums text-[11px] text-[color:var(--portal-muted)]">{body.length} / 1600 · Enter to send</p></div>
                 </div>
-                <button type="button" onClick={() => void sendMessage()} disabled={!body.trim() || sending} className="flex h-9.5 min-w-9.5 items-center justify-center gap-1.5 rounded-xl bg-[#caa24c] px-3.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#b88f3d] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-45">{sending ? <Loader2 size={15} className="animate-spin"/> : <><Send size={14}/><span className="hidden sm:inline">Send</span></>}</button>
+                <button type="button" onClick={() => void sendMessage()} disabled={!body.trim() || sending} className="luxor-gold-raised flex h-9.5 min-w-9.5 items-center justify-center gap-1.5 rounded-xl px-3.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-45">{sending ? <Loader2 size={15} className="animate-spin"/> : <><Send size={14}/><span className="hidden sm:inline">Send</span></>}</button>
               </div>
             </div>
           ) : null}
@@ -527,7 +527,7 @@ function MessageBubble({ message }: { message: LuxorMessage }) {
   const outbound = message.direction === 'outbound'
   return <div className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
     <div className={`max-w-[88%] sm:max-w-[72%] ${outbound ? 'text-right' : 'text-left'}`}>
-      <div className={`inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-6 ${outbound ? 'rounded-br-md bg-[#caa24c] !text-white shadow-xs' : 'rounded-bl-md border border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{message.body || '(Media message)'}</div>
+      <div className={`inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-6 ${outbound ? 'rounded-br-md border border-[#b88d37] bg-gradient-to-b from-[#d4af54] to-[#ba8e35] !text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_1px_2px_rgba(0,0,0,0.12)]' : 'rounded-bl-md border border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{message.body || '(Media message)'}</div>
       <p className={`mt-1 flex items-center gap-1 tabular-nums text-[11px] text-[color:var(--portal-muted)] ${outbound ? 'justify-end' : 'justify-start'}`}>{message.owner_email === 'luxor-automation' ? <><span>Automated</span><span>·</span></> : null}{formatMessageTime(message.created_at)}{outbound ? <><span>·</span><span className="capitalize">{message.status}</span>{message.status === 'delivered' || message.status === 'read' ? <CheckCheck size={12} className={message.status === 'read' ? 'text-emerald-500' : 'text-[#caa24c]'}/> : null}</> : null}</p>
       {message.error_message ? <p className="mt-1 text-xs text-red-500">{message.error_message}</p> : null}
     </div>

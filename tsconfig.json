@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "lucide-react": [
+        "./src/lib/icons/phosphor-compat.tsx"
       ]
     }
   },

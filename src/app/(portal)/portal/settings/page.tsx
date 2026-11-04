@@ -985,7 +985,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={saving}
-              className="bg-[#caa24c] hover:bg-[#dfbd68] text-white text-xs font-black uppercase tracking-widest px-6 py-3 rounded-lg shadow-xl shadow-[#caa24c]/10 cursor-pointer disabled:opacity-40 hover:scale-105 active:scale-95 transition-all"
+              className="luxor-gold-raised inline-flex min-h-11 items-center justify-center px-6 py-3 rounded-lg text-xs font-black uppercase tracking-widest text-white cursor-pointer disabled:opacity-40"
             >
               {saving ? 'Saving...' : activeTab === 'team' ? 'Save My Profile' : 'Save Notification Recipients'}
             </button>

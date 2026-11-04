@@ -756,7 +756,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
             actions={
               <button
                 type="button"
-                className="portal-inline-action inline-flex h-9 w-9 shrink-0 aspect-square items-center justify-center rounded-lg border border-[#b88d37] bg-[#caa24c] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.38)] transition-all hover:border-[#c49b42] hover:bg-[#d4ad54] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] active:shadow-none active:translate-y-[1px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
+                className="portal-inline-action luxor-gold-raised inline-flex h-9 w-9 shrink-0 aspect-square items-center justify-center rounded-lg text-white cursor-pointer"
                 style={{ height: '36px', width: '36px', minHeight: '36px', maxHeight: '36px', minWidth: '36px', maxWidth: '36px' }}
                 onClick={() => { if (leads[0]) openAddTask(leads[0].id) }}
                 title="Add Follow-Up"

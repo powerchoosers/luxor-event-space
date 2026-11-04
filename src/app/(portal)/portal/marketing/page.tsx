@@ -830,7 +830,7 @@ function MarketingPageContent() {
     headerActions = (
       <Link
         href="/portal/marketing/custom-workflows/new"
-        className="inline-flex min-h-9.5 items-center gap-2 rounded-xl border border-[#b88d37] bg-[#caa24c] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.38)] transition-all hover:border-[#c49b42] hover:bg-[#d4ad54] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] active:shadow-none active:translate-y-[1px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+        className="luxor-gold-raised inline-flex min-h-9.5 items-center gap-2 rounded-xl px-4 text-xs font-bold text-white"
       >
         <Plus size={14} /> Create Workflow
       </Link>

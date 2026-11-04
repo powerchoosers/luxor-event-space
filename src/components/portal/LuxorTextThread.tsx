@@ -119,7 +119,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
                 key={message.id}
                 className={`max-w-[88%] rounded-2xl px-4 py-3 ${
                   message.direction === 'outbound'
-                    ? 'ml-auto bg-[#caa24c] !text-white shadow-md'
+                    ? 'ml-auto border border-[#b88d37] bg-gradient-to-b from-[#d4af54] to-[#ba8e35] !text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_1px_2px_rgba(0,0,0,0.12)]'
                     : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
                 }`}
               >
@@ -164,7 +164,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
             type="button"
             onClick={() => void send()}
             disabled={!phone || !body.trim() || sending || isOptedOut}
-            className="flex w-12 items-center justify-center rounded-xl bg-[#caa24c] text-white disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-40 transition-colors hover:bg-[#dfbd68]"
+            className="luxor-gold-raised flex w-12 items-center justify-center rounded-xl text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-40 disabled:shadow-none"
           >
             {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>

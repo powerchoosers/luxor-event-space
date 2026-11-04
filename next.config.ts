@@ -1,7 +1,21 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  webpack: (config) => {
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'lucide-react$': path.resolve(__dirname, 'src/lib/icons/phosphor-compat.tsx'),
+    };
+    return config;
+  },
+  turbopack: {
+    resolveAlias: {
+      'lucide-react': './src/lib/icons/phosphor-compat.tsx',
+    },
+  },
   // Next's minimal server trace omits the runtime used by its vendored Pages contexts.
   // Include its production React dependencies too; tracing includes are not recursive.
   outputFileTracingIncludes: {

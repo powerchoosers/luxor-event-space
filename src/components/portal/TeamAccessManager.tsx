@@ -111,7 +111,7 @@ export function TeamAccessManager() {
   return <div className="space-y-5">
     <div className="flex flex-col gap-4 border-b border-[color:var(--portal-border)] pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div><h3 className="text-sm font-bold text-[color:var(--portal-text)]">People, roles & access</h3><p className="mt-1 max-w-xl text-xs leading-5 text-[color:var(--portal-muted)]">Control what each person can open. Active portal staff can manage all event plans; only the owner account can share a design with a client.</p></div>
-      <button type="button" onClick={beginAdd} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition-colors hover:bg-[#dfbd68]"><Plus size={15} /> Add team member</button>
+      <button type="button" onClick={beginAdd} className="luxor-gold-raised inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-xs font-bold text-white"><Plus size={15} /> Add team member</button>
     </div>
     <div className="rounded-xl border border-[color:var(--portal-border)]">
       <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 md:hidden"><span className="text-[9px] font-black uppercase tracking-[0.13em] text-[color:var(--portal-faint)]">People</span><span className="text-[10px] text-[color:var(--portal-muted)]">Swipe to view access</span></div>

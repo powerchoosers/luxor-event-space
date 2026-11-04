@@ -687,7 +687,7 @@ export default function CustomWorkflowEditorPage() {
           <div className="rounded-2xl border-2 border-[#caa24c]/60 bg-[color:var(--portal-card)] p-4 lg:p-5 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-[#17130b]">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white">
                   <Workflow size={20} />
                 </div>
                 <div>
@@ -1147,7 +1147,7 @@ export default function CustomWorkflowEditorPage() {
                           onClick={() => updateStepField(selectedStep.id, 'generationMode', 'ai')}
                           className={`rounded px-2 py-1 text-[10px] font-bold transition ${
                             selectedStep.type === 'text' && selectedStep.generationMode === 'ai'
-                              ? 'bg-[#caa24c] text-[#17130b] shadow-xs'
+                              ? 'bg-[#caa24c] text-white shadow-xs'
                               : 'text-[color:var(--portal-muted)]'
                           }`}
                         >
@@ -1172,7 +1172,7 @@ export default function CustomWorkflowEditorPage() {
                           type="button"
                           onClick={() => handleGenerateAiCopy('text')}
                           disabled={generatingAiCopy}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#caa24c] px-3 py-1.5 text-xs font-bold text-[#17130b]"
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#caa24c] px-3 py-1.5 text-xs font-bold text-white hover:text-white"
                         >
                           {generatingAiCopy ? <RefreshCw size={12} className="animate-spin" /> : <Bot size={12} />}
                           <span>Generate SMS with Elena</span>

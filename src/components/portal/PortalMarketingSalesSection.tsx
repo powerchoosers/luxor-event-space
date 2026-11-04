@@ -220,7 +220,7 @@ export function PortalMarketingSalesSection({
         <div className="relative z-10 flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-md">
             <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#caa24c] text-[10px] font-bold text-[#18130d]">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#caa24c] text-[10px] font-bold text-white">
                 ★
               </span>
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#caa24c]">
@@ -529,7 +529,7 @@ export function PortalMarketingSalesSection({
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#caa24c] text-[8px] text-[#18130d] font-bold">
+                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#caa24c] text-[8px] text-white font-bold">
                         ★
                       </span>
                       <div className="relative group/tip cursor-help">

@@ -229,15 +229,15 @@ export function PortalAudioPlayer({
         <button
           type="button"
           onClick={() => void togglePlay()}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white transition-transform duration-100 active:scale-95 hover:bg-[#b98a3d] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]"
+          className="luxor-gold-raised flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white cursor-pointer focus-visible:outline-none"
           aria-label={isPlaying ? 'Pause recording' : 'Play recording'}
         >
           {isLoading ? (
             <Loader2 size={14} className="animate-spin" />
           ) : isPlaying ? (
-            <Pause size={13} className="fill-current" />
+            <Pause size={13} weight="fill" />
           ) : (
-            <Play size={13} className="fill-current ml-0.5" />
+            <Play size={13} weight="fill" className="ml-0.5" />
           )}
         </button>
 
@@ -419,15 +419,15 @@ export function PortalAudioPlayer({
           <button
             type="button"
             onClick={() => void togglePlay()}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm transition-transform duration-100 active:scale-95 hover:bg-[#b98a3d] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]"
+            className="luxor-gold-raised flex h-11 w-11 items-center justify-center rounded-full text-white cursor-pointer focus-visible:outline-none"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isLoading ? (
               <Loader2 size={18} className="animate-spin" />
             ) : isPlaying ? (
-              <Pause size={18} className="fill-current" />
+              <Pause size={18} weight="fill" />
             ) : (
-              <Play size={18} className="fill-current ml-0.5" />
+              <Play size={18} weight="fill" className="ml-0.5" />
             )}
           </button>
 

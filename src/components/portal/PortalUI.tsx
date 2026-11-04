@@ -48,6 +48,7 @@ export function PortalPageHeader({
   const router = useRouter()
   const pathname = usePathname()
   const canGoBack = pathname !== '/portal'
+  const isPortalHome = pathname === '/portal' || pathname === '/portal/'
 
   const goBack = () => {
     if (window.history.length > 1) {
@@ -73,7 +74,7 @@ export function PortalPageHeader({
               <ArrowLeft size={15} />
             </button>
           ) : null}
-          {icon ? <span className="shrink-0 text-[#caa24c]">{icon}</span> : null}
+          {icon && isPortalHome ? <span className="shrink-0 text-[#caa24c]">{icon}</span> : null}
           <h1 className={`font-sans font-bold tracking-tight leading-tight text-[color:var(--portal-text)] ${titleClassName || (mobileActionsInline ? 'whitespace-nowrap text-xl sm:text-2xl' : 'text-xl sm:text-2xl')}`}>
             {titleHref ? (
               <Link href={titleHref} className="no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
@@ -107,8 +108,7 @@ export function PortalButton({
   size?: PortalButtonSize
 }) {
   const variantClasses: Record<PortalButtonVariant, string> = {
-    primary:
-      'border border-[#b88d37] bg-[#caa24c] text-white font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.38)] hover:border-[#c49b42] hover:bg-[#d4ad54] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] active:shadow-none active:translate-y-[1px]',
+    primary: 'luxor-gold-raised',
     secondary:
       'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/30 hover:bg-[color:var(--portal-border)]/40 active:translate-y-[1px]',
     ghost:
@@ -713,7 +713,7 @@ export function PortalFilterBar({
                         exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.55, y: -2 }}
                         transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: [0.23, 1, 0.32, 1] }}
                         aria-hidden="true"
-                        className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#caa24c] px-0.5 text-[8px] font-bold text-[#18130d] leading-none shadow-xs"
+                        className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#caa24c] px-0.5 text-[8px] font-bold text-white leading-none shadow-xs"
                       >
                         {activeFilters.length}
                       </motion.span>
