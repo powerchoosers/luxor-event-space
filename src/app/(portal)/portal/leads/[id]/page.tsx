@@ -5583,7 +5583,7 @@ export default function LeadDetailPage({
                     ) : null}
                   </span>
                 </span>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] dark:text-[#f1d27a] md:px-3 md:py-2 md:text-[13px] md:font-semibold md:normal-case md:tracking-normal md:text-[#8c6529] dark:md:text-[#f1d27a]">
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border-0 bg-[#caa24c]/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] dark:text-[#f1d27a] md:px-3 md:py-2 md:text-[13px] md:font-semibold md:normal-case md:tracking-normal md:text-[#8c6529] dark:md:text-[#f1d27a]">
                   <Menu size={13} />
                   Browse sections
                   <ChevronDown size={13} />

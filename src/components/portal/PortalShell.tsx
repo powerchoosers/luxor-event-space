@@ -1600,29 +1600,31 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
-                  active ? 'bg-[#caa24c]/10 text-[#caa24c]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
+                className={`relative isolate flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
+                  active ? 'text-[#caa24c]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
                 }`}
                 aria-current={active ? 'page' : undefined}
               >
-                {item.icon}
-                <span>{item.label}</span>
+                {active ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-0 rounded-xl bg-[#caa24c]/10" /> : null}
+                <span className="relative z-10">{item.icon}</span>
+                <span className="relative z-10">{item.label}</span>
               </Link>
             )
           })}
           <button
             type="button"
             onClick={() => setMobileMoreOpen(true)}
-            className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
+            className={`relative isolate flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
               !accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams))
-                ? 'bg-[#caa24c]/10 text-[#caa24c]'
+                ? 'text-[#caa24c]'
                 : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
             }`}
             aria-label="More portal sections"
             aria-expanded={mobileMoreOpen}
           >
-            <MoreHorizontal size={20} />
-            <span>More</span>
+            {!accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams)) ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-0 rounded-xl bg-[#caa24c]/10" /> : null}
+            <span className="relative z-10"><MoreHorizontal size={20} /></span>
+            <span className="relative z-10">More</span>
           </button>
         </nav>
       <PortalElenaChat isOpen={elenaOpen} onClose={() => setElenaOpen(false)} activePath={pathname} />

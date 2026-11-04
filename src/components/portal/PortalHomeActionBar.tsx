@@ -52,13 +52,16 @@ export function PortalHomeActionBar() {
   const actionButton =
     'group inline-flex h-11 min-w-0 items-center justify-center rounded-lg text-sm font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50'
   const actionSurface =
-    'inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 transition-colors group-hover:border-[#caa24c]/40 group-active:bg-[#caa24c]/10'
+    'inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md border-0 bg-[color:var(--portal-soft)] px-2 transition-colors group-hover:bg-[color:var(--portal-card)] group-active:bg-[#caa24c]/10'
 
   if (!mounted || typeof document === 'undefined') return null
 
   return createPortal(
-    <div
+    <motion.div
       className="pointer-events-none fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-50 h-[52px] overflow-hidden sm:hidden"
+      initial={reduceMotion ? false : { y: 24, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: reduceMotion ? 0 : 0.36, ease: [0.22, 1, 0.36, 1] }}
       onKeyDown={(event) => {
         if (event.key !== 'Escape' || !expanded) return
         event.preventDefault()
@@ -153,7 +156,7 @@ export function PortalHomeActionBar() {
         onCreated={() => router.push('/portal/leads')}
         pagePath="/portal"
       />
-    </div>,
+    </motion.div>,
     document.body
   )
 }

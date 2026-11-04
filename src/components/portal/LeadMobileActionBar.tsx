@@ -49,12 +49,15 @@ export function LeadMobileActionBar({
   const setVisibility = (visible: boolean) => setExpanded(visible)
 
   const secondaryButton = 'group inline-flex h-11 min-w-0 items-center justify-center rounded-lg text-sm font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:pointer-events-none disabled:opacity-40'
-  const secondarySurface = 'inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 transition-colors group-hover:border-[#caa24c]/40 group-active:bg-[#caa24c]/10'
+  const secondarySurface = 'inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md border-0 bg-[color:var(--portal-soft)] px-2 transition-colors group-hover:bg-[color:var(--portal-card)] group-active:bg-[#caa24c]/10'
 
   return (
-    <div
+    <motion.div
       style={{ bottom: 'var(--portal-mobile-nav-height, 3.75rem)' }}
       className="pointer-events-none fixed inset-x-0 z-50 h-[52px] overflow-hidden sm:hidden"
+      initial={reduceMotion ? false : { y: 12, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: reduceMotion ? 0 : 0.24, ease: 'easeOut' }}
       onKeyDown={(event) => {
         if (event.key !== 'Escape' || !expanded) return
         event.preventDefault()
@@ -101,6 +104,6 @@ export function LeadMobileActionBar({
           </button>
         </div>
       </motion.div>
-    </div>
+    </motion.div>
   )
 }
