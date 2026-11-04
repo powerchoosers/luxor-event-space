@@ -331,15 +331,15 @@ body[data-portal-theme='light'] .bg-\[\#0c0c0c\]\/85 {
   background-color: var(--portal-soft) !important;
 }
 
-body[data-portal-theme='light'] .text-white,
-body[data-portal-theme='light'] .text-white\/95,
-body[data-portal-theme='light'] .text-white\/90,
-body[data-portal-theme='light'] .text-white\/80,
-body[data-portal-theme='light'] .text-zinc-200,
-body[data-portal-theme='light'] .text-zinc-300,
-body[data-portal-theme='light'] .text-zinc-355,
-body[data-portal-theme='light'] .text-zinc-350,
-body[data-portal-theme='light'] .text-zinc-400 {
+body[data-portal-theme='light'] .text-white:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
+body[data-portal-theme='light'] .text-white\/95:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
+body[data-portal-theme='light'] .text-white\/90:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
+body[data-portal-theme='light'] .text-white\/80:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
+body[data-portal-theme='light'] .text-zinc-200:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
+body[data-portal-theme='light'] .text-zinc-300:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
+body[data-portal-theme='light'] .text-zinc-355:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
+body[data-portal-theme='light'] .text-zinc-350:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
+body[data-portal-theme='light'] .text-zinc-400:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]) {
   color: var(--portal-text) !important;
 }
 
@@ -457,7 +457,13 @@ body[data-portal-theme='light'] .text-zinc-900 {
 
 /* Canonical Luxor 3D Raised Gold Action Hardware (matching Loadline tactile engineering) */
 body[data-portal-theme] .luxor-gold-raised,
-body[data-portal-theme] .portal-gold-btn {
+body[data-portal-theme='light'] .luxor-gold-raised,
+body[data-portal-theme='dark'] .luxor-gold-raised,
+body[data-portal-theme] .portal-gold-btn,
+body[data-portal-theme='light'] .portal-gold-btn,
+body[data-portal-theme='dark'] .portal-gold-btn,
+:is(a, button, [role="button"]).luxor-gold-raised,
+:is(a, button, [role="button"]).portal-gold-btn {
   border: 1px solid #b88d37 !important;
   background: linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
   color: #ffffff !important;
@@ -469,21 +475,46 @@ body[data-portal-theme] .portal-gold-btn {
   transition: all 0.14s cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
+body[data-portal-theme] .luxor-gold-raised,
+body[data-portal-theme='light'] .luxor-gold-raised,
+body[data-portal-theme='dark'] .luxor-gold-raised,
 body[data-portal-theme] .luxor-gold-raised *,
-body[data-portal-theme] .portal-gold-btn * {
+body[data-portal-theme='light'] .luxor-gold-raised *,
+body[data-portal-theme='dark'] .luxor-gold-raised *,
+body[data-portal-theme] .portal-gold-btn,
+body[data-portal-theme='light'] .portal-gold-btn,
+body[data-portal-theme='dark'] .portal-gold-btn,
+body[data-portal-theme] .portal-gold-btn *,
+body[data-portal-theme='light'] .portal-gold-btn *,
+body[data-portal-theme='dark'] .portal-gold-btn *,
+:is(a, button, [role="button"]).luxor-gold-raised,
+:is(a, button, [role="button"]).luxor-gold-raised *,
+:is(a, button, [role="button"]).portal-gold-btn,
+:is(a, button, [role="button"]).portal-gold-btn * {
   color: #ffffff !important;
 }
 
-body[data-portal-theme] .luxor-gold-raised svg,
-body[data-portal-theme] .luxor-gold-raised svg path,
-body[data-portal-theme] .luxor-gold-raised svg rect,
-body[data-portal-theme] .luxor-gold-raised svg circle,
-body[data-portal-theme] .luxor-gold-raised svg polygon,
-body[data-portal-theme] .portal-gold-btn svg,
-body[data-portal-theme] .portal-gold-btn svg path {
-  fill: #ffffff !important;
+body[data-portal-theme] :is(.luxor-gold-raised, .portal-gold-btn) svg,
+body[data-portal-theme='light'] :is(.luxor-gold-raised, .portal-gold-btn) svg,
+body[data-portal-theme='dark'] :is(.luxor-gold-raised, .portal-gold-btn) svg,
+body[data-portal-theme] :is(.luxor-gold-raised, .portal-gold-btn) svg *,
+body[data-portal-theme='light'] :is(.luxor-gold-raised, .portal-gold-btn) svg *,
+body[data-portal-theme='dark'] :is(.luxor-gold-raised, .portal-gold-btn) svg * {
   color: #ffffff !important;
-  stroke: transparent !important;
+}
+
+body[data-portal-theme] :is(.luxor-gold-raised, .portal-gold-btn) svg:not([fill="none"]),
+body[data-portal-theme='light'] :is(.luxor-gold-raised, .portal-gold-btn) svg:not([fill="none"]),
+body[data-portal-theme] :is(.luxor-gold-raised, .portal-gold-btn) svg:not([fill="none"]) path {
+  fill: #ffffff !important;
+}
+
+body[data-portal-theme] :is(.luxor-gold-raised, .portal-gold-btn) svg[fill="none"],
+body[data-portal-theme='light'] :is(.luxor-gold-raised, .portal-gold-btn) svg[fill="none"],
+body[data-portal-theme] :is(.luxor-gold-raised, .portal-gold-btn) svg[fill="none"] path,
+body[data-portal-theme] :is(.luxor-gold-raised, .portal-gold-btn) svg[fill="none"] line,
+body[data-portal-theme] :is(.luxor-gold-raised, .portal-gold-btn) svg[fill="none"] polyline {
+  stroke: #ffffff !important;
 }
 
 body[data-portal-theme] .luxor-gold-raised:hover:not(:disabled),

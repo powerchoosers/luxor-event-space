@@ -1811,7 +1811,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email'))}
           aria-label="Compose email"
           title="Compose email"
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c] text-white transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] focus-visible:ring-offset-2"
+          className="luxor-gold-raised inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] focus-visible:ring-offset-2"
         >
           <SquarePen size={18} aria-hidden="true" />
         </button>

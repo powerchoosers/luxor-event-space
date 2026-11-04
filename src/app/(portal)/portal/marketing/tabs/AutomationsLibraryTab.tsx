@@ -328,7 +328,7 @@ export function AutomationsLibraryTab() {
               <Compass size={14} /> Elena Architect
             </button>
             {customAuthoringEnabled ? (
-              <Link href="/portal/marketing/custom-workflows/new" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition hover:bg-[#d6b45f] hover:text-white focus-visible:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Create workflow</Link>
+              <Link href="/portal/marketing/custom-workflows/new" className="luxor-gold-raised inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg px-4 text-xs font-bold text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Create workflow</Link>
             ) : (
               <button type="button" disabled title="Draft creation and editing are disabled by the workflow controls." className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-bold text-[color:var(--portal-muted)] opacity-70">Create workflow</button>
             )}
@@ -504,7 +504,7 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
           </div>
           <Link
             href={`/portal/marketing/automations/${entry.id === 'system:payment-reminders' ? 'payment-reminders' : entry.kind === 'system' ? 'tour-notifications' : encodeURIComponent(entry.id)}`}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition hover:bg-[#d6b45f] hover:text-white focus-visible:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+            className="luxor-gold-raised inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-xs font-bold text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
           >
             View details
           </Link>

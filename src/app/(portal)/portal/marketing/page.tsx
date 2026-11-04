@@ -926,6 +926,7 @@ function MarketingPageContent() {
       {!builderCanvasOpen ? (
         <div className="shrink-0 space-y-5 border-b border-[color:var(--portal-border)] pb-5">
           <PortalPageHeader
+            mobileActionsInline
             icon={activeTab === 'overview' ? undefined : header.icon}
             title={activeTab === 'overview' ? 'Marketing' : header.title}
             description={activeTab === 'overview' ? 'Grow your audience, engage your contacts, and fill your event calendar.' : ('description' in header ? header.description : undefined)}

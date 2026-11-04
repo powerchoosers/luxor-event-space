@@ -646,7 +646,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
               <Maximize2 size={15} />
             </button>
           )}
-          <button type="button" onClick={() => void handleSend()} disabled={isSending} aria-label={isSending ? 'Sending email' : 'Send email'} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition-colors hover:bg-[#d4b060] disabled:cursor-wait disabled:opacity-50">
+          <button type="button" onClick={() => void handleSend()} disabled={isSending} aria-label={isSending ? 'Sending email' : 'Send email'} className="luxor-gold-raised inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-xs font-bold text-white disabled:cursor-wait disabled:opacity-50">
             {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} {isSending ? 'Sending…' : 'Send'}
           </button>
           <div className="relative hidden sm:block">
@@ -1319,7 +1319,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
             disabled={purpose === 'inquiry-response' && isSending}
             aria-label={purpose === 'inquiry-response' ? (isSending ? 'Sending email' : 'Send email') : 'Done editing message'}
             title={purpose === 'inquiry-response' ? 'Send email' : 'Done editing'}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)] disabled:cursor-wait disabled:opacity-60"
+            className="luxor-gold-raised inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)] disabled:cursor-wait disabled:opacity-60"
           >
             {purpose === 'inquiry-response' ? <Send size={18} strokeWidth={2.5} /> : <Check size={19} strokeWidth={2.5} />}
           </button>
