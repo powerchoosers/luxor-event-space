@@ -94,6 +94,11 @@ type LuxorBookingExpense = {
   const [expenseCategory, setExpenseCategory] = useState('Supplies')
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseDesc, setExpenseDesc] = useState('')
+  const [expenseBookingId, setExpenseBookingId] = useState('')
+  const [expenseStatus, setExpenseStatus] = useState('incurred')
+  const [expenseActionError, setExpenseActionError] = useState<string | null>(null)
+  const [expenseActionBusyId, setExpenseActionBusyId] = useState<string | null>(null)
+  const [showCancelledExpenses, setShowCancelledExpenses] = useState(false)
   const [expenses, setExpenses] = useState<LuxorBookingExpense[]>([])
 
   const fetchFinanceData = async () => {
@@ -178,29 +183,60 @@ type LuxorBookingExpense = {
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!expenseAmount || !expenseDesc) return
+    if (!expenseBookingId || !expenseAmount || !expenseDesc) return
     try {
+      setExpenseActionError(null)
       const res = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          booking_id: expenseBookingId,
           category: expenseCategory,
           amount: Number(expenseAmount),
           description: expenseDesc,
           incurred_on: new Date().toISOString().split('T')[0],
-          status: 'paid'
+          status: expenseStatus,
         })
       })
 
-      if (!res.ok) throw new Error('Failed to save expense.')
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        throw new Error(typeof payload.error === 'string' ? payload.error : 'Failed to save expense.')
+      }
       const newExp = await res.json()
       setExpenses((prev) => [newExp, ...prev])
       setExpenseDesc('')
       setExpenseAmount('')
       setIsAddingExpense(false)
+      setExpenseStatus('incurred')
     } catch (err) {
       console.error(err)
-      alert('Error saving expense: ' + (err instanceof Error ? err.message : 'Unknown error'))
+      setExpenseActionError(err instanceof Error ? err.message : 'Failed to save expense.')
+    }
+  }
+
+  const handleRemoveExpense = async (expense: LuxorBookingExpense) => {
+    const description = expense.description || 'this expense'
+    const amount = Number(expense.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    if (!window.confirm(`Remove “${description}” ($${amount}) from the expense totals? It will be marked cancelled and remain in the ledger history.`)) return
+    try {
+      setExpenseActionError(null)
+      setExpenseActionBusyId(expense.id)
+      const response = await fetch('/api/expenses', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: expense.id, status: 'cancelled' }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(typeof payload.error === 'string' ? payload.error : 'Failed to remove expense.')
+      }
+      const updated = await response.json() as LuxorBookingExpense
+      setExpenses((previous) => previous.map((item) => item.id === updated.id ? updated : item))
+    } catch (err) {
+      setExpenseActionError(err instanceof Error ? err.message : 'Failed to remove expense.')
+    } finally {
+      setExpenseActionBusyId(null)
     }
   }
 
@@ -214,13 +250,17 @@ type LuxorBookingExpense = {
   }), [invoices, bookings, expenses, verifiedTestInquiryIds, verifiedTestBookingIds])
   const { invoices: businessInvoices, expenses: businessExpenses } = businessRows
   const recordedBusinessExpenses = useMemo(() => getLuxorRecordedFinanceExpenses(businessExpenses), [businessExpenses])
+  const paidBusinessExpenses = useMemo(() => businessExpenses.filter((expense) => expense.status === 'paid'), [businessExpenses])
+  const incurredUnpaidBusinessExpenses = useMemo(() => businessExpenses.filter((expense) => expense.status === 'incurred'), [businessExpenses])
+  const cancelledExpenseCount = businessExpenses.filter((expense) => expense.status === 'cancelled').length
+  const visibleExpenses = businessExpenses.filter((expense) => showCancelledExpenses || expense.status !== 'cancelled')
 
   const financeSummary = useMemo(() => getLuxorInvoiceFinancialSummary(invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, installments, new Date(), businessRows.testInvoiceIds, refunds), [invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, installments, refunds])
   const netRevenue = financeSummary.eventPaymentsReceived
   const outstandingAR = financeSummary.outstandingEventReceivable
   const overdueAR = financeSummary.overdueEventReceivable
   const totalExpenses = useMemo(() => recordedBusinessExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0), [recordedBusinessExpenses])
-  const monthlyProfit = useMemo(() => netRevenue - totalExpenses, [netRevenue, totalExpenses])
+  const eventPaymentsAfterCosts = useMemo(() => netRevenue - totalExpenses, [netRevenue, totalExpenses])
 
   // Payments extraction
   const allPayments = payments.filter((payment) => payment.status === 'paid' || payment.status === 'refunded')
@@ -352,8 +392,9 @@ type LuxorBookingExpense = {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 mt-4 font-bold tabular-nums">
-                    <ArrowDownRight size={16} /> <span>-{recordedBusinessExpenses.length} payments out</span>
+                    <ArrowDownRight size={16} /> <span>{paidBusinessExpenses.length} paid</span>
                   </div>
+                  <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{incurredUnpaidBusinessExpenses.length} incurred unpaid · planned costs excluded</p>
                 </MagicCard>
               </PortalStaggerCard>
 
@@ -362,8 +403,8 @@ type LuxorBookingExpense = {
                   <BorderBeam size={95} duration={10} borderWidth={1.2} />
                   <div className="min-w-0 flex-1 pr-2 flex flex-col justify-between h-full">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Recorded Income After Costs</p>
-                      <p className="text-3xl font-extrabold text-[#a37d2c] dark:text-[#f1d27a] mt-2 tabular-nums tracking-tight">${monthlyProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event Payments After Costs</p>
+                      <p className="text-3xl font-extrabold text-[#a37d2c] dark:text-[#f1d27a] mt-2 tabular-nums tracking-tight">${eventPaymentsAfterCosts.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-[#a37d2c] dark:text-[#caa24c] mt-4 font-bold tabular-nums">
                         <span>Recorded expenses compared with event payments</span>
@@ -371,7 +412,7 @@ type LuxorBookingExpense = {
                   </div>
                   <div className="ml-auto shrink-0">
                     <AnimatedCircularProgressBar
-                      value={netRevenue > 0 ? Math.max(0, (monthlyProfit / netRevenue) * 100) : 0}
+                      value={netRevenue > 0 ? Math.max(0, (eventPaymentsAfterCosts / netRevenue) * 100) : 0}
                       size={58}
                       strokeWidth={5}
                       gaugePrimaryColor="#caa24c"
@@ -591,19 +632,39 @@ type LuxorBookingExpense = {
           <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Operations Expense Ledger</h3>
-              <button
-                type="button"
-                onClick={() => setIsAddingExpense(!isAddingExpense)}
-                className="flex items-center gap-2 bg-[#caa24c]/15 border border-[#caa24c]/30 hover:bg-[#caa24c]/25 text-[#a37d2c] dark:text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
-              >
-                <Plus size={14} /> Log Operational Cost
-              </button>
+              <div className="flex items-center gap-3">
+                {cancelledExpenseCount > 0 && <button type="button" onClick={() => setShowCancelledExpenses((show) => !show)} className="text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">{showCancelledExpenses ? 'Hide' : 'Show'} removed ({cancelledExpenseCount})</button>}
+                <button
+                  type="button"
+                  onClick={() => { setExpenseActionError(null); setIsAddingExpense(!isAddingExpense) }}
+                  className="flex items-center gap-2 bg-[#caa24c]/15 border border-[#caa24c]/30 hover:bg-[#caa24c]/25 text-[#a37d2c] dark:text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+                >
+                  <Plus size={14} /> Log Operational Cost
+                </button>
+              </div>
             </div>
+
+            {expenseActionError && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs text-rose-700 dark:text-rose-300">{expenseActionError}</p>}
 
             {isAddingExpense && (
               <form onSubmit={handleAddExpense} className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4 max-w-md">
                 <h4 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Log Operational Expense</h4>
                 <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Booking</label>
+                    <PortalSelect
+                      value={expenseBookingId}
+                      onChange={setExpenseBookingId}
+                      options={businessRows.bookings.map((booking) => ({
+                        value: booking.id,
+                        label: `${booking.client_name} - ${booking.event_date || 'Date not set'} - ${booking.event_type || 'Event'}`,
+                      }))}
+                      placeholder={businessRows.bookings.length ? 'Select booking...' : 'No bookings available'}
+                      disabled={!businessRows.bookings.length}
+                      aria-label="Expense booking"
+                    />
+                    {!businessRows.bookings.length && <p className="text-[10px] text-[color:var(--portal-muted)]">This ledger requires each expense to be linked to a booking.</p>}
+                  </div>
                   <div className="space-y-1">
                     <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Category</label>
                     <PortalSelect
@@ -616,6 +677,19 @@ type LuxorBookingExpense = {
                         { value: 'Supplies', label: 'Cleaning & Hospitality Supplies' },
                         { value: 'Marketing', label: 'Marketing & Ad Spend' }
                       ]}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Expense status</label>
+                    <PortalSelect
+                      value={expenseStatus}
+                      onChange={setExpenseStatus}
+                      options={[
+                        { value: 'planned', label: 'Planned - not incurred' },
+                        { value: 'incurred', label: 'Incurred - unpaid' },
+                        { value: 'paid', label: 'Paid' },
+                      ]}
+                      aria-label="Expense status"
                     />
                   </div>
                   <div className="space-y-1">
@@ -643,25 +717,27 @@ type LuxorBookingExpense = {
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
                   <button type="button" onClick={() => setIsAddingExpense(false)} className="px-3 py-2 border border-transparent text-xs font-bold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] cursor-pointer">Cancel</button>
-                  <button type="submit" className="px-4 py-2 bg-[#caa24c] hover:bg-[#b58d3b] text-white text-xs font-bold uppercase tracking-wider rounded-lg cursor-pointer transition-all">Save Cost</button>
+                  <button type="submit" disabled={!expenseBookingId} className="px-4 py-2 bg-[#caa24c] hover:bg-[#b58d3b] text-white text-xs font-bold uppercase tracking-wider rounded-lg cursor-pointer transition-all disabled:cursor-not-allowed disabled:opacity-50">Save Cost</button>
                 </div>
               </form>
             )}
 
             <PortalTableCard>
               <div className="overflow-x-auto">
-                <PortalStickyTable minWidth="800px">
+                <PortalStickyTable minWidth="980px">
                   <PortalStickyThead>
                     <tr className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em] border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/80">
                       <th className="px-8 py-5">Date</th>
                       <th className="px-6 py-5">Description</th>
                       <th className="px-6 py-5">Category</th>
+                      <th className="px-6 py-5">Status</th>
                       <th className="px-8 py-5 text-right">Debit (USD)</th>
+                      <th className="px-6 py-5 text-right">Actions</th>
                     </tr>
                   </PortalStickyThead>
                   <tbody className="divide-y divide-[color:var(--portal-border)]/50">
-                    {expenses.map((exp) => (
-                      <tr key={exp.id} className="hover:bg-[color:var(--portal-soft)]/50 transition-colors">
+                    {visibleExpenses.map((exp) => (
+                      <tr key={exp.id} className={`hover:bg-[color:var(--portal-soft)]/50 transition-colors ${exp.status === 'cancelled' ? 'opacity-60' : ''}`}>
                         <td className="px-8 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">
                           {exp.incurred_on ? new Date(exp.incurred_on).toLocaleDateString() : 'N/A'}
                         </td>
@@ -669,11 +745,16 @@ type LuxorBookingExpense = {
                           {exp.description || 'General Operational Expense'}
                         </td>
                         <td className="px-6 py-5 font-bold uppercase tracking-wider text-[10px] text-[#a37d2c] dark:text-[#caa24c]">{exp.category}</td>
+                        <td className="px-6 py-5 text-xs capitalize text-[color:var(--portal-muted)]">{exp.status === 'cancelled' ? 'Removed' : exp.status === 'incurred' ? 'Incurred - unpaid' : exp.status === 'paid' ? 'Paid' : 'Planned'}</td>
                         <td className="px-8 py-5 text-right tabular-nums font-bold text-rose-600 dark:text-rose-400">
-                          -${Number(exp.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {exp.status === 'cancelled' ? '' : '-'}${Number(exp.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-6 py-5 text-right">
+                          {exp.status !== 'cancelled' && <button type="button" onClick={() => void handleRemoveExpense(exp)} disabled={expenseActionBusyId === exp.id} aria-label={`Remove ${exp.description || 'expense'}`} className="text-xs font-semibold text-[color:var(--portal-muted)] underline decoration-[color:var(--portal-border)] underline-offset-4 hover:text-rose-700 dark:hover:text-rose-300 disabled:opacity-50">{expenseActionBusyId === exp.id ? 'Removing...' : 'Remove'}</button>}
                         </td>
                       </tr>
                     ))}
+                    {visibleExpenses.length === 0 && <tr><td colSpan={6} className="px-6 py-10 text-center text-xs text-[color:var(--portal-muted)]">No expenses are recorded in this view.</td></tr>}
                   </tbody>
                 </PortalStickyTable>
               </div>

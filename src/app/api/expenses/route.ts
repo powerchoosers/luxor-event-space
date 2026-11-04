@@ -63,27 +63,35 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { booking_id, category, description, vendor_name, amount, incurred_on, status, notes } = body
-
-    if (booking_id) {
-      const [booking] = await supabaseRest<Array<{ inquiry_id: string | null }>>(`luxor_bookings?select=inquiry_id&id=eq.${encodeURIComponent(String(booking_id))}&limit=1`)
-      if (booking?.inquiry_id) await assertLuxorProductionSideEffectsAllowed(booking.inquiry_id)
+    const bookingId = typeof booking_id === 'string' ? booking_id.trim() : ''
+    const cleanCategory = typeof category === 'string' ? category.trim() : ''
+    const numericAmount = Number(amount)
+    const expenseStatus = status ?? 'incurred'
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(bookingId)) {
+      return NextResponse.json({ error: 'Choose a valid booking for this expense.' }, { status: 400 })
+    }
+    if (!cleanCategory || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return NextResponse.json({ error: 'Category and a positive amount are required.' }, { status: 400 })
+    }
+    if (!['planned', 'incurred', 'paid'].includes(expenseStatus)) {
+      return NextResponse.json({ error: 'Choose planned, incurred, or paid status.' }, { status: 400 })
     }
 
-    if (!category || !amount) {
-      return NextResponse.json({ error: 'Category and Amount are required.' }, { status: 400 })
-    }
+    const [booking] = await supabaseRestStrict<Array<{ inquiry_id: string | null }>>(`luxor_bookings?select=inquiry_id&id=eq.${encodeURIComponent(bookingId)}&limit=1`)
+    if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+    if (booking.inquiry_id) await assertLuxorProductionSideEffectsAllowed(booking.inquiry_id)
 
     const [created] = await supabaseRest<LuxorBookingExpense[]>('luxor_booking_expenses?select=*', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({
-        booking_id: booking_id || null,
-        category,
+        booking_id: bookingId,
+        category: cleanCategory,
         description: description || null,
         vendor_name: vendor_name || null,
-        amount: Number(amount),
+        amount: numericAmount,
         incurred_on: incurred_on || new Date().toISOString().split('T')[0],
-        status: status || 'paid',
+        status: expenseStatus,
         notes: notes || null,
         metadata: {},
       }),
@@ -92,6 +100,44 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(created, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to save expense.'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await getLuxorPortalSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const id = typeof body.id === 'string' ? body.id.trim() : ''
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+      || body.status !== 'cancelled') {
+      return NextResponse.json({ error: 'A valid expense and cancelled status are required.' }, { status: 400 })
+    }
+
+    const [current] = await supabaseRestStrict<LuxorBookingExpense[]>(`luxor_booking_expenses?select=*&id=eq.${encodeURIComponent(id)}&limit=1`)
+    if (!current) return NextResponse.json({ error: 'Expense not found.' }, { status: 404 })
+    if (current.status === 'cancelled') return NextResponse.json(current)
+    if (current.booking_id) {
+      const [booking] = await supabaseRestStrict<Array<{ inquiry_id: string | null }>>(`luxor_bookings?select=inquiry_id&id=eq.${encodeURIComponent(current.booking_id)}&limit=1`)
+      if (booking?.inquiry_id) await assertLuxorProductionSideEffectsAllowed(booking.inquiry_id)
+    }
+
+    const updated = await supabaseRestStrict<LuxorBookingExpense[]>(
+      `luxor_booking_expenses?id=eq.${encodeURIComponent(id)}&status=eq.${encodeURIComponent(current.status)}&select=*`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ status: 'cancelled' }),
+      },
+    )
+    if (updated.length !== 1) return NextResponse.json({ error: 'Expense changed while it was being removed. Refresh and try again.' }, { status: 409 })
+    return NextResponse.json(updated[0])
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to remove expense.'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

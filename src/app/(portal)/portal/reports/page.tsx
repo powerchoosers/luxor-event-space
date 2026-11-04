@@ -105,8 +105,8 @@ export default function ReportsPage() {
       ['Event payments recorded', String(metrics.paidRevenue)],
       ['Refundable security deposits held', String(metrics.securityDepositsHeld)],
       ['Unallocated payments requiring review', String(metrics.unallocatedPayments)],
-      ['Recorded expenses', String(metrics.recordedExpenses)],
-      ['Net recorded income from known paid-status rows', String(metrics.netIncome)],
+      ['Recorded expenses (incurred and paid)', String(metrics.recordedExpenses)],
+      ['Event payments after recorded costs', String(metrics.netIncome)],
       ['Accepted event balance outstanding', String(metrics.outstandingRevenue)],
     ]
     const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
@@ -161,9 +161,9 @@ export default function ReportsPage() {
           </PortalStaggerCard>
           <PortalStaggerCard>
             <StatsPanel
-              label="Recorded Income After Costs"
+              label="Event Payments After Costs"
               value={currency(metrics.netIncome)}
-              detail={`${currency(metrics.paidRevenue)} event payments recorded less ${currency(metrics.recordedExpenses)} expenses`}
+              detail={`${currency(metrics.paidRevenue)} event payments less ${currency(metrics.recordedExpenses)} incurred or paid costs`}
               loading={loading}
               highlight
               progress={metrics.paidRevenue > 0 ? Math.max(0, Math.min(100, (metrics.netIncome / metrics.paidRevenue) * 100)) : 0}
@@ -238,7 +238,7 @@ export default function ReportsPage() {
           </p>
         )}
 
-        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use accepted proposals for event obligations, paid-status receipts, and separately linked Stripe refunds. Only confirmed refunds reduce known cash. Pending or uncertain refunds remain excluded until reconciled. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
+        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use accepted proposals for event obligations, paid-status receipts, and separately linked Stripe refunds. Expense totals include incurred and paid costs; planned and cancelled costs are excluded. Only confirmed refunds reduce known cash. Pending or uncertain refunds remain excluded until reconciled. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
       </div>}
     </PortalPageFrame>
   )

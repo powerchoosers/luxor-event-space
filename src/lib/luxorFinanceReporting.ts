@@ -303,7 +303,7 @@ export function getLuxorBusinessInquiries(inquiries: LuxorInquiry[], testInquiry
   return inquiries.filter((inquiry) => !excludedIds.has(inquiry.id.toLowerCase()))
 }
 
-/** Shared revenue-report expense scope; cancelled rows stay visible in the ledger but do not count as costs. */
+/** Incurred and paid costs count as expenses; planned and cancelled rows do not. */
 export function getLuxorRecordedFinanceExpenses<TExpense extends LuxorFinanceExpense>(expenses: TExpense[]) {
-  return expenses.filter((expense) => expense.status !== 'cancelled')
+  return expenses.filter((expense) => expense.status === 'incurred' || expense.status === 'paid')
 }
