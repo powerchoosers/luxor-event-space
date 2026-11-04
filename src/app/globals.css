@@ -597,8 +597,9 @@ body[data-portal-theme] .portal-gold-btn:focus-visible {
 /* Tablet & Mobile Portal Scrollbars: native disappearing lightweight scrollbar without any persistent strip or track */
 @media (max-width: 1023px), (hover: none), (pointer: coarse) {
   body[data-portal-theme] * {
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none !important;
+    scrollbar-color: auto !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
   body[data-portal-theme] *::-webkit-scrollbar,
