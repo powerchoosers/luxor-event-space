@@ -40,7 +40,7 @@ import Image from 'next/image'
 import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
 import { PortalCloseButton, PortalContactAvatar } from '@/components/portal/PortalUI'
 import { PortalViewportDiagnostics } from '@/components/portal/PortalViewportDiagnostics'
-import { PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
+import { MobileActiveCallStrip, PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
 import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
 import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads, saveRecentLead, clearRecentLeads, type RecentLeadItem } from '@/lib/luxorRecentLeads'
@@ -794,7 +794,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
   return (
     <body data-portal-theme={portalTheme} className="portal-shell h-[100dvh] overflow-hidden bg-[color:var(--portal-bg)] font-sans text-[color:var(--portal-muted)] selection:bg-[#caa24c]/30">
-      <PortalVoiceProvider>
+      <PortalVoiceProvider canUsePhone={canAccess('calls')} canViewLeadDetails={canAccess('leads')} canText={canAccess('messages')} canEmail={canAccess('emails')}>
       <aside
         onWheelCapture={handOffWheelToPage}
         onClick={handleSidebarEmptyClick}
@@ -1377,6 +1377,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               onRefresh={refreshNotifications}
             />
             
+        <MobileActiveCallStrip />
           </div>
         </header>
 

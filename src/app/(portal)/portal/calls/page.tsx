@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   CheckCheck,
+  ChevronDown,
   ChevronRight,
   Circle,
   Clock3,
@@ -11,9 +12,13 @@ import {
   FileText,
   Grid,
   Loader2,
+  Mail,
   MessageSquare,
+  Mic,
+  MicOff,
   Phone,
   PhoneCall,
+  PhoneOff,
   PhoneIncoming,
   PhoneMissed,
   PhoneOutgoing,
@@ -27,7 +32,8 @@ import {
   X,
 } from 'lucide-react'
 import Link from 'next/link'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import {
   PortalContactAvatar,
   PortalSelect,
@@ -83,7 +89,9 @@ const KEYPAD_KEYS: Array<{ digit: string; letters?: string }> = [
 
 export default function CallsPage() {
   const { notify } = useToast()
-  const { openPanel, phoneState, startCall, enablePhone } = usePortalVoice()
+  const { openPanel, phoneState, startCall, enablePhone, activeCall, isStartingCall, startingCallTarget } = usePortalVoice()
+  const reduceMotion = useReducedMotion()
+  const showCall = Boolean(activeCall) || isStartingCall
 
   const [calls, setCalls] = useState<LuxorCall[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -412,11 +420,11 @@ export default function CallsPage() {
            ============================================================ */}
         <section
           className={`flex flex-col min-h-0 overflow-hidden md:border-r md:border-[color:var(--portal-border)] ${
-            mobileDetailOpen ? 'hidden md:flex' : 'flex'
+            mobileDetailOpen && !showCall ? 'hidden md:flex' : 'flex'
           }`}
         >
           {/* Top Navigation Bar (iOS style) */}
-          {activeTab !== 'keypad' && (
+          {!showCall && activeTab !== 'keypad' && (
             <div className="shrink-0 px-4 pt-3.5 pb-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-md space-y-2.5">
               {/* Top Utility Row: Edit | Segmented Control | Refresh */}
               <div className="flex items-center justify-between gap-2 min-h-8">
@@ -524,8 +532,17 @@ export default function CallsPage() {
           )}
 
           {/* Middle Body: Either Keypad OR Scrollable Call/Voicemail List */}
-          {activeTab === 'keypad' ? (
-            <div className="flex-1 min-h-0 flex flex-col justify-between px-6 py-5 overflow-y-auto portal-scrollbar">
+          <AnimatePresence mode="wait" initial={false}>
+          {activeCall ? (
+            <motion.div key="live-call" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }} transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }} className="flex min-h-0 flex-1 flex-col overflow-y-auto portal-scrollbar">
+              <LivePhoneCall call={activeCall} />
+            </motion.div>
+          ) : isStartingCall ? (
+            <motion.div key="starting-call" initial={reduceMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }} transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }} className="flex min-h-0 flex-1 flex-col overflow-y-auto portal-scrollbar">
+              <StartingPhoneCall target={startingCallTarget} />
+            </motion.div>
+          ) : activeTab === 'keypad' ? (
+            <motion.div key="keypad" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -8 }} transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }} className="flex-1 min-h-0 flex flex-col justify-between px-6 py-5 overflow-y-auto portal-scrollbar">
               {/* Softphone status pill */}
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--portal-muted)]">
@@ -633,9 +650,9 @@ export default function CallsPage() {
                   )}
                 </div>
               </div>
-            </div>
+            </motion.div>
           ) : (
-            <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]/70">
+            <motion.div key="call-list" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reduceMotion ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.15 }} className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]/70">
               {loading ? (
                 <div className="p-4 space-y-3.5">
                   {Array.from({ length: 7 }).map((_, i) => (
@@ -846,11 +863,12 @@ export default function CallsPage() {
                   )
                 })
               )}
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
 
           {/* Bottom Tab Bar (Recents | Voicemail | Keypad) */}
-          <nav
+          {!showCall && <nav
             aria-label="Phone navigation"
             className="shrink-0 grid grid-cols-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-xl px-2 py-1.5"
           >
@@ -906,7 +924,7 @@ export default function CallsPage() {
               <Grid size={19} />
               <span className="text-[10px] font-semibold">Keypad</span>
             </button>
-          </nav>
+          </nav>}
         </section>
 
         {/* ============================================================
@@ -914,7 +932,7 @@ export default function CallsPage() {
            ============================================================ */}
         <section
           className={`flex-1 min-h-0 overflow-y-auto portal-scrollbar bg-[color:var(--portal-bg)]/35 ${
-            mobileDetailOpen ? 'flex flex-col' : 'hidden md:flex md:flex-col'
+            mobileDetailOpen && !showCall ? 'flex flex-col' : 'hidden md:flex md:flex-col'
           }`}
         >
           {selectedCall ? (
@@ -1361,6 +1379,177 @@ export default function CallsPage() {
       />
     </div>
   )
+}
+
+function CallAvatar({ name, connecting = false }: { name: string; connecting?: boolean }) {
+  const reduceMotion = useReducedMotion()
+  return (
+    <div className="relative inline-flex items-center justify-center p-1.5">
+      <motion.span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-full border border-[#caa24c]/50" initial={false} animate={connecting && !reduceMotion ? { scale: [1, 1.07, 1], opacity: [0.45, 0.9, 0.45] } : { scale: 1, opacity: 0.65 }} transition={connecting && !reduceMotion ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' } : { duration: 0 }} />
+      <PortalContactAvatar name={name} size="xl" />
+    </div>
+  )
+}
+
+function StartingPhoneCall({ target }: { target: ReturnType<typeof usePortalVoice>['startingCallTarget'] }) {
+  const { minimizeCall } = usePortalVoice()
+  const number = target?.phoneNumber ? formatPhoneDisplay(target.phoneNumber) : ''
+  const name = target?.contactName?.trim()
+  return (
+    <div className="flex min-h-full flex-1 flex-col items-center px-6 py-6 text-center">
+      <div className="flex w-full items-center justify-between gap-2 text-left text-xs font-medium text-[color:var(--portal-muted)]"><p role="status" aria-live="polite"><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-[#caa24c]" />Preparing call</p><button type="button" onClick={minimizeCall} aria-label="Collapse call view" className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 md:hidden"><ChevronDown size={19} /></button></div>
+      <div className="flex w-full flex-1 flex-col items-center justify-center py-6">
+        <CallAvatar name={name || number || 'Call'} connecting />
+        <p className="mt-5 font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)]">{name || number || 'Starting call'}</p>
+        {name && number && <p className="mt-1 text-sm tabular-nums text-[color:var(--portal-muted)]">{number}</p>}
+        <p className="mt-3 text-sm text-[color:var(--portal-muted)]">Connecting your call…</p>
+      </div>
+      <div className="h-[72px] shrink-0" aria-hidden="true" />
+    </div>
+  )
+}
+
+function LivePhoneCall({ call }: { call: NonNullable<ReturnType<typeof usePortalVoice>['activeCall']> }) {
+  const { isMuted, toggleMute, hangUp, sendDigit, dismissBridgeNotice, minimizeCall, canViewLeadDetails } = usePortalVoice()
+  const [showKeypad, setShowKeypad] = useState(false)
+  const [showLeadDetails, setShowLeadDetails] = useState(false)
+  const leadDetailsId = useId()
+  const reduceMotion = useReducedMotion()
+  const [now, setNow] = useState(() => Date.now())
+  const isBrowserCall = call.mode === 'browser'
+  const incomingRinging = call.direction === 'inbound' && call.phase === 'ringing'
+
+  useEffect(() => {
+    if (!isBrowserCall || call.phase !== 'active') return
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [call.phase, isBrowserCall])
+
+  const status = !isBrowserCall
+    ? call.bridgeStatusUnavailable ? 'Call status unavailable' : call.phase === 'active' ? 'Connected' : call.phase === 'ringing' ? 'Ringing…' : call.bridgeStage === 'calling_phone' ? 'Calling your phone…' : call.bridgeStage === 'connecting_client' ? 'Connecting client…' : 'Starting call…'
+    : incomingRinging
+      ? 'Incoming call'
+      : call.phase === 'active'
+        ? 'Connected to Luxor line'
+        : call.phase === 'ringing' ? 'Ringing…' : 'Calling…'
+
+  return (
+    <div className="flex min-h-full flex-1 flex-col items-center px-6 py-6 text-center">
+      <div className="flex w-full items-center justify-between gap-2 text-left text-xs font-medium text-[color:var(--portal-muted)]">
+        <div className="flex min-w-0 items-center gap-2"><p role="status" aria-live="polite"><span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${call.phase === 'active' && !call.bridgeStatusUnavailable ? 'bg-emerald-500' : 'bg-[#caa24c]'}`} />{status}</p>
+        {isBrowserCall && call.phase === 'active' && <span role="timer" aria-label="Call duration" aria-live="off">{formatDuration(Math.max(0, Math.floor((now - call.startedAt) / 1000)))}</span>}</div>
+        <button type="button" onClick={minimizeCall} aria-label="Collapse call view" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 md:hidden"><ChevronDown size={19} /></button>
+      </div>
+      <div className="flex w-full flex-1 flex-col items-center justify-center py-6">
+        <CallAvatar name={call.contactName} />
+        {call.inquiryId && canViewLeadDetails ? (
+          <Link href={`/portal/leads/${call.inquiryId}`} className="mt-5 font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{call.contactName}</Link>
+        ) : <p className="mt-5 font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)]">{call.contactName}</p>}
+        <p className="mt-1 text-sm tabular-nums text-[color:var(--portal-muted)]">{formatPhoneDisplay(call.phoneNumber)}</p>
+        {!isBrowserCall && <p className="mt-3 max-w-64 text-sm leading-5 text-[color:var(--portal-muted)]">{call.bridgeStatusUnavailable ? 'Unable to refresh call status. Check your phone.' : call.bridgeStage === 'calling_phone' ? `Answer ${call.ringToNumber ? formatPhoneDisplay(call.ringToNumber) : 'your phone'} to connect this call.` : call.phase === 'active' ? 'Continue this call on your phone.' : call.phase === 'ringing' ? 'Waiting for the client to answer.' : 'Connecting the client now.'}</p>}
+        {incomingRinging && <p className="mt-3 text-sm text-[color:var(--portal-muted)]">Use the incoming call prompt to answer or decline.</p>}
+
+        {isBrowserCall && call.phase === 'active' && showKeypad && (
+          <div className="mt-5 grid w-full max-w-52 grid-cols-3 gap-2" aria-label="Call keypad">
+            {KEYPAD_KEYS.map(({ digit }) => <button key={digit} type="button" onClick={() => sendDigit(digit)} aria-label={`Send ${digit}`} className="flex h-11 items-center justify-center rounded-lg bg-[color:var(--portal-soft)] text-lg font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">{digit}</button>)}
+          </div>
+        )}
+      </div>
+
+      {isBrowserCall && !incomingRinging ? (
+        <div className="flex items-start justify-center gap-5 pb-4">
+          <button type="button" onClick={toggleMute} aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'} aria-pressed={isMuted} className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${isMuted ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{isMuted ? <MicOff size={20} /> : <Mic size={20} />}</button>
+          {call.phase === 'active' && <button type="button" onClick={() => setShowKeypad(current => !current)} aria-label={showKeypad ? 'Hide call keypad' : 'Show call keypad'} aria-pressed={showKeypad} className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${showKeypad ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}><Grid size={20} /></button>}
+          <button type="button" onClick={hangUp} aria-label="End call" className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white transition-colors hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"><PhoneOff size={21} /></button>
+        </div>
+      ) : !isBrowserCall && call.bridgeStatusUnavailable ? <button type="button" onClick={dismissBridgeNotice} className="mb-4 min-h-11 rounded-lg bg-[color:var(--portal-soft)] px-6 text-sm font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">Dismiss status</button> : null}
+      {call.inquiryId && canViewLeadDetails && <div className="w-full pb-2 text-left">
+        <button type="button" aria-expanded={showLeadDetails} aria-controls={leadDetailsId} onClick={() => setShowLeadDetails(current => !current)} className="flex min-h-11 w-full items-center justify-between rounded-xl bg-[color:var(--portal-soft)] px-4 text-sm font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">Lead details <ChevronDown size={16} className={`text-[color:var(--portal-muted)] transition-transform motion-reduce:transition-none ${showLeadDetails ? 'rotate-180' : ''}`} /></button>
+        <AnimatePresence initial={false}>{showLeadDetails && <motion.div id={leadDetailsId} key={call.inquiryId} initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={reduceMotion ? { opacity: 1 } : { height: 0, opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.22, ease: 'easeOut' }} className="overflow-hidden"><CallLeadDetails inquiryId={call.inquiryId} /></motion.div>}</AnimatePresence>
+      </div>}
+    </div>
+  )
+}
+
+type CallLeadContext = {
+  id: string
+  fullName: string
+  phone: string | null
+  email: string | null
+  eventType: string | null
+  targetDate: string | null
+  guestCount: number | null
+  packageInterest: string | null
+  status: string | null
+  pipelineStage: string | null
+  preferredTourDate: string | null
+  preferredTourTime: string | null
+  message: string | null
+}
+
+function CallLeadDetails({ inquiryId }: { inquiryId: string }) {
+  const { canText, canEmail } = usePortalVoice()
+  const [lead, setLead] = useState<CallLeadContext | null>(null)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const response = await fetch(`/api/twilio/calls/lead-context?id=${encodeURIComponent(inquiryId)}`, { cache: 'no-store', signal: controller.signal })
+        if (!response.ok) throw new Error('Lead details are unavailable right now.')
+        const result = await response.json() as CallLeadContext
+        if (result.id !== inquiryId) throw new Error('Lead details are unavailable right now.')
+        if (!controller.signal.aborted) setLead(result)
+      } catch (cause) {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Lead details are unavailable right now.')
+      }
+    })()
+    return () => controller.abort()
+  }, [inquiryId, retry])
+
+  if (error) return <div className="px-1 py-3 text-xs text-[color:var(--portal-muted)]"><span role="status">{error}</span> <button type="button" onClick={() => { setError(''); setRetry(current => current + 1) }} className="font-semibold text-[#a8792f] underline dark:text-[#f1d27a]">Try again</button> <Link className="ml-2 font-semibold text-[#a8792f] underline dark:text-[#f1d27a]" href={`/portal/leads/${encodeURIComponent(inquiryId)}`}>Open lead</Link></div>
+  if (!lead) return <p className="px-1 py-4 text-xs text-[color:var(--portal-muted)]" role="status">Loading lead details…</p>
+
+  const rows = [
+    { label: 'Event', value: lead.eventType },
+    { label: 'Event date', value: formatCallLeadDate(lead.targetDate) },
+    { label: 'Guests', value: lead.guestCount != null ? String(lead.guestCount) : null },
+    { label: 'Stage', value: (lead.pipelineStage || lead.status || '').replace(/_/g, ' ') || null },
+    { label: 'Package interest', value: lead.packageInterest },
+    { label: 'Preferred tour', value: [formatCallLeadDate(lead.preferredTourDate), formatCallLeadTime(lead.preferredTourTime)].filter(Boolean).join(' · ') || null },
+  ].filter((row) => row.value)
+
+  return (
+    <div className="px-1 pb-2 pt-3 text-left">
+      {rows.length ? <dl className="space-y-2.5">{rows.map(row => <div key={row.label} className="flex items-start justify-between gap-4 text-xs"><dt className="text-[color:var(--portal-muted)]">{row.label}</dt><dd className="min-w-0 text-right font-semibold text-[color:var(--portal-text)] first-letter:uppercase">{row.value}</dd></div>)}</dl> : <p className="text-xs text-[color:var(--portal-muted)]">No event details captured yet.</p>}
+      {lead.message && <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3"><p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Inquiry</p><p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-[color:var(--portal-text)]">{lead.message}</p></div>}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {canText && lead.phone && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-open-text', { detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.fullName } }))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"><MessageSquare size={14} /> Text</button>}
+        {canEmail && lead.email && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: { id: lead.id, full_name: lead.fullName, email: lead.email, event_type: lead.eventType } } }))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"><Mail size={14} /> Email</button>}
+        <Link href={`/portal/leads/${encodeURIComponent(lead.id)}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#f1d27a]">Open lead <ChevronRight size={14} /></Link>
+      </div>
+    </div>
+  )
+}
+
+function formatCallLeadDate(value: string | null) {
+  if (!value) return null
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!match) return value
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function formatCallLeadTime(value: string | null) {
+  if (!value) return null
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim())
+  if (!match) return value
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  if (hour > 23 || minute > 59) return value
+  return `${hour % 12 || 12}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}`
 }
 
 function getNamedContact(name: string | null | undefined): string | null {
