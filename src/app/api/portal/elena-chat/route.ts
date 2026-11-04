@@ -1441,13 +1441,10 @@ async function buildDeepPageContext(activePath: string): Promise<string> {
     }
   } else if (activePath.startsWith('/portal/finances') || activePath.startsWith('/portal/invoices')) {
     try {
-      const invoices = await supabaseRest<Array<{ status: string; total: number; client_name: string }>>('luxor_invoices?select=status,total,client_name&limit=100')
-      const unpaid = (invoices || []).filter(i => i.status !== 'paid')
-      const unpaidSum = unpaid.reduce((s, i) => s + Number(i.total || 0), 0)
       contextParts.push(`ACTIVE FINANCES SCREEN CONTEXT:
-- Total Invoices: ${invoices.length}
-- Unpaid Total: $${unpaidSum.toLocaleString()} across ${unpaid.length} invoices
-- Outstanding Clients: ${unpaid.slice(0, 5).map(i => `${i.client_name} ($${i.total})`).join(', ') || 'None'}`)
+- Use the portal's verified signed, confirmed receivable totals for accounts receivable.
+- Drafts, unsigned proposals, and tentative bookings are not receivables; do not infer amounts due from raw invoice totals or stored invoice status.
+- Keep recorded paid cash separate from contractual obligations, and check paid transactions and saved installment allocations before stating a remaining balance.`)
     } catch (err) {
       console.warn('[Elena Chat] Pre-fetch finance context error:', err)
     }

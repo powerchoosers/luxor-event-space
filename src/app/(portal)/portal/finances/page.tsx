@@ -256,7 +256,7 @@ type LuxorBookingExpense = {
   const cancelledExpenseCount = businessExpenses.filter((expense) => expense.status === 'cancelled').length
   const visibleExpenses = businessExpenses.filter((expense) => showCancelledExpenses || expense.status !== 'cancelled')
 
-  const financeSummary = useMemo(() => getLuxorInvoiceFinancialSummary(invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, installments, new Date(), businessRows.testInvoiceIds, refunds), [invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, installments, refunds])
+  const financeSummary = useMemo(() => getLuxorInvoiceFinancialSummary(invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, installments, new Date(), businessRows.testInvoiceIds, refunds, bookings), [invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, installments, refunds, bookings])
   const netRevenue = financeSummary.eventPaymentsReceived
   const outstandingAR = financeSummary.outstandingEventReceivable
   const overdueAR = financeSummary.overdueEventReceivable
@@ -432,7 +432,7 @@ type LuxorBookingExpense = {
                   <div className="space-y-3.5">
                     <div className="space-y-1.5 pb-2.5 border-b border-[color:var(--portal-border)]/60">
                       <div className="flex justify-between text-xs">
-                        <span className="text-[color:var(--portal-muted)] font-medium">Accepted Event Balance Outstanding</span>
+                        <span className="text-[color:var(--portal-muted)] font-medium">Signed, Confirmed Event Balance Outstanding</span>
                         <span className="text-[color:var(--portal-text)] font-bold tabular-nums">${outstandingAR.toLocaleString()}</span>
                       </div>
                       <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">

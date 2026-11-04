@@ -1,7 +1,7 @@
 import { isLuxorTestAvailabilityBooking } from './luxorAvailability'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment, LuxorPaymentRefundView } from './luxorInquiryTypes'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from './luxorTestLeadPolicy'
-import { installmentDisplayState, invoiceEventObligation, refundableSecurityAmount } from './luxorPaymentDashboardModel'
+import { installmentDisplayState, invoiceEventObligation, isLuxorBookingReceivableEligible, refundableSecurityAmount } from './luxorPaymentDashboardModel'
 
 export type LuxorFinanceExpense = {
   booking_id: string | null
@@ -106,15 +106,16 @@ function luxorTestInvoiceLineage(invoices: LuxorInvoice[], inquiryIds: ReadonlyS
 }
 
 /**
- * Derive cash and open event balances from explicit payment rows and accepted
- * proposal obligations. Invoice status and invoice.total never prove cash.
+ * Derive cash and receivables from explicit payment rows and signed, confirmed
+ * event obligations. Invoice status and invoice.total never prove cash.
  * Child invoices describe collection installments under the accepted master;
  * they do not create additional obligations.
  */
-export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], payments: LuxorPayment[], testInquiryIds: ReadonlySet<string> = new Set(), testBookingIds: ReadonlySet<string> = new Set(), installments: LuxorPaymentInstallment[] = [], now = new Date(), excludedTestInvoiceIds: ReadonlySet<string> = new Set(), refunds: LuxorPaymentRefundView[] = []): LuxorInvoiceFinancialSummary {
+export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], payments: LuxorPayment[], testInquiryIds: ReadonlySet<string> = new Set(), testBookingIds: ReadonlySet<string> = new Set(), installments: LuxorPaymentInstallment[] = [], now = new Date(), excludedTestInvoiceIds: ReadonlySet<string> = new Set(), refunds: LuxorPaymentRefundView[] = [], bookings: LuxorBooking[] = []): LuxorInvoiceFinancialSummary {
   const testInquiries = new Set([...testInquiryIds].map((id) => id.toLowerCase()))
   const testBookings = new Set([...testBookingIds].map((id) => id.toLowerCase()))
   const byId = new Map(invoices.map((invoice) => [invoice.id, invoice]))
+  const bookingById = new Map(bookings.map((booking) => [booking.id, booking]))
   const testInvoiceIds = luxorTestInvoiceLineage(invoices, testInquiries, testBookings, excludedTestInvoiceIds)
   const supersededAcceptedIds = new Set(invoices.filter((invoice) =>
     (invoice.invoice_kind ?? 'event') === 'event'
@@ -140,6 +141,10 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     bookingMasterCandidates.set(invoice.booking_id, new Set([...(bookingMasterCandidates.get(invoice.booking_id) || []), invoice.id]))
   }
   const bookingMasterIds = new Map([...bookingMasterCandidates].filter(([, ids]) => ids.size === 1).map(([bookingId, ids]) => [bookingId, [...ids][0]]))
+  const eligibleReceivableInvoices = acceptedInvoices.filter((invoice) => {
+    const booking = invoice.booking_id ? bookingById.get(invoice.booking_id) : undefined
+    return Boolean(invoice.booking_id && bookingMasterIds.get(invoice.booking_id) === invoice.id && isLuxorBookingReceivableEligible(booking))
+  })
   const currentMastersByPredecessor = new Map<string, Set<string>>()
   for (const invoice of acceptedInvoices) {
     let predecessorId = invoice.supersedes_invoice_id || null
@@ -251,25 +256,29 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     eventReceiptsByMaster.set(master.id, money((eventReceiptsByMaster.get(master.id) || 0) + eventPortion))
   }
 
-  const acceptedAmounts = acceptedInvoices.map((invoice) => {
+  const acceptedAmounts = eligibleReceivableInvoices.map((invoice) => {
     const eventObligation = invoiceEventObligation(invoice)
     const received = eventReceiptsByMaster.get(invoice.id) || 0
     return { invoice, eventObligation, received, outstanding: money(Math.max(0, eventObligation - received)) }
   })
   const outstandingEventReceivable = money(acceptedAmounts.reduce((sum, row) => sum + Math.max(0, row.eventObligation - row.received), 0))
   const overdueByMaster = new Map<string, number>()
-  const overdueEventReceivable = money(installments.reduce((sum, installment) => {
-    if (installment.status === 'void' || installment.metadata?.payment_bucket === 'security_deposit') return sum
-    const masterId = bookingMasterIds.get(installment.booking_id)
-    if (!masterId) return sum
+  const receivableBookingMasterIds = new Map<string, string>(eligibleReceivableInvoices.flatMap((invoice) => invoice.booking_id ? [[invoice.booking_id, invoice.id] as [string, string]] : []))
+  const seenInstallments = new Set<string>()
+  for (const installment of installments) {
+    if (seenInstallments.has(installment.id)) continue
+    seenInstallments.add(installment.id)
+    if (installment.status === 'void' || installment.metadata?.payment_bucket === 'security_deposit') continue
+    const masterId = receivableBookingMasterIds.get(installment.booking_id)
+    if (!masterId || (installment.invoice_id && installment.invoice_id !== masterId)) continue
     const state = installmentDisplayState(installment, payments, now)
     const remainder = state.isOverdue ? money(state.amountDue - state.credited) : 0
     if (remainder > 0) overdueByMaster.set(masterId, money((overdueByMaster.get(masterId) || 0) + remainder))
-    return sum + remainder
-  }, 0))
+  }
+  const overdueEventReceivable = money(acceptedAmounts.reduce((sum, row) => sum + Math.min(row.outstanding, overdueByMaster.get(row.invoice.id) || 0), 0))
   const acceptedInvoiceRows = acceptedAmounts.map((row) => ({
     ...row,
-    overdue: overdueByMaster.get(row.invoice.id) || 0,
+    overdue: money(Math.min(row.outstanding, overdueByMaster.get(row.invoice.id) || 0)),
   }))
 
   for (const refund of refunds) {

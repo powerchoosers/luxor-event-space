@@ -215,9 +215,9 @@ export default function ReportsPage() {
           </PortalStaggerCard>
           <PortalStaggerCard>
             <SummaryCard
-              label="Accepted Event Balance Outstanding"
+              label="Signed, Confirmed Event Balance Outstanding"
               value={currency(metrics.outstandingRevenue)}
-              detail="Accepted event obligations less recorded event payments"
+              detail="Signed, confirmed event obligations less recorded event payments"
               progress={metrics.paidRevenue + metrics.outstandingRevenue > 0 ? (metrics.outstandingRevenue / (metrics.paidRevenue + metrics.outstandingRevenue)) * 100 : 0}
               tone="gold"
             />
@@ -238,7 +238,7 @@ export default function ReportsPage() {
           </p>
         )}
 
-        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use accepted proposals for event obligations, paid-status receipts, and separately linked Stripe refunds. Paid expense totals include only costs marked paid; planned, incurred-unpaid, and cancelled costs are excluded. Only confirmed refunds reduce known cash. Pending or uncertain refunds remain excluded until reconciled. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
+        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use signed, confirmed event obligations, paid-status receipts, and separately linked Stripe refunds. Paid expense totals include only costs marked paid; planned, incurred-unpaid, and cancelled costs are excluded. Only confirmed refunds reduce known cash. Pending or uncertain refunds remain excluded until reconciled. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
       </div>}
     </PortalPageFrame>
   )
@@ -252,7 +252,7 @@ function buildMetrics(data: ReportData, testInquiryIds: ReadonlySet<string>, tes
   const businessBookings = financeRows.bookings
   const businessExpenses = financeRows.expenses
   const confirmedBookings = businessBookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed')
-  const finance = getLuxorInvoiceFinancialSummary(data.invoices, data.payments, verifiedTestInquiryIds, verifiedTestBookingIds, data.installments, new Date(), financeRows.testInvoiceIds, data.refunds)
+  const finance = getLuxorInvoiceFinancialSummary(data.invoices, data.payments, verifiedTestInquiryIds, verifiedTestBookingIds, data.installments, new Date(), financeRows.testInvoiceIds, data.refunds, businessBookings)
   const paidRevenue = finance.eventPaymentsReceived
   const outstandingRevenue = finance.outstandingEventReceivable
   const paidExpenses = getLuxorPaidFinanceExpenses(businessExpenses).reduce((sum, expense) => sum + Number(expense.amount || 0), 0)

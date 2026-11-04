@@ -1,5 +1,6 @@
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+import { isLuxorBookingReceivableEligible } from '@/lib/luxorPaymentDashboardModel'
 import { NextResponse } from 'next/server'
 
 type PriorityKind = 'lead' | 'money' | 'contract' | 'event' | 'message' | 'task'
@@ -41,12 +42,19 @@ interface BookingRecord {
   client_name: string | null
   event_type: string | null
   event_date: string | null
+  status: string | null
   contract_status: string | null
+  contract_signed_at: string | null
   final_payment_due_date: string | null
 }
 
 interface InvoiceRecord {
   id: string
+  booking_id: string | null
+  parent_invoice_id: string | null
+  invoice_kind: string | null
+  proposal_accepted_at: string | null
+  offer_status: string | null
   client_name: string | null
   total: number | string | null
   status: string | null
@@ -193,14 +201,20 @@ export async function GET(request: Request) {
 
     const [inquiries, bookings, invoices, vendorBills, tasks, signatures, unreadMessages, recentEmails] = await Promise.all([
       withFallbackTimeout(supabaseRest<InquiryRecord[]>('luxor_inquiries?select=id,full_name,email,event_type,status,pipeline_stage,campaign_key,created_at,updated_at&archived_at=is.null&is_test=is.false&order=created_at.desc&limit=40'), []),
-      withFallbackTimeout(supabaseRest<BookingRecord[]>('luxor_bookings?select=id,client_name,event_type,event_date,contract_status,final_payment_due_date&order=event_date.asc&limit=30'), []),
-      withFallbackTimeout(supabaseRest<InvoiceRecord[]>('luxor_invoices?select=id,client_name,total,status,due_date&status=neq.paid&order=due_date.asc&limit=30'), []),
+      withFallbackTimeout(supabaseRest<BookingRecord[]>('luxor_bookings?select=id,client_name,event_type,event_date,status,contract_status,contract_signed_at,final_payment_due_date&order=event_date.asc&limit=30'), []),
+      withFallbackTimeout(supabaseRest<InvoiceRecord[]>('luxor_invoices?select=id,booking_id,parent_invoice_id,invoice_kind,proposal_accepted_at,offer_status,client_name,total,status,due_date&status=neq.paid&order=due_date.asc&limit=30'), []),
       withFallbackTimeout(supabaseRest<VendorBillRecord[]>('luxor_bills?select=id,provider,service,amount,status,due_date,source_type,extraction_status,extraction_confidence,arithmetic_status&status=neq.paid&order=due_date.asc,created_at.desc&limit=30'), []),
       withFallbackTimeout(supabaseRest<TaskRecord[]>('luxor_tasks?select=id,title,priority,status,due_date&status=neq.completed&order=due_date.asc&limit=30'), []),
       withFallbackTimeout(supabaseRest<SignatureRequestRecord[]>('luxor_signature_requests?select=id,client_name,status,expires_at,updated_at&status=neq.signed&order=updated_at.desc&limit=20'), []),
       withFallbackTimeout(supabaseRest<MessageRecord[]>('luxor_messages?select=id,contact_name,body,created_at&direction=eq.inbound&is_read=eq.false&order=created_at.desc&limit=12'), []),
       withFallbackTimeout(supabaseRest<MailMessageRecord[]>('luxor_mail_messages?select=id,direction,from_address,to_addresses,subject,text_body,occurred_at,read_at&direction=eq.incoming&order=occurred_at.desc&limit=15'), []),
     ])
+
+    const invoiceBookingIds = [...new Set(invoices.map((invoice) => invoice.booking_id).filter((id): id is string => Boolean(id)))]
+    const receivableBookings = invoiceBookingIds.length
+      ? await withFallbackTimeout(supabaseRest<Array<Pick<BookingRecord, 'id' | 'status' | 'contract_status' | 'contract_signed_at'>>>(`luxor_bookings?select=id,status,contract_status,contract_signed_at&id=in.(${invoiceBookingIds.map(encodeURIComponent).join(',')})`), [])
+      : []
+    const receivableBookingById = new Map(receivableBookings.map((booking) => [booking.id, booking]))
 
     const candidates: SmartSuggestion[] = []
 
@@ -262,7 +276,12 @@ export async function GET(request: Request) {
       })
 
     invoices
-      .filter((invoice) => isOpenStatus(invoice.status))
+      .filter((invoice) => isOpenStatus(invoice.status)
+        && Boolean(invoice.proposal_accepted_at)
+        && (!invoice.invoice_kind || invoice.invoice_kind === 'event')
+        && !invoice.parent_invoice_id
+        && invoice.offer_status !== 'withdrawn'
+        && isLuxorBookingReceivableEligible(receivableBookingById.get(invoice.booking_id || '')))
       .slice(0, 6)
       .forEach((invoice) => {
         const days = daysFromToday(invoice.due_date)
@@ -274,8 +293,8 @@ export async function GET(request: Request) {
           id: `invoice-${invoice.id}`,
           kind: 'money',
           label: overdue ? 'Invoice overdue' : 'Payment due soon',
-          detail: `${formatMoney(invoice.total)} from ${name} is ${overdue ? `${Math.abs(days || 0)} day${Math.abs(days || 0) === 1 ? '' : 's'} overdue` : 'due within the next week'}.`,
-          prompt: `Review ${name}'s ${formatMoney(invoice.total)} invoice and tell me the best next step to collect it.`,
+          detail: `${name}'s signed, confirmed booking has an invoice due date ${overdue ? `${Math.abs(days || 0)} day${Math.abs(days || 0) === 1 ? '' : 's'} past due` : 'within the next week'}. Verify received payments and the saved installment balance before recommending follow-up.`,
+          prompt: `Review ${name}'s signed, confirmed booking, saved installment schedule, and recorded payments. State the verified remaining amount before recommending a collection follow-up.`,
           urgency: overdue ? 'urgent' : 'attention',
         })
       })

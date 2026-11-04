@@ -11,7 +11,7 @@ import {
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { LuxorInvoice, type LuxorBooking, type LuxorPayment, type LuxorPaymentInstallment, type LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
-import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
+import { formatLuxorPaymentCalendarDate, getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
 import { getInvoiceCollectionDisplayState } from '@/lib/luxorPaymentDashboardModel'
 import {
   PortalPageFrame,
@@ -229,9 +229,9 @@ export default function InvoicesPage() {
     testBookingIds: verifiedTestBookingIds,
   }), [invoices, bookings, verifiedTestInquiryIds, verifiedTestBookingIds])
   const financialSummary = useMemo(() => financeVerified
-    ? getLuxorInvoiceFinancialSummary(invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, installments, new Date(), financeRows.testInvoiceIds, refunds)
+    ? getLuxorInvoiceFinancialSummary(invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, installments, new Date(), financeRows.testInvoiceIds, refunds, financeRows.bookings)
     : null,
-  [financeVerified, invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, financeRows.testInvoiceIds, installments, refunds])
+  [financeVerified, invoices, payments, financeRows.testInquiryIds, financeRows.testBookingIds, financeRows.testInvoiceIds, financeRows.bookings, installments, refunds])
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
@@ -258,9 +258,9 @@ export default function InvoicesPage() {
           gaugePercent={financialSummary && financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.eventPaymentsReceived / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0}
         />
         <StatsPanel
-          label="Accepted Event Balance Outstanding"
+          label="Signed, Confirmed Event Balance Outstanding"
           value={financialSummary ? `$${financialSummary.outstandingEventReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
-          trend={financialSummary ? `${financialSummary.acceptedInvoices.length} accepted proposals` : 'Verified records required'}
+          trend={financialSummary ? `${financialSummary.acceptedInvoiceRows.length} signed, confirmed obligations` : 'Verified records required'}
           isNegative={Boolean(financialSummary?.outstandingEventReceivable)}
           progress={financialSummary && financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.outstandingEventReceivable / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0}
         />
@@ -351,7 +351,7 @@ export default function InvoicesPage() {
                     <div className="flex flex-col tabular-nums">
                       <span className="text-xs text-[color:var(--portal-text)] font-medium">{new Date(inv.created_at).toLocaleDateString()}</span>
                       <span className="text-[10px] text-[color:var(--portal-muted)] font-medium uppercase tracking-tight mt-1">
-                        Due: {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : 'Immediate'}
+                        Due: {inv.due_date ? formatLuxorPaymentCalendarDate(inv.due_date.slice(0, 10)) : 'Immediate'}
                       </span>
                     </div>
                   </td>
@@ -360,7 +360,7 @@ export default function InvoicesPage() {
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Stored lifecycle</span>
                       <PortalStatusBadge status={inv.status} />
                       {financeVerified && !financeRows.testInvoiceIds.has(inv.id.toLowerCase()) ? (() => {
-                        const collection = getInvoiceCollectionDisplayState(inv, invoices, payments, installments, new Date(), financialSummary || undefined)
+                        const collection = getInvoiceCollectionDisplayState(inv, invoices, payments, installments, new Date(), financialSummary || undefined, bookings.find((booking) => booking.id === inv.booking_id) || null)
                         return collection.collectionStatus ? <span aria-label={`Collection status: ${collection.collectionStatus}`} className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2.5 py-1 text-[10px] font-semibold text-[#8b6424]">Collection: {collection.collectionStatus}</span> : null
                       })() : null}
                     </div>

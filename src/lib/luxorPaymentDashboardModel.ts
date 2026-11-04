@@ -212,10 +212,19 @@ export function invoiceEventObligation(invoice: LuxorInvoice) {
 
 export type InvoiceCollectionStatus = 'Open' | 'Partially paid' | 'Paid' | 'Overdue' | 'Needs reconciliation'
 
+/** A receivable needs a confirmed (or completed) event and a saved signed contract. */
+export function isLuxorBookingReceivableEligible(booking: Pick<LuxorBooking, 'status' | 'contract_status' | 'contract_signed_at'> | { status: string | null; contract_status: string | null; contract_signed_at: string | null } | null | undefined) {
+  return Boolean(booking
+    && (booking.status === 'confirmed' || booking.status === 'completed')
+    && booking.contract_status === 'signed'
+    && booking.contract_signed_at)
+}
+
 /**
  * Derive a collection label without changing the invoice's persisted lifecycle status.
- * Only an accepted, current event proposal (or a child invoice linked to one) creates
- * an obligation. Saved installment remainders control overdue state when available.
+ * Only an accepted, current event proposal tied to a signed confirmed booking (or
+ * a child invoice linked to one) creates a receivable. Saved installment remainders
+ * control overdue state when available.
  */
 export function getInvoiceCollectionDisplayState(
   invoice: LuxorInvoice,
@@ -224,6 +233,7 @@ export function getInvoiceCollectionDisplayState(
   installments: LuxorPaymentInstallment[],
   now = new Date(),
   financialSummary?: { acceptedInvoiceRows?: Array<{ invoice: Pick<LuxorInvoice, 'id'>; eventObligation: number; received: number; overdue: number }> },
+  booking?: LuxorBooking | null,
 ) {
   const empty = { paidAmount: 0, totalDue: 0, balanceDue: 0, collectionStatus: null as InvoiceCollectionStatus | null }
   if (invoice.status === 'draft' || invoice.status === 'cancelled' || invoice.offer_status === 'withdrawn') return empty
@@ -243,7 +253,7 @@ export function getInvoiceCollectionDisplayState(
   const isInvoiceEventMaster = !invoice.parent_invoice_id && (!invoice.invoice_kind || invoice.invoice_kind === 'event')
   const rootIsEventMaster = !root.parent_invoice_id && (!root.invoice_kind || root.invoice_kind === 'event')
   const historicalPaidAmount = paidOnInvoice(invoice, invoices, payments)
-  if (!rootIsEventMaster || !root.proposal_accepted_at || root.status === 'draft' || root.status === 'cancelled' || root.offer_status === 'withdrawn') return empty
+  if (!rootIsEventMaster || !root.proposal_accepted_at || root.status === 'draft' || root.status === 'cancelled' || root.offer_status === 'withdrawn' || !isLuxorBookingReceivableEligible(booking)) return empty
 
   // Historical accepted proposal versions remain visible in the table but no longer
   // represent the current receivable once a later accepted version supersedes them.
@@ -256,6 +266,7 @@ export function getInvoiceCollectionDisplayState(
   const masterRow = isInvoiceEventMaster
     ? financialSummary?.acceptedInvoiceRows?.find((row) => row.invoice.id === invoice.id)
     : undefined
+  if (isInvoiceEventMaster && financialSummary?.acceptedInvoiceRows && !masterRow) return { ...empty, paidAmount: historicalPaidAmount }
   const paidAmount = masterRow?.received ?? historicalPaidAmount
   const total = isInvoiceEventMaster ? masterRow?.eventObligation ?? invoiceEventObligation(invoice) : Math.max(0, Number(invoice.total || 0))
   const balanceDue = Math.max(0, Math.round((total - paidAmount + Number.EPSILON) * 100) / 100)
