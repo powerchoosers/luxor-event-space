@@ -303,7 +303,7 @@ export function getLuxorBusinessInquiries(inquiries: LuxorInquiry[], testInquiry
   return inquiries.filter((inquiry) => !excludedIds.has(inquiry.id.toLowerCase()))
 }
 
-/** Incurred and paid costs count as expenses; planned and cancelled rows do not. */
-export function getLuxorRecordedFinanceExpenses<TExpense extends LuxorFinanceExpense>(expenses: TExpense[]) {
-  return expenses.filter((expense) => expense.status === 'incurred' || expense.status === 'paid')
+/** Only paid costs count against cash receipts; incurred, planned, and cancelled rows are excluded. */
+export function getLuxorPaidFinanceExpenses<TExpense extends LuxorFinanceExpense>(expenses: TExpense[]) {
+  return expenses.filter((expense) => expense.status === 'paid')
 }

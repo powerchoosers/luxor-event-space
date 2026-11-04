@@ -8,7 +8,7 @@ import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice, type LuxorPayment, type LuxorPaymentInstallment, type LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
-import { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorInvoiceFinancialSummary, getLuxorRecordedFinanceExpenses } from '@/lib/luxorFinanceReporting'
+import { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorInvoiceFinancialSummary, getLuxorPaidFinanceExpenses } from '@/lib/luxorFinanceReporting'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from '@/lib/luxorTestLeadPolicy'
 
 type ReportData = {
@@ -105,8 +105,8 @@ export default function ReportsPage() {
       ['Event payments recorded', String(metrics.paidRevenue)],
       ['Refundable security deposits held', String(metrics.securityDepositsHeld)],
       ['Unallocated payments requiring review', String(metrics.unallocatedPayments)],
-      ['Recorded expenses (incurred and paid)', String(metrics.recordedExpenses)],
-      ['Event payments after recorded costs', String(metrics.netIncome)],
+      ['Paid expenses', String(metrics.paidExpenses)],
+      ['Event payments after paid expenses', String(metrics.netIncome)],
       ['Accepted event balance outstanding', String(metrics.outstandingRevenue)],
     ]
     const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
@@ -161,9 +161,9 @@ export default function ReportsPage() {
           </PortalStaggerCard>
           <PortalStaggerCard>
             <StatsPanel
-              label="Event Payments After Costs"
+              label="Event Payments After Paid Costs"
               value={currency(metrics.netIncome)}
-              detail={`${currency(metrics.paidRevenue)} event payments less ${currency(metrics.recordedExpenses)} incurred or paid costs`}
+              detail={`${currency(metrics.paidRevenue)} event payments less ${currency(metrics.paidExpenses)} paid costs`}
               loading={loading}
               highlight
               progress={metrics.paidRevenue > 0 ? Math.max(0, Math.min(100, (metrics.netIncome / metrics.paidRevenue) * 100)) : 0}
@@ -238,7 +238,7 @@ export default function ReportsPage() {
           </p>
         )}
 
-        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use accepted proposals for event obligations, paid-status receipts, and separately linked Stripe refunds. Expense totals include incurred and paid costs; planned and cancelled costs are excluded. Only confirmed refunds reduce known cash. Pending or uncertain refunds remain excluded until reconciled. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
+        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use accepted proposals for event obligations, paid-status receipts, and separately linked Stripe refunds. Paid expense totals include only costs marked paid; planned, incurred-unpaid, and cancelled costs are excluded. Only confirmed refunds reduce known cash. Pending or uncertain refunds remain excluded until reconciled. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
       </div>}
     </PortalPageFrame>
   )
@@ -255,7 +255,7 @@ function buildMetrics(data: ReportData, testInquiryIds: ReadonlySet<string>, tes
   const finance = getLuxorInvoiceFinancialSummary(data.invoices, data.payments, verifiedTestInquiryIds, verifiedTestBookingIds, data.installments, new Date(), financeRows.testInvoiceIds, data.refunds)
   const paidRevenue = finance.eventPaymentsReceived
   const outstandingRevenue = finance.outstandingEventReceivable
-  const recordedExpenses = getLuxorRecordedFinanceExpenses(businessExpenses).reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
+  const paidExpenses = getLuxorPaidFinanceExpenses(businessExpenses).reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
   const bookedLeadIds = new Set(confirmedBookings.map((booking) => booking.inquiry_id).filter((id): id is string => Boolean(id)))
   const conversionRate = businessInquiries.length ? (bookedLeadIds.size / businessInquiries.length) * 100 : 0
   const averageBookingValue = confirmedBookings.length ? confirmedBookings.reduce((sum, booking) => sum + Number(booking.contract_total || 0), 0) / confirmedBookings.length : 0
@@ -273,7 +273,7 @@ function buildMetrics(data: ReportData, testInquiryIds: ReadonlySet<string>, tes
   const eventTypes = [...eventTypeCounts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
   const currentMonth = monthKey(new Date().toISOString())
   const currentMonthEventDays = new Set(confirmedBookings.map((booking) => booking.event_date).filter((date): date is string => typeof date === 'string' && monthKey(date) === currentMonth)).size
-  return { confirmedBookings, paidRevenue, outstandingRevenue, knownPaidCashTotal: finance.knownPaidCashTotal, refundRecordCount: finance.refundRecordCount, refundRecordAmount: finance.refundRecordAmount, refundReconciliationRequired: finance.refundReconciliationRequired, securityDepositsHeld: finance.securityDepositsHeld, unallocatedPayments: finance.unallocatedPayments, unallocatedPaymentCount: finance.unallocatedPaymentRows.length, recordedExpenses, netIncome: paidRevenue - recordedExpenses, bookedLeadIds, conversionRate, averageBookingValue, averageDaysToBook, months, maxMonthlyRevenue, eventTypes, currentMonthEventDays, totalLeads: businessInquiries.length }
+  return { confirmedBookings, paidRevenue, outstandingRevenue, knownPaidCashTotal: finance.knownPaidCashTotal, refundRecordCount: finance.refundRecordCount, refundRecordAmount: finance.refundRecordAmount, refundReconciliationRequired: finance.refundReconciliationRequired, securityDepositsHeld: finance.securityDepositsHeld, unallocatedPayments: finance.unallocatedPayments, unallocatedPaymentCount: finance.unallocatedPaymentRows.length, paidExpenses, netIncome: paidRevenue - paidExpenses, bookedLeadIds, conversionRate, averageBookingValue, averageDaysToBook, months, maxMonthlyRevenue, eventTypes, currentMonthEventDays, totalLeads: businessInquiries.length }
 }
 
 function lastSixMonths() { const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }); return Array.from({ length: 6 }, (_, index) => { const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - (5 - index)); return { key: monthKey(date.toISOString()), label: formatter.format(date) } }) }

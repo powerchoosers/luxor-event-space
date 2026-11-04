@@ -63,12 +63,13 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { booking_id, category, description, vendor_name, amount, incurred_on, status, notes } = body
-    const bookingId = typeof booking_id === 'string' ? booking_id.trim() : ''
+    const bookingIdValue = booking_id == null ? null : typeof booking_id === 'string' ? booking_id.trim() : undefined
+    const bookingId = bookingIdValue ?? ''
     const cleanCategory = typeof category === 'string' ? category.trim() : ''
     const numericAmount = Number(amount)
     const expenseStatus = status ?? 'incurred'
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(bookingId)) {
-      return NextResponse.json({ error: 'Choose a valid booking for this expense.' }, { status: 400 })
+    if (bookingIdValue === undefined || (bookingId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(bookingId))) {
+      return NextResponse.json({ error: 'Choose a valid booking or leave it blank for general overhead.' }, { status: 400 })
     }
     if (!cleanCategory || !Number.isFinite(numericAmount) || numericAmount <= 0) {
       return NextResponse.json({ error: 'Category and a positive amount are required.' }, { status: 400 })
@@ -77,15 +78,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Choose planned, incurred, or paid status.' }, { status: 400 })
     }
 
-    const [booking] = await supabaseRestStrict<Array<{ inquiry_id: string | null }>>(`luxor_bookings?select=inquiry_id&id=eq.${encodeURIComponent(bookingId)}&limit=1`)
-    if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
-    if (booking.inquiry_id) await assertLuxorProductionSideEffectsAllowed(booking.inquiry_id)
+    if (bookingId) {
+      const [booking] = await supabaseRestStrict<Array<{ inquiry_id: string | null }>>(`luxor_bookings?select=inquiry_id&id=eq.${encodeURIComponent(bookingId)}&limit=1`)
+      if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+      if (booking.inquiry_id) await assertLuxorProductionSideEffectsAllowed(booking.inquiry_id)
+    }
 
     const [created] = await supabaseRest<LuxorBookingExpense[]>('luxor_booking_expenses?select=*', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({
-        booking_id: bookingId,
+        booking_id: bookingId || null,
         category: cleanCategory,
         description: description || null,
         vendor_name: vendor_name || null,

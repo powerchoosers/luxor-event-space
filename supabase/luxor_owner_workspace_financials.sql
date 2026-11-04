@@ -127,7 +127,7 @@ create table if not exists public.luxor_booking_expenses (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default timezone('utc'::text, now()),
   updated_at timestamptz not null default timezone('utc'::text, now()),
-  booking_id uuid not null references public.luxor_bookings(id) on delete cascade,
+  booking_id uuid references public.luxor_bookings(id) on delete cascade,
   category text not null default 'other',
   description text,
   vendor_name text,

@@ -38,7 +38,7 @@ import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
-import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary, getLuxorRecordedFinanceExpenses } from '@/lib/luxorFinanceReporting'
+import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary, getLuxorPaidFinanceExpenses } from '@/lib/luxorFinanceReporting'
 
 type BookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -183,14 +183,14 @@ type LuxorBookingExpense = {
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!expenseBookingId || !expenseAmount || !expenseDesc) return
+    if (!expenseAmount || !expenseDesc) return
     try {
       setExpenseActionError(null)
       const res = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          booking_id: expenseBookingId,
+          booking_id: expenseBookingId || null,
           category: expenseCategory,
           amount: Number(expenseAmount),
           description: expenseDesc,
@@ -207,6 +207,7 @@ type LuxorBookingExpense = {
       setExpenses((prev) => [newExp, ...prev])
       setExpenseDesc('')
       setExpenseAmount('')
+      setExpenseBookingId('')
       setIsAddingExpense(false)
       setExpenseStatus('incurred')
     } catch (err) {
@@ -249,7 +250,7 @@ type LuxorBookingExpense = {
     testBookingIds: verifiedTestBookingIds,
   }), [invoices, bookings, expenses, verifiedTestInquiryIds, verifiedTestBookingIds])
   const { invoices: businessInvoices, expenses: businessExpenses } = businessRows
-  const recordedBusinessExpenses = useMemo(() => getLuxorRecordedFinanceExpenses(businessExpenses), [businessExpenses])
+  const paidCostRows = useMemo(() => getLuxorPaidFinanceExpenses(businessExpenses), [businessExpenses])
   const paidBusinessExpenses = useMemo(() => businessExpenses.filter((expense) => expense.status === 'paid'), [businessExpenses])
   const incurredUnpaidBusinessExpenses = useMemo(() => businessExpenses.filter((expense) => expense.status === 'incurred'), [businessExpenses])
   const cancelledExpenseCount = businessExpenses.filter((expense) => expense.status === 'cancelled').length
@@ -259,7 +260,7 @@ type LuxorBookingExpense = {
   const netRevenue = financeSummary.eventPaymentsReceived
   const outstandingAR = financeSummary.outstandingEventReceivable
   const overdueAR = financeSummary.overdueEventReceivable
-  const totalExpenses = useMemo(() => recordedBusinessExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0), [recordedBusinessExpenses])
+  const totalExpenses = useMemo(() => paidCostRows.reduce((sum, exp) => sum + Number(exp.amount || 0), 0), [paidCostRows])
   const eventPaymentsAfterCosts = useMemo(() => netRevenue - totalExpenses, [netRevenue, totalExpenses])
 
   // Payments extraction
@@ -394,7 +395,7 @@ type LuxorBookingExpense = {
                   <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 mt-4 font-bold tabular-nums">
                     <ArrowDownRight size={16} /> <span>{paidBusinessExpenses.length} paid</span>
                   </div>
-                  <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{incurredUnpaidBusinessExpenses.length} incurred unpaid · planned costs excluded</p>
+                  <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{incurredUnpaidBusinessExpenses.length} unpaid costs; only paid costs reduce cash</p>
                 </MagicCard>
               </PortalStaggerCard>
 
@@ -403,11 +404,11 @@ type LuxorBookingExpense = {
                   <BorderBeam size={95} duration={10} borderWidth={1.2} />
                   <div className="min-w-0 flex-1 pr-2 flex flex-col justify-between h-full">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event Payments After Costs</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event Payments After Paid Costs</p>
                       <p className="text-3xl font-extrabold text-[#a37d2c] dark:text-[#f1d27a] mt-2 tabular-nums tracking-tight">${eventPaymentsAfterCosts.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-[#a37d2c] dark:text-[#caa24c] mt-4 font-bold tabular-nums">
-                        <span>Recorded expenses compared with event payments</span>
+                        <span>Paid expenses compared with event payments</span>
                     </div>
                   </div>
                   <div className="ml-auto shrink-0">
@@ -651,19 +652,20 @@ type LuxorBookingExpense = {
                 <h4 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Log Operational Expense</h4>
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Booking</label>
+                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Booking (optional)</label>
                     <PortalSelect
                       value={expenseBookingId}
                       onChange={setExpenseBookingId}
-                      options={businessRows.bookings.map((booking) => ({
-                        value: booking.id,
-                        label: `${booking.client_name} - ${booking.event_date || 'Date not set'} - ${booking.event_type || 'Event'}`,
-                      }))}
-                      placeholder={businessRows.bookings.length ? 'Select booking...' : 'No bookings available'}
-                      disabled={!businessRows.bookings.length}
+                      options={[
+                        { value: '', label: 'General overhead (not linked to a booking)' },
+                        ...businessRows.bookings.map((booking) => ({
+                          value: booking.id,
+                          label: `${booking.client_name} - ${booking.event_date || 'Date not set'} - ${booking.event_type || 'Event'}`,
+                        })),
+                      ]}
                       aria-label="Expense booking"
                     />
-                    {!businessRows.bookings.length && <p className="text-[10px] text-[color:var(--portal-muted)]">This ledger requires each expense to be linked to a booking.</p>}
+                    <p className="text-[10px] text-[color:var(--portal-muted)]">Leave this set to general overhead for costs that are not tied to one event.</p>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Category</label>
@@ -717,7 +719,7 @@ type LuxorBookingExpense = {
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
                   <button type="button" onClick={() => setIsAddingExpense(false)} className="px-3 py-2 border border-transparent text-xs font-bold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] cursor-pointer">Cancel</button>
-                  <button type="submit" disabled={!expenseBookingId} className="px-4 py-2 bg-[#caa24c] hover:bg-[#b58d3b] text-white text-xs font-bold uppercase tracking-wider rounded-lg cursor-pointer transition-all disabled:cursor-not-allowed disabled:opacity-50">Save Cost</button>
+                  <button type="submit" className="px-4 py-2 bg-[#caa24c] hover:bg-[#b58d3b] text-white text-xs font-bold uppercase tracking-wider rounded-lg cursor-pointer transition-all">Save Cost</button>
                 </div>
               </form>
             )}
