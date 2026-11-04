@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import type { BlockType, EmailTemplate } from '../emailTemplates'
+import { PortalAnimatedTabs } from '@/components/portal/PortalUI'
 import {
   CalendarDays,
   Columns2,
@@ -88,17 +89,19 @@ export function BlockPalette({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[color:var(--portal-card)]">
-      <div className="grid grid-cols-3 border-b border-[color:var(--portal-border)] px-2 pt-2">
-        {(['blocks', 'sections', 'templates'] as const).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={`border-b-2 px-1 py-3 text-[10px] font-bold capitalize transition-colors ${activeTab === tab ? 'border-[#b88732] text-[#a8792f]' : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
-          >
-            {tab}
-          </button>
-        ))}
+      <div className="border-b border-[color:var(--portal-border)] p-2">
+        <PortalAnimatedTabs
+          variant="slider"
+          tabs={[
+            { id: 'blocks', label: 'Blocks' },
+            { id: 'sections', label: 'Sections' },
+            { id: 'templates', label: 'Templates' },
+          ]}
+          activeTab={activeTab}
+          onTabChange={(tab) => setActiveTab(tab as PaletteTab)}
+          ariaLabel="Email builder palette"
+          buttonClassName="flex-1 justify-center text-[10px] font-bold capitalize"
+        />
       </div>
 
       <div className="border-b border-[color:var(--portal-border)] p-3">

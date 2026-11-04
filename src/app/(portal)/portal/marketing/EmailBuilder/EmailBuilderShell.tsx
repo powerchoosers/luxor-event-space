@@ -10,7 +10,7 @@ import { BlockInspector } from './BlockInspector'
 import { EmailStylePanel } from './EmailStylePanel'
 import { EmailPreview } from './EmailPreview'
 import { BadgeCheck, CheckCircle2, Eye, Monitor, Moon, Redo2, RotateCcw, Save, Send, Smartphone, Sun, Trash2, Loader2, X } from 'lucide-react'
-import { PortalModal, PortalCloseButton } from '@/components/portal/PortalUI'
+import { PortalModal, PortalCloseButton, PortalAnimatedTabs } from '@/components/portal/PortalUI'
 import { BrandAssetPicker } from '@/components/portal/BrandAssetPicker'
 import { AnimatePresence, motion } from 'framer-motion'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
@@ -712,10 +712,18 @@ export function EmailBuilderShell({ initialTemplate = null, onClose }: { initial
         </motion.main>
 
         <motion.aside initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} className="hidden min-h-0 overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] xl:flex xl:flex-col">
-          <div className="grid shrink-0 grid-cols-2 border-b border-[color:var(--portal-border)] px-2 pt-2">
-            {(['content', 'design'] as const).map((tab) => (
-              <button key={tab} type="button" onClick={() => setInspectorTab(tab)} className={`border-b-2 px-3 py-3 text-[10px] font-bold capitalize ${inspectorTab === tab ? 'border-[#b88732] text-[#a8792f]' : 'border-transparent text-[color:var(--portal-muted)]'}`}>{tab}</button>
-            ))}
+          <div className="shrink-0 border-b border-[color:var(--portal-border)] p-2">
+            <PortalAnimatedTabs
+              variant="slider"
+              tabs={[
+                { id: 'content', label: 'Content' },
+                { id: 'design', label: 'Design' },
+              ]}
+              activeTab={inspectorTab}
+              onTabChange={(tab) => setInspectorTab(tab as typeof inspectorTab)}
+              ariaLabel="Inspector panels"
+              buttonClassName="flex-1 justify-center text-[10px] font-bold capitalize"
+            />
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">
             {inspectorTab === 'design' ? <EmailStylePanel theme={theme} onChange={setTheme} activeField={activeField} /> : selectedBlock ? (

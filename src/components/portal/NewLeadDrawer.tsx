@@ -3,7 +3,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Plus } from 'lucide-react'
+import { Plus, Loader2 } from 'lucide-react'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { PortalCloseButton } from '@/components/portal/PortalUI'
 import {
@@ -282,7 +282,7 @@ export function NewLeadDrawer({
                       max={LUXOR_MAX_GUESTS}
                       step={1}
                       placeholder="180"
-                      className="w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-center text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10"
+                      className="w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10"
                     />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
@@ -316,10 +316,14 @@ export function NewLeadDrawer({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="mt-auto inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#b98a3e] px-4 py-2.5 text-xs font-semibold !text-white shadow-xs transition-colors hover:bg-[#a8792f] [&>svg]:!text-white disabled:cursor-not-allowed disabled:bg-[#b98a3e]/45 disabled:!text-white/80 cursor-pointer"
+                  className="luxor-gold-raised mt-auto inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white shadow-xs cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Plus size={14} aria-hidden="true" />
-                  Add client lead
+                  {submitting ? (
+                    <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Plus size={14} aria-hidden="true" />
+                  )}
+                  {submitting ? 'Adding client lead...' : 'Add client lead'}
                 </button>
               </form>
             </div>

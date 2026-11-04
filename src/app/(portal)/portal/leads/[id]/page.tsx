@@ -67,7 +67,7 @@ import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { saveRecentLead } from '@/lib/luxorRecentLeads'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
-import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar, PortalAnimatedTabs } from '@/components/portal/PortalUI'
 import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
@@ -6660,30 +6660,21 @@ export default function LeadDetailPage({
                     </MagicCard>
 
                     {/* Sub-tabs for Planning */}
-                    <div className="flex gap-4 border-b border-[color:var(--portal-border)] text-xs overflow-x-auto pb-1 portal-scrollbar">
-                      {(['details', 'vendors', 'fb', 'decor', 'timeline', 'files'] as const).map((tab) => {
-                        const labels = {
-                          details: 'Event Details',
-                          vendors: 'Vendors',
-                          fb: 'Food & Beverage',
-                          decor: 'Décor & Design',
-                          timeline: 'Timeline',
-                          files: 'Notes & Files',
-                        }
-                        const isCurrent = planningSubTab === tab
-                        return (
-                          <button
-                            key={tab}
-                            type="button"
-                            onClick={() => setPlanningSubTab(tab)}
-                            className={`py-2 px-1 font-bold uppercase tracking-wider border-b-2 transition-colors shrink-0 cursor-pointer ${
-                              isCurrent ? 'border-[#caa24c] text-[#a8792f] dark:text-[#f1d27a]' : 'border-transparent text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                            }`}
-                          >
-                            {labels[tab]}
-                          </button>
-                        )
-                      })}
+                    <div className="overflow-x-auto pb-1 portal-scrollbar">
+                      <PortalAnimatedTabs
+                        variant="slider"
+                        tabs={[
+                          { id: 'details', label: 'Event Details' },
+                          { id: 'vendors', label: 'Vendors' },
+                          { id: 'fb', label: 'Food & Beverage' },
+                          { id: 'decor', label: 'Décor & Design' },
+                          { id: 'timeline', label: 'Timeline' },
+                          { id: 'files', label: 'Notes & Files' },
+                        ]}
+                        activeTab={planningSubTab}
+                        onTabChange={(tab) => setPlanningSubTab(tab as typeof planningSubTab)}
+                        ariaLabel="Event planning tabs"
+                      />
                     </div>
 
                     {/* Planning sub-tab contents */}

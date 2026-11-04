@@ -11,6 +11,7 @@ import {
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
   Search,
   Settings,
   Users,
@@ -108,6 +109,11 @@ function hasNativeVerticalScrollPath(target: HTMLElement, deltaY: number) {
 
 const EmailComposeDrawer = dynamic(
   () => import('@/components/portal/EmailComposeDrawer').then((mod) => mod.EmailComposeDrawer),
+  { ssr: false }
+)
+
+const NewLeadDrawer = dynamic(
+  () => import('@/components/portal/NewLeadDrawer').then((mod) => mod.NewLeadDrawer),
   { ssr: false }
 )
 
@@ -447,6 +453,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   }, [registerToastCallback, notify, router])
   const [inquiries, setInquiries] = useState<LuxorInquiry[]>([])
 
+  // Global Add Client / Lead Drawer State
+  const [isNewLeadDrawerOpen, setIsNewLeadDrawerOpen] = useState(false)
+
   // Global SMS / Text Modal State & Event Listener
   const [activeTextMessage, setActiveTextMessage] = useState<{
     inquiryId?: string
@@ -509,13 +518,19 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       }
     }
 
+    const handleOpenNewLead = () => setIsNewLeadDrawerOpen(true)
+
     window.addEventListener('luxor-compose-email', handleComposeEvent)
     window.addEventListener('luxor-open-elena', handleOpenElena)
     window.addEventListener('luxor-open-text', handleTextEvent)
+    window.addEventListener('luxor-open-new-lead', handleOpenNewLead)
+    window.addEventListener('luxor:open-new-lead', handleOpenNewLead)
     return () => {
       window.removeEventListener('luxor-compose-email', handleComposeEvent)
       window.removeEventListener('luxor-open-elena', handleOpenElena)
       window.removeEventListener('luxor-open-text', handleTextEvent)
+      window.removeEventListener('luxor-open-new-lead', handleOpenNewLead)
+      window.removeEventListener('luxor:open-new-lead', handleOpenNewLead)
     }
   }, [])
   
@@ -947,16 +962,17 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
           </div>
 
-          {/* Header Search Command Bar */}
-          <div
-            className={`group relative col-start-2 hidden h-9.5 w-full items-center justify-self-center rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 transition-[max-width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border)] focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10 sm:flex cursor-text ${
-              searchFocused ? 'max-w-[28rem]' : 'max-w-80'
-            }`}
-            onClick={() => {
-              searchInputRef.current?.focus()
-              setSearchFocused(true)
-            }}
-          >
+          {/* Header Search Command Bar & Quick Add Client / Lead */}
+          <div className="col-start-2 hidden items-center justify-self-center gap-2.5 sm:flex">
+            <div
+              className={`group relative flex h-9.5 items-center rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 transition-[width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border)] focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10 cursor-text ${
+                searchFocused ? 'w-[28rem] lg:w-[30rem]' : 'w-72 md:w-80'
+              }`}
+              onClick={() => {
+                searchInputRef.current?.focus()
+                setSearchFocused(true)
+              }}
+            >
             <Search size={14} className="shrink-0 text-[color:var(--portal-muted)] group-focus-within:text-[#caa24c] transition-colors" />
             <input
               ref={searchInputRef}
@@ -1144,6 +1160,18 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 </motion.div>
               )}
             </AnimatePresence>
+            </div>
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setIsNewLeadDrawerOpen(true)}
+              aria-label="Add new client or lead"
+              title="Add new client or lead"
+              className="luxor-gold-raised inline-flex h-9.5 w-9.5 min-w-[2.375rem] aspect-square shrink-0 items-center justify-center rounded-xl text-white shadow-xs transition-all active:scale-95 cursor-pointer"
+            >
+              <Plus size={16} strokeWidth={2.5} aria-hidden="true" />
+            </button>
           </div>
 
           <div className="flex items-center justify-self-end">
@@ -1329,29 +1357,43 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 className="relative z-40 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/98 backdrop-blur-xl sm:hidden shadow-lg overflow-visible"
               >
               <div className="p-3">
-                <div className="flex h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 focus-within:border-[#caa24c]/60 focus-within:ring-2 focus-within:ring-[#caa24c]/20 transition-all">
-                  <Search size={15} className="shrink-0 text-[#caa24c]" />
-                  <input
-                    ref={mobileSearchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search clients, events, or emails..."
-                    className="portal-input-transparent h-full flex-1 bg-transparent text-xs font-semibold text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
-                  />
+                <div className="flex items-center gap-2">
+                  <div className="flex h-10 flex-1 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 focus-within:border-[#caa24c]/60 focus-within:ring-2 focus-within:ring-[#caa24c]/20 transition-all">
+                    <Search size={15} className="shrink-0 text-[#caa24c]" />
+                    <input
+                      ref={mobileSearchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search clients, events, or emails..."
+                      className="portal-input-transparent h-full flex-1 bg-transparent text-xs font-semibold text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('')
+                        mobileSearchInputRef.current?.focus()
+                      }}
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer ${
+                        searchQuery ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                      }`}
+                      aria-label="Clear search"
+                      tabIndex={searchQuery ? 0 : -1}
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
-                      setSearchQuery('')
-                      mobileSearchInputRef.current?.focus()
+                      setMobileSearchOpen(false)
+                      setIsNewLeadDrawerOpen(true)
                     }}
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer ${
-                      searchQuery ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                    }`}
-                    aria-label="Clear search"
-                    tabIndex={searchQuery ? 0 : -1}
+                    aria-label="Add new client or lead"
+                    title="Add new client or lead"
+                    className="luxor-gold-raised inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-xs transition-transform active:scale-95 cursor-pointer"
                   >
-                    <X size={13} />
+                    <Plus size={16} strokeWidth={2.5} aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -1668,6 +1710,18 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             initialDraft={composeDraft?.contextKey === composeContextKey ? composeDraft : null}
             onDraftChange={persistComposeDraft}
             onSuccess={() => setComposeDraft(null)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isNewLeadDrawerOpen && (
+          <NewLeadDrawer
+            isOpen={isNewLeadDrawerOpen}
+            onClose={() => setIsNewLeadDrawerOpen(false)}
+            onCreated={() => {
+              window.dispatchEvent(new CustomEvent('luxor:portal-inquiries-refreshed'))
+            }}
+            pagePath={pathname}
           />
         )}
       </AnimatePresence>
