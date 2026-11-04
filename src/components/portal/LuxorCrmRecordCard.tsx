@@ -126,9 +126,9 @@ export function LuxorCrmRecordCard({
 }
 
 export function LuxorCrmPrimaryAction({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button {...props} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold text-white transition-colors hover:bg-[#916825] disabled:cursor-not-allowed disabled:opacity-50 ${props.className || ''}`}>{children}</button>
+  return <button {...props} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#b88d37] bg-[#caa24c] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.38)] transition-all hover:border-[#c49b42] hover:bg-[#d4ad54] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] active:shadow-none active:translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-50 ${props.className || ''}`}>{children}</button>
 }
 
 export function LuxorCrmSecondaryAction({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button {...props} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-50 ${props.className || ''}`}>{children}</button>
+  return <button {...props} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 text-xs font-semibold text-[color:var(--portal-text)] transition-all hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] active:translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-50 ${props.className || ''}`}>{children}</button>
 }

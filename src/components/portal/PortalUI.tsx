@@ -107,10 +107,14 @@ export function PortalButton({
   size?: PortalButtonSize
 }) {
   const variantClasses: Record<PortalButtonVariant, string> = {
-    primary: 'border-[#caa24c] bg-[#caa24c] text-white shadow-2xs hover:border-[#b98a3d] hover:bg-[#b98a3d]',
-    secondary: 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/30 hover:bg-[color:var(--portal-border)]/40',
-    ghost: 'border-transparent bg-transparent text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]',
-    danger: 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-300 hover:border-red-500/35 hover:bg-red-500/15',
+    primary:
+      'border border-[#b88d37] bg-[#caa24c] text-white font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.38)] hover:border-[#c49b42] hover:bg-[#d4ad54] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] active:shadow-none active:translate-y-[1px]',
+    secondary:
+      'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/30 hover:bg-[color:var(--portal-border)]/40 active:translate-y-[1px]',
+    ghost:
+      'border-transparent bg-transparent text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] active:translate-y-[1px]',
+    danger:
+      'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-300 hover:border-red-500/35 hover:bg-red-500/15 active:translate-y-[1px]',
   }
   const sizeClasses: Record<PortalButtonSize, string> = {
     sm: 'min-h-8.5 px-3 py-1.5 text-xs',
