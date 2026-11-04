@@ -12,7 +12,7 @@ export type LuxorFinanceExpense = {
 export type LuxorInvoiceFinancialSummary = {
   acceptedInvoices: LuxorInvoice[]
   acceptedInvoiceRows: Array<{ invoice: LuxorInvoice; eventObligation: number; received: number; outstanding: number; overdue: number }>
-  eventPaymentRows: Array<{ amount: number; paid_at: string | null }>
+  eventPaymentRows: Array<{ amount: number; paid_at: string | null; received_date: string | null }>
   unallocatedPaymentRows: Array<{ amount: number; paid_at: string | null; reason: string }>
   knownPaidCashTotal: number
   refundRecordCount: number
@@ -27,6 +27,46 @@ export type LuxorInvoiceFinancialSummary = {
 
 function money(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
+type LuxorPaymentDateFields = Pick<LuxorPayment, 'received_date' | 'paid_at'>
+
+/** Return the payment's saved Luxor calendar date, preferring an audited received_date. */
+export function getLuxorPaymentCalendarDateKey(payment: LuxorPaymentDateFields): string {
+  const value = payment.received_date || payment.paid_at || ''
+  if (!value) return ''
+
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (dateOnly) {
+    const year = Number(dateOnly[1])
+    const month = Number(dateOnly[2])
+    const day = Number(dateOnly[3])
+    const date = new Date(Date.UTC(year, month - 1, day))
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? value : ''
+  }
+
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const part = (type: 'year' | 'month' | 'day') => parts.find((item) => item.type === type)?.value || ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+/** Format a date key without shifting it across time zones. */
+export function formatLuxorPaymentCalendarDate(dateKey: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
+  if (!match) return 'N/A'
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day, 12))
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return 'N/A'
+  return date.toLocaleDateString(undefined, { timeZone: 'UTC' })
 }
 
 function paymentIsSecurityDeposit(payment: LuxorPayment, invoice?: LuxorInvoice) {
@@ -141,7 +181,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
   let eventPaymentsReceived = 0
   let securityDepositsHeld = 0
   let unallocatedPayments = 0
-  const eventPaymentRows: Array<{ amount: number; paid_at: string | null }> = []
+  const eventPaymentRows: Array<{ amount: number; paid_at: string | null; received_date: string | null }> = []
   const unallocatedPaymentRows: Array<{ amount: number; paid_at: string | null; reason: string }> = []
   for (const payment of payments) {
     if (payment.metadata?.is_test_record === true) continue
@@ -206,7 +246,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     }
     const depositPortion = amount - eventPortion
     eventPaymentsReceived = money(eventPaymentsReceived + eventPortion)
-    eventPaymentRows.push({ amount: money(eventPortion), paid_at: payment.paid_at })
+    eventPaymentRows.push({ amount: money(eventPortion), paid_at: payment.paid_at, received_date: payment.received_date || null })
     if (depositPortion) securityDepositsHeld = money(securityDepositsHeld + depositPortion)
     eventReceiptsByMaster.set(master.id, money((eventReceiptsByMaster.get(master.id) || 0) + eventPortion))
   }
@@ -247,7 +287,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     if (refund.refund_kind === 'security_deposit') securityDepositsHeld = money(Math.max(0, securityDepositsHeld - amount))
     else {
       eventPaymentsReceived = money(eventPaymentsReceived - amount)
-      eventPaymentRows.push({ amount: -money(amount), paid_at: refund.completed_at })
+      eventPaymentRows.push({ amount: -money(amount), paid_at: refund.completed_at, received_date: null })
     }
   }
 

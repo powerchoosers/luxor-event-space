@@ -38,6 +38,7 @@ import { BorderBeam } from "@/components/ui/border-beam";
 import { AnimatedCircularProgressBar } from "@/components/ui/animated-circular-progress-bar";
 import { fetchMarketingAndSalesMetrics, getDateRangeFromPreset } from "@/lib/luxorAnalyticsServer";
 import { luxorTodayKey } from "@/lib/luxorTourMetrics";
+import { getLuxorPaymentCalendarDateKey } from "@/lib/luxorFinanceReporting";
 
 function addDateKeyDays(dateKey: string, days: number) {
   const [year, month, day] = dateKey.split('-').map(Number)
@@ -143,6 +144,7 @@ async function PortalOverviewContent() {
   const todayDateStr = luxorTodayKey(now)
   const [currentYear, currentMonthNumber, currentDayNumber] = todayDateStr.split('-').map(Number)
   const currentMonth = currentMonthNumber - 1
+  const currentMonthKey = `${currentYear}-${String(currentMonthNumber).padStart(2, '0')}`
 
   const startOfMonth = new Date(currentYear, currentMonth, 1);
   const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
@@ -160,9 +162,8 @@ async function PortalOverviewContent() {
   // Card 2: Cash Flow (This Month)
   // Cash Inflow: sum of paid payments this month
   const paidPaymentsThisMonth = businessPayments.filter(p => {
-    if (p.status !== 'paid' || !p.paid_at) return false;
-    const paidAt = new Date(p.paid_at!);
-    return paidAt >= startOfMonth && paidAt <= endOfMonth;
+    if (p.status !== 'paid' || (!p.received_date && !p.paid_at)) return false;
+    return getLuxorPaymentCalendarDateKey(p).startsWith(currentMonthKey);
   });
   const totalInflow = paidPaymentsThisMonth.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
@@ -189,8 +190,8 @@ async function PortalOverviewContent() {
 
     const dayInflow = paidPaymentsThisMonth
       .filter(p => {
-        const d = new Date(p.paid_at!);
-        return d >= dayStart && d <= dayEnd;
+        const dayKey = `${currentYear}-${String(currentMonthNumber).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        return getLuxorPaymentCalendarDateKey(p) === dayKey;
       })
       .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 

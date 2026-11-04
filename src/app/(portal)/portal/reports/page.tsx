@@ -8,7 +8,7 @@ import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice, type LuxorPayment, type LuxorPaymentInstallment, type LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
-import { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorInvoiceFinancialSummary, getLuxorPaidFinanceExpenses } from '@/lib/luxorFinanceReporting'
+import { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorInvoiceFinancialSummary, getLuxorPaidFinanceExpenses, getLuxorPaymentCalendarDateKey } from '@/lib/luxorFinanceReporting'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from '@/lib/luxorTestLeadPolicy'
 
 type ReportData = {
@@ -266,7 +266,7 @@ function buildMetrics(data: ReportData, testInquiryIds: ReadonlySet<string>, tes
     return start && Number.isFinite(end) && end >= start ? [(end - start) / 86_400_000] : []
   })
   const averageDaysToBook = bookingDurations.length ? bookingDurations.reduce((sum, days) => sum + days, 0) / bookingDurations.length : null
-  const months = lastSixMonths().map((month) => ({ ...month, revenue: finance.eventPaymentRows.filter((payment) => monthKey(payment.paid_at || '') === month.key).reduce((sum, payment) => sum + payment.amount, 0) }))
+  const months = lastSixMonths().map((month) => ({ ...month, revenue: finance.eventPaymentRows.filter((payment) => getLuxorPaymentCalendarDateKey(payment).slice(0, 7) === month.key).reduce((sum, payment) => sum + payment.amount, 0) }))
   const maxMonthlyRevenue = Math.max(0, ...months.map((month) => month.revenue))
   const eventTypeCounts = new Map<string, number>()
   confirmedBookings.forEach((booking) => { const label = booking.event_type?.trim() || 'Other'; eventTypeCounts.set(label, (eventTypeCounts.get(label) || 0) + 1) })

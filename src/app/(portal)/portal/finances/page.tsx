@@ -38,7 +38,7 @@ import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
-import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary, getLuxorPaidFinanceExpenses } from '@/lib/luxorFinanceReporting'
+import { formatLuxorPaymentCalendarDate, getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary, getLuxorPaidFinanceExpenses, getLuxorPaymentCalendarDateKey } from '@/lib/luxorFinanceReporting'
 
 type BookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -277,8 +277,8 @@ type LuxorBookingExpense = {
     ...allPayments.map((payment) => ({ kind: 'payment' as const, payment })),
     ...visibleRefunds.map((refund) => ({ kind: 'refund' as const, refund })),
   ].sort((left, right) => {
-    const leftAt = left.kind === 'payment' ? left.payment.received_date || left.payment.paid_at || left.payment.created_at : left.refund.completed_at || left.refund.requested_at
-    const rightAt = right.kind === 'payment' ? right.payment.received_date || right.payment.paid_at || right.payment.created_at : right.refund.completed_at || right.refund.requested_at
+    const leftAt = left.kind === 'payment' ? getLuxorPaymentCalendarDateKey({ received_date: left.payment.received_date, paid_at: left.payment.paid_at || left.payment.created_at }) : left.refund.completed_at || left.refund.requested_at
+    const rightAt = right.kind === 'payment' ? getLuxorPaymentCalendarDateKey({ received_date: right.payment.received_date, paid_at: right.payment.paid_at || right.payment.created_at }) : right.refund.completed_at || right.refund.requested_at
     return Date.parse(rightAt || '') - Date.parse(leftAt || '')
   })
 
@@ -593,7 +593,7 @@ type LuxorBookingExpense = {
                     <th className="px-8 py-5">Transaction Ref</th>
                     <th className="px-6 py-5">Source Detail</th>
                     <th className="px-6 py-5">Payment Method</th>
-                    <th className="px-6 py-5">Paid Date</th>
+                    <th className="px-6 py-5">Received / Completed Date</th>
                     <th className="px-8 py-5 text-right">Settled Amount</th>
                   </tr>
                 </PortalStickyThead>
@@ -608,7 +608,7 @@ type LuxorBookingExpense = {
                       const id = isRefund ? transaction.refund.id : transaction.payment.id
                       const status = isRefund ? transaction.refund.status : transaction.payment.status
                       const amount = isRefund ? Number(transaction.refund.amount || 0) : Number(transaction.payment.amount || 0)
-                      const at = isRefund ? transaction.refund.completed_at || transaction.refund.requested_at : transaction.payment.received_date || transaction.payment.paid_at || transaction.payment.created_at
+                      const at = isRefund ? transaction.refund.completed_at || transaction.refund.requested_at : getLuxorPaymentCalendarDateKey({ received_date: transaction.payment.received_date, paid_at: transaction.payment.paid_at || transaction.payment.created_at })
                       const label = isRefund ? (status === 'succeeded' ? 'Refund completed' : `Refund ${status}`) : status === 'refunded' ? 'Legacy refund needs review' : 'Payment recorded'
                       return <tr key={`${transaction.kind}-${id || idx}`} className="hover:bg-[color:var(--portal-soft)]/50 transition-colors">
                         <td className="px-8 py-5 tabular-nums font-bold text-xs text-[color:var(--portal-muted)]">#{id?.slice(0, 10) || `TX-00${idx}`}</td>
@@ -617,7 +617,7 @@ type LuxorBookingExpense = {
                           <p className={`text-[9px] font-bold uppercase tracking-widest mt-1 ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-[#caa24c]'}`}>{label}</p>
                         </td>
                         <td className="px-6 py-5 text-xs text-[color:var(--portal-muted)] font-medium">{isRefund ? 'Stripe' : transaction.payment.payment_method || 'Bank Transfer'}</td>
-                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{at ? new Date(at).toLocaleDateString() : 'N/A'}</td>
+                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{at ? isRefund ? new Date(at).toLocaleDateString() : formatLuxorPaymentCalendarDate(at) : 'N/A'}</td>
                         <td className={`px-8 py-5 text-right tabular-nums font-bold ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{isRefund ? status === 'succeeded' ? '-' : '' : status === 'refunded' ? '-' : '+'}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       </tr>
                     })
