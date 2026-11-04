@@ -29,7 +29,7 @@ import {
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore, Suspense } from 'react'
+import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, Suspense } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { LuxorWordmark } from '@/components/LuxorWordmark'
 import { LuxorInquiry } from '@/lib/luxorInquiryTypes'
@@ -54,6 +54,57 @@ type PortalUserProfile = {
 type PortalTheme = 'light' | 'dark'
 type NextBestActionKind = 'reply' | 'tour' | 'proposal' | 'followup' | 'review'
 type NextBestActionMode = 'compose' | 'open'
+
+function PortalHeaderDivider() {
+  const frameRef = useRef<HTMLSpanElement>(null)
+
+  useLayoutEffect(() => {
+    const frame = frameRef.current
+    const line = frame?.firstElementChild as HTMLSpanElement | null
+    if (!frame || !line) return
+
+    // A CSS pixel can cover fractional screen pixels at Windows display scaling
+    // or browser zoom. Draw one screen pixel, snapped to the same pixel grid.
+    const alignLine = () => {
+      const rect = frame.getBoundingClientRect()
+      if (!rect.width || !rect.height) return
+      const ratio = Number(window.devicePixelRatio.toFixed(6)) || 1
+      const x = Math.round(rect.left * ratio) / ratio - rect.left
+      const y = Math.round(rect.top * ratio) / ratio - rect.top
+      line.style.width = `${1 / ratio}px`
+      line.style.height = `${Math.round(rect.height * ratio) / ratio}px`
+      line.style.transform = 'none'
+      line.style.left = `${x}px`
+      line.style.top = `${y}px`
+    }
+
+    alignLine()
+    const observer = new ResizeObserver(alignLine)
+    observer.observe(frame)
+    const header = frame.closest('header')
+    if (header) observer.observe(header)
+    let resolutionQuery: MediaQueryList
+    const watchResolution = () => {
+      resolutionQuery?.removeEventListener('change', watchResolution)
+      alignLine()
+      resolutionQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+      resolutionQuery.addEventListener('change', watchResolution)
+    }
+    watchResolution()
+    window.addEventListener('resize', alignLine)
+    return () => {
+      observer.disconnect()
+      resolutionQuery.removeEventListener('change', watchResolution)
+      window.removeEventListener('resize', alignLine)
+    }
+  }, [])
+
+  return (
+    <span ref={frameRef} data-portal-header-divider className="relative mx-0.5 h-5 w-px shrink-0" aria-hidden="true">
+      <span className="absolute left-0 top-0 h-full w-px bg-[color:var(--portal-border)]" />
+    </span>
+  )
+}
 
 function NextBestActionIcon({ kind }: { kind: NextBestActionKind }) {
   const Icon = kind === 'reply'
@@ -947,7 +998,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             <button
               type="button"
               onClick={handleNextBestAction}
-              className="group/next-action hidden h-11 min-w-0 max-w-[19rem] items-center gap-2 rounded-xl border border-[#caa24c]/20 bg-[color:var(--portal-soft)]/70 px-2.5 transition-[border-color,background-color,transform] duration-200 hover:-translate-y-px hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] xl:flex"
+              className="group/next-action hidden h-11 min-w-0 max-w-[19rem] items-center gap-2 rounded-xl border-0 bg-[color:var(--portal-soft)]/70 px-2.5 transition-[background-color,transform] duration-200 hover:-translate-y-px hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 xl:flex"
               aria-label={`Next best action: ${nextBestAction.title}`}
             >
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c]">
@@ -1200,7 +1251,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               </button>
 
               {/* Vertical divider */}
-              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
+              <PortalHeaderDivider />
 
               {/* 2. Phone Button */}
               <PortalPhoneButton
@@ -1209,7 +1260,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               />
 
               {/* Vertical divider */}
-              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
+              <PortalHeaderDivider />
 
               {/* 3. Bell Notifications */}
               <div className="relative flex items-center justify-center">
@@ -1230,7 +1281,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   <div className="relative inline-flex items-center justify-center">
                     <Bell size={18} />
                     {notificationCount > 0 && (
-                      <span className="portal-notification-number absolute -top-1 -right-2 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[8px] font-black text-white shadow-xs ring-2 ring-[color:var(--portal-card)]">
+                      <span ref={(node) => node?.style.setProperty('color', '#fff', 'important')} className="portal-notification-number absolute -top-1 -right-2 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[8px] font-black text-white shadow-xs ring-2 ring-[color:var(--portal-card)]">
                         {notificationCount > 99 ? '99+' : notificationCount}
                       </span>
                     )}
@@ -1244,11 +1295,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               {/* 1. Phone Button */}
               <PortalPhoneButton
                 compact
-                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
+                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-lg transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10 group"
               />
 
               {/* Vertical divider 1 */}
-              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
+              <PortalHeaderDivider />
 
               {/* 2. Bell Notifications */}
               <div className="relative flex items-center justify-center">
@@ -1258,7 +1309,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   }}
                   type="button"
                   onClick={() => setNotificationsOpen((prev) => !prev)}
-                  className={`portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer ${
+                  className={`portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-lg transition-all active:scale-95 cursor-pointer ${
                     notificationsOpen
                       ? 'bg-[#caa24c]/15 text-[#caa24c] shadow-xs'
                       : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10'
@@ -1269,7 +1320,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   <div className="relative inline-flex items-center justify-center">
                     <Bell size={18} />
                     {notificationCount > 0 && (
-                      <span className="portal-notification-number absolute -top-1 -right-2 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[8px] font-black text-white shadow-xs ring-2 ring-[color:var(--portal-card)]">
+                      <span ref={(node) => node?.style.setProperty('color', '#fff', 'important')} className="portal-notification-number absolute -top-1 -right-2 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[8px] font-black text-white shadow-xs ring-2 ring-[color:var(--portal-card)]">
                         {notificationCount > 99 ? '99+' : notificationCount}
                       </span>
                     )}
@@ -1278,13 +1329,13 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               </div>
 
               {/* Vertical divider 2 */}
-              <div className="h-5 w-px bg-[color:var(--portal-border)] shrink-0 mx-0.5" aria-hidden="true" />
+              <PortalHeaderDivider />
 
               {/* 3. Text messages */}
               <Link
                 href="/portal/messages?tab=sms"
                 prefetch
-                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10"
+                className="portal-header-action relative flex h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-lg transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10"
                 aria-label="Text messages"
                 title="Text messages"
               >

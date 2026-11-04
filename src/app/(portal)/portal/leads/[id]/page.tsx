@@ -41,6 +41,7 @@ import {
   ChevronDown,
   ChevronRight,
   MoreVertical,
+  MoreHorizontal,
   Workflow,
   ShieldCheck,
   Eye,
@@ -662,6 +663,9 @@ export default function LeadDetailPage({
   const [showTaskTools, setShowTaskTools] = useState(false)
   const [textPopupOpen, setTextPopupOpen] = useState(false)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [editClientSummaryRequested, setEditClientSummaryRequested] = useState(false)
+  const clientSummaryRef = useRef<HTMLElement | null>(null)
+  const reduceMotion = useReducedMotion()
   const [showEnrollWorkflowModal, setShowEnrollWorkflowModal] = useState(false)
   const [showLeadTabOverflow, setShowLeadTabOverflow] = useState(false)
   const [leadLifecycleAction, setLeadLifecycleAction] = useState<LeadLifecycleAction | null>(null)
@@ -944,6 +948,18 @@ export default function LeadDetailPage({
     topOffset: 80,
     bottomOffset: 24,
   })
+
+  useEffect(() => {
+    if (!editClientSummaryRequested || activeLeadTab !== 'overview') return
+    const frame = window.requestAnimationFrame(() => {
+      const summary = clientSummaryRef.current
+      if (!summary) return
+      summary.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' })
+      summary.dispatchEvent(new CustomEvent('luxor-edit-client-summary'))
+      setEditClientSummaryRequested(false)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeLeadTab, editClientSummaryRequested, reduceMotion])
 
   useEffect(() => {
     if (!mobileSectionDrawerOpen) return
@@ -1632,7 +1648,7 @@ export default function LeadDetailPage({
   }
 
   useEffect(() => {
-    if (!showEventPicker) return
+    if (!showEventPicker && !showActionsMenu) return
     const updatePopoverPositions = () => {
       const place = (
         anchor: HTMLButtonElement | null,
@@ -4888,6 +4904,15 @@ export default function LeadDetailPage({
     }
   }
 
+  const openClientSummaryEditor = () => {
+    setShowActionsMenu(false)
+    setActiveLeadTab('overview')
+    setShowClientSidebar(true)
+    setEditClientSummaryRequested(true)
+  }
+
+
+
   const quickNoteTemplates = [
     { label: 'Call recap', value: 'Call recap:\n- \nNext step:\n', type: 'call_log' as const },
     { label: 'Follow-up sent', value: 'Follow-up email sent:\n\n', type: 'email_log' as const },
@@ -5144,19 +5169,19 @@ export default function LeadDetailPage({
           <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
             <Calendar size={12} /> {tourHeaderStatusLabel(lead)}
           </span>
-        ) : <PortalStatusBadge status={proposalWorkflowDisplay.status} />}
+        ) : <span className="[&>span]:!border-0"><PortalStatusBadge status={proposalWorkflowDisplay.status} /></span>}
       </div>
 
       <section className="overflow-visible rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] sm:shadow-2xl sm:shadow-black/10">
-        <div aria-label="Contact summary" className="relative grid gap-3 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-6">
-          <div className="grid min-w-0 grid-cols-[3rem_minmax(0,1fr)_2.75rem] items-start gap-x-3 gap-y-2 sm:flex sm:gap-4">
-            <div className="relative col-start-1 row-start-1 h-12 w-12 shrink-0 self-start sm:h-20 sm:w-20">
+        <div aria-label="Contact summary" className="relative flex flex-col gap-3 p-4 sm:p-5 md:flex-row md:items-start md:justify-between lg:p-6">
+          <div className="grid min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-3 gap-y-3 sm:flex sm:items-start sm:gap-4">
+            <div className="relative shrink-0">
               <PortalContactAvatar
                 name={lead.full_name}
                 avatarUrl={lead.metadata?.avatar_url as string | null}
                 inquiryId={lead.id}
                 size="2xl"
-                className="h-12 w-12 text-lg sm:h-20 sm:w-20 sm:text-2xl sm:shadow-xl sm:shadow-black/10"
+                className="h-12 w-12 text-lg sm:h-16 sm:w-16 sm:text-2xl sm:shadow-xl sm:shadow-black/10"
                 onAvatarUpdate={(newUrl) => {
                   setLead((current) => current ? {
                     ...current,
@@ -5168,102 +5193,100 @@ export default function LeadDetailPage({
                 }}
               />
               <div
-                className="absolute bottom-0 right-0 hidden h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--portal-card)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md sm:flex"
+                className="absolute bottom-0 right-0 hidden h-6 w-6 items-center justify-center rounded-full border-2 border-[color:var(--portal-card)] bg-[color:var(--portal-bg)] text-[#caa24c] shadow-md sm:flex"
                 title={isNewsletter ? 'Newsletter subscriber' : `${displayEventType} event`}
                 aria-label={isNewsletter ? 'Newsletter subscriber' : `${displayEventType} event`}
               >
-                {isNewsletter ? <Mail size={13} /> : <EventTypeIcon eventType={displayEventType} />}
+                {isNewsletter ? <Mail size={11} /> : <EventTypeIcon eventType={displayEventType} />}
               </div>
             </div>
-            <div className="contents sm:block sm:min-w-0 sm:pt-1">
-              <div className="contents sm:flex sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
-                <div className="col-span-2 col-start-2 row-start-1 flex min-w-0 items-center gap-2 pr-12 sm:pr-0">
-                  <h1 className="min-w-0 break-words font-serif text-2xl font-semibold leading-tight text-[color:var(--portal-text)] sm:text-4xl">{lead.full_name}</h1>
-                  {lead.email ? (
-                    <button
-                      onClick={handleToggleMarketing}
-                      disabled={togglingMarketing}
-                      className="group relative inline-flex h-9 w-9 shrink-0 cursor-pointer select-none items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50 sm:h-[18px] sm:w-[18px]"
-                      aria-label={isSubscribed ? 'Remove from marketing list' : 'Add to marketing list'}
-                      title={isSubscribed ? 'Remove from marketing list' : 'Add to marketing list'}
-                    >
-                      <div className="relative h-[18px] w-[18px] shrink-0">
-                        <Star size={18} className="absolute inset-0 text-[color:var(--portal-muted)] transition-colors group-hover:text-[color:var(--portal-text)]" />
-                        <div className="absolute bottom-0 left-0 right-0 overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ height: isSubscribed ? '18px' : '0px' }}>
-                          <Star size={18} className="absolute bottom-0 left-0 fill-[#caa24c] text-[#caa24c]" style={{ width: '18px', height: '18px' }} />
-                        </div>
-                      </div>
-                    </button>
-                  ) : null}
-                </div>
-                {lead.phone ? (
-                  <div className="col-span-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:contents">
-                    <span className="inline-flex min-w-0 max-w-full items-center gap-2 text-sm leading-5 tabular-nums text-[color:var(--portal-text)] sm:col-span-3 sm:gap-1.5 sm:rounded-full sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-2.5 sm:py-1 sm:text-[10px] sm:font-semibold">
-                      <Phone size={14} className="shrink-0 text-[color:var(--portal-muted)] sm:h-[11px] sm:w-[11px] sm:text-[#caa24c]" /> {formatPhoneDisplay(lead.phone)}
-                    </span>
-                    <span className="sm:hidden"><PortalSmsConsentBadge phone={lead.phone} initialConsent={smsConsent} compact /></span>
-                  </div>
-                ) : null}
-                {lead.email ? (
-                  <span className="col-span-3 inline-flex min-w-0 max-w-full items-start gap-2 text-sm leading-5 text-[color:var(--portal-text)] sm:gap-1.5 sm:rounded-full sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-2.5 sm:py-1 sm:text-[10px] sm:font-semibold">
-                    <Mail size={14} className="mt-0.5 shrink-0 text-[color:var(--portal-muted)] sm:mt-0 sm:h-[11px] sm:w-[11px] sm:text-[#caa24c]" /><span className="min-w-0 [overflow-wrap:anywhere]">{lead.email}</span>
-                  </span>
-                ) : null}
-                {emailNoticeResolution?.kind === 'warning' && !loadingEmailMessages ? (
-                  <span className="col-span-3 inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/8 px-2.5 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">
-                    {bouncedAddressMatchesCurrentEmail(lead) ? 'Email bounced · check address' : 'Earlier email address bounced'}
-                  </span>
-                ) : null}
-                {showResolvedEmailNotice && emailNoticeResolution?.kind === 'resolved' ? (
-                  <div role="status" aria-live="polite" className="col-span-3 flex min-w-0 basis-full items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2.5 text-emerald-800 dark:text-emerald-200 sm:px-3.5">
-                    <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
-                    <p className="min-w-0 flex-1 break-words text-xs font-semibold leading-5">
-                      {emailNoticeResolution.delivery === 'delivered' ? 'Delivered' : 'Successfully sent'} to {emailNoticeResolution.recipient}.
-                    </p>
-                    <button
-                      type="button"
-                      aria-label="Dismiss email delivery notice"
-                      title="Dismiss notice"
-                      onClick={() => {
-                        const resolution = emailNoticeResolution
-                        if (resolution?.kind !== 'resolved') return
-                        let storage: Storage | null = null
-                        try { storage = window.localStorage } catch { /* The in-memory notice still dismisses. */ }
-                        const tracker = emailNoticeTracker || ensureLeadEmailNoticeTracker(storage, resolution)
-                        setEmailNoticeTracker(dismissLeadEmailNoticeTracker(storage, resolution, tracker))
-                      }}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-emerald-800 transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/40 dark:text-emerald-200 dark:hover:bg-emerald-400/10"
-                    >
-                      <X size={14} aria-hidden="true" />
-                    </button>
-                  </div>
-                ) : null}
-                {lead.email && (
-                  <div className="contents sm:flex sm:items-center sm:gap-3">
-                    {isGrandOpeningLead ? (
-                      <span className="col-span-3 whitespace-nowrap text-[9px] font-black uppercase tracking-[0.16em] text-[#caa24c]">
-                        Grand Opening
-                      </span>
-                    ) : null}
-                    <AnimatePresence>
-                      {marketingMessage && (
-                        <motion.span
-                          initial={{ opacity: 0, x: -4 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 4 }}
-                          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                          className={`col-span-3 text-[9px] font-black uppercase tracking-[0.18em] ${
-                            marketingMessage === 'added' ? 'text-emerald-450' : 'text-zinc-550'
-                          }`}
-                        >
-                          {marketingMessage === 'added' ? 'Added to marketing' : 'Removed from marketing'}
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )}
+
+            <div className="contents sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
+              <div className="min-w-0 pr-12 sm:pr-14 md:pr-0">
+                <h1 className="min-w-0 [overflow-wrap:anywhere] font-serif text-[26px] font-semibold leading-[1.1] tracking-[-0.015em] text-[color:var(--portal-text)] sm:text-3xl lg:text-4xl">
+                  {lead.full_name}
+                </h1>
               </div>
-              <div className="col-span-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-[color:var(--portal-muted)] sm:mt-1.5 sm:gap-x-2.5">
+
+              <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:gap-2">
+                {lead.phone ? (
+                  <PortalSmsConsentBadge phone={lead.phone} initialConsent={smsConsent} pill className="!border-0" />
+                ) : null}
+
+                {lead.email ? (
+                  <button
+                    type="button"
+                    onClick={handleToggleMarketing}
+                    disabled={togglingMarketing}
+                    className="group inline-flex min-h-11 max-w-full items-center rounded-lg text-[11px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50 sm:min-h-8"
+                    aria-label={isSubscribed ? 'Remove from marketing list' : 'Add to marketing list'}
+                    aria-pressed={isSubscribed}
+                    title={isSubscribed ? 'Remove from marketing list' : 'Add to marketing list'}
+                  >
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--portal-soft)] px-2.5 py-1 text-[color:var(--portal-text)] transition-colors group-active:bg-[#caa24c]/15">
+                      <Star size={12} aria-hidden="true" className={isSubscribed ? 'fill-[#caa24c] text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)]'} />
+                      <span>{isSubscribed ? 'Marketing Contact' : 'Transactional Only'}</span>
+                    </span>
+                  </button>
+                ) : null}
+
+                {isGrandOpeningLead ? (
+                  <span className="inline-flex items-center whitespace-nowrap rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a]">
+                    Grand Opening
+                  </span>
+                ) : null}
+
+                {emailNoticeResolution?.kind === 'warning' && !loadingEmailMessages ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">
+                    {bouncedAddressMatchesCurrentEmail(lead) ? 'Email bounced' : 'Prior email bounced'}
+                  </span>
+                ) : null}
+
+                <AnimatePresence>
+                  {marketingMessage && (
+                    <motion.span
+                      initial={{ opacity: 0, x: reduceMotion ? 0 : -4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: reduceMotion ? 0 : 4 }}
+                      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                      role="status"
+                      className={`text-[10px] font-bold uppercase tracking-wider ${
+                        marketingMessage === 'added' ? 'text-emerald-600 dark:text-emerald-400' : 'text-[color:var(--portal-muted)]'
+                      }`}
+                    >
+                      {marketingMessage === 'added' ? 'Added to marketing' : 'Removed from marketing'}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Resolved Email Delivery Notice if active */}
+              {showResolvedEmailNotice && emailNoticeResolution?.kind === 'resolved' ? (
+                <div role="status" aria-live="polite" className="col-span-2 flex min-w-0 max-w-xl items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2 text-emerald-800 dark:text-emerald-200">
+                  <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
+                  <p className="min-w-0 flex-1 break-words text-xs font-semibold leading-5">
+                    {emailNoticeResolution.delivery === 'delivered' ? 'Delivered' : 'Successfully sent'} to {emailNoticeResolution.recipient}.
+                  </p>
+                  <button
+                    type="button"
+                    aria-label="Dismiss email delivery notice"
+                    title="Dismiss notice"
+                    onClick={() => {
+                      const resolution = emailNoticeResolution
+                      if (resolution?.kind !== 'resolved') return
+                      let storage: Storage | null = null
+                      try { storage = window.localStorage } catch { /* The in-memory notice still dismisses. */ }
+                      const tracker = emailNoticeTracker || ensureLeadEmailNoticeTracker(storage, resolution)
+                      setEmailNoticeTracker(dismissLeadEmailNoticeTracker(storage, resolution, tracker))
+                    }}
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-emerald-800 transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/40 dark:text-emerald-200 dark:hover:bg-emerald-400/10"
+                  >
+                    <X size={13} aria-hidden="true" />
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:basis-full border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)] sm:border-0 sm:pt-0">
                 {isNewsletter ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                     Newsletter
@@ -5276,7 +5299,7 @@ export default function LeadDetailPage({
                       onClick={() => setShowEventPicker((current) => !current)}
                       aria-expanded={showEventPicker}
                       aria-haspopup="listbox"
-                      className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-left text-[13px] font-semibold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] sm:min-h-0 sm:max-w-[260px] sm:rounded-md sm:px-2 sm:text-[10px] sm:font-black sm:uppercase sm:tracking-[0.08em]"
+                      className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-xl border-0 bg-[color:var(--portal-soft)] px-3 py-1 text-left text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/50 hover:text-[#a8792f] active:bg-[#caa24c]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#f1d27a] sm:min-h-8 sm:rounded-full"
                     >
                       <EventTypeIcon eventType={displayEventType} />
                       <span className="truncate">{displayEventType}{leadEvents.length > 1 ? ` · ${leadEvents.length} events` : ''}</span>
@@ -5285,13 +5308,13 @@ export default function LeadDetailPage({
                     <AnimatePresence>
                       {showEventPicker ? (
                         <motion.div
-                          initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                          initial={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                          exit={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
                           transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
                           role="listbox"
                           ref={eventPickerMenuRef}
-                          className="portal-dropdown absolute left-0 top-full mt-1.5 z-[71] w-[min(340px,calc(100vw-2rem))] max-h-80 overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
+                          className="portal-dropdown absolute left-0 top-full mt-1.5 z-[71] w-[min(340px,calc(100vw-4rem))] max-h-80 overflow-y-auto overscroll-contain rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-2xl backdrop-blur-xl"
                         >
                           <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Events under this lead</div>
                           {leadEvents.map((event) => (
@@ -5301,7 +5324,7 @@ export default function LeadDetailPage({
                               role="option"
                               aria-selected={event.id === selectedLeadEvent?.id}
                               onClick={() => selectLeadEvent(event.id)}
-                              className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${event.id === selectedLeadEvent?.id ? 'bg-[#caa24c]/15' : 'hover:bg-[color:var(--portal-soft)]'}`}
+                              className={`flex min-h-11 w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${event.id === selectedLeadEvent?.id ? 'bg-[#caa24c]/15' : 'hover:bg-[color:var(--portal-soft)]'}`}
                             >
                               <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#caa24c]/10 text-[#caa24c]"><EventTypeIcon eventType={event.event_type} /></span>
                               <span className="min-w-0 flex-1">
@@ -5318,61 +5341,36 @@ export default function LeadDetailPage({
                     </AnimatePresence>
                   </div>
                 ) : null}
+
                 {requestedTourLanguage ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--portal-muted)] sm:rounded-full sm:border sm:border-[#caa24c]/35 sm:bg-[#caa24c]/10 sm:px-2.5 sm:py-1 sm:text-[9px] sm:font-black sm:uppercase sm:tracking-[0.14em] sm:text-[#a8792f] dark:sm:text-[#f1d27a]">
-                    <Languages size={13} className="shrink-0" /><span className="capitalize">{requestedTourLanguage}<span className="hidden sm:inline">-speaking</span></span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-xs font-medium text-[color:var(--portal-muted)]">
+                    <Languages size={12} className="shrink-0 text-[#caa24c]" />
+                    <span className="capitalize">{requestedTourLanguage}</span>
                   </span>
                 ) : null}
-                <p className="basis-full text-xs leading-5 text-[color:var(--portal-muted)] sm:basis-auto">
-                  <span className="hidden sm:inline">Captured via </span><span className="capitalize font-medium sm:text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</span><span className="sm:hidden"> · </span><span className="hidden sm:inline"> on </span><time dateTime={lead.created_at}><span className="sm:hidden">{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span><span className="hidden sm:inline">{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</span></time>
-                </p>
+
+                <span className="ml-auto min-w-0 flex-1 text-right text-[11px] leading-5 text-[color:var(--portal-muted)] sm:ml-0 sm:flex-none sm:text-left sm:text-xs">
+                  <span className="block [overflow-wrap:anywhere] sm:inline">{formatSourceLabel(lead)}</span>
+                  <span className="hidden sm:inline"> · </span>
+                  <time className="block sm:inline" dateTime={lead.created_at}>{new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</time>
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-0.5 border-t-0 pt-0 sm:justify-start sm:gap-3 sm:border-0 sm:pt-0 lg:justify-end">
-            {lead.phone ? <span className="hidden sm:inline-flex sm:basis-auto"><PortalSmsConsentBadge phone={lead.phone} initialConsent={smsConsent} compact /></span> : null}
-            {lead.email && (
-              <button 
-                type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))}
-                className="hidden h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:inline-flex sm:h-9 sm:w-9"
-                aria-label="Email client"
-                title="Email client"
-              >
-                <Mail size={18} className="sm:h-[15px] sm:w-[15px]" />
-              </button>
-            )}
-            {lead.phone && (
-              <button
-                type="button"
-                onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })}
-                className="hidden h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:inline-flex sm:h-9 sm:w-9"
-                aria-label="Call client"
-                title="Call client"
-              >
-                <Phone size={18} className="sm:h-[15px] sm:w-[15px]" />
-              </button>
-            )}
-            {lead.phone && (
-              <button
-                type="button"
-                onClick={() => {
-                  window.dispatchEvent(
-                    new CustomEvent('luxor-open-text', {
-                      detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.full_name },
-                    })
-                  )
-                }}
-                className="hidden h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:inline-flex sm:h-9 sm:w-9"
-                aria-label="Text client"
-                title="Text client"
-              >
-                <MessageSquare size={18} className="sm:h-[15px] sm:w-[15px]" />
-              </button>
-            )}
+          {/* Right side actions: Test lead panel and More options menu */}
+          <div className={lead.is_test ? 'flex min-w-0 items-center justify-end gap-2' : 'contents md:flex md:items-start md:gap-2'}>
             {lead.is_test ? <LuxorTestLeadPanel leadId={lead.id} /> : null}
-            <div className="absolute right-3 top-3 z-10 sm:relative sm:right-auto sm:top-auto sm:z-auto">
+            {lead.phone || lead.email ? (
+            <div className="relative hidden items-center gap-1.5 py-1 pr-3 after:absolute after:right-0 after:top-1/2 after:h-6 after:w-px after:-translate-y-1/2 after:bg-[color:var(--portal-border)] lg:flex">
+              {lead.phone ? <>
+                <button type="button" aria-label="Call client" title="Call" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10"><Phone size={17} aria-hidden="true" /></button>
+                <button type="button" aria-label="Text client" title="Text" onClick={() => window.dispatchEvent(new CustomEvent('luxor-open-text', { detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.full_name } }))} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10"><MessageSquare size={17} aria-hidden="true" /></button>
+              </> : null}
+              {lead.email ? <button type="button" aria-label="Email client" title="Email" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead, purpose: 'inquiry-response', initialSubject: `Your ${lead.event_type?.trim() || 'event'} inquiry at Luxor` } }))} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10"><Mail size={17} aria-hidden="true" /></button> : null}
+            </div>
+            ) : null}
+            <div className={`absolute right-4 top-4 z-10 pl-1 sm:right-5 sm:top-5 md:relative md:right-auto md:top-auto md:z-auto ${!lead.is_test && (lead.phone || lead.email) ? 'lg:mt-1' : ''}`}>
               <button
                 ref={actionsMenuTriggerRef}
                 type="button"
@@ -5381,27 +5379,35 @@ export default function LeadDetailPage({
                 aria-haspopup="menu"
                 aria-label="More lead options"
                 title="More options"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:h-9 sm:w-9"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-transparent text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/10 active:bg-[#caa24c]/20 dark:hover:text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:h-10 lg:w-10"
               >
-                <MoreVertical size={16} />
+                <MoreHorizontal size={20} aria-hidden="true" />
               </button>
               <AnimatePresence>
                 {showActionsMenu ? (
                   <>
                     <div className="fixed inset-0 z-[70]" onClick={() => setShowActionsMenu(false)} />
                     <motion.div
-                      ref={actionsMenuRef}
-                      initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                      ref={(node) => {
+                        actionsMenuRef.current = node
+                        node?.style.setProperty('box-shadow', '0 4px 12px -5px rgba(0, 0, 0, 0.14)', 'important')
+                        node?.style.setProperty('backdrop-filter', 'none', 'important')
+                      }}
+                      initial={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                      exit={{ opacity: 0, y: reduceMotion ? 0 : -4, scale: reduceMotion ? 1 : 0.98 }}
                       transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
                       role="menu"
                       data-portal-dropdown="true"
-                      className="portal-dropdown absolute right-0 top-full mt-2 z-[71] w-64 max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-8rem)] overflow-y-auto portal-scrollbar rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 pb-2.5 shadow-2xl backdrop-blur-xl"
+                      data-contact-actions-menu
+                      className="portal-dropdown absolute right-0 top-full mt-2 z-[71] w-72 max-w-[calc(100vw-3rem)] max-h-[calc(100vh-8rem)] overflow-y-auto portal-scrollbar rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 pb-2.5 shadow-2xl backdrop-blur-xl [&_[role=menuitem]]:min-h-11 [&_[role=menuitem]]:text-xs [&_[role=menuitem]]:font-semibold [&_[role=menuitem]]:normal-case [&_[role=menuitem]]:tracking-normal"
                     >
                       <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setShowEnrollWorkflowModal(true) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <Workflow size={13} className="text-[#caa24c]" />
                         <span>Enroll in workflow</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={openClientSummaryEditor} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+                        <Pencil size={13} className="text-[#caa24c]" /> Edit contact details
                       </button>
                       <button type="button" role="menuitem" onClick={openAddEventModal} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <Plus size={13} className="text-[#caa24c]" />
@@ -5602,7 +5608,7 @@ export default function LeadDetailPage({
         {/* Full tab bar for wide desktop layouts. */}
         <div className="hidden bg-transparent px-4 xl:block">
           <div className="flex items-center justify-between gap-3">
-            <div role="tablist" aria-label="Client sections" className="relative flex min-w-0 flex-1 items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 overflow-x-auto portal-scrollbar">
+            <div role="tablist" aria-label="Client sections" className="relative flex min-w-0 flex-1 items-center gap-1 p-1 overflow-x-auto portal-scrollbar">
               {primaryLeadTabs.map((item) => {
                 const isActive = activeLeadTab === item.id
                 return (
@@ -5642,7 +5648,7 @@ export default function LeadDetailPage({
                   type="button"
                   onClick={() => setShowClientSidebar((current) => !current)}
                   title={showClientSidebar ? 'Hide Client Summary sidebar for full-width presentation view' : 'Show Client Summary sidebar'}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] transition-colors ${
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg !border-0 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] transition-colors ${
                     !showClientSidebar
                       ? 'border-[#caa24c]/45 bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]'
                       : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]'
@@ -5654,16 +5660,27 @@ export default function LeadDetailPage({
               ) : null}
             </div>
           </div>
-          {showLeadTabOverflow ? (
-            <div role="tablist" aria-label="Additional client sections" className="mt-1 flex flex-wrap gap-1 border-t border-[color:var(--portal-border)] py-1.5">
-              {secondaryLeadTabs.map((item) => {
-                const isActive = activeLeadTab === item.id
-                return <button key={item.id} ref={(node) => { tabButtonRefs.current[item.id] = node }} type="button" role="tab" aria-selected={isActive} onClick={() => selectLeadTab(item)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
-                  {item.label}{typeof item.count === 'number' ? <span className="text-[8px] font-bold tabular-nums opacity-70">{item.count}</span> : null}
-                </button>
-              })}
-            </div>
-          ) : null}
+          <AnimatePresence initial={false}>
+            {showLeadTabOverflow ? (
+              <motion.div
+                key="additional-lead-sections"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="mt-1 overflow-hidden"
+              >
+                <div role="tablist" aria-label="Additional client sections" className="flex flex-wrap gap-1 border-t border-[color:var(--portal-border)] py-1.5">
+                  {secondaryLeadTabs.map((item) => {
+                    const isActive = activeLeadTab === item.id
+                    return <button key={item.id} ref={(node) => { tabButtonRefs.current[item.id] = node }} type="button" role="tab" aria-selected={isActive} onClick={() => selectLeadTab(item)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
+                      {item.label}{typeof item.count === 'number' ? <span className="text-[8px] font-bold tabular-nums opacity-70">{item.count}</span> : null}
+                    </button>
+                  })}
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -5748,7 +5765,7 @@ export default function LeadDetailPage({
                   purpose: 'inquiry-response',
                   initialSubject: `Your ${lead.event_type?.trim() || 'event'} inquiry at Luxor`,
                 } }))}
-                className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 text-[11px] font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:w-auto"
+                className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border-0 bg-[#caa24c]/10 px-3 text-[11px] font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:w-auto"
               >
                 <Mail size={14} aria-hidden="true" /> Respond to inquiry
               </button>
@@ -5920,7 +5937,7 @@ export default function LeadDetailPage({
                             onClick={() => openTourScheduleModal('new_visit')}
                             disabled={!lead.email}
                             title={lead.email ? 'Schedule the tour and send the calendar invite' : 'Add an email address before sending an invite'}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#caa24c]/10 transition-all hover:bg-[#dfbd68] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                            className="luxor-gold-raised inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-md shadow-[#caa24c]/10 transition-all hover:bg-[#dfbd68] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <Calendar size={13} /> Schedule Invite
                           </button>
@@ -6042,7 +6059,7 @@ export default function LeadDetailPage({
                           <button
                             type="button"
                             onClick={openTourDetailsEditor}
-                            className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer"
+                            className="rounded-md border-0 bg-[color:var(--portal-soft)] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-[#caa24c] hover:bg-[#caa24c]/10 transition-colors cursor-pointer"
                           >
                             Edit Intake
                           </button>
@@ -7943,6 +7960,7 @@ export default function LeadDetailPage({
                 return (
                   <>
                     <ClientSummaryCard
+                      summaryRef={clientSummaryRef}
                       lead={clientSummaryLead}
                       isSaving={Boolean(savingLeadField)}
                       onUpdate={handleLeadFieldUpdate}
@@ -8060,6 +8078,7 @@ export default function LeadDetailPage({
               return (
                 <>
                   <ClientSummaryCard
+                      summaryRef={clientSummaryRef}
                     lead={clientSummaryLead}
                     isSaving={Boolean(savingLeadField)}
                     onUpdate={handleLeadFieldUpdate}
@@ -8783,7 +8802,7 @@ export default function LeadDetailPage({
                 <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]"><FileText size={16} className="text-[#a8792f] dark:text-[#caa24c]" /> Proposals</h3>
                 <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[color:var(--portal-muted)]">Each saved event proposal stays available here with its own quoted total and delivery status.</p>
               </div>
-              <button type="button" onClick={() => openProposalBuilder()} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition hover:bg-[#dfbd68]"><Plus size={14} /> Create New Proposal</button>
+              <button type="button" onClick={() => openProposalBuilder()} className="luxor-gold-raised inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition hover:bg-[#dfbd68]"><Plus size={14} /> Create New Proposal</button>
             </div>
             {clientProposals.length === 0 ? (
               isLuxorTestInquiry(lead) ? null : (
@@ -10322,12 +10341,14 @@ function ClientDossierLoading() {
 }
 
 function ClientSummaryCard({
+  summaryRef,
   lead,
   isSaving,
   onUpdate,
   onViewDetails,
   onAvatarUpdate,
 }: {
+  summaryRef: React.RefObject<HTMLElement | null>
   lead: LuxorInquiry
   isSaving: boolean
   onUpdate: (field: EditableLeadField, value: string) => Promise<boolean>
@@ -10366,6 +10387,16 @@ function ClientSummaryCard({
     ]))
     setSectionEditing(true)
   }
+  useEffect(() => {
+    const section = summaryRef.current
+    if (!section) return
+    const edit = () => {
+      beginSummaryEdit()
+      window.requestAnimationFrame(() => section.querySelector<HTMLInputElement>('[aria-label="Client name"]')?.focus({ preventScroll: true }))
+    }
+    section.addEventListener('luxor-edit-client-summary', edit)
+    return () => section.removeEventListener('luxor-edit-client-summary', edit)
+  })
   const saveSummary = async () => {
     const updates: Array<[EditableLeadField, string]> = [
       ['full_name', sectionDraft.full_name ?? lead.full_name],
@@ -10384,7 +10415,7 @@ function ClientSummaryCard({
   }
 
   return (
-    <section className="flex min-h-[260px] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+    <section ref={summaryRef} className="flex min-h-[260px] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
         <div className="flex min-w-0 items-center gap-3">
           <PortalContactAvatar
@@ -10720,7 +10751,7 @@ function LeadLifecycleRail({
           className="flex w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/70 px-3.5 py-2.5 text-left transition-colors hover:border-[#caa24c]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:min-h-[72px] md:px-4 md:py-3"
         >
           <span className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm shadow-[#caa24c]/25 md:h-10 md:w-10">
+            <span className="luxor-gold-raised flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm shadow-[#caa24c]/25 md:h-10 md:w-10">
               {React.createElement(getStageIcon(currentStep?.id || 'inquiry'), { size: 14, strokeWidth: 2.5 })}
             </span>
             <span className="min-w-0">
@@ -10834,7 +10865,7 @@ function LeadLifecycleRail({
               >
                 <div className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ${
                   isCurrent
-                    ? 'border-2 border-[#caa24c] bg-[#caa24c] text-white ring-4 ring-[#caa24c]/25 shadow-lg shadow-[#caa24c]/25 font-bold scale-105'
+                    ? 'luxor-gold-raised text-white font-bold scale-105'
                     : isDone
                     ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-md shadow-[#caa24c]/20 font-bold'
                     : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/45'

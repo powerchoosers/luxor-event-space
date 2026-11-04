@@ -426,7 +426,7 @@ export function LeadPaymentsDashboard({
             <CalendarDays size={16} className="shrink-0 text-[#ae8138]" />
             {reminderHistoryError ? 'Reminder schedule unavailable' : reminderHistoryLoading && !paymentEmailJobs.length ? 'Loading payment reminders…' : nextReminder ? <>Next payment reminder: <strong className="font-semibold">{formatDate(nextReminder.scheduled_for)}</strong></> : 'No upcoming reminders'}
           </p>
-          <button type="button" onClick={() => { setRecordKind('deposit'); setRecordOpen(true) }} disabled={!booking || Boolean(paymentLoadError)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#b88737] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#9d6c25] disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={() => { setRecordKind('deposit'); setRecordOpen(true) }} disabled={!booking || Boolean(paymentLoadError)} className="luxor-gold-raised inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#b88737] px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#9d6c25] disabled:cursor-not-allowed disabled:opacity-50">
             <CircleDollarSign size={17} /> Record Payment
           </button>
         </div>
@@ -445,7 +445,7 @@ export function LeadPaymentsDashboard({
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-[#eadfcf] bg-white" aria-labelledby="payment-plan-heading">
-        <button type="button" onClick={() => setPlanOpen((value) => !value)} aria-expanded={planOpen} className="flex w-full items-center gap-3 p-4 text-left sm:p-5">
+        <button type="button" onClick={() => setPlanOpen((value) => !value)} aria-expanded={planOpen} aria-controls="payment-plan-content" className="flex w-full items-center gap-3 p-4 text-left sm:p-5">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#fbf1e4] text-[#af7c2a]"><Layers3 size={22} /></span>
           <span className="min-w-0 flex-1"><span id="payment-plan-heading" className="block font-serif text-2xl font-semibold text-[#2d211a]">Payment Plan</span><span className="mt-0.5 block text-sm text-[#78685a]">All payment milestones for this event.</span></span>
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#fbf1e4] text-[#ad7a2a]">{planOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
@@ -454,14 +454,16 @@ export function LeadPaymentsDashboard({
           <div className="flex flex-wrap items-baseline justify-between gap-2"><p className="text-sm"><strong className="mr-2 font-serif text-xl text-[#2d211a]">{formatMoney(paidTotal)}</strong><span className="text-[#78685a]">Paid</span></p><p className="text-sm"><strong className="mr-2 font-serif text-xl text-[#2d211a]">{formatMoney(remaining)}</strong><span className="text-[#78685a]">Remaining</span></p></div>
           <div className="mt-3 h-3 overflow-hidden rounded-full bg-[#f8d9e5]" role="progressbar" aria-label="Event payment progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentPaid}><div className="h-full rounded-full bg-[#ed4388] transition-[width]" style={{ width: `${percentPaid}%` }} /></div>
         </div>
-        {planOpen ? <div className="border-t border-[#f0e7dc] px-4 pb-5 pt-2 sm:px-6">
+        <div id="payment-plan-content" aria-hidden={!planOpen} inert={!planOpen} className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none ${planOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+          <div className="min-h-0 overflow-hidden">
+          <div className="border-t border-[#f0e7dc] px-4 pb-5 pt-2 sm:px-6">
           <div className="relative ml-2 space-y-1 before:absolute before:bottom-3 before:left-[11px] before:top-4 before:w-px before:bg-[#d8c6ac]">
             <div className="relative grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 py-3">
               <span className={`z-10 grid h-6 w-6 place-items-center rounded-full ${lastDeposit ? 'bg-emerald-600 text-white' : 'border-2 border-[#c7b69d] bg-white text-[#8b7a67]'}`}>{lastDeposit ? <Check size={14} /> : <Clock3 size={15} />}</span>
               <div className="min-w-0"><p className="font-semibold">Booking Deposit</p><p className="text-xs text-[#78685a]">{lastDeposit ? `Received ${formatDate(displayReceivedDate(lastDeposit))}` : 'No received booking deposit recorded'}</p></div>
               <div className="text-right"><p className="font-semibold tabular-nums">{formatMoney(scheduledDepositPaid)}</p><span className={`text-[10px] font-bold uppercase tracking-wide ${lastDeposit ? 'text-emerald-700' : 'text-[#8b7a67]'}`}>{lastDeposit ? 'Paid' : 'Pending'}</span></div>
             </div>
-            <div className="flex items-center gap-3 py-2"><span className="z-10 h-2 w-2 rounded-full bg-[#c29448]" /><p className="flex flex-1 items-center gap-3 text-[10px] font-bold uppercase tracking-[0.15em] text-[#a6772b]">Monthly payments<span className="h-px flex-1 bg-[#d8c6ac]" /></p></div>
+            <div className="grid grid-cols-[28px_minmax(0,1fr)] items-center gap-3 py-2"><span className="z-10 ml-[7px] h-2 w-2 rounded-full bg-[#c29448]" /><p className="flex min-w-0 items-center gap-3 text-[10px] font-bold uppercase tracking-[0.15em] text-[#a6772b]">Monthly payments<span className="h-px flex-1 bg-[#d8c6ac]" /></p></div>
             {timelineInstallments.map((installment) => {
               const state = installmentDisplayState(installment, uniquePayments)
               const { amountDue: due, credited, isPaid, isPartial, overdueDays } = state
@@ -476,7 +478,7 @@ export function LeadPaymentsDashboard({
             })}
             {paymentInstallmentLoadError ? <p role="alert" className="py-3 pl-10 text-sm text-amber-800">{paymentInstallmentLoadError}</p> : timelineInstallments.length === 0 ? <p className="py-3 pl-10 text-sm text-[#78685a]">No installment schedule is saved for this event.</p> : null}
             {securityAmount > 0 ? <>
-              <div className="flex items-center gap-3 py-2"><span className="z-10 h-2 w-2 rounded-full bg-[#c29448]" /><p className="flex flex-1 items-center gap-3 text-[10px] font-bold uppercase tracking-[0.15em] text-[#a6772b]">Refundable security deposit<span className="h-px flex-1 bg-[#d8c6ac]" /></p></div>
+              <div className="grid grid-cols-[28px_minmax(0,1fr)] items-center gap-3 py-2"><span className="z-10 ml-[7px] h-2 w-2 rounded-full bg-[#c29448]" /><p className="flex min-w-0 items-center gap-3 text-[10px] font-bold uppercase tracking-[0.15em] text-[#a6772b]">Refundable security deposit<span className="h-px flex-1 bg-[#d8c6ac]" /></p></div>
               <div className="relative grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 py-3">
                 <span className={`z-10 grid h-6 w-6 place-items-center rounded-full ${securityReceived ? 'bg-emerald-600 text-white' : 'border-2 border-[#b4a391] bg-white text-[#817364]'}`}>{securityReceived ? <Check size={14} /> : <Clock3 size={14} />}</span>
                 <div className="min-w-0"><p className="font-semibold">Security deposit</p><p className="text-xs text-[#78685a]">{securityInvoice?.due_date ? `Due ${formatDate(securityInvoice.due_date)}` : booking?.event_date ? `Due ${formatDate(daysBefore(booking.event_date, 30))}` : 'Separate from event total'}{securityStatus === 'held' ? ' · Held separately' : securityStatus === 'refunded' ? ' · Refunded' : ''}</p></div>
@@ -484,18 +486,22 @@ export function LeadPaymentsDashboard({
               </div>
             </> : null}
           </div>
-        </div> : null}
+          </div>
+          </div>
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-[#eadfcf] bg-white" aria-labelledby="financial-records-heading">
-        <button type="button" onClick={() => setRecordsOpen((value) => !value)} aria-expanded={recordsOpen} className="flex w-full items-center gap-3 p-4 text-left sm:p-5">
+        <button type="button" onClick={() => setRecordsOpen((value) => !value)} aria-expanded={recordsOpen} aria-controls="financial-records-content" className="flex w-full items-center gap-3 p-4 text-left sm:p-5">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#fbf1e4] text-[#af7c2a]"><FolderClosed size={22} /></span>
           <span className="min-w-0 flex-1"><span id="financial-records-heading" className="block font-serif text-2xl font-semibold text-[#2d211a]">Financial Records</span><span className="mt-0.5 block text-sm text-[#78685a]">All payment transactions, invoices, receipts, and reminders for this client.</span></span>
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#fbf1e4] text-[#ad7a2a]">{recordsOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
         </button>
-        {recordsOpen ? <div className="border-t border-[#f0e7dc] p-3 sm:p-5">
+        <div id="financial-records-content" aria-hidden={!recordsOpen} inert={!recordsOpen} className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none ${recordsOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+          <div className="min-h-0 overflow-hidden">
+          <div className="border-t border-[#f0e7dc] p-3 sm:p-5">
           <div role="tablist" aria-label="Financial record type" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {([['history', 'Payment History'], ['invoices', 'Invoices'], ['receipts', 'Receipts'], ['reminders', 'Reminder History']] as const).map(([key, label]) => <button key={key} id={`payment-record-tab-${key}`} type="button" role="tab" aria-selected={activeTab === key} aria-controls={`payment-record-panel-${key}`} onClick={() => setActiveTab(key)} className={`min-h-10 rounded-xl border px-3 py-2 text-xs font-semibold transition ${activeTab === key ? 'border-[#b88737] bg-[#b88737] text-white shadow-sm' : 'border-[#eadfcf] bg-[#fffdf9] text-[#624d35] hover:border-[#c9a66e]'}`}>{label}</button>)}
+            {([['history', 'Payment History'], ['invoices', 'Invoices'], ['receipts', 'Receipts'], ['reminders', 'Reminder History']] as const).map(([key, label]) => <button key={key} id={`payment-record-tab-${key}`} type="button" role="tab" aria-selected={activeTab === key} aria-controls={`payment-record-panel-${key}`} onClick={() => setActiveTab(key)} className={`min-h-10 rounded-xl border px-3 py-2 text-xs font-semibold transition ${activeTab === key ? 'luxor-gold-raised border-[#b88737] bg-[#b88737] text-white shadow-sm' : 'border-[#eadfcf] bg-[#fffdf9] text-[#624d35] hover:border-[#c9a66e]'}`}>{label}</button>)}
           </div>
           <div id={`payment-record-panel-${activeTab}`} role="tabpanel" aria-labelledby={`payment-record-tab-${activeTab}`} className="mt-4">
             {activeTab === 'history' ? <div>
@@ -548,7 +554,9 @@ export function LeadPaymentsDashboard({
               {reminderHistoryLoading && !eventReminderJobs.length ? <p className="rounded-xl border border-dashed border-[#e7d6be] p-6 text-center text-sm text-[#78685a]">Loading reminder history…</p> : null}
             </div> : null}
           </div>
-        </div> : null}
+          </div>
+          </div>
+        </div>
       </section>
 
       {recordOpen ? <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setRecordOpen(false) }}><div role="dialog" aria-modal="true" aria-labelledby="record-payment-title" className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-[#eadfcf] bg-[#fffdfa] p-5 shadow-xl sm:rounded-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#a6772b]">{leadName}{leadEmail ? ` · ${leadEmail}` : ''}</p><h3 id="record-payment-title" className="mt-1 font-serif text-2xl font-semibold text-[#2d211a]">Record Payment</h3><p className="mt-1 text-sm text-[#78685a]">Record funds already received and apply them to the correct signed-booking obligation.</p></div><button type="button" onClick={() => setRecordOpen(false)} disabled={busy} aria-label="Close" className="rounded-lg p-2 text-[#78685a] hover:bg-[#f6eee4]">×</button></div>
