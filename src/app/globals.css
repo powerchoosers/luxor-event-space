@@ -597,9 +597,31 @@ body[data-portal-theme] .portal-gold-btn:focus-visible {
 /* Tablet & Mobile Portal Scrollbars: native disappearing lightweight scrollbar without any persistent strip or track */
 @media (max-width: 1023px), (hover: none), (pointer: coarse) {
   body[data-portal-theme] * {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(180, 139, 59, 0.6) transparent;
+    scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar,
+  body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar-track,
+  body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-track {
+    display: none !important;
+    background: transparent !important;
+    border: 0 !important;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar-thumb,
+  body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-thumb {
+    display: none !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
   }
 }
 
