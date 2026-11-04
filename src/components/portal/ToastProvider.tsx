@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -57,6 +57,101 @@ const variantStyles: Record<ToastVariant, { icon: ReactNode; className: string; 
   },
 }
 
+function ToastItem({
+  toast,
+  style,
+  onDismiss,
+}: {
+  toast: Toast
+  style: { icon: ReactNode; className: string; labelClassName: string }
+  onDismiss: (id: string) => void
+}) {
+  const isDraggingRef = useRef(false)
+
+  return (
+    <motion.div
+      key={toast.id}
+      layout
+      drag="x"
+      dragDirectionLock
+      dragConstraints={{ left: 0, right: 320 }}
+      dragElastic={{ left: 0.05, right: 0.75 }}
+      dragSnapToOrigin
+      onDragStart={() => {
+        isDraggingRef.current = true
+      }}
+      onDragEnd={(_e, info) => {
+        // Swipe right past 60px or flick right with velocity to dismiss
+        if (info.offset.x > 60 || info.velocity.x > 250) {
+          onDismiss(toast.id)
+        }
+        setTimeout(() => {
+          isDraggingRef.current = false
+        }, 120)
+      }}
+      initial={{ opacity: 0, y: -20, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{
+        opacity: 0,
+        x: 180,
+        scale: 0.92,
+        transition: { duration: 0.2, ease: [0.23, 1, 0.32, 1] },
+      }}
+      transition={{
+        duration: 0.24,
+        ease: [0.23, 1, 0.32, 1],
+        layout: { duration: 0.22, ease: [0.23, 1, 0.32, 1] },
+      }}
+      className={`portal-toast pointer-events-auto relative overflow-hidden rounded-2xl border p-4 pr-12 shadow-2xl backdrop-blur-xl touch-pan-y cursor-grab active:cursor-grabbing select-none transform-gpu will-change-transform ${
+        toast.onClick ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60' : ''
+      } ${style.className}`}
+      data-toast-variant={toast.variant || 'info'}
+      role={toast.onClick ? 'button' : 'status'}
+      tabIndex={toast.onClick ? 0 : undefined}
+      onClick={() => {
+        if (isDraggingRef.current) return
+        toast.onClick?.()
+      }}
+      onKeyDown={(event) => {
+        if (toast.onClick && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault()
+          toast.onClick()
+        }
+      }}
+      aria-live="polite"
+    >
+      {/* Vertically centered dismiss button on the right edge */}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onDismiss(toast.id)
+        }}
+        className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex h-7 w-7 items-center justify-center rounded-lg text-[color:var(--portal-muted)] opacity-70 transition-all hover:text-[color:var(--portal-text)] hover:opacity-100 hover:bg-[color:var(--portal-soft)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer"
+        aria-label="Close notification"
+      >
+        <X size={15} />
+      </button>
+      <div className="flex gap-3">
+        <span className={`mt-0.5 shrink-0 ${style.labelClassName}`}>
+          {toast.icon !== undefined ? toast.icon : style.icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-5 text-[color:var(--portal-text)]">{toast.title}</p>
+          {toast.description ? (
+            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{toast.description}</p>
+          ) : null}
+          {toast.action ? (
+            <div className="mt-2.5 pointer-events-auto">
+              {toast.action}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const canUsePortal = useSyncExternalStore(
@@ -94,63 +189,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {canUsePortal ? createPortal(<div className="pointer-events-none fixed right-4 top-4 z-[300] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-5 sm:top-5">
         <AnimatePresence mode="popLayout" initial={false}>
-          {toasts.map((toast) => {
-            const style = variantStyles[toast.variant || 'info']
-            return (
-              <motion.div
-                key={toast.id}
-                layout
-                initial={{ opacity: 0, y: -20, scale: 0.94 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -20, scale: 0.92 }}
-                transition={{
-                  duration: 0.24,
-                  ease: [0.23, 1, 0.32, 1],
-                  layout: { duration: 0.22, ease: [0.23, 1, 0.32, 1] },
-                }}
-                className={`portal-toast pointer-events-auto relative overflow-hidden rounded-2xl border p-4 pr-11 shadow-2xl backdrop-blur-xl ${toast.onClick ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60' : ''} ${style.className}`}
-                data-toast-variant={toast.variant || 'info'}
-                role={toast.onClick ? 'button' : 'status'}
-                tabIndex={toast.onClick ? 0 : undefined}
-                onClick={toast.onClick}
-                onKeyDown={(event) => {
-                  if (toast.onClick && (event.key === 'Enter' || event.key === ' ')) {
-                    event.preventDefault()
-                    toast.onClick()
-                  }
-                }}
-                aria-live="polite"
-              >
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    dismiss(toast.id)
-                  }}
-                  className="absolute right-2.5 top-2.5 rounded-lg p-1 text-[color:var(--portal-muted)] opacity-70 transition-all hover:text-[color:var(--portal-text)] hover:opacity-100 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer"
-                  aria-label="Close notification"
-                >
-                  <X size={15} />
-                </button>
-                <div className="flex gap-3">
-                  <span className={`mt-0.5 shrink-0 ${style.labelClassName}`}>
-                    {toast.icon !== undefined ? toast.icon : style.icon}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold leading-5 text-[color:var(--portal-text)]">{toast.title}</p>
-                    {toast.description ? (
-                      <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{toast.description}</p>
-                    ) : null}
-                    {toast.action ? (
-                      <div className="mt-2.5 pointer-events-auto">
-                        {toast.action}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </motion.div>
-            )
-          })}
+          {toasts.map((toast) => (
+            <ToastItem
+              key={toast.id}
+              toast={toast}
+              style={variantStyles[toast.variant || 'info']}
+              onDismiss={dismiss}
+            />
+          ))}
         </AnimatePresence>
       </div>, document.body) : null}
     </ToastContext.Provider>
