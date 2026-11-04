@@ -525,7 +525,39 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const mobileSearchInputRef = useRef<HTMLInputElement>(null)
+  const mobileSearchContainerRef = useRef<HTMLDivElement>(null)
+  const mobileSearchToggleRef = useRef<HTMLButtonElement>(null)
   const deferredSearchQuery = useDeferredValue(searchQuery)
+
+  // Close mobile search on pathname change during render
+  const [prevSearchPathname, setPrevSearchPathname] = useState(pathname)
+  if (pathname !== prevSearchPathname) {
+    setPrevSearchPathname(pathname)
+    if (mobileSearchOpen) {
+      setMobileSearchOpen(false)
+    }
+  }
+
+  // Close mobile search when clicking or tapping outside of search bar and dropdown
+  useEffect(() => {
+    if (!mobileSearchOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+
+      if (mobileSearchContainerRef.current?.contains(target)) return
+      if (mobileSearchToggleRef.current?.contains(target)) return
+
+      setMobileSearchOpen(false)
+      mobileSearchInputRef.current?.blur()
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [mobileSearchOpen])
 
   const recentLeads = useSyncExternalStore(
     subscribeRecentLeads,
@@ -700,7 +732,6 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
       <aside
         onWheelCapture={handOffWheelToPage}
         onClick={handleSidebarEmptyClick}
-        title={sidebarIsCollapsed ? 'Click blank spot to expand navigation' : 'Click blank spot to collapse navigation'}
         className={`fixed left-0 top-0 z-50 hidden h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:block overflow-visible cursor-pointer select-none border-0 border-none ${
           portalTheme === 'light'
             ? 'bg-[color:var(--portal-card)]/95 shadow-none'
@@ -787,17 +818,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             })}
           </nav>
 
-          {/* Dedicated blank spot hit zone between nav items and bottom actions */}
+          {/* Invisible blank spot hit zone between nav items and bottom actions */}
           <div
-            role="button"
-            tabIndex={-1}
             onClick={(event) => {
               event.stopPropagation()
               toggleSidebar()
             }}
-            title={sidebarIsCollapsed ? 'Click blank spot to expand navigation' : 'Click blank spot to collapse navigation'}
-            aria-label={sidebarIsCollapsed ? 'Expand navigation panel' : 'Collapse navigation panel'}
-            className="flex-1 min-h-[3.5rem] w-full cursor-pointer select-none rounded-xl transition-colors hover:bg-[#caa24c]/[0.03]"
+            aria-hidden="true"
+            className="flex-1 min-h-[3.5rem] w-full cursor-pointer select-none"
           />
 
           <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
@@ -921,7 +949,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
           {/* Header Search Command Bar */}
           <div
-            className="group relative col-start-2 hidden h-9.5 w-full max-w-80 items-center justify-self-center rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 transition-all duration-200 ease-out hover:border-[color:var(--portal-border)] focus-within:!max-w-96 focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10 sm:flex cursor-text"
+            className={`group relative col-start-2 hidden h-9.5 w-full items-center justify-self-center rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 transition-[max-width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border)] focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10 sm:flex cursor-text ${
+              searchFocused ? 'max-w-[28rem]' : 'max-w-80'
+            }`}
             onClick={() => {
               searchInputRef.current?.focus()
               setSearchFocused(true)
@@ -966,11 +996,11 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               {searchFocused && (
                 <motion.div
                   onMouseDown={(e) => e.preventDefault()}
-                  initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                  transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-                  className="portal-search-dropdown absolute left-0 top-12 z-[100] w-full min-w-[24rem] rounded-xl border p-2 space-y-1 shadow-xl backdrop-blur-2xl"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                  className="portal-search-dropdown absolute inset-x-0 top-12 z-[100] w-full rounded-xl border p-2 space-y-1 shadow-xl backdrop-blur-2xl overflow-hidden"
                 >
                   {searchQuery.trim().length > 0 ? (
                     <>
@@ -1121,6 +1151,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             <div className="flex h-9 items-center sm:hidden gap-1">
               {/* 1. Mobile Search Toggle */}
               <button
+                ref={mobileSearchToggleRef}
                 type="button"
                 onClick={() => {
                   setMobileSearchOpen((prev) => {
@@ -1270,16 +1301,33 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           </div>
         </header>
 
-        {/* Mobile Search Bar that pushes in from the bottom of the header */}
+        {/* Mobile Search Bar and Backdrop */}
         <AnimatePresence>
           {mobileSearchOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-              className="relative z-40 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/98 backdrop-blur-xl sm:hidden shadow-lg overflow-visible"
-            >
+            <>
+              {/* Tap-outside backdrop */}
+              <motion.div
+                key="mobile-search-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="fixed inset-0 z-30 bg-black/15 backdrop-blur-[1px] sm:hidden"
+                onClick={() => {
+                  setMobileSearchOpen(false)
+                  mobileSearchInputRef.current?.blur()
+                }}
+                aria-hidden="true"
+              />
+              <motion.div
+                key="mobile-search-panel"
+                ref={mobileSearchContainerRef}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                className="relative z-40 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/98 backdrop-blur-xl sm:hidden shadow-lg overflow-visible"
+              >
               <div className="p-3">
                 <div className="flex h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 focus-within:border-[#caa24c]/60 focus-within:ring-2 focus-within:ring-[#caa24c]/20 transition-all">
                   <Search size={15} className="shrink-0 text-[#caa24c]" />
@@ -1430,8 +1478,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 )}
               </AnimatePresence>
             </motion.div>
-          )}
-        </AnimatePresence>
+          </>
+        )}
+      </AnimatePresence>
 
         {/* The shell reserves the bottom bar; detail pages also reserve their action row. */}
         <div ref={contentScrollRef} className={`portal-scrollbar min-h-0 min-w-0 flex-1 bg-[color:var(--portal-bg)] transition-[border-radius] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] lg:rounded-tl-[28px] ${usesInternalPaneScroll ? 'flex flex-col overflow-y-hidden' : 'overflow-y-auto'} overflow-x-hidden ${isCallsPage || isMessagesPage ? 'p-0 lg:p-8' : isCustomWorkflowEditor ? 'p-0 lg:p-8' : isEmailPage ? 'p-0 lg:p-8' : isLeadDetailPage ? 'px-4 pt-4 pb-44 sm:p-6 lg:px-8 lg:pt-8 lg:pb-0' : pathname === '/portal/leads' ? 'p-4 max-md:pt-0 max-md:pb-[calc(4rem+env(safe-area-inset-bottom))] sm:p-6 lg:p-8' : 'p-4 sm:p-6 lg:p-8'} ${
