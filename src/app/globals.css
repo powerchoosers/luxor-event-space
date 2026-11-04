@@ -540,83 +540,66 @@ body[data-portal-theme] .portal-gold-btn:focus-visible {
   outline-offset: 2px !important;
 }
 
-/* Desktop Portal Scrollbars: matching Loadline's tactile gold 3D raised texture */
-@supports selector(::-webkit-scrollbar) {
+/* Desktop Portal Scrollbars: matching Loadline's tactile gold 3D raised texture (desktop mouse only) */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  @supports selector(::-webkit-scrollbar) {
+    body[data-portal-theme] * {
+      scrollbar-color: auto !important;
+      scrollbar-width: auto !important;
+    }
+  }
+
   body[data-portal-theme] * {
-    scrollbar-color: auto !important;
-    scrollbar-width: auto !important;
+    scrollbar-width: thin;
+    scrollbar-color: #caa24c transparent;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar,
+  body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar-track,
+  body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-track,
+  body[data-portal-theme] *::-webkit-scrollbar-corner {
+    background: transparent !important;
+    border: 0 !important;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar-thumb,
+  body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-thumb {
+    min-height: 36px;
+    border: 1px solid #9e7525 !important;
+    border-radius: 999px !important;
+    background: linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.8),
+      inset 0 -1px 1px rgba(0, 0, 0, 0.3),
+      0 1px 2px rgba(0, 0, 0, 0.16) !important;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar-thumb:hover,
+  body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-thumb:hover {
+    border-color: #aa812f !important;
+    background: linear-gradient(180deg, #e0be67 0%, #caa043 100%) !important;
+    box-shadow:
+      inset 0 1px 1px #ffffff,
+      inset 0 -1px 1px rgba(0, 0, 0, 0.35),
+      0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  body[data-portal-theme] *::-webkit-scrollbar-button {
+    display: none !important;
   }
 }
 
-body[data-portal-theme] * {
-  scrollbar-width: thin;
-  scrollbar-color: #caa24c transparent;
-}
-
-body[data-portal-theme] *::-webkit-scrollbar,
-body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-body[data-portal-theme] *::-webkit-scrollbar-track,
-body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-track,
-body[data-portal-theme] *::-webkit-scrollbar-corner {
-  background: transparent !important;
-  border: 0 !important;
-}
-
-body[data-portal-theme] *::-webkit-scrollbar-thumb,
-body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-thumb {
-  min-height: 36px;
-  border: 1px solid #9e7525 !important;
-  border-radius: 999px !important;
-  background: linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.8),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.3),
-    0 1px 2px rgba(0, 0, 0, 0.16) !important;
-}
-
-body[data-portal-theme] *::-webkit-scrollbar-thumb:hover,
-body[data-portal-theme] .portal-scrollbar::-webkit-scrollbar-thumb:hover {
-  border-color: #aa812f !important;
-  background: linear-gradient(180deg, #e0be67 0%, #caa043 100%) !important;
-  box-shadow:
-    inset 0 1px 1px #ffffff,
-    inset 0 -1px 1px rgba(0, 0, 0, 0.35),
-    0 2px 4px rgba(0, 0, 0, 0.2) !important;
-}
-
-body[data-portal-theme] *::-webkit-scrollbar-button {
-  display: none !important;
-}
-
-/* Keep the portal's mobile scroll indicator quiet and unobtrusive. */
-@media (max-width: 640px) {
+/* Tablet & Mobile Portal Scrollbars: native disappearing lightweight scrollbar without any persistent strip or track */
+@media (max-width: 1023px), (hover: none), (pointer: coarse) {
   body[data-portal-theme] * {
-    scrollbar-color: rgba(180, 139, 59, 0.72) transparent;
-  }
-
-  body[data-portal-theme] *::-webkit-scrollbar {
-    width: 0.32rem;
-    height: 0.32rem;
-  }
-
-  body[data-portal-theme] *::-webkit-scrollbar-track {
-    border: 0;
-    background: transparent;
-  }
-
-  body[data-portal-theme] *::-webkit-scrollbar-thumb {
-    border: 0;
-    border-radius: 999px;
-    background: linear-gradient(180deg, #d7b45f, #aa7d32);
-    box-shadow: none;
-  }
-
-  body[data-portal-theme] *::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #e3c575, #b88c40);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(180, 139, 59, 0.6) transparent;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
@@ -1091,57 +1074,75 @@ body[data-luxor-site]::-webkit-scrollbar-thumb:hover {
   }
 
   .portal-scrollbar {
-    scrollbar-color: #caa24c transparent;
-    scrollbar-width: thin;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     overscroll-behavior-y: auto;
   }
 
-  .portal-scrollbar::-webkit-scrollbar {
-    width: 7px;
-    height: 7px;
-  }
+  @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+    .portal-scrollbar {
+      scrollbar-color: #caa24c transparent;
+      scrollbar-width: thin;
+    }
 
-  .portal-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-    border: 0;
-  }
+    .portal-scrollbar::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
 
-  .portal-scrollbar::-webkit-scrollbar-thumb {
-    min-height: 32px;
-    border: 1px solid #b88d37;
-    border-radius: 999px;
-    background: #caa24c;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
-  }
+    .portal-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+      border: 0;
+    }
 
-  .portal-scrollbar::-webkit-scrollbar-thumb:hover {
-    border-color: #c49b42;
-    background: #d4ad54;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-  }
+    .portal-scrollbar::-webkit-scrollbar-thumb {
+      min-height: 36px;
+      border: 1px solid #9e7525 !important;
+      border-radius: 999px !important;
+      background: linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
+      box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.8),
+        inset 0 -1px 1px rgba(0, 0, 0, 0.3),
+        0 1px 2px rgba(0, 0, 0, 0.16) !important;
+    }
 
-  .portal-scrollbar-light {
-    scrollbar-color: #caa24c transparent;
-  }
+    .portal-scrollbar::-webkit-scrollbar-thumb:hover {
+      border-color: #aa812f !important;
+      background: linear-gradient(180deg, #e0be67 0%, #caa043 100%) !important;
+      box-shadow:
+        inset 0 1px 1px #ffffff,
+        inset 0 -1px 1px rgba(0, 0, 0, 0.35),
+        0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    }
 
-  .portal-scrollbar-light::-webkit-scrollbar-track {
-    background: transparent;
-    border: 0;
-  }
+    .portal-scrollbar-light {
+      scrollbar-color: #caa24c transparent;
+    }
 
-  .portal-scrollbar-light::-webkit-scrollbar-thumb {
-    border: 1px solid #b88d37;
-    border-radius: 999px;
-    background: #caa24c;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
-  }
+    .portal-scrollbar-light::-webkit-scrollbar-track {
+      background: transparent;
+      border: 0;
+    }
 
-  .portal-scrollbar-light::-webkit-scrollbar-thumb:hover {
-    border-color: #c49b42;
-    background: #d4ad54;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    .portal-scrollbar-light::-webkit-scrollbar-thumb {
+      min-height: 36px;
+      border: 1px solid #9e7525 !important;
+      border-radius: 999px !important;
+      background: linear-gradient(180deg, #d4af54 0%, #ba8e35 100%) !important;
+      box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.8),
+        inset 0 -1px 1px rgba(0, 0, 0, 0.3),
+        0 1px 2px rgba(0, 0, 0, 0.16) !important;
+    }
+
+    .portal-scrollbar-light::-webkit-scrollbar-thumb:hover {
+      border-color: #aa812f !important;
+      background: linear-gradient(180deg, #e0be67 0%, #caa043 100%) !important;
+      box-shadow:
+        inset 0 1px 1px #ffffff,
+        inset 0 -1px 1px rgba(0, 0, 0, 0.35),
+        0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    }
   }
 
   .portal-render-surface {
