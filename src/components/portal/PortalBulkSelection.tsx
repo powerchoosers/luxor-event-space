@@ -114,12 +114,12 @@ export function PortalBulkRowSelector({
           : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-faint)] hover:border-[#caa24c]/60 hover:text-[color:var(--portal-text)] focus-visible:border-[#caa24c]'
       }`}
     >
-      <span className={checked ? 'hidden' : 'group-hover/selector:hidden group-focus-visible/selector:hidden'}>{index}</span>
+      <span aria-hidden="true" className={`pointer-events-none absolute inset-0 grid place-items-center leading-none ${checked ? 'opacity-0' : 'opacity-100 group-hover/selector:opacity-0 group-focus-visible/selector:opacity-0'}`}>{index}</span>
       <Check
         size={11}
         strokeWidth={3}
         aria-hidden="true"
-        className={`${checked ? 'block' : 'hidden group-hover/selector:block group-focus-visible/selector:block'} !text-white !stroke-white`}
+        className={`pointer-events-none absolute ${checked ? 'opacity-100' : 'opacity-0 group-hover/selector:opacity-100 group-focus-visible/selector:opacity-100'} !text-white !stroke-white`}
         style={{ color: '#fff', stroke: '#fff' }}
       />
     </button>

@@ -26,8 +26,6 @@ import {
   X,
   Menu,
   SquarePen,
-  Maximize2,
-  Minimize2,
   MoreVertical,
   Download,
   FileText,
@@ -459,7 +457,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [viewportWidth, setViewportWidth] = useState<'full' | 'tablet' | 'mobile'>('full')
   const [blockExternalImages, setBlockExternalImages] = useState(false)
   const mailboxDrawerRef = useRef<HTMLElement | null>(null)
-  const [readerExpanded, setReaderExpanded] = useState(false)
   const [landscapeDetailsMessageId, setLandscapeDetailsMessageId] = useState<string | null>(null)
   const [readerMenuOpen, setReaderMenuOpen] = useState(false)
   const [openingAttachment, setOpeningAttachment] = useState<string | null>(null)
@@ -754,7 +751,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           setSelectedMessageKey(null)
           setMessageDetail(null)
           setCompactReaderOpen(false)
-          setReaderExpanded(false)
         }
         return
       }
@@ -1328,7 +1324,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       return
     }
     setCompactReaderOpen(false)
-    setReaderExpanded(false)
     setReaderMenuOpen(false)
     readerOpenedFromList.current = false
     if (searchParams?.get('messageId')) {
@@ -1758,7 +1753,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       <div className="relative flex min-h-0 flex-1 w-full overflow-hidden rounded-none border-x border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] font-sans text-[color:var(--portal-text)] shadow-none lg:rounded-2xl lg:border lg:shadow-sm">
       {/* PANE 1: Mailbox Navigation (Desktop collapsible column) */}
       <AnimatePresence initial={false}>
-      {mailboxDrawerOpen && !readerExpanded && (
+      {mailboxDrawerOpen && (
         <motion.aside
           key="mailbox-nav-desktop"
           role="region"
@@ -1775,7 +1770,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       </AnimatePresence>
       {/* PANE 2: Message Threads List */}
       <AnimatePresence initial={false}>
-      {!readerExpanded && <motion.div
+      <motion.div
         key="message-list"
         initial={{ width: 0, opacity: 0, x: -12 }}
         animate={{ width: 'var(--message-list-width)', opacity: 1, x: 0 }}
@@ -1824,7 +1819,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
               aria-label={mailboxDrawerOpen ? "Close mailbox navigation" : "Open mailbox navigation"}
               title={mailboxDrawerOpen ? "Close mailbox navigation" : "Open mailbox navigation"}
               aria-expanded={mailboxDrawerOpen}
-              className={`inline-flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${
+              className={`inline-flex h-9.5 w-9.5 !min-h-9.5 !min-w-9.5 shrink-0 items-center justify-center rounded-xl p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${
                 mailboxDrawerOpen
                   ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]'
                   : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
@@ -1966,7 +1961,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           <div data-mailbox-list-end className="h-px w-full" aria-hidden="true" />
         </div>
 
-      </motion.div>}
+      </motion.div>
       </AnimatePresence>
 
       {/* PANE 3: Mainstream Email Detail & Isolated Viewer */}
@@ -1981,8 +1976,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         className={`absolute inset-0 z-20 w-full min-h-0 min-w-0 flex-1 overflow-hidden bg-[color:var(--portal-card)] flex-col lg:static lg:z-auto lg:w-auto ${compactReaderOpen ? 'flex' : 'hidden lg:flex'}`}
       >
         <div className="flex min-h-11 shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-1.5 sm:px-4">
-          <button type="button" onClick={closeReader} aria-label="Back to email list" title="Back to email list" className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${readerExpanded ? '' : 'lg:hidden'}`}>
-            <ArrowLeft size={17} aria-hidden="true" /> <span className={readerExpanded ? 'hidden lg:inline' : 'hidden'}>Back to list</span>
+          <button type="button" onClick={closeReader} aria-label="Back to email list" title="Back to email list" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] lg:hidden">
+            <ArrowLeft size={17} aria-hidden="true" />
           </button>
           {selectedId && messageDetail ? (
             <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-[color:var(--portal-text)] sm:text-sm lg:text-base" title={decodeHtmlEntities(messageDetail.subject)}>
@@ -1995,18 +1990,6 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             <span className="max-w-28 truncate pr-1 text-[10px] text-[color:var(--portal-muted)] sm:hidden">{mailboxName || 'Luxor Email'}</span>
             {selectedId && messageDetail ? (
                 <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReaderMenuOpen(false)
-                      setReaderExpanded((expanded) => !expanded)
-                    }}
-                    className="hidden lg:inline-flex rounded-xl bg-transparent p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
-                    title={readerExpanded ? 'Restore message list' : 'Expand email reader'}
-                    aria-label={readerExpanded ? 'Restore message list' : 'Expand email reader'}
-                  >
-                    {readerExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                  </button>
                   <div ref={readerMenuRef} className="relative">
                     <button
                       type="button"

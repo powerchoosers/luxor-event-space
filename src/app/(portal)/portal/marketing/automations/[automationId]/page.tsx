@@ -2,9 +2,9 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, CalendarClock, Clock3, Mail, MessageSquareText, Phone, RefreshCw, Save, Workflow } from 'lucide-react'
-import { PortalPageFrame } from '@/components/portal/PortalUI'
+import { PortalButton, PortalModal, PortalPageFrame } from '@/components/portal/PortalUI'
 import type { AutomationLibraryEntry, AutomationLibraryTotals, AutomationStatus } from '@/lib/luxorAutomationsLibrary'
 
 type LibraryResponse = {
@@ -152,6 +152,7 @@ function statusLabel(status: AutomationStatus) {
 
 export default function AutomationDetailPage() {
   const params = useParams<{ automationId: string }>()
+  const router = useRouter()
   const routeId = String(params.automationId || '')
   const libraryId = routeId === 'tour-notifications' ? 'system:tour-notifications' : routeId === 'payment-reminders' ? 'system:payment-reminders' : routeId
   const [entry, setEntry] = React.useState<AutomationLibraryEntry | null>(null)
@@ -172,6 +173,7 @@ export default function AutomationDetailPage() {
   const [feedback, setFeedback] = React.useState<string | null>(null)
   const [automationSaving, setAutomationSaving] = React.useState(false)
   const [automationError, setAutomationError] = React.useState<string | null>(null)
+  const [confirmation, setConfirmation] = React.useState<{ title: string; description: string; confirmLabel: string; onConfirm: () => void } | null>(null)
   const pendingSaveReload = React.useRef(false)
   const pendingSaveMessage = React.useRef<string | null>(null)
   const preserveFeedbackOnTemplateRefresh = React.useRef(false)
@@ -253,6 +255,16 @@ export default function AutomationDetailPage() {
   const currentSavedDraft = activeTemplate ? draftFromTemplate(activeTemplate) : EMPTY_DRAFT
   const dirty = canEdit && !sameDraft(draft, currentSavedDraft)
 
+  const requestConfirmation = React.useCallback((title: string, description: string, confirmLabel: string, onConfirm: () => void) => {
+    setConfirmation({ title, description, confirmLabel, onConfirm })
+  }, [])
+
+  function confirmPendingAction() {
+    const action = confirmation?.onConfirm
+    setConfirmation(null)
+    action?.()
+  }
+
   React.useEffect(() => {
     if (!activeTemplate) return
     setDraft(draftFromTemplate(activeTemplate))
@@ -286,19 +298,26 @@ export default function AutomationDetailPage() {
       const destination = new URL(link.href, window.location.href)
       if (destination.origin !== window.location.origin) return
       if (destination.pathname === window.location.pathname && destination.search === window.location.search) return
-      if (!window.confirm('Discard unsaved email changes and leave this detail page?')) {
-        event.preventDefault()
-        event.stopImmediatePropagation()
-      }
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      requestConfirmation('Discard unsaved changes?', 'Your email edits have not been saved. Discard them and leave this detail page?', 'Discard and leave', () => {
+        router.push(`${destination.pathname}${destination.search}${destination.hash}`)
+      })
     }
     document.addEventListener('click', guardInternalNavigation, true)
     return () => document.removeEventListener('click', guardInternalNavigation, true)
-  }, [dirty])
+  }, [dirty, requestConfirmation, router])
 
   function handleRefresh() {
-    if (dirty && !window.confirm('Discard unsaved email changes and reload saved automation data?')) return
-    if (dirty && activeTemplate) setDraft(draftFromTemplate(activeTemplate))
-    setReloadVersion((value) => value + 1)
+    const refresh = () => {
+      if (activeTemplate) setDraft(draftFromTemplate(activeTemplate))
+      setReloadVersion((value) => value + 1)
+    }
+    if (dirty) {
+      requestConfirmation('Discard unsaved changes?', 'Reloading will discard your email edits and load the saved automation data.', 'Reload saved data', refresh)
+      return
+    }
+    refresh()
   }
 
   async function handleAutomationToggle() {
@@ -323,9 +342,15 @@ export default function AutomationDetailPage() {
 
   function handleSelectStep(key: string) {
     if (key === selectedStepKey) return
-    if (dirty && !window.confirm('Discard unsaved email changes and open another step?')) return
-    if (dirty && activeTemplate) setDraft(draftFromTemplate(activeTemplate))
-    setSelectedStepKey(key)
+    const selectStep = () => {
+      if (activeTemplate) setDraft(draftFromTemplate(activeTemplate))
+      setSelectedStepKey(key)
+    }
+    if (dirty) {
+      requestConfirmation('Discard unsaved changes?', 'Opening another step will discard your email edits.', 'Discard and continue', selectStep)
+      return
+    }
+    selectStep()
   }
 
   function updateDraft(field: keyof ContentDraft, value: string) {
@@ -399,8 +424,14 @@ export default function AutomationDetailPage() {
     if (applyToQueued) {
       const count = queuedPreview?.eligibleCount ?? 0
       const description = count === 1 ? '1 matching queued email' : `${count} matching queued emails`
-      if (!window.confirm(`Save this email and update the reviewed ${description}? Only still-queued, unattempted copies scheduled in the future will change. Recipients and send times stay the same; sent, claimed, attempted, stale, or ineligible emails will be skipped.`)) return
+      requestConfirmation('Update queued emails?', `Save this email and update the reviewed ${description}? Only future-dated queued emails with no delivery attempt will change. Recipients and send times stay the same.`, 'Save and update emails', () => { void persistDraft() })
+      return
     }
+    await persistDraft()
+  }
+
+  async function persistDraft() {
+    if (!activeTemplate || !dirty) return
     setSaving(true)
     setFeedback(null)
     try {
@@ -466,7 +497,7 @@ export default function AutomationDetailPage() {
                 
                 <h1 className="font-serif text-2xl font-semibold text-[color:var(--portal-text)] sm:text-3xl">{entry?.name || 'Automation details'}</h1>
                 {entry ? <StatusBadge status={productionSettingIsOn ? 'active' : entry.status} label={productionSettingIsOn ? 'Live in prod' : undefined} title={productionSettingIsOn ? 'The saved production setting is on. This local preview is read-only and does not send follow-ups.' : undefined} /> : null}
-                {entry ? <div className="ml-1 flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-1.5"><span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{entry.enabled ? 'On' : 'Off'}</span><button type="button" role="switch" aria-checked={entry.enabled} aria-label={`${entry.name} automation`} disabled={automationSaving || entry.canToggle === false || (entry.canEnable === false && !entry.enabled)} onClick={() => void handleAutomationToggle()} title={entry.canToggle === false ? entry.controlReason || 'Use the deployed portal to change live automation.' : entry.canEnable === false && !entry.enabled ? entry.controlReason || 'This automation is not ready to enable.' : undefined} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-50 ${entry.enabled ? 'bg-[#a8792f]' : 'bg-[color:var(--portal-border)]'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} /></button></div> : null}
+                {entry ? <div className="ml-1 flex items-center gap-2"><span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{entry.enabled ? 'On' : 'Off'}</span><button type="button" role="switch" aria-checked={entry.enabled} aria-label={`${entry.name} automation`} disabled={automationSaving || entry.canToggle === false || (entry.canEnable === false && !entry.enabled)} onClick={() => void handleAutomationToggle()} title={entry.canToggle === false ? entry.controlReason || 'Use the deployed portal to change live automation.' : entry.canEnable === false && !entry.enabled ? entry.controlReason || 'This automation is not ready to enable.' : undefined} className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-50"><span aria-hidden="true" className={`inline-flex h-6 w-11 items-center rounded-full transition-colors ${entry.enabled ? 'bg-[#a8792f]' : 'bg-[color:var(--portal-border)]'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${entry.enabled ? 'translate-x-6' : 'translate-x-1'}`} /></span></button></div> : null}
               </div>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--portal-muted)]">{entry?.description || 'Inspect the saved automation configuration.'}</p>
             </div>
@@ -511,6 +542,15 @@ export default function AutomationDetailPage() {
           />
         ) : detail?.kind === 'system' ? <TourNotificationDetail detail={detail} /> : detail?.kind === 'payment-reminders' ? <PaymentReminderDetailView detail={detail} /> : entry ? <UnknownWorkflowDetail entry={entry} /> : null}
       </div>
+      <PortalModal
+        isOpen={Boolean(confirmation)}
+        onClose={() => setConfirmation(null)}
+        title={confirmation?.title}
+        maxWidth="max-w-md"
+        footer={<div className="flex flex-wrap justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={() => setConfirmation(null)}>Cancel</PortalButton><PortalButton type="button" variant="primary" onClick={confirmPendingAction}>{confirmation?.confirmLabel || 'Continue'}</PortalButton></div>}
+      >
+        <p className="text-sm leading-6 text-[color:var(--portal-muted)]">{confirmation?.description}</p>
+      </PortalModal>
     </PortalPageFrame>
   )
 }
@@ -622,10 +662,12 @@ function SelectedStepPanel(props: Parameters<typeof SavedWorkflowDetail>[0]) {
             </p> : <p className="mt-2 text-[11px] leading-5 text-[color:var(--portal-muted)]">Review first to see the exact current count. Only future-dated queued jobs with no delivery attempt or outbox payload can be changed.</p>}
           </div> : null}
         </div> : null}
-        <div className="flex flex-wrap gap-2 border-t border-[color:var(--portal-border)] pt-4">
-          <button type="button" onClick={props.onPreview} disabled={props.previewing || props.saving} className={secondaryButtonClass}><Mail size={14} aria-hidden="true" />{props.previewing ? 'Rendering…' : 'Preview'}</button>
-          <button type="button" onClick={props.onSave} disabled={!props.dirty || props.saving || props.previewing || props.queuePreviewing || (props.applyToQueued && (!props.queuedPreview || props.queuedPreview.limitExceeded))} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition hover:bg-[#d6b45f] hover:text-white focus-visible:text-white disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><Save size={14} aria-hidden="true" />{props.saving ? 'Saving…' : 'Save changes'}</button>
-          <button type="button" onClick={props.onCancel} disabled={!props.dirty || props.saving} className={secondaryButtonClass}>Cancel</button>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--portal-border)] pt-4">
+          <button type="button" onClick={props.onPreview} disabled={props.previewing || props.saving} className="inline-flex min-h-11 items-center justify-center gap-2 px-1 text-xs font-semibold text-[color:var(--portal-muted)] transition hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-45"><Mail size={14} aria-hidden="true" />{props.previewing ? 'Rendering…' : 'Preview'}</button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button type="button" onClick={props.onCancel} disabled={!props.dirty || props.saving} className={secondaryButtonClass}>Cancel</button>
+            <button type="button" onClick={props.onSave} disabled={!props.dirty || props.saving || props.previewing || props.queuePreviewing || (props.applyToQueued && (!props.queuedPreview || props.queuedPreview.limitExceeded))} className="luxor-gold-raised inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-xs font-bold !text-white transition hover:!text-white focus-visible:!text-white disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><Save size={14} aria-hidden="true" className="!text-white" />{props.saving ? 'Saving…' : 'Save changes'}</button>
+          </div>
         </div>
         {props.feedback ? <p role="status" className="text-xs leading-5 text-[color:var(--portal-muted)]">{props.feedback}</p> : null}
         {props.previewHtml ? <div className="border-t border-[color:var(--portal-border)] pt-4"><p className="text-xs font-bold text-[color:var(--portal-text)]">Preview</p><p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">{props.previewNote}</p><iframe title="Luxor email preview" sandbox="" srcDoc={props.previewHtml} className="mt-3 h-[min(42rem,70vh)] w-full rounded-xl border border-[color:var(--portal-border)] bg-white" /></div> : null}

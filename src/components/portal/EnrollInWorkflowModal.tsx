@@ -2,6 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Check, ExternalLink, LoaderCircle, Search, Workflow, X } from 'lucide-react'
 import { PortalModal, PortalButton } from '@/components/portal/PortalUI'
 import { PREBUILT_WORKFLOWS } from '@/lib/luxorPrebuiltWorkflows'
@@ -21,6 +22,8 @@ export interface EnrollInWorkflowModalProps {
 }
 
 export function EnrollInWorkflowModal({ isOpen, onClose, inquiryIds = [], leadNames = [], onSuccess, initialWorkflowId }: EnrollInWorkflowModalProps) {
+  const tabIndicatorId = React.useId()
+  const reduceMotion = useReducedMotion()
   const [filterTab, setFilterTab] = React.useState<'custom' | 'starter'>('custom')
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState('')
   const [customWorkflows, setCustomWorkflows] = React.useState<CustomWorkflowOption[]>([])
@@ -115,7 +118,18 @@ export function EnrollInWorkflowModal({ isOpen, onClose, inquiryIds = [], leadNa
         <div className="flex items-center gap-3"><Workflow size={20} className="shrink-0 text-[#a8792f]" /><div><h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Enroll in a workflow</h2><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Choose an active workflow, or prepare a starter as a draft.</p></div></div>
         <button type="button" onClick={onClose} disabled={enrolling} aria-label="Close workflow enrollment" className="grid size-10 shrink-0 place-items-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><X size={18} /></button>
       </div>
-      <div className="mt-4 flex flex-wrap gap-3" role="tablist" aria-label="Workflow types">{([{ id: 'custom', label: `Active workflows (${customWorkflows.length})` }, { id: 'starter', label: 'Workflow starters' }] as const).map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={filterTab === tab.id} onClick={() => { setFilterTab(tab.id); setResultMessage(null) }} disabled={enrolling || completed} className={`min-h-11 border-b-2 px-1 text-xs font-semibold ${filterTab === tab.id ? 'border-[#a8792f] text-[#8c6424] dark:text-[#f1d27a]' : 'border-transparent text-[color:var(--portal-muted)]'}`}>{tab.label}</button>)}</div>
+      <nav aria-label="Workflow types" className="portal-scrollbar mt-4 min-w-0 overflow-x-auto">
+        <div className="flex min-w-max items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1">
+          {([{ id: 'custom', label: 'Active workflows', count: customWorkflows.length }, { id: 'starter', label: 'Workflow starters' }] as const).map((tab) => {
+            const isActive = filterTab === tab.id
+            return <button key={tab.id} type="button" aria-pressed={isActive} onClick={() => { setFilterTab(tab.id); setResultMessage(null) }} disabled={enrolling || completed} className={`relative isolate inline-flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-50 ${isActive ? 'text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
+              {isActive ? <motion.span layoutId={`workflow-picker-tab-${tabIndicatorId}`} className="absolute inset-0 -z-10 rounded-lg bg-[#caa24c]/15" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+              {tab.label}
+              {'count' in tab ? <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${isActive ? 'bg-[#caa24c]/15 text-[#9a6d26] dark:text-[#f1d27a]' : 'bg-black/5 text-[color:var(--portal-muted)] dark:bg-white/10'}`}>{tab.count}</span> : null}
+            </button>
+          })}
+        </div>
+      </nav>
     </div>
     <div className="portal-scrollbar max-h-[62dvh] space-y-4 overflow-y-auto p-5 sm:p-6">
       {resultMessage ? <div role={resultMessage.error ? 'alert' : 'status'} className={`rounded-xl border p-3.5 text-xs leading-5 ${resultMessage.error ? 'border-rose-500/25 text-rose-600 dark:text-rose-400' : 'border-[color:var(--portal-border)] text-[color:var(--portal-text)]'}`}><p>{resultMessage.text}</p>{resultMessage.workflow ? <Link href={`/portal/marketing/custom-workflows/${encodeURIComponent(resultMessage.workflow.id)}`} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 font-semibold text-[#8c6424] dark:text-[#f1d27a]">Review {resultMessage.workflow.name}<ExternalLink size={13} /></Link> : null}</div> : null}

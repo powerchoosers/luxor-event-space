@@ -109,6 +109,7 @@ function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
 }
 
 import type { LuxorCall } from '@/lib/luxorCallTypes'
+import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
 import {
@@ -174,6 +175,7 @@ type ActivityEntry =
   | { kind: 'note'; id: string; createdAt: string; note: LuxorNote }
   | { kind: 'email'; id: string; createdAt: string; email: ZohoEmailMessage }
   | { kind: 'call'; id: string; createdAt: string; call: LuxorCall }
+  | { kind: 'text'; id: string; createdAt: string; message: LuxorMessage }
 
 function tourDisplayStatus(lead: LuxorInquiry) {
   if (lead.tour_attendance_status === 'cancelled') return 'Cancelled'
@@ -481,6 +483,9 @@ export default function LeadDetailPage({
   const activeTestRunRequestRef = useRef<string | null>(null)
   const [notes, setNotes] = useState<LuxorNote[]>([])
   const [callRecords, setCallRecords] = useState<LuxorCall[]>([])
+  const [textRecords, setTextRecords] = useState<LuxorMessage[]>([])
+  const [textHistoryError, setTextHistoryError] = useState(false)
+  const [callHistoryError, setCallHistoryError] = useState(false)
   const [editingCallSummaryId, setEditingCallSummaryId] = useState<string | null>(null)
   const [callSummaryDraft, setCallSummaryDraft] = useState('')
   const [savingCallSummaryId, setSavingCallSummaryId] = useState<string | null>(null)
@@ -655,7 +660,7 @@ export default function LeadDetailPage({
     setLayoutDesignerOpenState(open)
   }, [])
   const [layoutReviewRefreshKey, setLayoutReviewRefreshKey] = useState(0)
-  const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'system'>('all')
+  const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'calls' | 'texts' | 'emails' | 'system'>('all')
   const [activitySearch, setActivitySearch] = useState('')
   const [activityWindow, setActivityWindow] = useState<'all' | '30d' | '90d' | 'year'>('all')
   const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE)
@@ -1187,7 +1192,8 @@ export default function LeadDetailPage({
       createdAt: call.started_at || call.created_at,
       call,
     }))
-    const derivedAllActivityEntries = [...derivedNoteEntries, ...derivedEmailEntries, ...derivedCallEntries].sort(
+    const derivedTextEntries: ActivityEntry[] = textRecords.map((message) => ({ kind: 'text', id: `text-${message.id}`, createdAt: message.created_at, message }))
+    const derivedAllActivityEntries = [...derivedNoteEntries, ...derivedEmailEntries, ...derivedCallEntries, ...derivedTextEntries].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
     const derivedSortedTasks = [...tasks].sort((a, b) => {
@@ -1232,9 +1238,9 @@ export default function LeadDetailPage({
       callEntries: derivedCallEntries,
       allActivityEntries: derivedAllActivityEntries,
       activityCounts: {
-        all: derivedNoteEntries.length + derivedEmailEntries.length + derivedCallEntries.length,
+        all: derivedAllActivityEntries.length,
         notes: notes.filter((note) => note.note_type === 'note').length,
-        comms: derivedEmailEntries.length + derivedCallEntries.length + notes.filter((note) => note.note_type === 'call_log' || note.note_type === 'email_log').length,
+        comms: derivedEmailEntries.length + derivedCallEntries.length + derivedTextEntries.length + notes.filter((note) => note.note_type === 'call_log' || note.note_type === 'email_log').length,
         system: notes.filter((note) => note.note_type === 'status_change').length,
       },
       sortedTasks: derivedSortedTasks,
@@ -1243,15 +1249,18 @@ export default function LeadDetailPage({
       sortedInvoices: derivedSortedInvoices,
       sortedPayments: derivedSortedPayments,
     }
-  }, [bookings, callRecords, emailMessages, eventBookings, eventInvoices, eventPayments, lead, notes, payments, tasks])
+  }, [bookings, callRecords, textRecords, emailMessages, eventBookings, eventInvoices, eventPayments, lead, notes, payments, tasks])
 
   const activityEntries = useMemo(() => {
     return leadDerivedData.allActivityEntries.filter((entry) => {
       if (activeFeedTab === 'notes' && !(entry.kind === 'note' && entry.note.note_type === 'note')) return false
       if (activeFeedTab === 'comms') {
-        const isCommunication = entry.kind === 'email' || entry.kind === 'call' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
+        const isCommunication = entry.kind === 'email' || entry.kind === 'call' || entry.kind === 'text' || (entry.kind === 'note' && (entry.note.note_type === 'call_log' || entry.note.note_type === 'email_log'))
         if (!isCommunication) return false
       }
+      if (activeFeedTab === 'calls' && entry.kind !== 'call' && !(entry.kind === 'note' && entry.note.note_type === 'call_log')) return false
+      if (activeFeedTab === 'texts' && entry.kind !== 'text') return false
+      if (activeFeedTab === 'emails' && entry.kind !== 'email' && !(entry.kind === 'note' && entry.note.note_type === 'email_log')) return false
       if (activeFeedTab === 'system' && !(entry.kind === 'note' && entry.note.note_type === 'status_change')) return false
 
       if (activityWindow !== 'all') {
@@ -1265,7 +1274,8 @@ export default function LeadDetailPage({
         const searchable = entry.kind === 'email'
           ? `${entry.email.subject} ${entry.email.from} ${entry.email.to} ${entry.email.summary}`
           : entry.kind === 'call'
-            ? `${entry.call.caller_number} ${entry.call.callee_number} ${entry.call.direction} ${entry.call.status}`
+            ? `${entry.call.caller_number} ${entry.call.callee_number} ${entry.call.direction} ${entry.call.status} ${entry.call.notes || ''} ${entry.call.summary_text || ''} ${entry.call.metadata?.voicemail_transcript || ''} ${entry.call.metadata?.transcript || ''} ${(entry.call.transcript_segments || []).map((segment) => segment.text).join(' ')}`
+            : entry.kind === 'text' ? `${entry.message.body} ${entry.message.from_number} ${entry.message.to_number} ${entry.message.status}`
             : `${entry.note.content} ${entry.note.note_type}`
         if (!searchable.toLowerCase().includes(query)) return false
       }
@@ -1888,8 +1898,13 @@ export default function LeadDetailPage({
           })
           .catch(() => ({ jobs: [], unavailable: true })),
         fetch(`/api/twilio/calls?inquiryId=${id}&limit=100`, { cache: 'no-store' })
-          .then(async (res) => (res.ok ? await res.json() : []))
-          .catch(() => []),
+          .then(async (res) => {
+            if (!res.ok) throw new Error('Calls unavailable')
+            const calls: unknown = await res.json()
+            if (!Array.isArray(calls)) throw new Error('Calls unavailable')
+            return calls as LuxorCall[]
+          })
+          .catch(() => null),
         fetch(`/api/lead-events?inquiryId=${id}`)
           .then(async (res) => (res.ok ? await res.json() : []))
           .catch(() => []),
@@ -1949,7 +1964,8 @@ export default function LeadDetailPage({
         })
         .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0] || null
       setEmailResendCandidate(preparedResend || null)
-      setCallRecords(callsData)
+      setCallHistoryError(callsData === null)
+      if (callsData) setCallRecords(callsData)
       const nextLeadEvents = leadEventsData as LuxorLeadEvent[]
       setLeadEvents(nextLeadEvents)
       if (!initializedEventPreferenceRef.current) {
@@ -2059,6 +2075,37 @@ export default function LeadDetailPage({
     return () => window.clearInterval(intervalId)
   }, [id])
 
+  useEffect(() => {
+    if (!id) return
+    let active = true
+    setTextRecords([])
+    setTextHistoryError(false)
+    const loadTexts = async () => {
+      try {
+        const inquiryQuery = `inquiryId=${encodeURIComponent(id)}&limit=300`
+        const queries = [inquiryQuery, ...(lead?.phone ? [`${inquiryQuery}&phone=${encodeURIComponent(lead.phone)}`] : [])]
+        const results = await Promise.all(queries.map(async (query) => {
+          const response = await fetch(`/api/twilio/messages?${query}`, { cache: 'no-store' })
+          if (!response.ok) throw new Error('Texts unavailable')
+          const messages: unknown = await response.json()
+          if (!Array.isArray(messages)) throw new Error('Texts unavailable')
+          return messages as LuxorMessage[]
+        }))
+        if (!active) return
+        setTextRecords([...new Map(results.flat().map((message) => [message.id, message])).values()])
+        setTextHistoryError(false)
+      } catch {
+        if (active) setTextHistoryError(true)
+      }
+    }
+    void loadTexts()
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void loadTexts() }, 30_000)
+    window.addEventListener('luxor-lead-text-history-refresh', loadTexts)
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('luxor-lead-text-history-refresh', loadTexts) }
+  }, [id, lead?.phone])
+
+  useEffect(() => { setCallRecords([]); setCallHistoryError(false) }, [id])
+
   // Sub-100ms Supabase Realtime WebSocket listener for instant Lead Dossier UI & field updates (opens, clicks, payments, SMS, calls)
   useEffect(() => {
     if (!id) return
@@ -2102,7 +2149,7 @@ export default function LeadDetailPage({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'luxor_messages' },
         () => {
-          if (!layoutDesignerOpenRef.current) void fetchAllData(false)
+          if (!layoutDesignerOpenRef.current) window.dispatchEvent(new Event('luxor-lead-text-history-refresh'))
         }
       )
       .on(
@@ -2136,9 +2183,14 @@ export default function LeadDetailPage({
   useEffect(() => {
     const refreshCalls = () => {
       void fetch(`/api/twilio/calls?inquiryId=${id}&limit=100`, { cache: 'no-store' })
-        .then(async (response) => response.ok ? await response.json() as LuxorCall[] : [])
-        .then(setCallRecords)
-        .catch(() => undefined)
+        .then(async (response) => {
+          if (!response.ok) throw new Error('Calls unavailable')
+          const calls: unknown = await response.json()
+          if (!Array.isArray(calls)) throw new Error('Calls unavailable')
+          setCallRecords(calls as LuxorCall[])
+          setCallHistoryError(false)
+        })
+        .catch(() => setCallHistoryError(true))
     }
     window.addEventListener('luxor-call-history-refresh', refreshCalls)
     return () => window.removeEventListener('luxor-call-history-refresh', refreshCalls)
@@ -4923,7 +4975,9 @@ export default function LeadDetailPage({
     activeFeedTab === 'notes'
       ? 'No note entries match this filter yet.'
       : activeFeedTab === 'comms'
-        ? 'No calls or emails match this filter yet.'
+        ? 'No calls, texts, or emails match this filter yet.'
+        : activeFeedTab === 'calls' || activeFeedTab === 'texts' || activeFeedTab === 'emails'
+          ? `No ${activeFeedTab} match this filter yet.`
         : activeFeedTab === 'system'
           ? 'No status updates match this filter yet.'
           : 'No activity has been logged yet.'
@@ -4935,14 +4989,16 @@ export default function LeadDetailPage({
         : activeFeedTab === 'notes'
       ? 'Use the note box above to capture the first written follow-up or summary.'
       : activeFeedTab === 'comms'
-        ? 'Add a call log, email note, or sync email history to populate this view.'
+        ? 'Calls, texts, and emails will appear here as they are recorded.'
+        : activeFeedTab === 'calls' || activeFeedTab === 'texts' || activeFeedTab === 'emails'
+          ? 'Try another search or time period.'
         : activeFeedTab === 'system'
           ? 'Status changes will appear here automatically when the lead moves.'
           : 'Use the note box above to add the first update or wait for email history to sync.'
   const activityFilterChips = [
     ...(activeFeedTab !== 'all' ? [{
       id: 'type',
-      label: `Type: ${activeFeedTab === 'notes' ? 'notes' : activeFeedTab === 'comms' ? 'calls & email' : 'status changes'}`,
+      label: `Type: ${activeFeedTab === 'comms' ? 'calls, texts & email' : activeFeedTab === 'system' ? 'status changes' : activeFeedTab}`,
       onRemove: () => setActiveFeedTab('all'),
     }] : []),
     ...(activityWindow !== 'all' ? [{
@@ -6190,23 +6246,25 @@ export default function LeadDetailPage({
                                   <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-105 ${
                                     isEmail
                                       ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400' 
-                                      : isCall || entry.note.note_type === 'call_log'
+                                      : isCall || (entry.kind === 'note' && entry.note.note_type === 'call_log')
                                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                      : entry.note.note_type === 'email_log'
+                                      : entry.kind === 'note' && entry.note.note_type === 'email_log'
                                       ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
                                       : 'bg-zinc-500/10 text-[color:var(--portal-muted)]'
                                   }`}>
                                     {isEmail ? (
                                       <Mail size={13} />
-                                    ) : isCall || entry.note.note_type === 'call_log' ? (
+                                    ) : isCall || (entry.kind === 'note' && entry.note.note_type === 'call_log') ? (
                                       <Phone size={13} />
+                                    ) : entry.kind === 'text' ? (
+                                      <MessageSquare size={13} />
                                     ) : (
                                       <FileText size={13} />
                                     )}
                                   </span>
                                   <div className="min-w-0">
                                     <p className="text-xs font-bold leading-tight text-[color:var(--portal-text)] truncate transition-colors duration-200 group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">
-                                      {isEmail ? decodeHtmlEntities(entry.email.subject) : isCall ? describeActivityEntry(entry) : decodeHtmlEntities(entry.note.content).substring(0, 45)}
+                                      {isEmail ? decodeHtmlEntities(entry.email.subject) : isCall ? describeActivityEntry(entry) : entry.kind === 'text' ? compactActivityText(entry.message.body, 45) || 'Text message' : decodeHtmlEntities(entry.note.content).substring(0, 45)}
                                     </p>
                                   </div>
                                 </div>
@@ -8133,7 +8191,7 @@ export default function LeadDetailPage({
                         return <div key={entry.id} className="group relative flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-[color:var(--portal-soft)]">
                           {isEmail ? <Link href={emailReaderUrl(entry.email)} aria-label={`Open email: ${decodeHtmlEntities(entry.email.subject)}`} className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" /> : <button type="button" onClick={() => setActiveLeadTab('activity')} aria-label="Open activity" className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" />}
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
-                            {entry.kind === 'email' ? <Mail size={11} /> : entry.kind === 'call' ? <Phone size={11} /> : <Check size={11} className="stroke-[3]" />}
+                            {entry.kind === 'email' ? <Mail size={11} /> : entry.kind === 'call' ? <Phone size={11} /> : entry.kind === 'text' ? <MessageSquare size={11} /> : <Check size={11} className="stroke-[3]" />}
                           </span>
                           <div className="min-w-0">
                             <p className="truncate text-xs font-bold leading-tight text-[color:var(--portal-text)] group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">{entry.kind === 'email' ? decodeHtmlEntities(entry.email.subject) : describeActivityEntry(entry)}</p>
@@ -8289,7 +8347,10 @@ export default function LeadDetailPage({
                       className="w-full"
                       options={[
                         { value: 'all', label: 'All activity types' },
-                        { value: 'comms', label: 'Calls & email' },
+                        { value: 'comms', label: 'Calls, texts & email' },
+                        { value: 'calls', label: 'Calls' },
+                        { value: 'texts', label: 'Texts' },
+                        { value: 'emails', label: 'Email' },
                         { value: 'notes', label: 'Notes' },
                         { value: 'system', label: 'Status changes' },
                       ]}
@@ -8309,29 +8370,28 @@ export default function LeadDetailPage({
                 </PortalFilterBar>
               </section>
 
+              {callHistoryError || textHistoryError ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">{callHistoryError && textHistoryError ? 'Calls and texts could not be loaded.' : callHistoryError ? 'Calls could not be loaded.' : 'Texts could not be loaded.'} History will retry automatically.</p> : null}
               {activityEntries.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-sm text-[color:var(--portal-muted)]">
                   <p className="font-semibold text-[color:var(--portal-text)]">{activityEmptyTitle}</p>
                   <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{activityEmptyCopy}</p>
                 </div>
               ) : (
-                <div className="relative ml-3 space-y-6 border-l border-[color:var(--portal-border)] pl-6">
+                <div className="space-y-3">
                   {visibleActivityEntries.map((entry) => {
                     if (entry.kind === 'call') {
                       const call = entry.call
                       const otherNumber = call.direction === 'inbound' ? call.caller_number : call.callee_number
+                      const savedTranscript = typeof call.metadata?.voicemail_transcript === 'string' ? call.metadata.voicemail_transcript : typeof call.metadata?.transcript === 'string' ? call.metadata.transcript : ''
+                      const hasTranscript = Boolean(call.transcript_segments?.length || savedTranscript)
                       return (
-                        <div key={entry.id} className="relative group">
-                          <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
+                        <div key={entry.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
                           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Luxor call</span>
-                            <div className="flex items-center gap-3">
-                              <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${call.direction === 'inbound' ? 'border-blue-500/20 bg-blue-500/10 text-blue-300' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'}`}>{call.direction}</span>
-                              <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
-                            </div>
+                            <span className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--portal-muted)]"><Phone size={14} aria-hidden="true" /> Call</span>
+                            <span className="text-xs text-[color:var(--portal-muted)]">{formatActivityDate(entry.createdAt)}</span>
                           </div>
-                          <p className="text-xs font-bold text-zinc-200">{describeActivityEntry(entry)}</p>
-                          <p className="mt-1 font-mono text-[10px] text-zinc-600">{otherNumber} · {call.duration_seconds === null ? call.status : formatCallDuration(call.duration_seconds)}</p>
+                          <p className="text-sm font-semibold text-[color:var(--portal-text)]">{describeActivityEntry(entry)}</p>
+                          <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{formatPhoneDisplay(otherNumber)} · {call.duration_seconds === null ? call.status : formatCallDuration(call.duration_seconds)}</p>
                           {call.recording_sid ? (
                             <div className="mt-3">
                               <PortalAudioPlayer
@@ -8344,15 +8404,15 @@ export default function LeadDetailPage({
                           ) : call.status === 'completed' ? (
                             <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">No recording is available for this call.</p>
                           ) : null}
-                          {call.is_voicemail ? <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">Voicemail is available for playback and is not transcribed.</p> : null}
-                          {call.recording_consent_status === 'consented' && !call.is_voicemail ? (
+                          {call.is_voicemail && !hasTranscript ? <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">No transcript is available for this voicemail.</p> : null}
+                          {hasTranscript || (call.recording_consent_status === 'consented' && !call.is_voicemail) ? (
                           <div className="mt-3 overflow-hidden rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--portal-border)] p-3">
                               <div className="inline-flex rounded-lg bg-[color:var(--portal-soft)] p-1" role="tablist" aria-label="Call details">
                                 <button type="button" role="tab" aria-selected={(callViewModes[call.id] || 'transcript') === 'transcript'} onClick={() => setCallViewModes((current) => ({ ...current, [call.id]: 'transcript' }))} className={`min-h-9 rounded-md px-3 text-xs font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${(callViewModes[call.id] || 'transcript') === 'transcript' ? 'bg-[color:var(--portal-card)] shadow-sm' : ''}`}>Transcript</button>
-                                <button type="button" role="tab" aria-selected={(callViewModes[call.id] || 'transcript') === 'summary'} onClick={() => void showCallSummary(call)} disabled={call.transcription_status !== 'completed'} className={`min-h-9 rounded-md px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${(callViewModes[call.id] || 'transcript') === 'summary' ? 'bg-[color:var(--portal-card)] shadow-sm' : ''}`}>Summary</button>
+                                <button type="button" role="tab" aria-selected={(callViewModes[call.id] || 'transcript') === 'summary'} onClick={() => void showCallSummary(call)} disabled={!call.summary_text && call.transcription_status !== 'completed'} className={`min-h-9 rounded-md px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${(callViewModes[call.id] || 'transcript') === 'summary' ? 'bg-[color:var(--portal-card)] shadow-sm' : ''}`}>Summary</button>
                               </div>
-                              <span className="text-[10px] text-[color:var(--portal-muted)]">{call.transcription_status === 'completed' ? 'Transcript ready' : call.transcription_status === 'failed' ? 'Transcript unavailable' : 'Transcript processing'}</span>
+                              <span className="text-[10px] text-[color:var(--portal-muted)]">{hasTranscript || call.transcription_status === 'completed' ? 'Transcript ready' : call.transcription_status === 'failed' ? 'Transcript unavailable' : 'Transcript processing'}</span>
                             </div>
                             {(callViewModes[call.id] || 'transcript') === 'transcript' ? (
                               <div role="tabpanel" className="max-h-80 space-y-3 overflow-y-auto p-3 sm:p-4">
@@ -8364,7 +8424,7 @@ export default function LeadDetailPage({
                                       <span className="break-words text-[color:var(--portal-text)]">{segment.text}</span>
                                     </button>
                                   )
-                                }) : <p className="text-sm text-[color:var(--portal-muted)]">{call.transcription_status === 'failed' ? 'The call transcript could not be processed.' : 'Transcript will appear here when Twilio finishes processing.'}</p>}
+                                }) : savedTranscript ? <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">{savedTranscript}</p> : <p className="text-sm text-[color:var(--portal-muted)]">{call.transcription_status === 'failed' ? 'The call transcript could not be processed.' : call.transcription_status === 'completed' ? 'No transcript text was captured.' : 'Transcript will appear here when Twilio finishes processing.'}</p>}
                               </div>
                             ) : (
                               <div role="tabpanel" className="min-h-24 p-4">
@@ -8418,35 +8478,41 @@ export default function LeadDetailPage({
                       )
                     }
 
+                    if (entry.kind === 'text') {
+                      const message = entry.message
+                      return (
+                        <div key={entry.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <span className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--portal-muted)]"><MessageSquare size={14} aria-hidden="true" /> Text {message.direction === 'inbound' ? 'received' : 'sent'}</span>
+                            <span className="text-xs text-[color:var(--portal-muted)]">{formatActivityDate(entry.createdAt)}</span>
+                          </div>
+                          {message.body ? <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">{message.body}</p> : <p className="text-sm text-[color:var(--portal-muted)]">Text message without written content</p>}
+                          {message.media_urls?.length ? <p className="mt-2 text-xs text-[color:var(--portal-muted)]">{message.media_urls.length} attachment{message.media_urls.length === 1 ? '' : 's'}</p> : null}
+                          {message.direction === 'outbound' ? <p className="mt-2 text-xs capitalize text-[color:var(--portal-muted)]">{message.status}</p> : null}
+                          <button type="button" onClick={() => { setActiveLeadTab('messages'); setActiveFeedTab('comms') }} className="mt-2 min-h-10 text-xs font-semibold text-[#8c6424] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:text-[#f1d27a]">Open text conversation</button>
+                        </div>
+                      )
+                    }
+
                     if (entry.kind === 'email') {
                       const email = entry.email
                       const isOutgoing = email.direction === 'outgoing'
-                      const emailSummary = compactActivityText(email.summary)
+                      const emailSummary = cleanEmailPreview(email.summary)
 
                       return (
-                        <Link href={emailReaderUrl(email)} key={entry.id} className="relative block rounded-lg group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-                          <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
+                        <Link href={emailReaderUrl(email)} key={entry.id} className="group block rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:p-5">
                           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-                              {isOutgoing ? 'Luxor Event Space' : email.from || 'Unknown sender'}
+                            <span className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--portal-muted)]">
+                              <Mail size={14} aria-hidden="true" /> {isOutgoing ? 'Email sent' : 'Email received'}
                             </span>
-                            <div className="flex items-center gap-3">
-                              <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${
-                                isOutgoing
-                                  ? 'border-blue-500/20 bg-blue-500/10 text-blue-300'
-                                  : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                              }`}>
-                                {isOutgoing ? 'Outbound' : 'Inbound'}
-                              </span>
-                              <span className="text-[9px] font-mono text-zinc-600">{formatTimelineDate(entry.createdAt)}</span>
-                            </div>
+                            <span className="text-xs text-[color:var(--portal-muted)]">{formatActivityDate(entry.createdAt)}</span>
                           </div>
-                          <p className="text-xs font-bold text-zinc-200">{decodeHtmlEntities(email.subject) || '(No subject)'}</p>
-                          <p className="mt-1 text-[10px] text-zinc-600">
+                          <p className="text-sm font-semibold text-[color:var(--portal-text)]">{decodeHtmlEntities(email.subject) || '(No subject)'}</p>
+                          <p className="mt-1 break-words text-xs text-[color:var(--portal-muted)]">
                             From {email.from || 'Unknown'} {email.to ? `to ${email.to}` : ''}
                           </p>
                           {emailSummary ? (
-                            <p className="mt-2 whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{emailSummary}</p>
+                            <p className="mt-2 break-words text-xs leading-5 text-[color:var(--portal-muted)]">{emailSummary}</p>
                           ) : null}
                           <span className="mt-2 inline-flex text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open full email →</span>
                         </Link>
@@ -8472,18 +8538,17 @@ export default function LeadDetailPage({
                     }
 
                     return (
-                      <div key={note.id} className="relative group">
-                        <div className="absolute -left-[29px] top-[7px] z-10 h-2.5 w-2.5 rotate-45 border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] transition-all group-hover:border-[#caa24c] group-hover:bg-[color:color-mix(in_srgb,var(--portal-bg)_80%,#caa24c_20%)]" />
+                      <div key={note.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
                         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{note.author}</span>
+                          <span className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--portal-muted)]"><FileText size={14} aria-hidden="true" /> {note.author}</span>
                           <div className="flex items-center gap-3">
                             <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${badgeColor}`}>
                               {typeLabel}
                             </span>
-                            <span className="text-[9px] font-mono text-zinc-650">{new Date(note.created_at).toLocaleString()}</span>
+                            <span className="text-xs text-[color:var(--portal-muted)]">{formatActivityDate(note.created_at)}</span>
                           </div>
                         </div>
-                        <p className="whitespace-pre-wrap text-xs font-medium leading-relaxed text-zinc-300">{noteContent}</p>
+                        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">{noteContent}</p>
                       </div>
                     )
                   })}
@@ -11468,6 +11533,8 @@ function describeActivityEntry(entry: ActivityEntry) {
     return entry.email.direction === 'outgoing' ? 'Email sent' : 'Email received'
   }
 
+  if (entry.kind === 'text') return entry.message.direction === 'outbound' ? 'Text sent' : 'Text received'
+
   if (entry.kind === 'call') {
     if (entry.call.is_voicemail) return 'Voicemail received'
     if (entry.call.direction === 'inbound') {
@@ -11747,6 +11814,11 @@ function formatTimelineDate(value: string | number) {
   const numericValue = Number(value)
   const date = Number.isFinite(numericValue) ? new Date(numericValue) : new Date(value)
   return Number.isNaN(date.getTime()) ? 'No date' : date.toLocaleString('en-US', { weekday: 'short' })
+}
+
+function formatActivityDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
 function compactActivityText(value: string | null | undefined, maxLength = 520) {

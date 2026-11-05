@@ -924,7 +924,7 @@ function MarketingPageContent() {
         </div>
       </PortalModal>
       {!builderCanvasOpen ? (
-        <div className="shrink-0 space-y-5 border-b border-[color:var(--portal-border)] pb-5">
+        <div className="shrink-0 space-y-5 pb-5">
           <PortalPageHeader
             mobileActionsInline
             icon={activeTab === 'overview' ? undefined : header.icon}

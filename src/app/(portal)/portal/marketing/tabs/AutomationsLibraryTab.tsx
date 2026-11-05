@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import { CalendarClock, ChevronDown, ChevronRight, Clock3, Compass, Mail, MessageSquare, Phone, Search, SlidersHorizontal, Workflow, Zap, ArrowRight } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -118,6 +118,8 @@ export function AutomationsLibraryTab() {
   const [search, setSearch] = React.useState('')
   const [status, setStatus] = React.useState<AutomationStatusFilter>('all')
   const [openEntryId, setOpenEntryId] = React.useState<string | null>(null)
+  const [prebuiltOpen, setPrebuiltOpen] = useState(true)
+  const reduceMotion = useReducedMotion() ?? false
   const [customWorkflows, setCustomWorkflows] = React.useState<CustomWorkflowSummary[]>([])
   const [customAuthoringEnabled, setCustomAuthoringEnabled] = React.useState(false)
   const [customExecutionEnabled, setCustomExecutionEnabled] = React.useState(false)
@@ -228,12 +230,11 @@ export function AutomationsLibraryTab() {
 
       {loading && data ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Refreshing saved workflow data…</p> : null}
       {automationControlError ? <p role="alert" className="rounded-lg border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs text-[color:var(--portal-muted)]">{automationControlError}</p> : null}
-      {data && [...data.workflows, data.systemManaged, data.paymentReminders].some((entry) => entry.canToggle === false) ? <p role="note" className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-muted)]">Some controls are unavailable in this environment or need their settings installed. Use the deployed portal after setup to change live automation.</p> : null}
-
       {/* Pre-built Workflows / Templates Library */}
-      <section aria-labelledby="prebuilt-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-6 space-y-4">
+      <section aria-labelledby="prebuilt-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5 space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+          <button type="button" aria-expanded={prebuiltOpen} aria-controls="prebuilt-workflows-content" onClick={() => setPrebuiltOpen((open) => !open)} className="flex min-h-11 min-w-0 flex-1 items-start justify-between gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">
                 Ready-to-Use Sequences
@@ -243,15 +244,17 @@ export function AutomationsLibraryTab() {
               </span>
             </div>
             <h2 id="prebuilt-workflows-heading" className="mt-1 font-serif text-lg font-semibold text-[color:var(--portal-text)]">
-              Pre-built Workflows
+              Pre-built Workflows <span className="ml-1 inline-block align-middle text-[color:var(--portal-muted)]">{prebuiltOpen ? '−' : '+'}</span>
             </h2>
             <p className="mt-0.5 text-xs text-[color:var(--portal-muted)] max-w-2xl">
-              Start with a draft, review the sender and messages, then activate it before enrolling leads.
+              {prebuiltOpen ? 'Start with a draft, review the sender and messages, then activate it before enrolling leads.' : '5 ready-to-use sequences'}
             </p>
           </div>
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-2">
+        <motion.div id="prebuilt-workflows-content" initial={false} animate={{ height: prebuiltOpen ? 'auto' : 0, opacity: prebuiltOpen ? 1 : 0 }} transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }} style={{ overflow: 'hidden' }} aria-hidden={!prebuiltOpen}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
           {PREBUILT_WORKFLOWS.map((pb) => (
             <div
               key={pb.id}
@@ -293,6 +296,7 @@ export function AutomationsLibraryTab() {
             </div>
           ))}
         </div>
+        </motion.div>
       </section>
 
       {/* Elena Workflow Architect Modal */}
@@ -485,7 +489,7 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-1.5">
+          <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{entry.enabled ? 'On' : 'Off'}</span>
             <button
               type="button"
