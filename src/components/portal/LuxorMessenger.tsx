@@ -1,6 +1,6 @@
 'use client'
 
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, UserPlus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -28,11 +28,11 @@ type BusinessLine = { phoneNumber: string; friendlyName: string | null; isActive
 type MessageFilter = 'all' | 'unread'
 
 export function LuxorMessenger() {
+  const reduceMotion = useReducedMotion()
   const { notify } = useToast()
   const searchParams = useSearchParams()
   const [messages, setMessages] = useState<LuxorMessage[]>([])
   const [businessLines, setBusinessLines] = useState<BusinessLine[]>([])
-  const [selectedLine, setSelectedLine] = useState('all')
   const [selectedKey, setSelectedKey] = useState<string | null>(() => searchParams?.get('inquiryId') || null)
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
@@ -50,10 +50,8 @@ export function LuxorMessenger() {
   const [loadedSmsConsent, setLoadedSmsConsent] = useState<{ phone: string; state: SmsConsentState } | null>(null)
   const [consentRequestSending, setConsentRequestSending] = useState(false)
   const [manualOptInLoading, setManualOptInLoading] = useState(false)
-  const [lineOptionsOpen, setLineOptionsOpen] = useState(false)
   const [mediaGalleryOpen, setMediaGalleryOpen] = useState(false)
   const threadEndRef = useRef<HTMLDivElement>(null)
-  const lineOptionsRef = useRef<HTMLDivElement>(null)
   const optionsRef = useRef<HTMLDivElement>(null)
   const listPaneRef = useRef<HTMLElement>(null)
   const threadPaneRef = useRef<HTMLElement>(null)
@@ -101,9 +99,6 @@ export function LuxorMessenger() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node
-      if (lineOptionsOpen && lineOptionsRef.current && !lineOptionsRef.current.contains(target)) {
-        setLineOptionsOpen(false)
-      }
       if (optionsOpen && optionsRef.current && !optionsRef.current.contains(target)) {
         setOptionsOpen(false)
       }
@@ -113,13 +108,9 @@ export function LuxorMessenger() {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [lineOptionsOpen, optionsOpen])
+  }, [optionsOpen])
 
-  const lineMessages = useMemo(() => selectedLine === 'all' ? messages : messages.filter((message) => {
-    const businessSide = message.direction === 'inbound' ? message.to_number : message.from_number
-    return businessSide === selectedLine
-  }), [messages, selectedLine])
-  const conversations = useMemo(() => buildConversations(lineMessages), [lineMessages])
+  const conversations = useMemo(() => buildConversations(messages), [messages])
   const visibleConversations = useMemo(() => {
     const normalizedQuery = deferredQuery.trim().toLowerCase()
     return conversations.filter((conversation) => {
@@ -210,7 +201,7 @@ export function LuxorMessenger() {
           body: body.trim(),
           inquiryId: selectedConversation.inquiryId,
           contactName: selectedConversation.contactName,
-          fromNumber: selectedLine === 'all' ? businessLines.find((line) => line.isActive)?.phoneNumber : selectedLine,
+          fromNumber: businessLines.find((line) => line.isActive)?.phoneNumber,
         }),
       })
       const payload = await response.json() as LuxorMessage | { error?: string }
@@ -236,7 +227,7 @@ export function LuxorMessenger() {
           to: selectedConversation.phoneNumber,
           inquiryId: selectedConversation.inquiryId,
           contactName: selectedConversation.contactName,
-          fromNumber: selectedLine === 'all' ? businessLines.find((line) => line.isActive)?.phoneNumber : selectedLine,
+          fromNumber: businessLines.find((line) => line.isActive)?.phoneNumber,
         }),
       })
       const payload = await response.json() as { simulated?: boolean; message?: LuxorMessage | null; error?: string }
@@ -322,13 +313,6 @@ export function LuxorMessenger() {
             <h1 className="text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">Messages</h1>
             <div className="flex items-center gap-1.5">
               <button type="button" onClick={() => { setNewMessageOpen(true); setShowThreadOnMobile(true); setContactQuery(''); setContactResults([]) }} className="luxor-gold-raised inline-flex h-8.5 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white"><Plus size={14}/> New</button>
-              <div className="relative" ref={lineOptionsRef}>
-                <button type="button" onClick={() => setLineOptionsOpen((current) => !current)} className="flex h-8.5 w-8.5 items-center justify-center rounded-xl text-[color:var(--portal-muted)] opacity-80 transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Message line options" aria-expanded={lineOptionsOpen}><MoreVertical size={16}/></button>
-                <AnimatePresence>{lineOptionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-10 z-30 w-64 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl backdrop-blur-xl">
-                  <p className="px-3 pb-1 pt-2 text-[11px] font-medium text-[color:var(--portal-muted)]">Show messages for</p>
-                  {[{ value: 'all', label: 'All Luxor numbers' }, ...businessLines.map((line) => ({ value: line.phoneNumber, label: `${line.isActive ? 'Main · ' : ''}${formatPhoneDisplay(line.phoneNumber)}` }))].map((option) => <button key={option.value} type="button" onClick={() => { setSelectedLine(option.value); setSelectedKey(null); setDraftConversation(null); setLineOptionsOpen(false) }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><span className="flex h-4 w-4 items-center justify-center">{selectedLine === option.value ? <Check size={13} className="text-[#caa24c]"/> : null}</span><span>{option.label}</span></button>)}
-                </motion.div> : null}</AnimatePresence>
-              </div>
             </div>
           </div>
           <label className="mt-3.5 flex h-9.5 items-center gap-2 rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3 transition-all focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10">
@@ -336,7 +320,10 @@ export function LuxorMessenger() {
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" className="portal-input-transparent min-w-0 flex-1 bg-transparent text-xs font-medium text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]" />
           </label>
           <div className="mt-3 grid grid-cols-2 rounded-xl border border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)] p-1">
-            {(['all', 'unread'] as const).map((value) => <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-lg py-1.5 text-xs font-semibold capitalize transition-all ${filter === value ? 'border border-[color:var(--portal-border)]/50 bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{value}</button>)}
+            {(['all', 'unread'] as const).map((value) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`relative isolate rounded-lg py-1.5 text-xs font-semibold capitalize transition-colors ${filter === value ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>
+              {filter === value ? <motion.span layoutId="messages-filter-pill" className="pointer-events-none absolute inset-0 rounded-lg border border-[color:var(--portal-border)]/50 bg-[color:var(--portal-card)] shadow-2xs" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+              <span className="relative z-10">{value}</span>
+            </button>)}
           </div>
         </div>
 

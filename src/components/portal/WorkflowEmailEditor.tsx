@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowDown, ArrowUp, Check, Copy, Eye, LayoutTemplate, Monitor, Plus, Redo2, Settings2, Smartphone, Trash2, Undo2 } from 'lucide-react'
 import { PortalButton, PortalCloseButton, PortalModal, PortalSelect } from './PortalUI'
 import { WorkflowVariableChipsBar } from './WorkflowVariableChipsBar'
@@ -113,6 +114,8 @@ function sampleDocument(document: LuxorEmailDocument) {
 }
 
 export function WorkflowEmailTemplateControls({ step, onChange, venueAddress }: { step: CustomWorkflowEmailStep; onChange: (step: CustomWorkflowEmailStep) => void; venueAddress?: string }) {
+  const reduceMotion = useReducedMotion()
+  const tabGroupId = React.useId()
   const [templates, setTemplates] = React.useState<TemplateOption[]>(() => EMAIL_TEMPLATES.map((template) => ({ ...template, source: 'starter' })))
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -349,12 +352,12 @@ export function WorkflowEmailTemplateControls({ step, onChange, venueAddress }: 
           <PortalCloseButton onClick={() => setOpen(false)} aria-label="Close email design" />
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[color:var(--portal-border)] px-3 py-1.5">
-          <div className="flex gap-1" role="tablist" aria-label="Email design views">{(['content', 'preview'] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={editorTab === tab} onClick={() => setEditorTab(tab)} className={`min-h-11 rounded-lg px-3 text-xs font-semibold ${editorTab === tab ? 'bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{tab === 'content' ? 'Edit email' : 'Preview'}</button>)}</div>
+          <div className="flex gap-1 rounded-lg bg-[color:var(--portal-soft)] p-0.5" role="tablist" aria-label="Email design views">{(['content', 'preview'] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={editorTab === tab} onClick={() => setEditorTab(tab)} className={`relative isolate min-h-11 rounded-md px-3 text-xs font-semibold transition-colors ${editorTab === tab ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{editorTab === tab ? <motion.span layoutId={`${tabGroupId}-email-design-view`} className="pointer-events-none absolute inset-0 rounded-md bg-[color:var(--portal-card)] shadow-2xs" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}<span className="relative z-10">{tab === 'content' ? 'Edit email' : 'Preview'}</span></button>)}</div>
           <div className="flex items-center" aria-label="Email design history"><button type="button" aria-label="Undo email design change" title="Undo" disabled={!canUndo} onClick={() => restoreDesign(-1)} className="grid size-11 place-items-center rounded-lg text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-30"><Undo2 size={16} /></button><button type="button" aria-label="Redo email design change" title="Redo" disabled={!canRedo} onClick={() => restoreDesign(1)} className="grid size-11 place-items-center rounded-lg text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-30"><Redo2 size={16} /></button></div>
           {editorTab === 'content' && <button type="button" aria-expanded={showInspector} onClick={() => setShowInspector((value) => !value)} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-text)] lg:hidden"><Settings2 size={16} /> Settings</button>}
-          <div className="hidden items-center gap-1 sm:flex" aria-label="Email canvas width">
-            <button type="button" onClick={() => setCanvasMode('desktop')} aria-pressed={canvasMode === 'desktop'} className={`inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs ${canvasMode === 'desktop' ? 'bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}><Monitor size={15} /> Desktop</button>
-            <button type="button" onClick={() => setCanvasMode('mobile')} aria-pressed={canvasMode === 'mobile'} className={`inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs ${canvasMode === 'mobile' ? 'bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}><Smartphone size={15} /> Mobile</button>
+          <div className="hidden items-center gap-1 rounded-lg bg-[color:var(--portal-soft)] p-0.5 sm:flex" aria-label="Email canvas width">
+            <button type="button" onClick={() => setCanvasMode('desktop')} aria-pressed={canvasMode === 'desktop'} className={`relative isolate inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-xs transition-colors ${canvasMode === 'desktop' ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{canvasMode === 'desktop' ? <motion.span layoutId={`${tabGroupId}-email-canvas-width`} className="pointer-events-none absolute inset-0 rounded-md bg-[color:var(--portal-card)] shadow-2xs" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}<span className="relative z-10 inline-flex items-center gap-2"><Monitor size={15} /> Desktop</span></button>
+            <button type="button" onClick={() => setCanvasMode('mobile')} aria-pressed={canvasMode === 'mobile'} className={`relative isolate inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-xs transition-colors ${canvasMode === 'mobile' ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)]'}`}>{canvasMode === 'mobile' ? <motion.span layoutId={`${tabGroupId}-email-canvas-width`} className="pointer-events-none absolute inset-0 rounded-md bg-[color:var(--portal-card)] shadow-2xs" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}<span className="relative z-10 inline-flex items-center gap-2"><Smartphone size={15} /> Mobile</span></button>
           </div>
         </div>
         {editorTab === 'preview' ? <iframe title="Workflow HTML email preview" srcDoc={previewHtml} sandbox="" className="min-h-0 w-full flex-1 border-0 bg-white" /> : <>

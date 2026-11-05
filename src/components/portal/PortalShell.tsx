@@ -1014,11 +1014,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           </div>
 
           {/* Header Search Command Bar & Quick Add Client / Lead */}
-          <div className="col-start-2 hidden items-center justify-self-center gap-2.5 sm:flex">
+          <div className={`col-start-2 hidden w-full min-w-0 items-center justify-self-center gap-2.5 transition-[max-width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] sm:flex ${searchFocused ? 'max-w-[30.875rem] lg:max-w-[33rem]' : 'max-w-[21rem] md:max-w-[23rem]'}`}>
             <div
-              className={`group relative flex h-9.5 items-center rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 transition-[width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border)] focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10 cursor-text ${
-                searchFocused ? 'w-[28rem] lg:w-[30rem]' : 'w-72 md:w-80'
-              }`}
+              className="group relative flex h-9.5 min-w-0 flex-1 items-center rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 transition-[border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--portal-border)] focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10 cursor-text"
               onClick={() => {
                 searchInputRef.current?.focus()
                 setSearchFocused(true)
@@ -1040,7 +1038,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               }}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search clients, events, or emails..."
-              className="portal-input-transparent w-full px-2 text-xs font-medium text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
+              className="portal-input-transparent min-w-0 w-full px-2 text-xs font-medium text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)]"
             />
             {searchQuery && (
               <button
@@ -1067,7 +1065,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                  className="portal-search-dropdown absolute inset-x-0 top-12 z-[100] w-full rounded-xl border p-2 space-y-1 shadow-xl backdrop-blur-2xl overflow-hidden"
+                  className="portal-search-dropdown absolute left-0 top-12 z-[100] w-[min(24rem,calc(100vw-3rem))] min-w-full rounded-xl border p-2 space-y-1 shadow-xl backdrop-blur-2xl overflow-hidden"
                 >
                   {searchQuery.trim().length > 0 ? (
                     <>
@@ -1377,9 +1375,9 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               onRefresh={refreshNotifications}
             />
             
-        <MobileActiveCallStrip />
           </div>
         </header>
+        <MobileActiveCallStrip />
 
         {/* Mobile Search Bar and Backdrop */}
         <AnimatePresence>

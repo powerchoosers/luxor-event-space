@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useId, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Download, Eye, FileText, LoaderCircle, Mail, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { LuxorInvoice } from '@/lib/luxorInquiryTypes'
 import { PortalCloseButton, PortalModal } from '@/components/portal/PortalUI'
@@ -39,6 +40,7 @@ export function ProposalDeliveryPreview({
   const [emailError, setEmailError] = useState<string | null>(null)
   const [loadingEmail, setLoadingEmail] = useState(false)
   const tabId = useId()
+  const reduceMotion = useReducedMotion()
 
   const invoiceId = invoice?.id || null
   const isBreakdown = invoice?.proposal_context?.proposal_record_type === 'proposal_breakdown'
@@ -155,9 +157,10 @@ export function ProposalDeliveryPreview({
                   tabIndex={activeTab === 'email' ? 0 : -1}
                   onClick={() => changeTab('email')}
                   onKeyDown={(event) => handleTabKeys(event, 'email')}
-                  className={`inline-flex min-h-8 items-center gap-2 rounded-md px-3 text-[10px] font-black uppercase tracking-widest transition ${activeTab === 'email' ? 'bg-[color:var(--portal-card)] text-[#8c6529] shadow-sm dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
+                  className={`relative isolate inline-flex min-h-8 items-center gap-2 rounded-md px-3 text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'email' ? 'text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
                 >
-                  <Mail size={13} /> Email
+                  {activeTab === 'email' ? <motion.span layoutId={`${tabId}-delivery-format-pill`} className="pointer-events-none absolute inset-0 rounded-md bg-[color:var(--portal-card)] shadow-sm" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+                  <span className="relative z-10 inline-flex items-center gap-2"><Mail size={13} /> Email</span>
                 </button>
                 <button
                   id={`${tabId}-pdf-tab`}
@@ -168,9 +171,10 @@ export function ProposalDeliveryPreview({
                   tabIndex={activeTab === 'pdf' ? 0 : -1}
                   onClick={() => changeTab('pdf')}
                   onKeyDown={(event) => handleTabKeys(event, 'pdf')}
-                  className={`inline-flex min-h-8 items-center gap-2 rounded-md px-3 text-[10px] font-black uppercase tracking-widest transition ${activeTab === 'pdf' ? 'bg-[color:var(--portal-card)] text-[#8c6529] shadow-sm dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
+                  className={`relative isolate inline-flex min-h-8 items-center gap-2 rounded-md px-3 text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'pdf' ? 'text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
                 >
-                  <FileText size={13} /> Attached PDF
+                  {activeTab === 'pdf' ? <motion.span layoutId={`${tabId}-delivery-format-pill`} className="pointer-events-none absolute inset-0 rounded-md bg-[color:var(--portal-card)] shadow-sm" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+                  <span className="relative z-10 inline-flex items-center gap-2"><FileText size={13} /> Attached PDF</span>
                 </button>
               </div> : <p className="text-[9px] font-black uppercase tracking-widest text-[#8c6529]">Email only · no attachment</p>}
             </div>

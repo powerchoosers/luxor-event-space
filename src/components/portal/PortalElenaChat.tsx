@@ -1142,7 +1142,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           {!voiceActive && <button
             type="button"
             onClick={() => setShowSessionsList(curr => !curr)}
-            className={`rounded-lg p-1.5 transition-all cursor-pointer ${
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-lg p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer ${
               showSessionsList 
                 ? 'bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]' 
                 : 'text-zinc-500 opacity-80 hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100'
@@ -1155,7 +1155,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           {!voiceActive && <button
             type="button"
             onClick={handleCreateSession}
-            className="rounded-lg p-1.5 text-zinc-500 opacity-80 transition-all hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 cursor-pointer"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg p-0 text-zinc-500 opacity-80 transition-colors hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
             title="Start New Chat Session"
             aria-label="Start New Chat Session"
           >
@@ -1417,7 +1417,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                             {[1, 2, 3, 4].map((i) => (
                               <div
                                 key={i}
-                                className="portal-elena-card portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 shadow-sm animate-pulse"
+                                className="portal-elena-card portal-suggestion-card flex items-center justify-between rounded-xl border-0 bg-zinc-950/40 p-3 shadow-sm animate-pulse"
                               >
                                 <div className="h-3.5 w-3/4 rounded bg-zinc-800/60 luxor-skeleton" />
                                 <Radar size={13} className="shrink-0 text-zinc-700/50" />
@@ -1446,7 +1446,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                                   }}
                                   type="button"
                                   onClick={() => handleSend(suggestion.prompt)}
-                                  className="portal-elena-card portal-suggestion-card flex items-center justify-between rounded-xl border border-zinc-800/20 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:border-[#caa24c]/40 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
+                                  className="portal-elena-card portal-suggestion-card flex items-center justify-between rounded-xl border-0 bg-zinc-950/40 p-3 text-left text-xs text-zinc-300 hover:bg-[#caa24c]/10 hover:text-white transition-all cursor-pointer group shadow-sm hover:shadow-md hover:shadow-[#caa24c]/5"
                                 >
                                   <span className="min-w-0">
                                     <span className="portal-elena-card-label block text-[9px] font-black uppercase tracking-wider text-[#a8792f] dark:text-[#e3bc65]">{suggestion.label}</span>
@@ -1751,7 +1751,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
         </div>
 
         {/* Input */}
-        {!voiceActive && <div className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-md p-3 shrink-0">
+        {!voiceActive && <div className="bg-[color:var(--portal-card)]/90 backdrop-blur-md p-3 shrink-0">
           <AnimatePresence>
             {voiceError && (
               <motion.div

@@ -450,26 +450,28 @@ export default function CallsPage() {
                       role="tab"
                       aria-selected={recentsFilter === 'all'}
                       onClick={() => setRecentsFilter('all')}
-                      className={`w-16 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                      className={`relative isolate w-16 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
                         recentsFilter === 'all'
-                          ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs'
+                          ? 'text-[color:var(--portal-text)]'
                           : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                       }`}
                     >
-                      All
+                      {recentsFilter === 'all' ? <motion.span layoutId="phone-recents-filter-pill" className="pointer-events-none absolute inset-0 rounded-md bg-[color:var(--portal-card)] shadow-2xs" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+                      <span className="relative z-10">All</span>
                     </button>
                     <button
                       type="button"
                       role="tab"
                       aria-selected={recentsFilter === 'missed'}
                       onClick={() => setRecentsFilter('missed')}
-                      className={`w-16 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                      className={`relative isolate w-16 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
                         recentsFilter === 'missed'
-                          ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs'
+                          ? 'text-[color:var(--portal-text)]'
                           : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                       }`}
                     >
-                      Missed
+                      {recentsFilter === 'missed' ? <motion.span layoutId="phone-recents-filter-pill" className="pointer-events-none absolute inset-0 rounded-md bg-[color:var(--portal-card)] shadow-2xs" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+                      <span className="relative z-10">Missed</span>
                     </button>
                   </div>
                 ) : (
@@ -874,14 +876,16 @@ export default function CallsPage() {
           >
             <button
               type="button"
+              aria-pressed={activeTab === 'recents'}
               onClick={() => setActiveTab('recents')}
-              className={`relative flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
+              className={`relative isolate flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
                 activeTab === 'recents'
                   ? 'text-[#a8792f] dark:text-[#f1d27a]'
                   : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
               }`}
             >
-              <div className="relative">
+              {activeTab === 'recents' ? <motion.span layoutId="phone-navigation-pill" className="pointer-events-none absolute inset-0 rounded-xl bg-[color:var(--portal-soft)]" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+              <div className="relative z-10">
                 <Clock3 size={19} />
                 {unreadMissedCount > 0 && (
                   <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
@@ -889,19 +893,21 @@ export default function CallsPage() {
                   </span>
                 )}
               </div>
-              <span className="text-[10px] font-semibold">Recents</span>
+              <span className="relative z-10 text-[10px] font-semibold">Recents</span>
             </button>
 
             <button
               type="button"
+              aria-pressed={activeTab === 'voicemail'}
               onClick={() => setActiveTab('voicemail')}
-              className={`relative flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
+              className={`relative isolate flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
                 activeTab === 'voicemail'
                   ? 'text-[#a8792f] dark:text-[#f1d27a]'
                   : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
               }`}
             >
-              <div className="relative">
+              {activeTab === 'voicemail' ? <motion.span layoutId="phone-navigation-pill" className="pointer-events-none absolute inset-0 rounded-xl bg-[color:var(--portal-soft)]" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+              <div className="relative z-10">
                 <Voicemail size={19} />
                 {unreadVoicemailCount > 0 && (
                   <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#caa24c] px-1 text-[9px] font-bold text-white">
@@ -909,20 +915,22 @@ export default function CallsPage() {
                   </span>
                 )}
               </div>
-              <span className="text-[10px] font-semibold">Voicemail</span>
+              <span className="relative z-10 text-[10px] font-semibold">Voicemail</span>
             </button>
 
             <button
               type="button"
+              aria-pressed={activeTab === 'keypad'}
               onClick={() => setActiveTab('keypad')}
-              className={`flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
+              className={`relative isolate flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
                 activeTab === 'keypad'
                   ? 'text-[#a8792f] dark:text-[#f1d27a]'
                   : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
               }`}
             >
-              <Grid size={19} />
-              <span className="text-[10px] font-semibold">Keypad</span>
+              {activeTab === 'keypad' ? <motion.span layoutId="phone-navigation-pill" className="pointer-events-none absolute inset-0 rounded-xl bg-[color:var(--portal-soft)]" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+              <Grid size={19} className="relative z-10" />
+              <span className="relative z-10 text-[10px] font-semibold">Keypad</span>
             </button>
           </nav>}
         </section>
@@ -1135,32 +1143,35 @@ export default function CallsPage() {
                         <div
                           className="inline-flex rounded-lg bg-[color:var(--portal-soft)] p-0.5 border border-[color:var(--portal-border)]"
                           role="tablist"
+                          aria-label="Call notes"
                         >
                           <button
                             type="button"
                             role="tab"
                             aria-selected={readerTab === 'transcript'}
                             onClick={() => setReaderTab('transcript')}
-                            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                            className={`relative isolate inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${
                               readerTab === 'transcript'
-                                ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs'
+                                ? 'text-[color:var(--portal-text)]'
                                 : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                             }`}
                           >
-                            <FileText size={12} /> Transcript
+                            {readerTab === 'transcript' ? <motion.span layoutId="phone-reader-view-pill" className="pointer-events-none absolute inset-0 rounded-md bg-[color:var(--portal-card)] shadow-2xs" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+                            <span className="relative z-10 inline-flex items-center gap-1.5"><FileText size={12} /> Transcript</span>
                           </button>
                           <button
                             type="button"
                             role="tab"
                             aria-selected={readerTab === 'summary'}
                             onClick={() => void handleGenerateSummary(selectedCall)}
-                            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                            className={`relative isolate inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${
                               readerTab === 'summary'
-                                ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-2xs'
+                                ? 'text-[color:var(--portal-text)]'
                                 : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                             }`}
                           >
-                            <Sparkles size={12} className="text-[#caa24c]" /> Summary
+                            {readerTab === 'summary' ? <motion.span layoutId="phone-reader-view-pill" className="pointer-events-none absolute inset-0 rounded-md bg-[color:var(--portal-card)] shadow-2xs" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
+                            <span className="relative z-10 inline-flex items-center gap-1.5"><Sparkles size={12} className="text-[#caa24c]" /> Summary</span>
                           </button>
                         </div>
 
