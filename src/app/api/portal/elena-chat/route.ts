@@ -9,7 +9,6 @@ import { isLuxorTourDay, isLuxorTourSlotAtLeast24HoursAway, LUXOR_TOUR_EARLIEST_
 import { listUpcomingLuxorTourSlots, publishLuxorTourDays, unpublishLuxorTourDays } from '@/lib/luxorTourSlotsServer'
 import { getInvoice, listPaidPaymentsByInvoice } from '@/lib/luxorInvoicesServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
-import { getDefaultLuxorProposalPricing } from '@/lib/luxorProposalPricingServer'
 import { getLuxorBooking, listLuxorBookingsByInquiry } from '@/lib/luxorBookingsServer'
 import { getCustomWorkflowFeatureStatus } from '@/lib/luxorCustomWorkflowsServer'
 import { validateCustomWorkflowDefinition, type CustomWorkflowDefinition } from '@/lib/luxorCustomWorkflowDefinition'
@@ -471,7 +470,7 @@ Use the live CRM context supplied by the portal when it already contains the exa
 - Email evidence: luxor_inquiries has a saved email address and may have provider bounce/complaint evidence in metadata; it has no separate email-verification flag. Do not call an address unverified unless a concrete record supports that claim. A matching saved address can be used for a draft. A sent job means the provider accepted it; only a provider delivery event confirms delivery, and no bounce evidence means no bounce is recorded. Never infer a bounce from missing verification data.
 - If "navigate_to_lead" rejects an ID or cannot verify a record, do not stop or claim the inquiry is unavailable. Call "lookup_luxor_lead" with the known human details and continue from its result. Never invent a UUID.
 - Keep event date and tour appointment date separate: target_date is the client's event date/range, while preferred_tour_date and preferred_tour_time are the Luxor tour appointment.
-- The proposal builder is the source of truth for package pricing and inclusions. Read the ACTIVE PROPOSAL CATALOG CONTEXT appended to this prompt before answering pricing questions. Never invent or estimate a package total outside the builder calculation. When the owner asks for a quote, use the proposal builder or ask for the missing event date, guest count, and rental period.
+- Settings is the source of truth for approved pricing rules and the proposal builder calculates customer-specific totals. Read the current pricing context appended to this prompt before answering pricing questions. If it is unavailable, say so and do not quote rates from memory or old correspondence. Never invent or estimate a package total outside the builder calculation. When the owner asks for a quote, use the proposal builder or ask for the missing event date, guest count, and rental period.
 - For "how many people are coming to the Grand Opening, including guests," sum each attending RSVP's attendee_count, falling back to guest_count and then 1. attendee_count already includes the named RSVP holder. Clearly distinguish expected people from people who have actually checked in.
 - Lead with the requested number, then give a short breakdown. Keep operational answers warm but professional; do not force "bestie" or an emoji into every response.
 - If a database query fails or returns nothing, retry with the known campaign_key, flow, and source fields before saying the data is unavailable.
@@ -988,31 +987,6 @@ async function processElenaChatRequest(request: Request, onToolActivity?: (text:
     }
 
     const executedQueries: Array<{ query: string; result: unknown }> = []
-    let proposalCatalogContext = ''
-    try {
-      const pricing = await getDefaultLuxorProposalPricing()
-      const config = pricing.config as Record<string, unknown>
-      proposalCatalogContext = `\n\nACTIVE PROPOSAL CATALOG (version ${pricing.version}; source: public.luxor_proposal_pricing):\n${JSON.stringify({
-        currency: config.currency,
-        packages: config.packages,
-        rental_rates: config.rental_rates,
-        rental_rate_rules: config.rental_rate_rules,
-        additional_time_rates: config.additional_time_rates,
-        required_fees: config.required_fees,
-        decor: config.decor,
-        catering: config.catering,
-        dj: config.dj,
-        photo_booth: config.photo_booth,
-        bartending: config.bartending,
-        tables: config.tables,
-        security_deposit: config.security_deposit,
-        rental_access: config.rental_access,
-        taxes_and_processing_fees: config.taxes_and_processing_fees,
-        discounts: config.discounts,
-      })}\nUse these values as the builder's approved line-item rules. Tables and chairs setup is $0 in the active catalog. A final total still depends on the selected event date, guest count, rental period, package, add-ons, promotions, and tax settings.`
-    } catch (pricingError) {
-      console.warn('[Elena Chat] Proposal catalog context unavailable:', pricingError)
-    }
     const [senderProfile, venueContext] = await Promise.all([getLuxorUserProfile(session.email), getLuxorAiVenueContext()])
 
     // 1. If this is a direct confirmation execute request
@@ -2167,7 +2141,7 @@ ${formatRows(bookings, ['client_name', 'event_type', 'event_date', 'start_time',
 
     // 2. Normal assistant request
     const openrouterMessages: ChatMessage[] = [
-      { role: 'system', content: `${SYSTEM_PROMPT}${proposalCatalogContext}\n\n${venueContext}` },
+      { role: 'system', content: `${SYSTEM_PROMPT}\n\n${venueContext}` },
       {
         role: 'system',
         content: `SIGNED-IN SENDER PROFILE: Name: "${senderProfile.displayName}". Title: "${senderProfile.roleTitle}". Email: "${senderProfile.email}". When drafting an email, use this identity for any sign-off and never invent a different sender. The rendered email adds this saved signature automatically.`

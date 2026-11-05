@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorAiVenueContext } from '@/lib/luxorAiContextServer'
 
 export async function POST(request: NextRequest) {
   const session = await getLuxorPortalSession()
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Tell Elena what the text should accomplish.' }, { status: 400 })
     }
 
+    const venueContext = await getLuxorAiVenueContext()
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -43,7 +45,7 @@ Return strict JSON with keys: name, bodyTemplate, campaignType.
 bodyTemplate must be 320 characters or fewer, identify "Luxor Event Space", and end with "Reply STOP to opt out."
 Allowed merge fields are [FirstName], [FullName], [EventType], [EventDate], [TourDate], and [TourTime].
 campaignType must be one of customer_care, transactional, tour, event, payment, invoice, or elena.
-Do not invent dates, prices, balances, availability, links, or promises.`,
+Do not invent dates, prices, balances, availability, links, or promises.\n\n${venueContext}`,
           },
           {
             role: 'user',
