@@ -1,6 +1,7 @@
 'use client'
 
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import Link from 'next/link'
 import { PortalContactAvatar, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 
@@ -35,6 +36,7 @@ export function LuxorCrmRecordCard({
   contentColumn = false,
   responsiveContentColumn = false,
   onOpen,
+  headerHref,
   expanded,
   expandedContentId,
   interactionLabel,
@@ -52,6 +54,7 @@ export function LuxorCrmRecordCard({
   children?: ReactNode
   actions?: ReactNode
   onOpen?: () => void
+  headerHref?: string
   expanded?: boolean
   expandedContentId?: string
   interactionLabel?: string
@@ -82,14 +85,19 @@ export function LuxorCrmRecordCard({
         className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#a8792f]"
       /> : null}
       {responsiveContentColumn ? <div className="relative z-10 grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] items-start gap-x-3">
-        <div className="row-start-1 col-start-1">{cardAvatar}</div>
+        <div className="row-start-1 col-start-1">{headerHref ? <Link href={headerHref} aria-label={`Open ${lead.full_name}`} className="block rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60">{cardAvatar}</Link> : cardAvatar}</div>
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
             <div className="min-w-0 flex-1">
-              <h3 className={`${responsiveContentColumn ? 'break-words [overflow-wrap:anywhere]' : 'truncate'} text-sm font-semibold leading-tight text-[color:var(--portal-text)]`}>{lead.full_name}</h3>
-              {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)]">{subtitle}</div> : null}
+              {headerHref ? <Link href={headerHref} className="group/lead-title block min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60">
+                <h3 className={`${responsiveContentColumn ? 'break-words [overflow-wrap:anywhere]' : 'truncate'} text-sm font-semibold leading-tight text-[color:var(--portal-text)] transition-colors group-hover/lead-title:text-[#a8792f] dark:group-hover/lead-title:text-[#dfbd68]`}>{lead.full_name}</h3>
+                {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)] transition-colors group-hover/lead-title:text-[#a8792f] dark:group-hover/lead-title:text-[#dfbd68]">{subtitle}</div> : null}
+              </Link> : <>
+                <h3 className={`${responsiveContentColumn ? 'break-words [overflow-wrap:anywhere]' : 'truncate'} text-sm font-semibold leading-tight text-[color:var(--portal-text)]`}>{lead.full_name}</h3>
+                {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)]">{subtitle}</div> : null}
+              </>}
             </div>
-            {(badges?.length || headerAction) ? <div className="flex max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-end">{badges?.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} />)}{headerAction}</div> : null}
+            {(badges?.length || headerAction) ? <div className="flex max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-end">{badges?.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} borderless />)}{headerAction}</div> : null}
           </div>
           {contact ? <div className="mt-1 break-all text-[10px] text-[color:var(--portal-muted)]">{contact}</div> : null}
         </div>
@@ -99,16 +107,21 @@ export function LuxorCrmRecordCard({
         </div> : null}
       </div> : <div className="relative z-10">
         <div className="flex min-w-0 items-start gap-3">
-          {cardAvatar}
+          {headerHref ? <Link href={headerHref} aria-label={`Open ${lead.full_name}`} className="block shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60">{cardAvatar}</Link> : cardAvatar}
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
               <div className="min-w-0 flex-1">
-                <h3 className="truncate text-sm font-semibold leading-tight text-[color:var(--portal-text)]">{lead.full_name}</h3>
-                {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)]">{subtitle}</div> : null}
+                {headerHref ? <Link href={headerHref} className="group/lead-title block min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60">
+                  <h3 className="truncate text-sm font-semibold leading-tight text-[color:var(--portal-text)] transition-colors group-hover/lead-title:text-[#a8792f] dark:group-hover/lead-title:text-[#dfbd68]">{lead.full_name}</h3>
+                  {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)] transition-colors group-hover/lead-title:text-[#a8792f] dark:group-hover/lead-title:text-[#dfbd68]">{subtitle}</div> : null}
+                </Link> : <>
+                  <h3 className="truncate text-sm font-semibold leading-tight text-[color:var(--portal-text)]">{lead.full_name}</h3>
+                  {subtitle ? <div className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)]">{subtitle}</div> : null}
+                </>}
               </div>
               {(badges?.length || headerAction) ? (
                 <div className="flex max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-end">
-                  {badges?.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} />)}
+                  {badges?.map((badge, index) => <PortalStatusBadge key={`${badge.label}-${index}`} status={badge.label} tone={badge.tone} warning={badge.warning} borderless />)}
                   {headerAction}
                 </div>
               ) : null}

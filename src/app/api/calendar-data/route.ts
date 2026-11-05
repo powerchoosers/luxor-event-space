@@ -53,15 +53,15 @@ export async function GET() {
     let taskInquiryContexts: Awaited<ReturnType<typeof listTaskInquiryContexts>> = []
     let taskInquiryContextsUnavailable = false
     try {
-      taskInquiryContexts = await listTaskInquiryContexts(tasks.map((task) => task.inquiry_id))
+      taskInquiryContexts = await listTaskInquiryContexts(tasks.map((task) => task.inquiry_id).filter((id): id is string => Boolean(id)))
     } catch {
       taskInquiryContextsUnavailable = true
     }
     const taskInquiryContextById = new Map(taskInquiryContexts.map((inquiry) => [inquiry.id, inquiry]))
     const tasksWithInquiryContext = tasks.map((task) => ({
       ...task,
-      inquiry_context: taskInquiryContextById.get(task.inquiry_id) ?? null,
-      inquiry_context_status: taskInquiryContextsUnavailable ? 'unavailable' : taskInquiryContextById.has(task.inquiry_id) ? 'linked' : 'unlinked',
+      inquiry_context: task.inquiry_id ? taskInquiryContextById.get(task.inquiry_id) ?? null : null,
+      inquiry_context_status: !task.inquiry_id ? 'unlinked' : taskInquiryContextsUnavailable ? 'unavailable' : taskInquiryContextById.has(task.inquiry_id) ? 'linked' : 'unlinked',
     }))
 
     const familyIds = [...new Set(invoiceResult.invoices.map((invoice) => invoice.proposal_family_id).filter((value): value is string => Boolean(value)))]

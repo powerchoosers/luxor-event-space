@@ -16,6 +16,7 @@ type LuxorAvailabilityCalendarProps = {
   pendingCounts?: Record<string, number>
   availabilityReady?: boolean
   compact?: boolean
+  embedded?: boolean
 }
 
 const MONTHS = [
@@ -37,15 +38,16 @@ function fullDateLabel(value: string) {
   return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(localDate(value))
 }
 
-function cellBackground(day?: LuxorAvailabilityDay) {
-  if (day?.status === 'fully-booked') return { background: '#bd852d' }
-  if (day?.status === 'am-booked') return { background: 'linear-gradient(90deg, #e6c376 0 50%, var(--portal-soft) 50% 100%)' }
-  if (day?.status === 'pm-booked') return { background: 'linear-gradient(90deg, var(--portal-soft) 0 50%, #e6c376 50% 100%)' }
-  return { background: 'var(--portal-soft)' }
+function cellBackground(day?: LuxorAvailabilityDay, embedded = false) {
+  const booked = embedded ? 'color-mix(in srgb, var(--portal-card) 55%, #caa24c)' : '#e6c376'
+  if (day?.status === 'fully-booked') return { background: embedded ? booked : '#bd852d' }
+  if (day?.status === 'am-booked') return { background: `linear-gradient(90deg, ${booked} 0 50%, var(--portal-soft) 50% 100%)` }
+  if (day?.status === 'pm-booked') return { background: `linear-gradient(90deg, var(--portal-soft) 0 50%, ${booked} 50% 100%)` }
+  return { background: embedded ? 'var(--portal-card)' : 'var(--portal-soft)' }
 }
 
-function LegendMark({ status }: { status: LuxorAvailabilityDay['status'] }) {
-  return <span aria-hidden="true" className="h-4 w-4 shrink-0 rounded-full border border-[#caa24c]/35" style={cellBackground({ amBooked: status === 'am-booked' || status === 'fully-booked', pmBooked: status === 'pm-booked' || status === 'fully-booked', status, blocks: [] })} />
+function LegendMark({ status, embedded = false }: { status: LuxorAvailabilityDay['status']; embedded?: boolean }) {
+  return <span aria-hidden="true" className="h-4 w-4 shrink-0 rounded-full border border-[#caa24c]/35" style={cellBackground({ amBooked: status === 'am-booked' || status === 'fully-booked', pmBooked: status === 'pm-booked' || status === 'fully-booked', status, blocks: [] }, embedded)} />
 }
 
 export function LuxorAvailabilityCalendar({
@@ -55,6 +57,7 @@ export function LuxorAvailabilityCalendar({
   pendingCounts,
   availabilityReady = true,
   compact = false,
+  embedded = false,
 }: LuxorAvailabilityCalendarProps) {
   const selected = useMemo(() => localDate(selectedDate), [selectedDate])
   const [viewOverride, setViewOverride] = useState<{ selectedDate: string; date: Date } | null>(null)
@@ -220,7 +223,7 @@ export function LuxorAvailabilityCalendar({
   }
 
   return (
-    <section aria-label="Event date availability" className="min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3.5 sm:p-4">
+    <section aria-label="Event date availability" className={`min-w-0 ${embedded ? 'p-4 sm:p-5' : 'rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3.5 sm:p-4'}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <button type="button" onClick={selectToday} className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] transition hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
           <CalendarDays size={14} className="text-[#a8792f]" aria-hidden="true" /> Today
@@ -308,7 +311,7 @@ export function LuxorAvailabilityCalendar({
               onClick={() => selectDay(key)}
               className={`relative mx-auto flex h-11 w-full min-w-0 items-center justify-center rounded-md text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)] transition focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60 disabled:cursor-not-allowed disabled:opacity-30 sm:text-xs ${inMonth ? '' : 'opacity-45'}`}
             >
-              <span className={`relative flex aspect-square w-full max-w-10 items-center justify-center rounded-full border border-[color:var(--portal-border)] text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)] transition sm:text-xs ${selectedDay ? 'ring-2 ring-[#b77d27] ring-offset-2 ring-offset-[color:var(--portal-card)]' : 'hover:border-[#caa24c]/50 hover:shadow-sm'}`} style={cellBackground(availabilityReady ? state : undefined)}>
+              <span className={`relative flex aspect-square w-full max-w-10 items-center justify-center rounded-full border text-[10px] font-semibold tabular-nums text-[color:var(--portal-text)] transition sm:text-xs ${embedded && (!availabilityReady || !state || state.status === 'available') ? 'border-transparent' : 'border-[color:var(--portal-border)]'} ${selectedDay ? 'ring-2 ring-[#b77d27] ring-offset-2 ring-offset-[color:var(--portal-card)]' : 'hover:border-[#caa24c]/50'}`} style={embedded && (!availabilityReady || !state || state.status === 'available') ? undefined : cellBackground(availabilityReady ? state : undefined, embedded)}>
                 {date.getDate()}
                 {pending > 0 ? <span title={`${pending} pending`} aria-hidden="true" className="absolute -right-1 -top-1 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full border border-[color:var(--portal-card)] bg-[#f3ead7] px-1 text-[8px] font-black leading-none text-[#6f4e1d] shadow-sm">{pending}</span> : null}
               </span>
@@ -320,10 +323,10 @@ export function LuxorAvailabilityCalendar({
       {!compact ? <p className="mt-3 min-h-4 text-center text-[10px] font-medium text-[color:var(--portal-muted)]" aria-live="polite">{selectedDate ? fullDateLabel(selectedDate) : 'Select an event date'}</p> : null}
 
       <div aria-label="Availability legend" className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-t border-[color:var(--portal-border)] pt-3 text-[9px] font-medium text-[color:var(--portal-muted)] sm:gap-x-4 sm:text-[10px]">
-        <span className="inline-flex items-center gap-1.5"><LegendMark status="available" />Available</span>
-        <span className="inline-flex items-center gap-1.5"><LegendMark status="fully-booked" />Fully booked</span>
-        <span className="inline-flex items-center gap-1.5"><LegendMark status="am-booked" />AM slot booked</span>
-        <span className="inline-flex items-center gap-1.5"><LegendMark status="pm-booked" />PM slot booked</span>
+        <span className="inline-flex items-center gap-1.5"><LegendMark status="available" embedded={embedded} />Available</span>
+        <span className="inline-flex items-center gap-1.5"><LegendMark status="fully-booked" embedded={embedded} />Fully booked</span>
+        <span className="inline-flex items-center gap-1.5"><LegendMark status="am-booked" embedded={embedded} />AM slot booked</span>
+        <span className="inline-flex items-center gap-1.5"><LegendMark status="pm-booked" embedded={embedded} />PM slot booked</span>
       </div>
     </section>
   )

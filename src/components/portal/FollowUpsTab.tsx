@@ -3,16 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { CalendarClock, Check, ChevronDown, ChevronRight, Clock3, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Pencil, Phone, Plus, UserRound, X } from 'lucide-react'
+import { CalendarClock, Check, ChevronRight, Clock3, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Phone, Plus, UserRound, X } from 'lucide-react'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
 import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask } from '@/lib/luxorFollowUpTaskPolicy'
 import { PortalButton, PortalDatePicker, PortalFilterBar, type PortalActiveFilter, PortalModal, PortalPagination, PortalSelect, PortalSkeletonTransition, PortalTableCard, PortalTourCardSkeleton, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import { LuxorCrmRecordCard } from '@/components/portal/LuxorCrmRecordCard'
+import { FollowUpLeadPicker } from '@/components/portal/FollowUpLeadPicker'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { useToast } from '@/components/portal/ToastProvider'
+import { saveRecentLead } from '@/lib/luxorRecentLeads'
 
 type Channel = 'email' | 'phone'
 type Activity = { id: string; at: string; kind: 'note' | 'call' | 'email' | 'follow-up'; label: string; detail: string }
@@ -144,6 +146,8 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [dueTime, setDueTime] = useState('09:00')
   const [assignee, setAssignee] = useState('')
   const [notes, setNotes] = useState('')
+  const [taskSaving, setTaskSaving] = useState(false)
+  const taskSavingRef = useRef(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const shouldReduceMotion = useReducedMotion()
   const [activity, setActivity] = useState<Activity[]>([])
@@ -166,6 +170,10 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [nextChannel, setNextChannel] = useState<Channel>('phone')
   const [callSaving, setCallSaving] = useState(false)
   const callSavingRef = useRef(false)
+  const [editingNextTask, setEditingNextTask] = useState<LuxorTask | null>(null)
+  const [editNextDate, setEditNextDate] = useState('')
+  const [editNextTime, setEditNextTime] = useState('09:00')
+  const [savingNextTask, setSavingNextTask] = useState(false)
   const [sequenceSaving, setSequenceSaving] = useState(false)
   const [pauseOpen, setPauseOpen] = useState(false)
   const [pauseDate, setPauseDate] = useState('')
@@ -283,7 +291,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
 
   const leadById = useMemo(() => new Map(leads.map((lead) => [lead.id, lead])), [leads])
   const pausedEnrollments = useMemo(() => new Set(pausedEnrollmentIds), [pausedEnrollmentIds])
-  const followUpTasks = useMemo(() => tasks.filter(isLuxorFollowUpTask), [tasks])
+  const followUpTasks = useMemo(() => tasks.filter((task): task is LuxorTask & { inquiry_id: string } => Boolean(task.inquiry_id) && isLuxorFollowUpTask(task)), [tasks])
   const completedTourLeads = useMemo(() => getCompletedTourLeads(leads.filter((lead) => !isLuxorInquiryArchived(lead))), [leads])
   const rows = useMemo<FollowUpRow[]>(() => {
     const entries: Array<{ inquiryId: string; id: string; channel: Channel; title: string; dueAt: string | null; dueDate: string | null; status: string; assignee: string; task?: LuxorTask }> = [
@@ -438,16 +446,26 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     ...activity,
     ...selectedTasks.map((task) => ({ id: `task-${task.id}`, at: task.completed_at || task.due_at || task.due_date || task.created_at, kind: taskChannel(task) === 'phone' ? 'call' as const : 'follow-up' as const, label: `${task.title} · ${task.status}${task.call_outcome ? ` · ${task.call_outcome.replaceAll('_', ' ')}` : ''}`, detail: taskNotes(task) })),
   ].sort((a, b) => b.at.localeCompare(a.at)), [activity, selectedTasks])
+  const nextAfterCall = callDraft ? [
+    ...followUpTasks.filter((task) => task.inquiry_id === callDraft.lead.id && task.id !== callDraft.task?.id && task.status === 'pending' && !(task.automation_enrollment_id && pausedEnrollments.has(task.automation_enrollment_id))).map((task) => ({ id: task.id, title: task.title, dueAt: task.due_at ?? null, dueDate: task.due_date ?? null, task, automated: Boolean(task.automation_enrollment_id) })),
+    ...emailActions.filter((action) => action.inquiry_id === callDraft.lead.id).map((action) => ({ id: action.id, title: `Automated email ${action.step_key.replace('email_', '#')}`, dueAt: action.scheduled_at, dueDate: null, task: undefined, automated: true })),
+  ].sort((a, b) => (a.dueAt ?? a.dueDate ?? '\uffff').localeCompare(b.dueAt ?? b.dueDate ?? '\uffff'))[0] : undefined
 
   async function saveTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!leadId || !title.trim() || !dueDate || !dueTime) return
-    const isPostTour = leadById.get(leadId)?.tour_attendance_status === 'attended'
-    const response = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: leadId, title: title.trim(), description: manualFollowUpDescription(newChannel, isPostTour, notes), dueDate, dueAt: localLuxorIso(dueDate, dueTime), assignedTo: assignee || undefined, priority: 'medium' }) })
-    if (!response.ok) { notify({ title: 'The follow-up could not be saved', variant: 'error' }); return }
-    setAdding(false); setTitle(''); setNotes(''); setDueDate(''); setLeadId('')
-    notify({ title: `${newChannel === 'phone' ? 'Phone' : 'Email'} follow-up task added`, description: 'No call or email was sent.', variant: 'success' })
-    await refresh()
+    if (!leadId || !title.trim() || !dueDate || !dueTime || taskSavingRef.current) return
+    taskSavingRef.current = true
+    setTaskSaving(true)
+    try {
+      const isPostTour = leadById.get(leadId)?.tour_attendance_status === 'attended'
+      const response = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryId: leadId, title: title.trim(), description: manualFollowUpDescription(newChannel, isPostTour, notes), dueDate, dueAt: localLuxorIso(dueDate, dueTime), assignedTo: assignee || undefined, priority: 'medium' }) })
+      if (!response.ok) throw new Error('Try again after checking the follow-up details.')
+      setAdding(false); setTitle(''); setNotes(''); setDueDate(''); setLeadId('')
+      notify({ title: `${newChannel === 'phone' ? 'Phone' : 'Email'} follow-up task added`, description: 'No call or email was sent.', variant: 'success' })
+      await refresh()
+    } catch (error) {
+      notify({ title: 'The follow-up could not be saved', description: error instanceof Error ? error.message : 'Try again.', variant: 'error' })
+    } finally { taskSavingRef.current = false; setTaskSaving(false) }
   }
 
   async function loadHistory(inquiryId: string, page = 0, append = false) {
@@ -473,7 +491,27 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   }
 
   function resetCallDraft() {
-    setCallDraft(null); setCallOutcome(''); setCallNote(''); setNextStep('none'); setNextDate(''); setNextTime('10:00'); setNextChannel('phone')
+    setCallDraft(null); setCallOutcome(''); setCallNote(''); setNextStep('none'); setNextDate(''); setNextTime('10:00'); setNextChannel('phone'); setEditingNextTask(null)
+  }
+
+  function editScheduledTask(task: LuxorTask) {
+    setEditingNextTask(task)
+    setEditNextDate(task.due_at ? luxorDate(task.due_at) : task.due_date?.slice(0, 10) ?? '')
+    setEditNextTime(task.due_at ? luxorTimeInput(task.due_at) : '09:00')
+  }
+
+  async function saveScheduledTask() {
+    if (!editingNextTask || !editNextDate || !editNextTime || savingNextTask) return
+    setSavingNextTask(true)
+    try {
+      const response = await fetch('/api/tasks', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingNextTask.id, due_date: editNextDate, due_at: localLuxorIso(editNextDate, editNextTime) }) })
+      if (!response.ok) throw new Error('The follow-up could not be rescheduled.')
+      await refresh()
+      setEditingNextTask(null)
+      notify({ title: 'Follow-up rescheduled', description: `${editNextDate} at ${editNextTime} Central`, variant: 'success' })
+    } catch (error) {
+      notify({ title: 'Follow-up could not be rescheduled', description: error instanceof Error ? error.message : 'Try again.', variant: 'error' })
+    } finally { setSavingNextTask(false) }
   }
 
   function pendingPhoneTask(inquiryId: string) {
@@ -539,14 +577,18 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   function toggleExpandedRow(inquiryId: string) {
     const next = new Set(expandedRowIdsRef.current)
     if (next.has(inquiryId)) next.delete(inquiryId)
-    else next.add(inquiryId)
+    else {
+      next.add(inquiryId)
+      const lead = leadById.get(inquiryId)
+      if (lead) saveRecentLead({ id: lead.id, fullName: lead.full_name, email: lead.email, phone: lead.phone, eventType: lead.event_type, status: lead.status })
+    }
     expandedRowIdsRef.current = next
     setExpandedRowIds(next)
     const detail = expandedCardDetails[inquiryId]
     if (!detail || detail.error) void loadExpandedCardDetails(inquiryId)
   }
 
-  function openAddTask(inquiryId: string) {
+  function openAddTask(inquiryId = '') {
     setLeadId(inquiryId)
     setTitle(''); setNotes(''); setDueDate(''); setDueTime('09:00'); setNewChannel('phone')
     setAdding(true)
@@ -554,6 +596,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
 
   async function updateTask(task: LuxorTask, outcome: string, note: string, step: string, nextAt: string | null, suppressResponse = false) {
     if (busyId === task.id) return
+    if (!task.inquiry_id) throw new Error('This follow-up has no linked lead.')
     setBusyId(task.id)
     try {
       const mapped = outcome === 'no_answer' ? 'no_answer' : outcome === 'voicemail_left' ? 'voicemail_left' : 'reached'
@@ -590,7 +633,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   async function changeManualTask(task: LuxorTask, action: 'complete' | 'skip' | 'reschedule', date?: string) {
     if (busyId === task.id) return
     if (action === 'complete' && taskChannel(task) === 'phone') {
-      const lead = leadById.get(task.inquiry_id)
+      const lead = task.inquiry_id ? leadById.get(task.inquiry_id) : undefined
       if (lead) logCall(lead, task)
       return
     }
@@ -752,13 +795,12 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
             resultLabel={loading ? 'Loading…' : `${visibleRows.length.toLocaleString()} ${visibleRows.length === 1 ? 'follow-up' : 'follow-ups'}`}
             activeFilters={activeFilters}
             onClearFilters={() => { setFilter('all'); setCurrentPage(1) }}
-            searchWidthClassName="w-full min-w-0"
             actions={
               <button
                 type="button"
                 className="portal-inline-action luxor-gold-raised inline-flex h-9 w-9 shrink-0 aspect-square items-center justify-center rounded-lg text-white cursor-pointer"
                 style={{ height: '36px', width: '36px', minHeight: '36px', maxHeight: '36px', minWidth: '36px', maxWidth: '36px' }}
-                onClick={() => { if (leads[0]) openAddTask(leads[0].id) }}
+                onClick={() => openAddTask()}
                 title="Add Follow-Up"
                 aria-label="Add Follow-Up"
               >
@@ -831,24 +873,60 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                 .map((task) => ({ id: `task-${task.id}`, at: task.completed_at || task.due_at || task.due_date || task.created_at, kind: taskChannel(task) === 'phone' ? 'call' : 'follow-up', label: `${task.title} · ${task.status}${task.call_outcome ? ` · ${task.call_outcome.replaceAll('_', ' ')}` : ''}`, detail: taskNotes(task) }))
               const cardHistory = [...(cardDetails?.history ?? []), ...additionalTaskHistory].sort((a, b) => b.at.localeCompare(a.at))
               const cardDetailsId = `follow-up-details-${row.inquiryId}`
+              const menuIsAbove = cardMenuPosition?.leadId === lead.id && cardMenuPosition.above
+              const moreActions = <div className="relative ml-1" data-follow-up-menu-root="true" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+                <button
+                  id={`follow-up-menu-toggle-${row.inquiryId}`}
+                  type="button"
+                  aria-label={`More actions for ${lead.full_name}`}
+                  title={`More actions for ${lead.full_name}`}
+                  aria-haspopup="menu"
+                  aria-controls={`follow-up-menu-${row.inquiryId}`}
+                  aria-expanded={cardMenuLeadId === lead.id}
+                  onClick={(event) => toggleCardMenu(event, lead.id)}
+                  className="portal-inline-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-transparent text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] cursor-pointer"
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {cardMenuLeadId === lead.id && <motion.div
+                    id={`follow-up-menu-${row.inquiryId}`}
+                    key={`follow-up-menu-${row.inquiryId}`}
+                    role="menu"
+                    aria-label={`Actions for ${lead.full_name}`}
+                    onKeyDown={(event) => {
+                      const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                      const currentIndex = items.indexOf(document.activeElement as HTMLElement)
+                      const nextIndex = event.key === 'ArrowDown' ? (currentIndex + 1) % items.length : event.key === 'ArrowUp' ? (currentIndex - 1 + items.length) % items.length : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : -1
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        setCardMenuLeadId(null)
+                        document.getElementById(`follow-up-menu-toggle-${row.inquiryId}`)?.focus()
+                      } else if (nextIndex >= 0 && items.length) {
+                        event.preventDefault()
+                        items[nextIndex]?.focus()
+                      }
+                    }}
+                    style={cardMenuPosition?.leadId === lead.id ? { left: cardMenuPosition.left, width: cardMenuPosition.width, ...(cardMenuPosition.above ? { bottom: 'calc(100% + 0.375rem)' } : { top: 'calc(100% + 0.375rem)' }), transformOrigin: cardMenuPosition.above ? 'bottom right' : 'top right' } : undefined}
+                    initial={shouldReduceMotion ? false : { opacity: 0, y: menuIsAbove ? 6 : -6, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: menuIsAbove ? 4 : -4, scale: 0.99 }}
+                    transition={{ duration: shouldReduceMotion ? 0 : 0.14, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute z-30 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl"
+                  >
+                    <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openLeadWorkspaceFromCard(lead) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View Full Workspace</button>
+                    <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openAddTask(lead.id) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Add Follow-Up</button>
+                  </motion.div>}
+                </AnimatePresence>
+              </div>
               return (
                 <LuxorCrmRecordCard
                   key={row.inquiryId}
                   lead={lead}
+                  headerHref={`/portal/leads/${lead.id}`}
                   avatar={<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/15 font-serif text-lg text-[#8c6529]">{lead.full_name.slice(0, 1).toUpperCase()}</span>}
                   badges={[{ label: stage, tone: stageTone }]}
-                  headerAction={
-                    <span
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[color:var(--portal-border)]/60 bg-[color:var(--portal-soft)]/50 text-[color:var(--portal-muted)] transition-colors group-hover:border-[#caa24c]/50 group-hover:text-[#8c6529] dark:group-hover:text-[#dfbd68]"
-                      aria-hidden="true"
-                      title={isExpanded ? 'Collapse follow-up details' : 'Expand follow-up details'}
-                    >
-                      <ChevronDown
-                        size={15}
-                        className={`transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${isExpanded ? 'rotate-180 text-[#8c6529] dark:text-[#dfbd68]' : ''}`}
-                      />
-                    </span>
-                  }
+                  headerAction={moreActions}
                   subtitle={<>{lead.event_type || 'Event not specified'} · {lead.target_date || 'Date not set'}{lead.guest_count ? ` · ${lead.guest_count} guests` : ''}</>}
                   onOpen={() => toggleExpandedRow(row.inquiryId)}
                   expanded={isExpanded}
@@ -865,9 +943,9 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                           {row.next.channel === 'phone' ? <Phone className="mt-0.5 shrink-0" size={14} /> : <Mail className="mt-0.5 shrink-0" size={14} />}<span className="min-w-0 break-words [overflow-wrap:anywhere]">{row.next.title}</span>
                         </div>
                         {row.next.id.startsWith('post-tour-') && row.postTourStatus
-                          ? <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>
-                          : <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>}
-                        {row.postTourStatus && !row.next.id.startsWith('post-tour-') && <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
+                          ? <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} borderless /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>
+                          : <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} borderless /><span className="break-words font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>}
+                        {row.postTourStatus && !row.next.id.startsWith('post-tour-') && <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} borderless /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
                       </div>
                       <div className="flex items-center gap-1.5 sm:shrink-0" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
                       {(() => {
@@ -880,7 +958,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                             disabled={!hasPhone}
                             title={hasPhone ? `Call ${lead.full_name}` : unavailableLabel}
                             aria-label={hasPhone ? `Call ${lead.full_name} through Luxor` : unavailableLabel}
-                            className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[#8c6529] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/15 hover:text-[#724f1c] dark:text-[#dfbd68] dark:hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+                            className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-soft)]/60 text-[#8c6529] transition-colors hover:bg-[#caa24c]/15 hover:text-[#724f1c] dark:text-[#dfbd68] dark:hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
                           >
                             <Phone size={15} />
                           </button>
@@ -892,7 +970,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                         disabled={!lead.email}
                         title={lead.email ? `Email ${lead.full_name}` : 'Email unavailable: no email on this lead'}
                         aria-label={lead.email ? `Email ${lead.full_name}` : 'Email unavailable: no email on this lead'}
-                        className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[#8c6529] transition-colors hover:border-[#caa24c]/50 hover:bg-[#caa24c]/15 hover:text-[#724f1c] dark:text-[#dfbd68] dark:hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+                        className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-soft)]/60 text-[#8c6529] transition-colors hover:bg-[#caa24c]/15 hover:text-[#724f1c] dark:text-[#dfbd68] dark:hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
                       >
                         <Mail size={15} />
                       </button>
@@ -900,43 +978,12 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                         type="button"
                         onClick={() => logCall(lead, row.next.task)}
                         disabled={!lead.phone?.trim()}
-                        title={lead.phone?.trim() ? `Log call for ${lead.full_name}` : 'Logging a call is unavailable: no phone number on this lead'}
-                        aria-label={lead.phone?.trim() ? `Log call for ${lead.full_name}` : 'Logging a call is unavailable: no phone number on this lead'}
-                        className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/50 hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+                        title={lead.phone?.trim() ? `${row.next.task && taskChannel(row.next.task) === 'phone' ? 'Complete follow-up by logging a call' : 'Log a call'} for ${lead.full_name}` : 'Logging a call is unavailable: no phone number on this lead'}
+                        aria-label={lead.phone?.trim() ? `${row.next.task && taskChannel(row.next.task) === 'phone' ? 'Complete follow-up by logging a call' : 'Log a call'} for ${lead.full_name}` : 'Logging a call is unavailable: no phone number on this lead'}
+                        className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
                       >
-                        <Pencil size={15} />
+                        <Check size={15} />
                       </button>
-                      <div className="relative" data-follow-up-menu-root="true">
-                        <button
-                          id={`follow-up-menu-toggle-${row.inquiryId}`}
-                          type="button"
-                          aria-label={`More actions for ${lead.full_name}`}
-                          title={`More actions for ${lead.full_name}`}
-                          aria-haspopup="menu"
-                          aria-controls={`follow-up-menu-${row.inquiryId}`}
-                          aria-expanded={cardMenuLeadId === lead.id}
-                          onClick={(event) => toggleCardMenu(event, lead.id)}
-                          className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/50 hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] cursor-pointer"
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
-                        {cardMenuLeadId === lead.id && <div id={`follow-up-menu-${row.inquiryId}`} role="menu" aria-label={`Actions for ${lead.full_name}`} onKeyDown={(event) => {
-                          const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-                          const currentIndex = items.indexOf(document.activeElement as HTMLElement)
-                          const nextIndex = event.key === 'ArrowDown' ? (currentIndex + 1) % items.length : event.key === 'ArrowUp' ? (currentIndex - 1 + items.length) % items.length : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : -1
-                          if (event.key === 'Escape') {
-                            event.preventDefault()
-                            setCardMenuLeadId(null)
-                            document.getElementById(`follow-up-menu-toggle-${row.inquiryId}`)?.focus()
-                          } else if (nextIndex >= 0 && items.length) {
-                            event.preventDefault()
-                            items[nextIndex]?.focus()
-                          }
-                        }} style={cardMenuPosition?.leadId === lead.id ? { left: cardMenuPosition.left, width: cardMenuPosition.width, ...(cardMenuPosition.above ? { bottom: 'calc(100% + 0.5rem)' } : { top: 'calc(100% + 0.5rem)' }) } : undefined} className="absolute z-30 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl">
-                          <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openLeadWorkspaceFromCard(lead) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View Full Workspace</button>
-                          <button type="button" role="menuitem" tabIndex={0} onClick={() => { setCardMenuLeadId(null); openAddTask(lead.id) }} className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-xs font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Add Follow-Up</button>
-                        </div>}
-                      </div>
                     </div>
                   </div>
                   <AnimatePresence initial={false}>
@@ -1040,11 +1087,11 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     ) : null}
 
     <PortalModal isOpen={adding} onClose={() => setAdding(false)} title="Add Follow-Up" description="Create a manual reminder on the existing lead. This does not send an email or place a call." maxWidth="max-w-lg" zIndex={100}>
-      <form onSubmit={saveTask} className="space-y-4"><label className="block text-sm">Lead<PortalSelect value={leadId} onChange={setLeadId} options={leads.filter((lead) => !isLuxorInquiryArchived(lead)).map((lead) => ({ value: lead.id, label: lead.full_name }))} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Type<PortalSelect value={newChannel} onChange={(value) => setNewChannel(value as Channel)} options={[{ value: 'phone', label: 'Phone call' }, { value: 'email', label: 'Email task' }]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Title<input required value={title} onChange={(event) => setTitle(event.target.value)} placeholder={newChannel === 'phone' ? 'Personal call' : 'Follow-up email'} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Due date<PortalDatePicker value={dueDate} onChange={setDueDate} placeholder="Choose date" minDate={today} className="mt-1 w-full [&>button]:h-10 [&>button]:rounded-lg [&>button]:px-3 [&>button]:py-2 [&>button]:normal-case [&>button]:tracking-normal" /></label><label className="block text-sm">Due time (Central)<input required type="time" value={dueTime} onChange={(event) => setDueTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Assigned to<PortalSelect value={assignee} onChange={setAssignee} options={[{ value: '', label: 'Assign to me' }, ...assignees.map((email) => ({ value: email, label: email }))]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm" /></label><div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={() => setAdding(false)}>Cancel</PortalButton><PortalButton type="submit" disabled={!leadId || !dueDate || !dueTime}>Save Follow-Up</PortalButton></div></form>
+      <form onSubmit={saveTask} className="space-y-4"><div><label htmlFor="follow-up-lead" className="block text-sm">Lead</label><FollowUpLeadPicker id="follow-up-lead" leads={leads.filter((lead) => !isLuxorInquiryArchived(lead))} value={leadId} onChange={setLeadId} suggestedLeadIds={rows.map((row) => row.inquiryId)} /></div><label className="block text-sm">Type<PortalSelect value={newChannel} onChange={(value) => setNewChannel(value as Channel)} options={[{ value: 'phone', label: 'Phone call' }, { value: 'email', label: 'Email task' }]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Title<input required value={title} onChange={(event) => setTitle(event.target.value)} placeholder={newChannel === 'phone' ? 'Personal call' : 'Follow-up email'} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Due date<PortalDatePicker value={dueDate} onChange={setDueDate} placeholder="Choose date" minDate={today} className="mt-1 w-full [&>button]:h-10 [&>button]:rounded-lg [&>button]:px-3 [&>button]:py-2 [&>button]:normal-case [&>button]:tracking-normal" /></label><label className="block text-sm">Due time (Central)<input required type="time" value={dueTime} onChange={(event) => setDueTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="block text-sm">Assigned to<PortalSelect value={assignee} onChange={setAssignee} options={[{ value: '', label: 'Assign to me' }, ...assignees.map((email) => ({ value: email, label: email }))]} className="mt-1 w-full" buttonClassName="h-10" /></label><label className="block text-sm">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#caa24c]/40" /></label><div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={() => setAdding(false)}>Cancel</PortalButton><PortalButton type="submit" disabled={!leadId || !title.trim() || !dueDate || !dueTime || taskSaving}>{taskSaving ? 'Saving…' : 'Save Follow-Up'}</PortalButton></div></form>
     </PortalModal>
 
-    <PortalModal isOpen={Boolean(callDraft)} onClose={resetCallDraft} title="Log Call Outcome" description="Record the result and choose a dated manual next step. This form does not place a call." maxWidth="max-w-xl" zIndex={110} footer={callDraft ? <div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={resetCallDraft}>Cancel</PortalButton><PortalButton type="submit" form="follow-up-call-outcome-form" disabled={!callOutcome || callSaving || (nextStep === 'later' && !nextDate)}><Check size={14} /> Save &amp; Schedule</PortalButton></div> : undefined}>
-      {callDraft && <form id="follow-up-call-outcome-form" onSubmit={saveCall} className="space-y-4"><p className="text-sm text-[color:var(--portal-muted)]">{callDraft.lead.full_name} · {formatPhoneDisplay(callDraft.lead.phone)}. A dial action does not verify call completion; choose the outcome only after you know it.</p><fieldset><legend className="mb-2 text-xs font-semibold">Call outcome</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{[['no_answer','No Answer'],['interested','Interested'],['wants_tour','Wants Tour'],['needs_time','Needs Time'],['not_interested','Not Interested']].map(([value,label]) => <button key={value} type="button" aria-pressed={callOutcome === value} onClick={() => { setCallOutcome(value); if (value === 'not_interested') setNextStep('none') }} className={`min-h-12 rounded-lg border px-2 text-xs font-semibold ${callOutcome === value ? 'border-[#a8792f] bg-[#a8792f]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)]'}`}>{label}</button>)}</div></fieldset><label className="block text-sm">Add a note<textarea value={callNote} onChange={(event) => setCallNote(event.target.value)} maxLength={500} rows={3} placeholder="Call summary or voicemail note" className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm" /></label><label className="block text-sm">Next step<PortalSelect value={nextStep} onChange={setNextStep} disabled={callOutcome === 'not_interested'} options={[{value:'none',label:'No change'}, {value:'tour',label:'Schedule Tour'}, {value:'proposal',label:'Send Proposal'}, {value:'later',label:'Follow Up Later'}, {value:'thank_you',label:'Send Thank You'}, {value:'nurture',label:'Move to Nurture'}, {value:'stop',label:'No Further Follow-Up'}]} className="mt-1 w-full" buttonClassName="h-10" /></label>{['tour','proposal'].includes(nextStep) && <button type="button" onClick={() => { const lead = callDraft.lead; resetCallDraft(); openLeadWorkspace(lead, nextStep as 'tour' | 'proposal') }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#caa24c]/50 px-3 text-xs font-semibold text-[#8c6529] dark:text-[#f1d27a]">Open existing {nextStep === 'tour' ? 'tour' : 'proposal'} controls <ChevronRight size={14} /></button>}{nextStep === 'thank_you' && <button type="button" onClick={() => composeEmail(callDraft.lead)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#caa24c]/50 px-3 text-xs font-semibold text-[#8c6529] dark:text-[#f1d27a]"><Mail size={14} /> Open manual email composer</button>}{nextStep === 'nurture' && <p className="text-xs text-[color:var(--portal-muted)]">This changes the lead&apos;s stage only. It sends no messages and adds no nurture enrollment.</p>}{nextStep === 'later' && <div className="grid gap-3 sm:grid-cols-3"><label className="text-sm sm:col-span-2">Follow-up date<PortalDatePicker value={nextDate} onChange={setNextDate} placeholder="Choose date" minDate={today} className="mt-1 w-full" /></label><label className="text-sm">Time<input type="time" value={nextTime} onChange={(event) => setNextTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="text-sm sm:col-span-3">Reminder type<PortalSelect value={nextChannel} onChange={(value) => setNextChannel(value as Channel)} options={[{value:'phone',label:'Phone call'}, {value:'email',label:'Email task (manual; no email sent)'}]} className="mt-1 w-full" buttonClassName="h-10" /></label></div>}</form>}
+    <PortalModal isOpen={Boolean(callDraft)} onClose={resetCallDraft} title="Log Call Outcome" description="Record the result and choose a dated manual next step. This form does not place a call." maxWidth="max-w-xl" zIndex={110} footer={callDraft ? <div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={resetCallDraft}>Cancel</PortalButton><PortalButton type="submit" form="follow-up-call-outcome-form" disabled={!callOutcome || callSaving || Boolean(editingNextTask) || (nextStep === 'later' && !nextDate)}><Check size={14} /> {nextStep === 'later' ? 'Save & Schedule' : ['tour', 'proposal', 'thank_you'].includes(nextStep) ? 'Save & Continue' : 'Save Outcome'}</PortalButton></div> : undefined}>
+      {callDraft && <form id="follow-up-call-outcome-form" onSubmit={saveCall} className="space-y-4"><div className="rounded-xl bg-[color:var(--portal-soft)] px-4 py-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold text-[color:var(--portal-muted)]">Next follow-up</p>{nextAfterCall ? <><p className="mt-1 text-sm font-semibold">{nextAfterCall.title}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{dateLabel(nextAfterCall.dueAt, nextAfterCall.dueDate)}{nextAfterCall.dueAt ? ' Central' : ''}{(nextAfterCall.dueAt || nextAfterCall.dueDate) && stateFor(nextAfterCall.dueAt, nextAfterCall.dueDate, today) === 'Overdue' ? ' · Overdue' : ''}{nextAfterCall.automated ? ' · Automated' : ''}</p></> : <p className="mt-1 text-sm">No other follow-up is currently scheduled.</p>}</div>{callOutcome === 'not_interested' && nextAfterCall?.automated && <p className="mt-2 text-xs text-[color:var(--portal-muted)]">Saving this outcome stops the active brochure sequence.</p>}{nextAfterCall?.task && !nextAfterCall.automated && !editingNextTask && <button type="button" onClick={() => editScheduledTask(nextAfterCall.task!)} className="rounded-lg px-2 py-1 text-xs font-semibold text-[#a8792f] hover:bg-[#caa24c]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">Edit date and time</button>}</div>{editingNextTask && <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold">Date<PortalDatePicker value={editNextDate} onChange={setEditNextDate} minDate={today} className="mt-1 w-full" /></label><label className="text-xs font-semibold">Time (Central)<input type="time" value={editNextTime} onChange={(event) => setEditNextTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#caa24c]/40" /></label><div className="flex justify-end gap-2 sm:col-span-2"><PortalButton type="button" size="sm" variant="ghost" disabled={savingNextTask} onClick={() => setEditingNextTask(null)}>Cancel</PortalButton><PortalButton type="button" size="sm" disabled={!editNextDate || !editNextTime || savingNextTask} onClick={() => void saveScheduledTask()}>Save date</PortalButton></div></div>}</div><p className="text-sm text-[color:var(--portal-muted)]">{callDraft.lead.full_name} · {formatPhoneDisplay(callDraft.lead.phone)}. A dial action does not verify call completion; choose the outcome only after you know it.</p><fieldset><legend className="mb-2 text-xs font-semibold">Call outcome</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{[['no_answer','No Answer'],['interested','Interested'],['wants_tour','Wants Tour'],['needs_time','Needs Time'],['not_interested','Not Interested']].map(([value,label]) => <button key={value} type="button" aria-pressed={callOutcome === value} onClick={() => { setCallOutcome(value); if (value === 'not_interested') setNextStep('none') }} className={`min-h-12 rounded-lg border px-2 text-xs font-semibold ${callOutcome === value ? 'border-[#a8792f] bg-[#a8792f]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)]'}`}>{label}</button>)}</div></fieldset><label className="block text-sm">Add a note<textarea value={callNote} onChange={(event) => setCallNote(event.target.value)} maxLength={500} rows={3} placeholder="Call summary or voicemail note" className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#caa24c]/40" /></label><label className="block text-sm">Next step<PortalSelect value={nextStep} onChange={setNextStep} disabled={callOutcome === 'not_interested'} options={[{value:'none',label:'No additional next step'}, {value:'tour',label:'Schedule Tour'}, {value:'proposal',label:'Send Proposal'}, {value:'later',label:'Schedule another follow-up'}, {value:'thank_you',label:'Send Thank You'}, {value:'nurture',label:'Move to Nurture'}, {value:'stop',label:'No Further Follow-Up'}]} className="mt-1 w-full" buttonClassName="h-10" /></label>{nextStep === 'nurture' && <p className="text-xs text-[color:var(--portal-muted)]">This changes the lead&apos;s stage only. It sends no messages and adds no nurture enrollment.</p>}{nextStep === 'later' && <div className="grid gap-3 sm:grid-cols-3"><label className="text-sm sm:col-span-2">Follow-up date<PortalDatePicker value={nextDate} onChange={setNextDate} placeholder="Choose date" minDate={today} className="mt-1 w-full" /></label><label className="text-sm">Time<input type="time" value={nextTime} onChange={(event) => setNextTime(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm" /></label><label className="text-sm sm:col-span-3">Reminder type<PortalSelect value={nextChannel} onChange={(value) => setNextChannel(value as Channel)} options={[{value:'phone',label:'Phone call'}, {value:'email',label:'Email task (manual; no email sent)'}]} className="mt-1 w-full" buttonClassName="h-10" /></label></div>}</form>}
     </PortalModal>
 
     <PortalModal isOpen={pauseOpen} onClose={() => setPauseOpen(false)} title="Pause Follow-Ups" description="Pause this lead’s approved brochure sequence. Any date below adds a manual review reminder; it will not automatically resume." maxWidth="max-w-md" zIndex={120}><form onSubmit={(event) => void savePause(event)} className="space-y-4"><label className="block text-sm">Review on (optional)<PortalDatePicker value={pauseDate} onChange={setPauseDate} placeholder="Choose a review date" minDate={today} className="mt-1 w-full" /></label><label className="block text-sm">Reason (optional)<PortalSelect value={pauseReason} onChange={setPauseReason} options={[{value:'',label:'Choose a reason'}, {value:'Client requested later',label:'Client requested later'}, {value:'Staff follow-up needed',label:'Staff follow-up needed'}, {value:'Other',label:'Other'}]} className="mt-1 w-full" buttonClassName="h-10" /></label><div className="flex justify-end gap-2"><PortalButton type="button" variant="ghost" onClick={() => setPauseOpen(false)}>Cancel</PortalButton><PortalButton type="submit" disabled={sequenceSaving}><Pause size={14} /> Pause Follow-Ups</PortalButton></div></form></PortalModal>

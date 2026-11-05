@@ -2,12 +2,12 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Calendar as CalendarIcon, Check, Settings2, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
+import { Calendar as CalendarIcon, Check, Plus, Settings2, ExternalLink, Mail, RefreshCw, Send, Trash2, UserCheck, UserX } from 'lucide-react'
 import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCalendarView } from '@/components/portal/PortalCalendar'
 import { LuxorAvailabilityCalendar } from '@/components/portal/LuxorAvailabilityCalendar'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
-import { PortalButton, PortalModal, PortalPageFrame, PortalPageHeader, PortalSkeleton, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard, type PortalStatusTone } from '@/components/portal/PortalUI'
-import { motion } from 'framer-motion'
+import { AddCalendarTaskModal } from '@/components/portal/AddCalendarTaskModal'
+import { PortalAnimatedTabs, PortalButton, PortalModal, PortalPageFrame, PortalPageHeader, PortalSkeleton, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard, type PortalStatusTone } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
@@ -99,6 +99,7 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [addTaskOpen, setAddTaskOpen] = useState(false)
   const { notify } = useToast()
 
   const loadData = useCallback(async (): Promise<boolean> => {
@@ -192,15 +193,16 @@ export default function CalendarPage() {
     }
   }
 
-  const dismissTask = useCallback(async (taskId: string) => {
+  const dismissTask = useCallback(async (taskId: string, complete = false) => {
+    const status = complete ? 'completed' : 'cancelled'
     const response = await fetch('/api/tasks', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: taskId, status: 'cancelled' }),
+      body: JSON.stringify({ id: taskId, status, ...(complete ? { completed_at: new Date().toISOString() } : {}) }),
     })
     const payload = await response.json() as { status?: string; error?: string }
     if (!response.ok) throw new Error(payload.error || 'Task could not be dismissed.')
-    if (payload.status !== 'cancelled') throw new Error('The task update could not be confirmed. Refresh and try again.')
+    if (payload.status !== status) throw new Error('The task update could not be confirmed. Refresh and try again.')
 
   }, [])
 
@@ -319,10 +321,11 @@ export default function CalendarPage() {
           unavailable: task.inquiry_context_status === 'unavailable',
         },
         content: <TaskSummary task={task} />,
-        onDismiss: () => dismissTask(task.id),
+        dismissLabel: task.task_type ? 'Complete task' : 'Dismiss task',
+        onDismiss: () => dismissTask(task.id, Boolean(task.task_type)),
         onDismissed: () => {
           setData((current) => ({ ...current, tasks: current.tasks.filter((currentTask) => currentTask.id !== task.id) }))
-          notify({ title: 'Task dismissed', description: 'It remains in task history.', variant: 'success' })
+          notify({ title: task.task_type ? 'Task completed' : 'Task dismissed', description: 'It remains in task history.', variant: 'success' })
         },
       } satisfies PortalCalendarItem))
   }, [data.tasks, dismissTask, notify])
@@ -389,58 +392,21 @@ export default function CalendarPage() {
       <PortalPageHeader
         icon={<CalendarIcon size={18} />}
         title="Tours & Booked Events"
+        titleClassName="text-lg sm:text-2xl"
+        mobileActionsInline
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            {activeCalendar === 'tours' ? (
-              <PortalButton
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setScheduleOpen(true)}
-                aria-haspopup="dialog"
-                aria-label="Tour schedule"
-                title="Tour schedule"
-                className="h-10 w-10 p-0 shrink-0"
-              >
-                <Settings2 size={16} aria-hidden="true" />
-              </PortalButton>
-            ) : null}
-            <div className="relative inline-flex items-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1 text-[10px] font-black uppercase tracking-widest">
-              <button
-                type="button"
-                onClick={() => setActiveCalendar('tours')}
-                className={`relative z-10 rounded-lg px-3.5 py-2 transition-colors duration-200 ${
-                  activeCalendar === 'tours' ? 'text-[#8c6529] dark:text-[#f1d27a] font-bold' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                }`}
-              >
-                {activeCalendar === 'tours' && (
-                  <motion.span
-                    layoutId="activeCalendarTabPill"
-                    className="absolute inset-0 rounded-lg bg-[#caa24c]/20 border border-[#caa24c]/30 shadow-sm"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                  />
-                )}
-                <span className="relative z-10">Tours + Tasks</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveCalendar('events')}
-                className={`relative z-10 rounded-lg px-3.5 py-2 transition-colors duration-200 ${
-                  activeCalendar === 'events' ? 'text-[#8c6529] dark:text-[#f1d27a] font-bold' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                }`}
-              >
-                {activeCalendar === 'events' && (
-                  <motion.span
-                    layoutId="activeCalendarTabPill"
-                    className="absolute inset-0 rounded-lg bg-[#caa24c]/20 border border-[#caa24c]/30 shadow-sm"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                  />
-                )}
-                <span className="relative z-10">Booked Events</span>
-              </button>
-            </div>
-          </div>
+          <PortalButton type="button" variant="primary" size="sm" onClick={() => setAddTaskOpen(true)}><Plus size={15} aria-hidden="true" /> Add Task</PortalButton>
         }
+      />
+
+      <PortalAnimatedTabs
+        ariaLabel="Calendar sections"
+        tabs={[{ id: 'tours', label: 'Tours + Tasks' }, { id: 'events', label: 'Booked Events' }] as const}
+        activeTab={activeCalendar}
+        onTabChange={setActiveCalendar}
+        className="min-w-0"
+        buttonClassName="max-sm:flex-1 max-sm:justify-center max-sm:!px-2"
+        trailing={activeCalendar === 'tours' ? <button type="button" onClick={() => setScheduleOpen(true)} aria-haspopup="dialog" aria-label="Tour schedule" title="Tour schedule" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><Settings2 size={16} aria-hidden="true" /></button> : undefined}
       />
 
       {error ? (
@@ -451,10 +417,10 @@ export default function CalendarPage() {
         {activeCalendar === 'tours' ? (
           <div className="flex-1 min-h-0 flex flex-col space-y-4">
             <div>
-              <div className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Today at a glance">
+              <div className="grid grid-cols-3 divide-x divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]" aria-label="Calendar at a glance">
                 <GlanceStat label="Tours today" value={todayStats.tours} loading={loading} />
                 <GlanceStat label="Tasks due today" value={todayStats.tasks} loading={loading} />
-                <GlanceStat label="Open tour times" value={todayStats.openTimes} loading={loading} />
+                <GlanceStat label="Available tour times" value={todayStats.openTimes} loading={loading} />
               </div>
             </div>
             <div className="flex-1 min-h-0 flex flex-col">
@@ -474,49 +440,44 @@ export default function CalendarPage() {
           <PortalStaggerGroup staggerDelay={0.06} className="flex-1 min-h-0 flex flex-col space-y-4">
             <PortalStaggerCard className="flex-1 min-h-0 flex flex-col">
               {view === 'month' ? (
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-[color:var(--portal-muted)]">Availability shows confirmed event and hold conflicts. Sent proposals remain separate.</p>
-            <div role="group" aria-label="Booked events calendar view" className="flex flex-wrap gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1">
-              {(['month', 'week', 'day', 'schedule'] as PortalCalendarView[]).map((nextView) => (
-                <button key={nextView} type="button" aria-pressed={view === nextView} onClick={() => setView(nextView)} className={`min-h-9 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60 ${view === nextView ? 'bg-[#caa24c]/20 text-[#8c6529] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>
-                  {nextView}
-                </button>
-              ))}
-            </div>
+                <section className="portal-card-surface portal-surface min-h-0 flex-1 overflow-y-auto">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] p-4">
+            <div><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Booked events</p><h2 className="mt-1 font-serif text-2xl font-bold text-[color:var(--portal-text)]">Event availability</h2></div>
+            <PortalAnimatedTabs ariaLabel="Booked events calendar view" tabs={[{ id: 'month', label: 'Month' }, { id: 'week', label: 'Week' }, { id: 'day', label: 'Day' }, { id: 'schedule', label: 'Schedule' }] as const} activeTab={view} onTabChange={setView} className="!w-auto max-w-full overflow-x-auto" buttonClassName="!px-3" />
           </div>
 
-          {data.pendingProposalsError ? <p role="status" className="rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">Pending proposal counts could not be loaded. Availability is current.</p> : null}
-          {data.plannerMeetingsError ? <p role="status" className="rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">{data.plannerMeetingsError} Existing booking calendar data is still available.</p> : null}
+          {data.pendingProposalsError ? <p role="status" className="mx-4 mt-4 rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">Pending proposal counts could not be loaded. Availability is current.</p> : null}
+          {data.plannerMeetingsError ? <p role="status" className="mx-4 mt-4 rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">{data.plannerMeetingsError} Existing booking calendar data is still available.</p> : null}
 
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-            <LuxorAvailabilityCalendar availability={data.availability} availabilityReady={!loading && !error} selectedDate={selectedEventDate} onSelectDate={setSelectedEventDate} pendingCounts={!error ? data.pendingProposalCounts : {}} />
+          <div className="grid min-w-0 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)] lg:divide-x lg:divide-[color:var(--portal-border)]">
+            <LuxorAvailabilityCalendar availability={data.availability} availabilityReady={!loading && !error} selectedDate={selectedEventDate} onSelectDate={setSelectedEventDate} pendingCounts={!error ? data.pendingProposalCounts : {}} embedded compact />
 
-            <section aria-labelledby="selected-event-date-heading" className="min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+            <section aria-labelledby="selected-event-date-heading" className="min-w-0 border-t border-[color:var(--portal-border)] p-4 sm:p-5 lg:border-t-0">
               <h2 id="selected-event-date-heading" className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">{calendarDateLabel(selectedEventDate)}</h2>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Bookings and holds affect availability. Proposals are shown separately.</p>
 
               <div className="mt-5 space-y-3">
                 <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f]">Confirmed bookings</h3>
                 {confirmedDateBookings.length ? confirmedDateBookings.map((booking) => (
-                  <article key={booking.id} className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3.5">
+                  <article key={booking.id} className="min-w-0 border-b border-[color:var(--portal-border)] pb-4 last:border-b-0">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}`} className="block truncate text-sm font-semibold text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{booking.client_name || booking.event_type || 'Confirmed event'}</Link> : <h4 className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{booking.client_name || booking.event_type || 'Confirmed event'}</h4>}
                         <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{booking.event_type || 'Event'}{booking.guest_count ? ` · ${booking.guest_count} guests` : ''}</p>
                         {booking.start_time || booking.end_time ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{timeLabel(booking.start_time) || 'Time TBD'}{booking.end_time ? ` – ${timeLabel(booking.end_time)}` : ''}</p> : null}
                       </div>
-                      {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking`} className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-blue-500 hover:text-blue-400">Open booking <ExternalLink size={10} className="ml-1 inline" /></Link> : null}
+                      {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking`} className="shrink-0 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]">Open booking <ExternalLink size={12} className="ml-1 inline" /></Link> : null}
                     </div>
                     <div className="mt-3 border-t border-[color:var(--portal-border)] pt-3">
                       <EventControls booking={booking} busyId={busyId} onSendContract={sendContract} onContractAction={updateContractRequest} />
                     </div>
                   </article>
-                )) : <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-3 py-4 text-xs text-[color:var(--portal-muted)]">No confirmed bookings for this date.</p>}
+                )) : <p className="text-xs text-[color:var(--portal-muted)]">No confirmed bookings for this date.</p>}
               </div>
 
               {holdDateBookings.length ? <div className="mt-5 space-y-2">
                 <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Active holds</h3>
-                {holdDateBookings.map((booking) => <p key={booking.id} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)]"><span className="font-semibold">{booking.event_type || 'Event hold'}</span>{booking.start_time && booking.end_time ? ` · ${timeLabel(booking.start_time)} – ${timeLabel(booking.end_time)}` : ''} <PortalStatusBadge status="tentative" /></p>)}
+                {holdDateBookings.map((booking) => <p key={booking.id} className="text-xs text-[color:var(--portal-text)]"><span className="font-semibold">{booking.event_type || 'Event hold'}</span>{booking.start_time && booking.end_time ? ` · ${timeLabel(booking.start_time)} – ${timeLabel(booking.end_time)}` : ''} <PortalStatusBadge status="tentative" /></p>)}
               </div> : null}
 
               <div className="mt-5 space-y-3 border-t border-[color:var(--portal-border)] pt-4">
@@ -525,27 +486,28 @@ export default function CalendarPage() {
                   {pendingDateProposals.length ? <span className="text-xs font-semibold text-[color:var(--portal-muted)]">{pendingDateProposals.length} pending</span> : null}
                 </div>
                 {data.pendingProposalsError ? <p role="status" className="rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-4 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">Pending proposal details could not be loaded.</p> : pendingDateProposals.length ? pendingDateProposals.map((proposal) => (
-                  <article key={proposal.id} className="rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/[0.06] p-3.5">
+                  <article key={proposal.id} className="border-b border-[color:var(--portal-border)] pb-3 last:border-b-0">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         <h4 className="text-sm font-semibold text-[color:var(--portal-text)]">{proposal.title}</h4>
                         <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Event date: {calendarDateLabel(proposal.date)} · {proposal.rentalPeriod} · {proposal.status} · sent {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(proposal.sentAt))}</p>
                       </div>
-                      {proposal.href ? <Link href={proposal.href} className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-blue-500 hover:text-blue-400">Open proposal <ExternalLink size={10} className="ml-1 inline" /></Link> : null}
+                      {proposal.href ? <Link href={proposal.href} className="shrink-0 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]">Open proposal <ExternalLink size={12} className="ml-1 inline" /></Link> : null}
                     </div>
                   </article>
-                )) : <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-3 py-4 text-xs text-[color:var(--portal-muted)]">No pending proposals for this date.</p>}
+                )) : <p className="text-xs text-[color:var(--portal-muted)]">No pending proposals for this date.</p>}
               </div>
             </section>
           </div>
-        </div>
+        </section>
       ) : (
-        <PortalCalendar title="Booked events" items={eventItems} view={view} onViewChange={setView} />
+        <PortalCalendar title="Booked events" items={eventItems} view={view} onViewChange={setView} initialDate={selectedEventDate} onAnchorChange={setSelectedEventDate} />
               )}
             </PortalStaggerCard>
           </PortalStaggerGroup>
         )}
       </PortalTabTransition>
+      <AddCalendarTaskModal isOpen={addTaskOpen} onClose={() => setAddTaskOpen(false)} onCreated={async () => { notify({ title: 'Task added', variant: 'success' }); await loadData() }} />
       <PortalModal
         isOpen={scheduleOpen}
         onClose={() => setScheduleOpen(false)}
@@ -562,16 +524,16 @@ export default function CalendarPage() {
 
 function GlanceStat({ label, value, loading }: { label: string; value: number; loading: boolean }) {
   return (
-    <div className="min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2.5 sm:px-4 sm:py-3">
-      <p className="truncate text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-muted)] sm:text-[10px]">{label}</p>
+    <div className="flex min-w-0 items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4">
       <PortalSkeletonTransition
         loading={loading}
         overlap
-        className="mt-0.5 h-8 w-16 sm:h-9"
+        className="h-6 w-8 shrink-0"
         skeleton={<PortalSkeleton className="h-full w-full rounded" />}
       >
-        <p className="whitespace-nowrap font-serif text-2xl font-semibold tabular-nums leading-none text-[color:var(--portal-text)] sm:text-3xl">{value}</p>
+        <p className="whitespace-nowrap text-lg font-semibold tabular-nums leading-6 text-[color:var(--portal-text)]">{value}</p>
       </PortalSkeletonTransition>
+      <p className="min-w-0 text-[10px] font-semibold leading-tight text-[color:var(--portal-muted)] sm:text-xs">{label}</p>
     </div>
   )
 }
@@ -673,9 +635,10 @@ function ActionButton({
 }
 
 function TaskSummary({ task }: { task: LuxorTask }) {
+  const description = cleanTaskDescription(task.description)
   return (
     <div className="space-y-3">
-      {task.description ? <p className="min-w-0 max-w-full whitespace-pre-wrap break-all text-xs leading-5 text-[color:var(--portal-muted)]">{task.description}</p> : null}
+      {description ? <p className="min-w-0 max-w-full whitespace-pre-wrap break-words text-xs leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <PortalStatusBadge status={task.status} />
         <PortalStatusBadge status={task.priority} />
@@ -684,23 +647,36 @@ function TaskSummary({ task }: { task: LuxorTask }) {
   )
 }
 
+function cleanTaskDescription(description: string | null) {
+  return (description || '').replace(/^(?:\[(?:follow-up:(?:email|phone)|post-tour|automatic)\]\s*)+/i, '').trim()
+}
+
 function buildTaskSubtitle(task: LuxorTask) {
+  if (task.task_type) {
+    const typeLabels = { todo: 'To-do', call: 'Call', email: 'Email', meeting: 'Meeting', other: 'Other' }
+    const time = task.due_at && !Number.isNaN(new Date(task.due_at).getTime())
+      ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: LUXOR_TOUR_TIMEZONE }).format(new Date(task.due_at))
+      : null
+    return [typeLabels[task.task_type], time ? `${time} Central` : null, task.description].filter(Boolean).join(' · ')
+  }
   if (/review bounced email address/i.test(task.title)) {
     const bouncedAddress = task.description?.match(/^Bounced recipient:\s*(.+)$/im)?.[1]?.trim()
     return [`${task.priority} priority`, bouncedAddress ? `Bounced: ${bouncedAddress}` : 'Bounced email address'].join(' · ')
   }
 
-  return `${task.priority} priority${task.description ? ` • ${task.description}` : ''}`
+  const description = cleanTaskDescription(task.description)
+  return `${task.priority} priority${description ? ` • ${description}` : ''}`
 }
 
 function buildTaskHref(task: LuxorTask) {
+  if (!task.inquiry_id) return undefined
   const params = new URLSearchParams({
     tab: 'tasks',
     section: 'lead-tasks',
     highlightTask: task.id,
   })
 
-  const routing = getTaskRouting(task)
+  const routing = task.task_type ? { tab: 'tasks' as const, section: 'lead-tasks', stage: undefined, planningTab: undefined } : getTaskRouting(task)
   params.set('tab', routing.tab)
   if (routing.section) params.set('section', routing.section)
   if (routing.stage) params.set('stage', routing.stage)
@@ -710,6 +686,7 @@ function buildTaskHref(task: LuxorTask) {
 }
 
 function buildTaskOpenLabel(task: LuxorTask) {
+  if (task.task_type) return 'Open task'
   const routing = getTaskRouting(task)
   if (routing.tab === 'documents') return 'Open booking'
   if (routing.tab === 'overview' && routing.stage === 'tour') return 'Open tour'

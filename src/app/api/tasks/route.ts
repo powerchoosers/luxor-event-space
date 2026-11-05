@@ -40,22 +40,29 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { inquiryId, title, description, dueDate, dueAt, assignedTo, priority } = body
+    const { inquiryId, title, description, dueDate, dueAt, assignedTo, priority, taskType } = body
 
-    if (!inquiryId || !title) {
-      return NextResponse.json({ error: 'inquiryId and title are required.' }, { status: 400 })
+    if (typeof title !== 'string' || !title.trim() || title.trim().length > 300) {
+      return NextResponse.json({ error: 'A task title of up to 300 characters is required.' }, { status: 400 })
     }
-
-    const inquiry = await getLuxorInquiry(String(inquiryId))
-    if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
-    if (isLuxorInquiryArchived(inquiry)) return NextResponse.json({ error: 'Archived leads cannot receive new follow-up tasks.' }, { status: 409 })
+    if (description != null && (typeof description !== 'string' || description.length > 5000)) return NextResponse.json({ error: 'Task notes must be 5000 characters or fewer.' }, { status: 400 })
+    if (inquiryId != null && (typeof inquiryId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inquiryId))) return NextResponse.json({ error: 'Invalid lead.' }, { status: 400 })
+    if (inquiryId) {
+      const inquiry = await getLuxorInquiry(inquiryId)
+      if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
+      if (isLuxorInquiryArchived(inquiry)) return NextResponse.json({ error: 'Archived leads cannot receive new follow-up tasks.' }, { status: 409 })
+    }
+    if (taskType != null && !['todo', 'call', 'email', 'meeting', 'other'].includes(taskType)) return NextResponse.json({ error: 'Unsupported task type.' }, { status: 400 })
+    if (!inquiryId && (!taskType || !dueDate)) return NextResponse.json({ error: 'Standalone tasks need a type and due date.' }, { status: 400 })
+    if (priority != null && !['low', 'medium', 'high', 'urgent'].includes(priority)) return NextResponse.json({ error: 'Unsupported task priority.' }, { status: 400 })
+    if (dueDate && (typeof dueDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || !Number.isFinite(Date.parse(`${dueDate}T00:00:00Z`)) || new Date(`${dueDate}T00:00:00Z`).toISOString().slice(0, 10) !== dueDate)) return NextResponse.json({ error: 'dueDate must be a valid date.' }, { status: 400 })
 
     if (dueAt && (typeof dueAt !== 'string' || !Number.isFinite(Date.parse(dueAt)))) {
       return NextResponse.json({ error: 'dueAt must be a valid timestamp.' }, { status: 400 })
     }
     const assignee = typeof assignedTo === 'string' && assignedTo ? assignedTo.trim().toLowerCase() : session.email
     if (!getAllowedZohoPortalEmails().includes(assignee)) return NextResponse.json({ error: 'Assignee must be an authorized portal user.' }, { status: 400 })
-    const task = await createTask(inquiryId, title, description, dueDate, priority, { dueAt: dueAt || null, assignedTo: assignee })
+    const task = await createTask(inquiryId || null, title, description, dueDate, priority, { dueAt: dueAt || null, assignedTo: assignee, taskType: taskType || null })
     return NextResponse.json(task, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create task.'

@@ -747,11 +747,13 @@ export type LuxorNote = {
 // --- Task Types ---
 export type LuxorTaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type LuxorTaskStatus = 'pending' | 'completed' | 'cancelled'
+export type LuxorTaskType = 'todo' | 'call' | 'email' | 'meeting' | 'other'
 
 export type LuxorTask = {
   id: string
   created_at: string
-  inquiry_id: string
+  inquiry_id: string | null
+  task_type?: LuxorTaskType | null
   title: string
   description: string | null
   due_date: string | null

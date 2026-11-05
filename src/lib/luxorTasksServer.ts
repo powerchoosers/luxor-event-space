@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { LuxorTask, LuxorTaskPriority, LuxorTaskStatus } from './luxorInquiryTypes'
+import { LuxorTask, LuxorTaskPriority, LuxorTaskType } from './luxorInquiryTypes'
 
 type SupabaseError = {
   message?: string
@@ -48,12 +48,12 @@ export async function listTasksByInquiry(inquiryId: string) {
 }
 
 export async function createTask(
-  inquiryId: string,
+  inquiryId: string | null,
   title: string,
   description?: string,
   dueDate?: string,
   priority: LuxorTaskPriority = 'medium',
-  options: { dueAt?: string | null; assignedTo?: string | null } = {},
+  options: { dueAt?: string | null; assignedTo?: string | null; taskType?: LuxorTaskType | null } = {},
 ) {
   if (!title.trim()) {
     throw new Error('Task title cannot be empty.')
@@ -64,6 +64,7 @@ export async function createTask(
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
       inquiry_id: inquiryId,
+      task_type: options.taskType || null,
       title: title.trim(),
       description: description?.trim() || null,
       due_date: dueDate || null,

@@ -166,6 +166,7 @@ const LEADS_TAB_LABELS: Record<'dashboard' | 'pipeline' | 'tours' | 'proposals' 
 }
 
 export default function LeadsPage() {
+  const router = useRouter()
   const { notify } = useToast()
   const reduceMotion = useReducedMotion()
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
@@ -726,7 +727,7 @@ export default function LeadsPage() {
             }}
           />
         )}
-        {activeTab === 'clients' && <LeadsClientsTab leads={activeLeads} loading={loading} sort={clientSort} onSort={updateClientSort} onLifecycleAction={openLeadLifecycleAction} />}
+        {activeTab === 'clients' && <LeadsClientsTab leads={activeLeads} loading={loading} sort={clientSort} onSort={updateClientSort} onOpen={(client) => router.push(`/portal/leads/${client.id}`)} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'lost' && <LeadsLostTab leads={leads} loading={loading} />}
         {activeTab === 'followups' && <FollowUpsTab leads={leads} onLeadsRefresh={async () => { await fetchLeads() }} />}
         {activeTab === 'tours' && <LeadsToursTab leads={activeLeads} loading={loading} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} busyTourOutcomeIds={busyTourOutcomeIds} />}
@@ -1727,7 +1728,7 @@ function LeadsDashboard({
                 <td className="px-6 py-3.5 text-sm font-medium text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</td>
                 <td className="px-6 py-3.5 tabular-nums text-xs font-medium text-[color:var(--portal-muted)]">{formatDate(lead.created_at)}</td>
                 <td className="px-6 py-3.5 tabular-nums text-[10px] font-bold uppercase tracking-wider text-[#a37d2c] dark:text-[#caa24c]">{formatSourceLabel(lead)}</td>
-                <td className="px-8 py-3.5 text-right"><PortalStatusBadge status={isLuxorInquiryArchived(lead) ? 'Archived' : lead.status} tone={isLuxorInquiryArchived(lead) ? 'neutral' : undefined} /></td>
+                <td className="px-8 py-3.5 text-right"><PortalStatusBadge status={isLuxorInquiryArchived(lead) ? 'Archived' : lead.status} tone={isLuxorInquiryArchived(lead) ? 'neutral' : undefined} borderless /></td>
               </tr>
             ))}
           </tbody>
@@ -1911,12 +1912,14 @@ function LeadsClientsTab({
   loading = false,
   sort,
   onSort,
+  onOpen,
   onLifecycleAction,
 }: {
   leads: LuxorInquiry[]
   loading?: boolean
   sort: TableSort<ClientSortKey>
   onSort: (key: ClientSortKey, direction?: SortDirection) => void
+  onOpen: (client: LuxorInquiry) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
 }) {
   const [searchTerm, setSearchTerm] = useState('')
@@ -1950,7 +1953,6 @@ function LeadsClientsTab({
           onSearchChange={(value) => { setSearchTerm(value); setCurrentPage(1) }}
           searchPlaceholder="Search clients, events, or contact details"
           resultLabel={loading ? 'Loading clients' : `${filteredClients.length.toLocaleString()} ${filteredClients.length === 1 ? 'client' : 'clients'}`}
-          searchWidthClassName="w-full min-w-0"
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Active Booked Clients</h3>
@@ -1987,21 +1989,43 @@ function LeadsClientsTab({
                 className="max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none"
                 badges={[{ label: 'Booked', tone: 'green' }]}
                 subtitle={<>{client.event_type || 'Quinceañera'} · {client.target_date || 'Date TBD'}{client.guest_count ? <> · {client.guest_count} guests</> : <> · Flexible guest count</>}</>}
-                contact={client.email || (client.phone ? formatPhoneDisplay(client.phone) : 'No contact details')}
-                actions={
-                  <>
-                    <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#a8792f] px-4 text-xs font-bold !text-white transition-colors hover:bg-[#916825] hover:!text-white [&>svg]:!text-white"><UserCheck size={14} /> Manage Dossier</Link>
-                    <LeadLifecycleActionsMenu lead={client} onAction={(action) => onLifecycleAction(client, action)} />
-                  </>
-                }
+                onOpen={() => onOpen(client)}
+                interactionLabel={`Open client record for ${client.full_name}`}
+                headerAction={<LeadLifecycleActionsMenu lead={client} onAction={(action) => onLifecycleAction(client, action)} className="!h-7 !w-7" />}
               >
-                <div className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
-                  <div className="flex min-w-0 items-center gap-2"><Phone size={13} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" /><span className="break-all text-[color:var(--portal-text)]">{client.phone ? formatPhoneDisplay(client.phone) : 'No phone captured'}</span></div>
-                  <div className="flex min-w-0 items-center gap-2"><Languages size={13} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" /><span className="text-[color:var(--portal-text)]">Tour language: {getRequestedTourLanguage(client) || 'Not specified'}</span></div>
+                <div className="grid min-w-0 items-start gap-x-4 gap-y-1.5 text-xs sm:grid-cols-2">
+                  <div className="flex min-w-0 flex-col items-start gap-y-0">
+                    {client.phone ? (
+                      <button
+                        type="button"
+                        aria-label={`Call ${client.full_name} at ${formatPhoneDisplay(client.phone)}`}
+                        title="Call from Luxor browser phone"
+                        onClick={() => startLuxorBrowserCall({ phoneNumber: client.phone!, contactName: client.full_name, inquiryId: client.id })}
+                        className="group inline-flex min-h-7 min-w-0 items-center gap-2 text-left text-[color:var(--portal-text)] transition-colors hover:!text-emerald-600 dark:hover:!text-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                      >
+                        <Phone size={13} className="shrink-0 text-[color:var(--portal-muted)] transition-colors group-hover:!text-emerald-600 dark:group-hover:!text-emerald-400" aria-hidden="true" />
+                        <span className="min-w-0 break-all">{formatPhoneDisplay(client.phone)}</span>
+                      </button>
+                    ) : (
+                      <div className="flex min-h-7 min-w-0 items-center gap-2 text-[color:var(--portal-muted)]"><Phone size={13} className="shrink-0" aria-hidden="true" /><span>No phone captured</span></div>
+                    )}
+                    {client.email ? (
+                      <a
+                        href={`mailto:${client.email}`}
+                        aria-label={`Email ${client.full_name} at ${client.email}`}
+                        title={client.email}
+                        className="group inline-flex min-h-7 min-w-0 items-start gap-2 text-[color:var(--portal-text)] transition-colors hover:!text-[#a8792f] dark:hover:!text-[#f1d27a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                      >
+                        <Mail size={13} className="shrink-0 text-[color:var(--portal-muted)] transition-colors group-hover:!text-[#a8792f] dark:group-hover:!text-[#f1d27a]" aria-hidden="true" />
+                        <span className="min-w-0 break-all">{client.email}</span>
+                      </a>
+                    ) : (
+                      <div className="flex min-h-7 min-w-0 items-center gap-2 text-[color:var(--portal-muted)]"><Mail size={13} className="shrink-0" aria-hidden="true" /><span>No email captured</span></div>
+                    )}
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2 px-1.5"><Languages size={13} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" /><span className="text-[color:var(--portal-text)]">Tour language: {getRequestedTourLanguage(client) || 'Not specified'}</span></div>
                   {isMarketingLead(client) ? <div className="flex items-center gap-2 text-[#8c6529] dark:text-[#f1d27a]"><Star size={13} className="fill-current" aria-hidden="true" />Marketing lead</div> : null}
-                  <div className="flex items-center justify-between gap-2"><span className="text-[color:var(--portal-muted)]">Booking status</span><span className="font-semibold text-[color:var(--portal-text)]">Active booked client</span></div>
                 </div>
-                <Link href={'/portal/leads/' + client.id} className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]"><Eye size={14} /> View client record</Link>
               </LuxorCrmRecordCard>
             ))}
           </div>
@@ -2202,7 +2226,6 @@ function LeadsLostTab({ leads, loading = false }: { leads: LuxorInquiry[]; loadi
           resultLabel={loading ? 'Loading archived leads' : `${filteredLeads.length.toLocaleString()} archived ${filteredLeads.length === 1 ? 'lead' : 'leads'}`}
           activeFilters={activeFilters}
           onClearFilters={() => { setEventType('all'); setCurrentPage(1) }}
-          searchWidthClassName="w-full min-w-0"
         >
           <PortalSelect
             value={eventType}
@@ -2454,7 +2477,6 @@ function LeadsToursTab({
           resultLabel={loading ? 'Loading tours' : `${activeTours.length.toLocaleString()} ${activeTours.length === 1 ? 'tour' : 'tours'}`}
           activeFilters={activeTourFilters}
           onClearFilters={() => saveView('all')}
-          searchWidthClassName="w-full min-w-0"
         >
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4" role="group" aria-label="Filter tours by date and status">
             {(['all', ...categoryOrder] as TourView[]).map((option) => {
@@ -2548,7 +2570,6 @@ function LeadsProposalsTab({
           resultLabel={loading ? 'Loading proposals' : `${filteredProposals.length.toLocaleString()} ${filteredProposals.length === 1 ? 'proposal' : 'proposals'}`}
           activeFilters={activeFilters}
           onClearFilters={() => { setEventType('all'); setCurrentPage(1) }}
-          searchWidthClassName="w-full min-w-0"
         >
           <PortalSelect value={eventType} onChange={(value) => { setEventType(value); setCurrentPage(1) }} className="w-full" options={[{ value: 'all', label: 'All event types' }, ...eventTypes.map((value) => ({ value, label: value }))]} />
         </PortalFilterBar>

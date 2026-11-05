@@ -508,6 +508,7 @@ export function PortalAnimatedTabs<T extends string>({
               buttonRefs.current[tab.id] = node
             }}
             type="button"
+            aria-pressed={isActive}
             onClick={() => onTabChange(tab.id)}
             className={`${isSlider
               ? `relative isolate inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${isActive ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`
@@ -952,13 +953,15 @@ function formatStatusText(s: string) {
     .join(' ')
 }
 
-export const PortalStatusBadge = React.memo(function PortalStatusBadge({ status, tone, warning = false }: { status: string; tone?: PortalStatusTone; warning?: boolean }) {
+export const PortalStatusBadge = React.memo(function PortalStatusBadge({ status, tone, warning = false, borderless = false }: { status: string; tone?: PortalStatusTone; warning?: boolean; borderless?: boolean }) {
   const normalized = status.toLowerCase().replace(/\s+/g, '_')
   const badgeStyle = STATUS_TONE_STYLES[tone ?? STATUS_TONES[normalized] ?? 'neutral']
-  const warningStyle = 'border-dashed border-amber-700 bg-amber-100 text-amber-950 ring-1 ring-amber-500/60 dark:border-amber-300 dark:bg-amber-500/20 dark:text-amber-200'
+  const warningStyle = borderless
+    ? 'bg-amber-100 text-amber-950 dark:bg-amber-500/20 dark:text-amber-200'
+    : 'border-dashed border-amber-700 bg-amber-100 text-amber-950 ring-1 ring-amber-500/60 dark:border-amber-300 dark:bg-amber-500/20 dark:text-amber-200'
 
   return (
-    <span aria-label={warning ? `Warning: ${formatStatusText(status)}` : undefined} className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium ${warning ? warningStyle : badgeStyle}`}>
+    <span aria-label={warning ? `Warning: ${formatStatusText(status)}` : undefined} className={`inline-flex items-center gap-1.5 rounded-md ${borderless ? '' : 'border'} px-2 py-0.5 text-[11px] font-medium ${warning ? warningStyle : badgeStyle}`}>
       {warning ? <AlertTriangle size={11} aria-hidden="true" /> : null}
       {formatStatusText(status)}
     </span>
@@ -1266,8 +1269,9 @@ export function PortalSelect({
   const selectedOption = options.find((opt) => opt.value === value)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
-  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number; maxHeight: number }>({ top: 0, left: 0, width: 0, maxHeight: 360 })
+  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number; maxHeight: number; opensAbove: boolean }>({ top: 0, left: 0, width: 0, maxHeight: 360, opensAbove: false })
   const isLight = theme === 'light'
+  const reduceMotion = useReducedMotion()
 
   const updateCoords = React.useCallback(() => {
     if (buttonRef.current) {
@@ -1276,7 +1280,7 @@ export function PortalSelect({
       const width = Math.min(rect.width, Math.max(0, window.innerWidth - viewportPadding * 2))
       const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding)
       const spaceAbove = Math.max(0, rect.top - viewportPadding)
-      const dropdownScrollHeight = dropdownRef.current ? dropdownRef.current.scrollHeight : 220
+      const dropdownScrollHeight = dropdownRef.current?.scrollHeight ?? Math.max(48, options.length * 36 + 12)
       const opensAbove = spaceBelow < Math.min(dropdownScrollHeight, 220) + 6 && spaceAbove > spaceBelow
       const availableSpace = Math.max(160, opensAbove ? spaceAbove : spaceBelow)
       const maxHeight = Math.min(380, availableSpace)
@@ -1287,15 +1291,16 @@ export function PortalSelect({
         left: Math.max(viewportPadding, Math.min(rect.left, window.innerWidth - width - viewportPadding)),
         width,
         maxHeight,
+        opensAbove,
       }
       setCoords((current) => {
-        if (current.top === nextCoords.top && current.left === nextCoords.left && current.width === nextCoords.width && current.maxHeight === nextCoords.maxHeight) {
+        if (current.top === nextCoords.top && current.left === nextCoords.left && current.width === nextCoords.width && current.maxHeight === nextCoords.maxHeight && current.opensAbove === nextCoords.opensAbove) {
           return current
         }
         return nextCoords
       })
     }
-  }, [])
+  }, [options.length])
 
   React.useEffect(() => {
     if (isOpen) {
@@ -1367,16 +1372,17 @@ export function PortalSelect({
                 role="listbox"
                 data-portal-popover="true"
                 data-scroll-lock="true"
-                initial={{ opacity: 0, y: -8, scale: 0.985 }}
+                initial={reduceMotion ? false : { opacity: 0, y: coords.opensAbove ? 6 : -6, scale: 0.99 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -6, scale: 0.985 }}
-                transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: coords.opensAbove ? 4 : -4, scale: 0.99 }}
+                transition={{ duration: reduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}
                 className={`portal-scrollbar fixed z-[9999] max-h-[380px] overflow-y-auto overscroll-contain rounded-xl border p-1.5 shadow-xl ring-1 ring-black/5 ${isLight ? 'portal-scrollbar-light border-[#d8c4a4] bg-[#fffdfa] shadow-[#3b2b1d]/12' : 'border-[color:var(--portal-border,rgba(202,162,76,0.18))] shadow-black/25'}`}
                 style={{
                   top: `${coords.top}px`,
                   left: `${coords.left}px`,
                   width: `${coords.width}px`,
                   maxHeight: `${coords.maxHeight}px`,
+                  transformOrigin: coords.opensAbove ? 'bottom center' : 'top center',
                   backgroundColor: isLight ? '#fffdfa' : 'color-mix(in srgb, var(--portal-bg, #080706) 88%, transparent)',
                   backdropFilter: isLight ? 'none' : 'blur(24px)',
                   WebkitBackdropFilter: 'blur(24px)'
