@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Plus, Loader2 } from 'lucide-react'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
-import { PortalCloseButton } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalDatePicker } from '@/components/portal/PortalUI'
+import { formatLocalDateKey } from '@/lib/publicEventDate'
 import {
   LUXOR_MAX_GUESTS,
   LuxorInquiry,
@@ -32,6 +33,7 @@ export function NewLeadDrawer({
   const [eventType, setEventType] = useState('Wedding')
   const [guestCount, setGuestCount] = useState('')
   const [targetDate, setTargetDate] = useState('')
+  const today = formatLocalDateKey(new Date())
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -130,6 +132,7 @@ export function NewLeadDrawer({
         eventType: cleanEventType,
         guestCount: guestCount.trim() || undefined,
         targetDate: targetDate.trim() || undefined,
+        metadata: { browserTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
         message: message.trim() || undefined,
         source: 'portal_manual',
         flow: 'manual_entry',
@@ -286,17 +289,10 @@ export function NewLeadDrawer({
                     />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label htmlFor="drawer-lead-target-date" className="text-xs font-medium text-[color:var(--portal-muted)]">
-                      Target month / date
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
+                      Target event date
                     </label>
-                    <input
-                      id="drawer-lead-target-date"
-                      type="text"
-                      value={targetDate}
-                      onChange={(e) => setTargetDate(e.target.value)}
-                      placeholder="Oct 2026"
-                      className="w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 py-2.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#b98a3e]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#b98a3e]/10"
-                    />
+                    <PortalDatePicker value={targetDate} onChange={setTargetDate} placeholder="Select event date" minDate={today} maxMonths={36} timeZone={null} allowPastDates={false} className="w-full [&>button]:min-h-11 [&>button]:rounded-lg [&>button]:px-3 [&>button]:text-sm" />
                   </div>
                 </div>
 
