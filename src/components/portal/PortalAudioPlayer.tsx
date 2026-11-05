@@ -427,7 +427,7 @@ export function PortalAudioPlayer({
             ) : isPlaying ? (
               <Pause size={18} weight="fill" />
             ) : (
-              <Play size={18} weight="fill" className="ml-0.5" />
+              <Play size={18} weight="fill" className="translate-x-[2px]" />
             )}
           </button>
 

@@ -99,6 +99,15 @@ export default function CallsPage() {
   const [expandedVoicemailId, setExpandedVoicemailId] = useState<string | null>(null)
 
   const [activeTab, setActiveTab] = useState<PhoneAppTab>('recents')
+  const [pendingPhoneTab, setPendingPhoneTab] = useState<PhoneAppTab | null>(null)
+  useEffect(() => {
+    if (!pendingPhoneTab) return
+    const timer = window.setTimeout(() => {
+      setActiveTab(pendingPhoneTab)
+      setPendingPhoneTab(null)
+    }, reduceMotion ? 0 : 150)
+    return () => window.clearTimeout(timer)
+  }, [pendingPhoneTab, reduceMotion])
   const [recentsFilter, setRecentsFilter] = useState<RecentsFilter>('all')
   const [readerTab, setReaderTab] = useState<ReaderTab>('transcript')
   const [isEditingList, setIsEditingList] = useState(false)
@@ -413,19 +422,17 @@ export default function CallsPage() {
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
       {/* Main Phone App Shell: Edge-to-edge on Mobile & iPad, Contained rounded container on Desktop */}
       <div
-        className="grid grid-cols-1 md:grid-cols-[20.5rem_minmax(0,1fr)] lg:grid-cols-[23.5rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)] h-full min-h-0 w-full flex-1 overflow-hidden bg-[color:var(--portal-card)] rounded-none border-0 lg:rounded-2xl lg:border lg:border-[color:var(--portal-border)] lg:shadow-xs"
+        className="relative grid grid-cols-1 md:grid-cols-[20.5rem_minmax(0,1fr)] lg:grid-cols-[23.5rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)] h-full min-h-0 w-full flex-1 overflow-hidden bg-[color:var(--portal-card)] rounded-none border-0 lg:rounded-2xl lg:border lg:border-[color:var(--portal-border)] lg:shadow-xs"
       >
         {/* ============================================================
             LEFT COLUMN: Native Phone App (Recents / Voicemail / Keypad)
            ============================================================ */}
         <section
-          className={`flex flex-col min-h-0 overflow-hidden md:border-r md:border-[color:var(--portal-border)] ${
-            mobileDetailOpen && !showCall ? 'hidden md:flex' : 'flex'
-          }`}
+          className="flex flex-col min-h-0 overflow-hidden md:border-r md:border-[color:var(--portal-border)]"
         >
           {/* Top Navigation Bar (iOS style) */}
           {!showCall && activeTab !== 'keypad' && (
-            <div className="shrink-0 px-4 pt-3.5 pb-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-md space-y-2.5">
+            <motion.div initial={reduceMotion ? false : { filter: 'blur(6px)' }} animate={{ filter: pendingPhoneTab && !reduceMotion ? 'blur(6px)' : 'blur(0px)' }} transition={{ duration: reduceMotion ? 0 : pendingPhoneTab ? 0.15 : 0.25, ease: 'easeOut' }} className="shrink-0 px-4 pt-3.5 pb-3 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-md space-y-2.5">
               {/* Top Utility Row: Edit | Segmented Control | Refresh */}
               <div className="flex items-center justify-between gap-2 min-h-8">
                 <button
@@ -530,11 +537,10 @@ export default function CallsPage() {
                   </button>
                 )}
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Middle Body: Either Keypad OR Scrollable Call/Voicemail List */}
-          <AnimatePresence mode="wait" initial={false}>
           {activeCall ? (
             <motion.div key="live-call" initial={reduceMotion ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }} transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }} className="flex min-h-0 flex-1 flex-col overflow-y-auto portal-scrollbar">
               <LivePhoneCall call={activeCall} />
@@ -544,7 +550,7 @@ export default function CallsPage() {
               <StartingPhoneCall target={startingCallTarget} />
             </motion.div>
           ) : activeTab === 'keypad' ? (
-            <motion.div key="keypad" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? { opacity: 1 } : { opacity: 0, y: -8 }} transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }} className="flex-1 min-h-0 flex flex-col justify-between px-6 py-5 overflow-y-auto portal-scrollbar">
+            <motion.div key="keypad" initial={reduceMotion ? false : { filter: 'blur(6px)' }} animate={{ filter: pendingPhoneTab && !reduceMotion ? 'blur(6px)' : 'blur(0px)' }} transition={{ duration: reduceMotion ? 0 : pendingPhoneTab ? 0.15 : 0.25, ease: 'easeOut' }} className="flex-1 min-h-0 flex flex-col px-6 py-5 overflow-y-auto portal-scrollbar">
               {/* Softphone status pill */}
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[color:var(--portal-muted)]">
@@ -575,15 +581,16 @@ export default function CallsPage() {
               </div>
 
               {/* Number Display & Contact Match */}
-              <div className="my-auto py-4 text-center min-h-[5.5rem] flex flex-col items-center justify-center">
+              <div className="mt-auto pt-6 pb-6 text-center min-h-[5.5rem] flex flex-col items-center justify-center">
                 <input
                   type="tel"
+                  inputMode="none"
                   value={keypadInput}
                   onChange={(e) => setKeypadInput(formatUsDialInput(e.target.value))}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && toUsE164(keypadInput)) handleKeypadCall()
                   }}
-                  placeholder="(000) 000-0000"
+                  placeholder="Enter phone number"
                   aria-label="Phone number to dial"
                   className="portal-input-transparent w-full bg-transparent text-center text-2xl sm:text-3xl font-semibold tracking-tight tabular-nums text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]/50"
                 />
@@ -607,7 +614,7 @@ export default function CallsPage() {
               </div>
 
               {/* 3x4 Tactile Keypad Grid */}
-              <div className="mx-auto w-full max-w-[16.5rem] space-y-3">
+              <div className="mx-auto mb-auto w-full max-w-[16.5rem] space-y-3">
                 <div className="grid grid-cols-3 gap-x-5 gap-y-3 justify-items-center">
                   {KEYPAD_KEYS.map((item) => (
                     <button
@@ -633,7 +640,8 @@ export default function CallsPage() {
                     type="button"
                     onClick={handleKeypadCall}
                     disabled={!toUsE164(keypadInput)}
-                    className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm transition-transform duration-100 active:scale-95 hover:bg-emerald-400 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                    className="portal-phone-call-action flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 shadow-sm transition-transform duration-100 active:scale-95 hover:bg-emerald-400 disabled:bg-[#8edbc8] disabled:pointer-events-none cursor-pointer"
+                    style={{ color: '#fff' }}
                     aria-label="Place call"
                   >
                     <Phone size={24} className="fill-current" />
@@ -654,7 +662,7 @@ export default function CallsPage() {
               </div>
             </motion.div>
           ) : (
-            <motion.div key="call-list" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reduceMotion ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.15 }} className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]/70">
+            <motion.div initial={reduceMotion ? false : { filter: 'blur(6px)' }} animate={{ filter: pendingPhoneTab && !reduceMotion ? 'blur(6px)' : 'blur(0px)' }} transition={{ duration: reduceMotion ? 0 : pendingPhoneTab ? 0.15 : 0.25, ease: 'easeOut' }} className="flex-1 min-h-0 overflow-y-auto portal-scrollbar divide-y divide-[color:var(--portal-border)]/70">
               {loading ? (
                 <div className="p-4 space-y-3.5">
                   {Array.from({ length: 7 }).map((_, i) => (
@@ -867,28 +875,27 @@ export default function CallsPage() {
               )}
             </motion.div>
           )}
-          </AnimatePresence>
 
           {/* Bottom Tab Bar (Recents | Voicemail | Keypad) */}
           {!showCall && <nav
             aria-label="Phone navigation"
-            className="shrink-0 grid grid-cols-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-xl px-2 py-1.5"
+            className="relative isolate shrink-0 grid grid-cols-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-xl px-2 py-1.5"
           >
+            <motion.span aria-hidden="true" className="pointer-events-none absolute top-1.5 bottom-1.5 left-2 w-[calc((100%-1rem)/3)] rounded-xl bg-[color:var(--portal-soft)]" initial={false} animate={{ x: `${(pendingPhoneTab || activeTab) === 'recents' ? 0 : (pendingPhoneTab || activeTab) === 'voicemail' ? 100 : 200}%` }} transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} />
             <button
               type="button"
               aria-pressed={activeTab === 'recents'}
-              onClick={() => setActiveTab('recents')}
+              onClick={() => setPendingPhoneTab(activeTab === 'recents' ? null : 'recents')}
               className={`relative isolate flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
                 activeTab === 'recents'
                   ? 'text-[#a8792f] dark:text-[#f1d27a]'
                   : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
               }`}
             >
-              {activeTab === 'recents' ? <motion.span layoutId="phone-navigation-pill" className="pointer-events-none absolute inset-0 rounded-xl bg-[color:var(--portal-soft)]" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
               <div className="relative z-10">
                 <Clock3 size={19} />
                 {unreadMissedCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                  <span className="portal-phone-unread-count absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold" style={{ color: '#fff' }}>
                     {unreadMissedCount}
                   </span>
                 )}
@@ -899,14 +906,13 @@ export default function CallsPage() {
             <button
               type="button"
               aria-pressed={activeTab === 'voicemail'}
-              onClick={() => setActiveTab('voicemail')}
+              onClick={() => setPendingPhoneTab(activeTab === 'voicemail' ? null : 'voicemail')}
               className={`relative isolate flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
                 activeTab === 'voicemail'
                   ? 'text-[#a8792f] dark:text-[#f1d27a]'
                   : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
               }`}
             >
-              {activeTab === 'voicemail' ? <motion.span layoutId="phone-navigation-pill" className="pointer-events-none absolute inset-0 rounded-xl bg-[color:var(--portal-soft)]" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
               <div className="relative z-10">
                 <Voicemail size={19} />
                 {unreadVoicemailCount > 0 && (
@@ -921,14 +927,13 @@ export default function CallsPage() {
             <button
               type="button"
               aria-pressed={activeTab === 'keypad'}
-              onClick={() => setActiveTab('keypad')}
+              onClick={() => setPendingPhoneTab(activeTab === 'keypad' ? null : 'keypad')}
               className={`relative isolate flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
                 activeTab === 'keypad'
                   ? 'text-[#a8792f] dark:text-[#f1d27a]'
                   : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
               }`}
             >
-              {activeTab === 'keypad' ? <motion.span layoutId="phone-navigation-pill" className="pointer-events-none absolute inset-0 rounded-xl bg-[color:var(--portal-soft)]" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} aria-hidden="true" /> : null}
               <Grid size={19} className="relative z-10" />
               <span className="relative z-10 text-[10px] font-semibold">Keypad</span>
             </button>
@@ -939,9 +944,7 @@ export default function CallsPage() {
             RIGHT COLUMN: Calm Call & Recording Inspector
            ============================================================ */}
         <section
-          className={`flex-1 min-h-0 overflow-y-auto portal-scrollbar bg-[color:var(--portal-bg)]/35 ${
-            mobileDetailOpen && !showCall ? 'flex flex-col' : 'hidden md:flex md:flex-col'
-          }`}
+          className={`absolute inset-0 z-10 flex flex-col min-h-0 overflow-y-auto portal-scrollbar bg-[color:var(--portal-bg)] transition-transform duration-[260ms] ease-out motion-reduce:transition-none md:static md:z-auto md:flex-1 md:translate-x-0 md:bg-[color:var(--portal-bg)]/35 ${mobileDetailOpen && !showCall ? 'translate-x-0' : 'translate-x-full pointer-events-none md:pointer-events-auto'}`}
         >
           {selectedCall ? (
             <div className="mx-auto w-full max-w-2xl p-5 sm:p-7 lg:p-8 space-y-6">
