@@ -10,7 +10,6 @@ import {
   TrendingUp,
   CreditCard,
   ArrowDownRight,
-  ArrowUpRight,
   TrendingDown,
   RefreshCw,
   Eye,
@@ -370,10 +369,7 @@ type LuxorBookingExpense = {
                       />
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300 mt-4 font-bold tabular-nums">
-                    <ArrowUpRight size={16} /> <span>+{businessInvoices.length} billing items</span>
-                  </div>
-                    <p className="mt-2 text-[10px] text-[color:var(--portal-muted)]">Known paid cash: ${financeSummary.knownPaidCashTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  <p className="mt-4 text-[10px] text-[color:var(--portal-muted)]">Known paid cash: ${financeSummary.knownPaidCashTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                 </MagicCard>
               </PortalStaggerCard>
 
