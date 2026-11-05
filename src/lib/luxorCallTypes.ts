@@ -1,5 +1,22 @@
 export type LuxorCallDirection = 'inbound' | 'outbound'
 
+// Transcription runs on the customer-facing leg for both incoming and outgoing calls.
+// Twilio's inbound track is audio received from that leg; outbound is audio sent to it.
+export function luxorTranscriptSpeaker(track: string): 'caller' | 'luxor' | 'unknown' {
+  switch (track.toLowerCase()) {
+    case 'inbound_track':
+    case 'caller':
+    case 'customer':
+      return 'caller'
+    case 'outbound_track':
+    case 'luxor_agent':
+    case 'agent':
+      return 'luxor'
+    default:
+      return 'unknown'
+  }
+}
+
 export type LuxorCallStatus =
   | 'queued'
   | 'initiated'

@@ -6,7 +6,6 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   Users,
   Plus,
-  ChevronLeft,
   ChevronRight,
   ExternalLink,
   Eye,
@@ -24,9 +23,6 @@ import {
   ArrowRightLeft,
   ListPlus,
   ListMinus,
-  ArrowUp,
-  ArrowDown,
-  List,
   Languages,
   Star,
   Menu,
@@ -38,6 +34,7 @@ import {
   Archive,
   Workflow,
 } from 'lucide-react'
+import { ArrowsDownUp, CaretDown as PhosphorCaretDown, CaretUp as PhosphorCaretUp } from '@phosphor-icons/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { isLuxorInquiryArchived, isLuxorNonRevenueTestInquiry, isLuxorPermanentTestLead, isLuxorTestInquiry, LUXOR_MAX_GUESTS, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, LuxorPipelineStage, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
@@ -74,7 +71,6 @@ import {
   PortalTableSkeleton,
   PortalTourCardSkeleton,
   PortalClientCardSkeleton,
-  PortalKanbanBoardSkeleton,
   PortalSkeletonTransition,
   PortalSkeleton,
   PortalFilterBar,
@@ -157,7 +153,7 @@ const DEFAULT_CLIENT_SORT: TableSort<ClientSortKey> = { key: 'targetDate', direc
 
 const LEADS_TAB_LABELS: Record<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups', string> = {
   dashboard: 'Funnel Dashboard',
-  pipeline: 'Pipeline Board',
+  pipeline: 'Pipeline',
   tours: 'Tours',
   followups: 'Follow Ups',
   proposals: 'Proposals & Contracts',
@@ -170,7 +166,6 @@ export default function LeadsPage() {
   const { notify } = useToast()
   const reduceMotion = useReducedMotion()
   const [leads, setLeads] = useState<LuxorInquiry[]>([])
-  const boardRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyTourOutcomeIds, setBusyTourOutcomeIds] = useState<string[]>([])
@@ -180,10 +175,6 @@ export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups'>('dashboard')
   const [viewPreferencesReady, setViewPreferencesReady] = useState(false)
   const [isTabMenuOpen, setIsTabMenuOpen] = useState(false)
-  
-  // View mode toggle
-  const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
-  const [isMobileViewport, setIsMobileViewport] = useState(false)
   
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('')
@@ -231,15 +222,11 @@ export default function LeadsPage() {
   useLayoutEffect(() => {
     if (typeof window !== 'undefined') {
       const savedTab = localStorage.getItem('luxor_leads_active_tab')
-      const savedViewMode = localStorage.getItem('luxor_leads_view_mode')
       const savedPage = localStorage.getItem('luxor_leads_current_page')
       const savedLeadSort = localStorage.getItem('luxor_leads_table_sort')
       const savedClientSort = localStorage.getItem('luxor_clients_table_sort')
       if (savedTab) {
         setActiveTab(savedTab as 'dashboard' | 'pipeline' | 'tours' | 'proposals' | 'clients' | 'lost' | 'followups')
-      }
-      if (savedViewMode) {
-        setViewMode(savedViewMode as 'list' | 'board')
       }
       if (savedPage) {
         setCurrentPage(parseInt(savedPage, 10))
@@ -253,36 +240,6 @@ export default function LeadsPage() {
     }
     setViewPreferencesReady(true)
   }, [])
-
-  useLayoutEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 767px)')
-    const syncViewport = () => {
-      setIsMobileViewport(mediaQuery.matches)
-      if (mediaQuery.matches) setViewMode('list')
-    }
-    syncViewport()
-    mediaQuery.addEventListener('change', syncViewport)
-    return () => mediaQuery.removeEventListener('change', syncViewport)
-  }, [])
-
-  // Restore board scroll position once data is loaded and columns are rendered
-  useEffect(() => {
-    if (!loading && activeTab === 'pipeline' && viewMode === 'board') {
-      const savedScroll = localStorage.getItem('luxor_leads_board_scroll_left')
-      if (savedScroll && boardRef.current) {
-        requestAnimationFrame(() => {
-          if (boardRef.current) {
-            boardRef.current.scrollLeft = parseInt(savedScroll, 10)
-          }
-        })
-      }
-    }
-  }, [loading, activeTab, viewMode])
-
-  const handleBoardScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const scrollLeft = e.currentTarget.scrollLeft
-    localStorage.setItem('luxor_leads_board_scroll_left', String(scrollLeft))
-  }
 
   useEffect(() => {
     fetchLeads()
@@ -334,40 +291,6 @@ export default function LeadsPage() {
       console.error(err)
       alert('Error updating status.')
       fetchLeads() // Re-sync from database if error
-    }
-  }
-
-  const handleMovePipelineStage = async (leadId: string, newStage: LuxorPipelineStage) => {
-    if (newStage === 'closed_lost') {
-      const lead = leads.find((item) => item.id === leadId)
-      if (lead) openLeadLifecycleAction(lead, 'archive')
-      return
-    }
-    const column = PIPELINE_COLUMNS.find((item) => item.id === newStage)
-    try {
-      setLeads((prev) =>
-        prev.map((lead) => (
-          lead.id === leadId
-            ? { ...lead, pipeline_stage: newStage, status: column?.status || lead.status }
-            : lead
-        ))
-      )
-
-      const res = await fetch('/api/inquiries', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: leadId,
-          pipeline_stage: newStage,
-          ...(column?.status ? { status: column.status } : {}),
-          author: 'Portal Owner',
-        }),
-      })
-      if (!res.ok) throw new Error('Failed to update pipeline stage.')
-    } catch (err) {
-      console.error(err)
-      alert('Error updating pipeline stage.')
-      fetchLeads()
     }
   }
 
@@ -604,48 +527,6 @@ export default function LeadsPage() {
         mobileActionsInline
         actions={
           <div className="flex flex-wrap items-center justify-end gap-3">
-            {activeTab === 'pipeline' && (
-              <>
-                <div className="hidden rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-0.5 text-[10px] font-semibold uppercase tracking-widest md:flex">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewMode('list')
-                      localStorage.setItem('luxor_leads_view_mode', 'list')
-                    }}
-                    className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                      viewMode === 'list'
-                        ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                        : 'font-bold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                    }`}
-                  >
-                    List
-                  </button>
-                  {!isMobileViewport ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setViewMode('board')
-                        setSearchTerm('')
-                        setStatusFilter('all')
-                        setEventTypeFilter('all')
-                        setSourceFilter('all')
-                        setContactFilter('all')
-                        localStorage.setItem('luxor_leads_view_mode', 'board')
-                      }}
-                      className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                        viewMode === 'board'
-                          ? 'bg-[#caa24c]/10 text-[#f1d27a] border border-[#caa24c]/20'
-                          : 'font-bold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-                      }`}
-                    >
-                      Board
-                    </button>
-                  ) : null}
-                </div>
-
-              </>
-            )}
             {/* iPad/Tablet Browse Views button (positioned immediately to the left of New Lead) */}
             <button
               type="button"
@@ -698,7 +579,7 @@ export default function LeadsPage() {
           ariaLabel="Leads & Clients views"
           tabs={[
           { id: 'dashboard', label: 'Funnel Dashboard', icon: <TrendingUp size={15} /> },
-          { id: 'pipeline', label: 'Pipeline Board', icon: <Users size={15} /> },
+          { id: 'pipeline', label: 'Pipeline', icon: <Users size={15} /> },
           { id: 'tours', label: 'Tours', icon: <Calendar size={15} /> },
           { id: 'followups', label: 'Follow Ups', icon: <Phone size={15} /> },
           { id: 'proposals', label: 'Proposals & Contracts', icon: <FileCheck size={15} /> },
@@ -730,11 +611,10 @@ export default function LeadsPage() {
         {activeTab === 'clients' && <LeadsClientsTab leads={activeLeads} loading={loading} sort={clientSort} onSort={updateClientSort} onOpen={(client) => router.push(`/portal/leads/${client.id}`)} onLifecycleAction={openLeadLifecycleAction} />}
         {activeTab === 'lost' && <LeadsLostTab leads={leads} loading={loading} />}
         {activeTab === 'followups' && <FollowUpsTab leads={leads} onLeadsRefresh={async () => { await fetchLeads() }} />}
-        {activeTab === 'tours' && <LeadsToursTab leads={activeLeads} loading={loading} onMovePipelineStage={handleMovePipelineStage} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} busyTourOutcomeIds={busyTourOutcomeIds} />}
+        {activeTab === 'tours' && <LeadsToursTab leads={activeLeads} loading={loading} onLifecycleAction={openLeadLifecycleAction} onTourOutcome={handleTourOutcome} busyTourOutcomeIds={busyTourOutcomeIds} />}
         {activeTab === 'proposals' && <LeadsProposalsTab leads={activeLeads} loading={loading} onLifecycleAction={openLeadLifecycleAction} />}
 
         {activeTab === 'pipeline' && (
-          viewMode === 'list' || isMobileViewport ? (
         <>
         <PortalTableCard
           mobilePageScroll
@@ -791,7 +671,7 @@ export default function LeadsPage() {
             </div>
           }
         >
-          <div className="hidden overflow-x-auto md:block">
+          <div className="hidden md:block">
           <PortalStickyTable minWidth="1170px">
             <PortalStickyThead>
               <tr className="whitespace-nowrap bg-[color:var(--portal-soft)] text-xs font-semibold text-[color:var(--portal-muted)]">
@@ -882,12 +762,9 @@ export default function LeadsPage() {
                       </Link>
                     </td>
                     <td className="px-6 py-3">
-                      <PortalSelect
-                        value={getPipelineStage(lead)}
-                        onChange={(value) => handleMovePipelineStage(lead.id, value as LuxorPipelineStage)}
-                        options={PIPELINE_STAGE_OPTIONS}
-                        className="min-w-[170px]"
-                      />
+                      <span className="text-xs font-medium text-[color:var(--portal-muted)]">
+                        {PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(lead))?.label || 'Inquiry'}
+                      </span>
                     </td>
                     <td className="px-6 py-3 text-xs text-[color:var(--portal-muted)]">
                       {getPipelineStage(lead) === 'newsletter' ? null : (
@@ -988,92 +865,6 @@ export default function LeadsPage() {
           </div>, document.body
         )}
         </>
-      ) : (
-        <PortalSkeletonTransition
-          loading={loading}
-          skeleton={<PortalKanbanBoardSkeleton />}
-        >
-          <div ref={boardRef} onScroll={handleBoardScroll} className="flex-1 min-h-0 overflow-x-auto portal-scrollbar -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pb-4 flex gap-4 select-none">
-          {PIPELINE_COLUMNS.map((col, colIndex, colArray) => {
-            const colLeads = sortedLeads.filter(l => getPipelineStage(l) === col.id)
-            return (
-              <div key={col.id} className="portal-card-surface flex-1 min-w-[280px] max-w-[340px] flex flex-col h-full overflow-hidden rounded-none sm:rounded-xl">
-                {/* Column Header */}
-                <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${col.tone === 'blue' ? 'bg-sky-600 dark:bg-sky-400' : col.tone === 'purple' ? 'bg-violet-600 dark:bg-violet-400' : col.tone === 'gold' ? 'bg-[#a8792f] dark:bg-[#f1d27a]' : 'bg-emerald-700 dark:bg-emerald-400'}`} aria-hidden="true" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">{col.short}</span>
-                  </div>
-                  <span className="text-[9px] tabular-nums font-bold text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] px-2 py-0.5 rounded-md">
-                    {colLeads.length}
-                  </span>
-                </div>
-
-                {/* Cards Container */}
-                <div className="p-3 flex-1 overflow-y-auto portal-scrollbar space-y-3">
-                  {colLeads.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] py-8 text-center text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
-                      No leads
-                    </div>
-                  ) : (
-                    colLeads.map((lead) => (
-                      <LuxorCrmRecordCard
-                        key={lead.id}
-                        lead={lead}
-                        badges={[{ label: PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(lead))?.label || col.label, tone: col.tone as PortalStatusTone }]}
-                        subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date TBD'} · {isGrandOpeningRsvp(lead) ? `${lead.attendee_count || lead.guest_count || 1} RSVP` : lead.guest_count ? `${lead.guest_count} guests` : 'No count'}</>}
-                        contact={lead.email ?? (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact')}
-                        onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
-                        className="min-h-[140px]"
-                        actions={
-                          <>
-                            <div className="flex gap-1.5" onClick={(event) => event.stopPropagation()}>
-                              {lead.email ? <a href={`mailto:${lead.email}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]" title="Send Email" aria-label={`Email ${lead.full_name}`}><Mail size={14} /></a> : null}
-                              {lead.phone ? <button type="button" onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)]" title="Call from Luxor browser phone" aria-label={`Call ${lead.full_name}`}><Phone size={14} /></button> : null}
-                              {lead.phone ? <Link href={`/portal/leads/${lead.id}?tab=messages`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)]" title="Text client" aria-label={`Text ${lead.full_name}`}><MessageSquare size={14} /></Link> : null}
-                            </div>
-                            <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-                              {colIndex > 0 ? <button type="button" onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex - 1].id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)]" title={`Move to ${colArray[colIndex - 1].label}`}><ChevronLeft size={14} /></button> : null}
-                              {colIndex < colArray.length - 1 ? <button type="button" onClick={() => handleMovePipelineStage(lead.id, colArray[colIndex + 1].id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-muted)]" title={`Move to ${colArray[colIndex + 1].label}`}><ChevronRight size={14} /></button> : null}
-                              <LeadLifecycleActionsMenu lead={lead} onAction={(action) => openLeadLifecycleAction(lead, action)} className="!h-9 !w-9" />
-                            </div>
-                          </>
-                        }
-                      >
-                        {isGrandOpeningRsvp(lead) ? <GrandOpeningBadge /> : null}
-                      </LuxorCrmRecordCard>
-                    ))
-                  )}
-                </div>
-              </div>
-            )
-          })}
-
-          {/* Archived Leads Drawer / Collapsed Last Column */}
-          <div className="portal-card-surface flex min-w-[280px] max-w-[340px] flex-1 flex-col overflow-hidden opacity-75 transition-opacity duration-300 hover:opacity-100 rounded-none sm:rounded-xl">
-            <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-              <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[color:var(--portal-muted)]" aria-hidden="true" /><span className="text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)]">Archived</span></div>
-            </div>
-            <div className="portal-scrollbar flex-1 space-y-3 overflow-y-auto p-3">
-              {sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] py-8 text-center text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">No archived leads</div>
-              ) : sortedLeads.filter((lead) => getPipelineStage(lead) === 'closed_lost').map((lead) => (
-                <LuxorCrmRecordCard
-                  key={lead.id}
-                  lead={lead}
-                  badges={[{ label: 'Archived', tone: 'neutral' }]}
-                  subtitle={<>{isGrandOpeningRsvp(lead) ? `Grand Opening RSVP · ${lead.attendee_count || lead.guest_count || 1} attending` : `${lead.event_type || 'Quinceañera'} · ${lead.guest_count || 0} guests`}</>}
-                  contact={<span className="block">{lead.email || 'No email'}{lead.phone ? <span className="mt-0.5 block">{formatPhoneDisplay(lead.phone)}</span> : null}</span>}
-                  onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
-                  className="min-h-[120px]"
-                  actions={<Link href={`/portal/leads/${lead.id}`} className="inline-flex min-h-10 items-center text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">View dossier <ExternalLink size={13} className="ml-1" aria-hidden="true" /></Link>}
-                />
-              ))}
-            </div>
-          </div>
-          </div>
-        </PortalSkeletonTransition>
-      )
     )}
       </PortalTabTransition> : null}
 
@@ -1206,7 +997,7 @@ export default function LeadsPage() {
                       <div className="divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)] overflow-hidden">
                         {[
                           { id: 'dashboard', label: 'Funnel Dashboard', description: 'Funnel volume, conversion rate, and pipeline value', icon: <TrendingUp size={16} /> },
-                          { id: 'pipeline', label: 'Pipeline Board', description: 'Kanban view of active prospects and bookings pace', icon: <Users size={16} /> },
+                          { id: 'pipeline', label: 'Pipeline', description: 'Active prospects and bookings pace', icon: <Users size={16} /> },
                           { id: 'tours', label: 'Tours', description: 'Scheduled, upcoming, and completed venue visits', icon: <Calendar size={16} /> },
                           { id: 'followups', label: 'Follow Ups', description: 'Pending client actions, calls, and next steps', icon: <Phone size={16} /> },
                           { id: 'proposals', label: 'Proposals & Contracts', description: 'Quotes and draft agreements awaiting signature', icon: <FileCheck size={16} /> },
@@ -1871,7 +1662,13 @@ function SortableHeader<Key extends string>({
         aria-label={`Sort by ${label} ${active && sort.direction === 'asc' ? 'descending' : 'ascending'}`}
       >
         <span>{label}</span>
-        {active ? (sort.direction === 'asc' ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />) : <span className="text-[color:var(--portal-faint)]" aria-hidden="true">↕</span>}
+        {active ? (
+          sort.direction === 'asc'
+            ? <PhosphorCaretUp size={14} weight="bold" aria-hidden="true" />
+            : <PhosphorCaretDown size={14} weight="bold" aria-hidden="true" />
+        ) : (
+          <ArrowsDownUp size={14} weight="regular" className="text-[color:var(--portal-faint)]" aria-hidden="true" />
+        )}
       </button>
     </th>
   )
@@ -2297,14 +2094,12 @@ function LeadsLostTab({ leads, loading = false }: { leads: LuxorInquiry[]; loadi
 function LeadsToursTab({
   leads,
   loading = false,
-  onMovePipelineStage,
   onLifecycleAction,
   onTourOutcome,
   busyTourOutcomeIds,
 }: {
   leads: LuxorInquiry[]
   loading?: boolean
-  onMovePipelineStage: (id: string, stage: LuxorPipelineStage) => void
   onLifecycleAction: (lead: LuxorInquiry, action: LeadLifecycleAction) => void
   onTourOutcome: (lead: LuxorInquiry, attendance: 'attended' | 'no_show') => void
   busyTourOutcomeIds: string[]
@@ -2444,15 +2239,9 @@ function LeadsToursTab({
         className="max-md:shadow-none"
         onOpen={() => { window.location.href = `/portal/leads/${tour.id}` }}
         interactionLabel={`Open lead record for ${tour.full_name}`}
-        actions={
-          <div className="flex w-full min-w-0 items-center gap-3">
-            <span className="shrink-0 text-[10px] font-semibold text-[color:var(--portal-muted)]">Stage</span>
-            <PortalSelect aria-label={`Pipeline stage for ${tour.full_name}`} className="min-w-0 flex-1" value={getPipelineStage(tour)} onChange={(value) => onMovePipelineStage(tour.id, value as LuxorPipelineStage)} options={PIPELINE_STAGE_OPTIONS} />
-          </div>
-        }
       >
         <div className="space-y-3">
-          <div><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Tour time</p><p className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">{tour.preferred_tour_date ? formatTourDate(tour.preferred_tour_date) : 'Date Pending'}</p><p className="text-xs text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Time TBD'} · Central</p></div>
+          <div className="flex flex-wrap justify-between gap-x-4 gap-y-2"><div><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Tour time</p><p className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">{tour.preferred_tour_date ? formatTourDate(tour.preferred_tour_date) : 'Date Pending'}</p><p className="text-xs text-[color:var(--portal-muted)]">{tour.preferred_tour_time || 'Time TBD'} · Central</p></div><div><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Stage</p><p className="mt-1 text-xs font-medium text-[color:var(--portal-muted)]">{PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(tour))?.label || getPipelineStage(tour)}</p></div></div>
           {tour.tour_attendance_status !== 'cancelled' && tour.tour_attendance_status !== 'attended' ? (
             <div className={`grid w-full gap-2 ${tour.tour_attendance_status === 'no_show' ? 'grid-cols-1' : 'grid-cols-2'}`}>
               <LuxorCrmSecondaryAction className="w-full" disabled={busyTourOutcomeIds.includes(tour.id)} onClick={() => onTourOutcome(tour, 'attended')}>{busyTourOutcomeIds.includes(tour.id) ? 'Saving…' : tour.tour_attendance_status === 'no_show' ? 'Correct to Completed' : 'Mark Completed'}</LuxorCrmSecondaryAction>

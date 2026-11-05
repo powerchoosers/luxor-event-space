@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { getLuxorCallById, getLuxorTranscriptSegments } from '@/lib/luxorCallsServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import type { LuxorCall } from '@/lib/luxorCallTypes'
+import { luxorTranscriptSpeaker, type LuxorCall } from '@/lib/luxorCallTypes'
 
 export const runtime = 'nodejs'
 
@@ -56,9 +56,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!apiKey) throw new Error('OpenRouter is not configured.')
     const transcript = segments
       .map((segment) => {
-        const customerTrack = segment.track === 'caller' || segment.track === 'customer'
-          || (call.direction === 'inbound' ? segment.track === 'outbound_track' : segment.track === 'inbound_track')
-        return `${customerTrack ? 'Caller' : 'Luxor'}: ${segment.segment_text}`
+        const speaker = luxorTranscriptSpeaker(segment.track)
+        return `${speaker === 'caller' ? 'Caller' : speaker === 'luxor' ? 'Luxor' : 'Speaker'}: ${segment.segment_text}`
       })
       .join('\n')
       .slice(0, 60000)

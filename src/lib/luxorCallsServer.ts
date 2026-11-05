@@ -268,8 +268,37 @@ export async function setLuxorTranscriptionStatus(callSid: string, status: 'fail
   return updated ?? current
 }
 
+function providerAudioStart(value: string | undefined): number | null {
+  if (!value) return null
+  try {
+    const envelope = JSON.parse(value) as { ProviderConnectTime?: unknown; ProviderData?: Record<string, unknown> }
+    const connectedAt = Date.parse(String(envelope.ProviderConnectTime || ''))
+    const provider = envelope.ProviderData
+    if (!provider || !Number.isFinite(connectedAt)) return null
+
+    // Deepgram supplies a segment start; Google supplies word start offsets.
+    let offset: unknown = provider.start
+    const results = Array.isArray(provider.results) ? provider.results as Array<Record<string, unknown>> : [provider]
+    const channel = provider.channel && typeof provider.channel === 'object' ? provider.channel as Record<string, unknown> : null
+    const alternatives = results[0] && Array.isArray(results[0].alternatives) ? results[0].alternatives as Array<Record<string, unknown>>
+      : channel && Array.isArray(channel.alternatives) ? channel.alternatives as Array<Record<string, unknown>> : []
+    const words = alternatives[0] && Array.isArray(alternatives[0].words) ? alternatives[0].words as Array<Record<string, unknown>> : []
+    if (words[0]) offset = words[0].startOffset ?? words[0].startTime ?? words[0].start_time ?? words[0].start ?? offset
+    let seconds = Number.NaN
+    if (typeof offset === 'number') seconds = offset
+    else if (typeof offset === 'string' && /^\d+(?:\.\d+)?s?$/.test(offset)) seconds = Number(offset.replace(/s$/, ''))
+    else if (offset && typeof offset === 'object' && ('seconds' in offset || 'nanos' in offset)) {
+      const duration = offset as { seconds?: number | string; nanos?: number }
+      seconds = Number(duration.seconds ?? 0) + Number(duration.nanos ?? 0) / 1e9
+    }
+    return Number.isFinite(seconds) && seconds >= 0 ? connectedAt + seconds * 1000 : null
+  } catch {
+    return null
+  }
+}
+
 export async function saveLuxorTranscriptEvent(input: {
-  callSid: string; event: string; sequenceId: number; transcriptionSid: string; transcriptionData?: string; transcriptionProviderData?: string; track?: string; timestamp?: string
+  callSid: string; event: string; sequenceId: number; transcriptionSid: string; transcriptionData?: string; transcriptionProviderData?: string; track?: string; timestamp?: string; final?: string
 }) {
   let call = await getLuxorCallBySid(input.callSid)
   if (!call || call.recording_consent_status !== 'consented') return null
@@ -277,27 +306,19 @@ export async function saveLuxorTranscriptEvent(input: {
   const alternatives = Array.isArray(metadata.alternatives) ? metadata.alternatives as Array<Record<string, unknown>> : []
   const text = String(metadata.transcript || metadata.text || alternatives[0]?.transcript || '').trim().slice(0, 4000)
   const track = String(metadata.track || input.track || 'both_tracks')
-  let providerStartAt: number | null = null
-  if (input.transcriptionProviderData) {
-    try {
-      const providerEnvelope = JSON.parse(input.transcriptionProviderData) as { ProviderData?: { start?: unknown; ProviderConnectTime?: unknown } }
-      const startSeconds = Number(providerEnvelope.ProviderData?.start)
-      const providerConnectTime = Date.parse(String(providerEnvelope.ProviderData?.ProviderConnectTime || ''))
-      if (Number.isFinite(startSeconds) && Number.isFinite(providerConnectTime)) providerStartAt = providerConnectTime + startSeconds * 1000
-    } catch {
-      // Provider timing is optional; use the callback timestamp when the provider payload is unavailable.
-    }
-  }
-  const final = metadata.is_final === true || metadata.final === true
+  const providerStartAt = providerAudioStart(input.transcriptionProviderData)
+  // Twilio sends Final as a top-level form field, not inside TranscriptionData.
+  // Our sessions request final results only; retain compatibility if the field is absent.
+  const final = input.final == null || input.final === '' ? true : input.final.toLowerCase() === 'true'
   let addedSegment = false
-  if (text) {
-    const eventTime = Number.isFinite(providerStartAt) ? new Date(providerStartAt!).toISOString() : input.timestamp || new Date().toISOString()
-    const eventMs = Number.isFinite(providerStartAt) ? providerStartAt! : Number.NaN
+  if (text && final) {
+    const eventTime = input.timestamp && Number.isFinite(Date.parse(input.timestamp)) ? input.timestamp : new Date().toISOString()
+    const eventMs = providerStartAt ?? Number.NaN
     const recordingStartMs = Date.parse(call.recording_started_at || '')
     const startSeconds = Number.isFinite(eventMs) && Number.isFinite(recordingStartMs) ? Math.max(0, (eventMs - recordingStartMs) / 1000) : null
     const inserted = await supabaseRest<Array<{ id: string }>>('luxor_call_transcript_segments?on_conflict=call_id%2Ctranscription_sid%2Csequence_id%2Ctrack', {
       method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
-      body: JSON.stringify({ call_id: call.id, transcription_sid: input.transcriptionSid, sequence_id: input.sequenceId, track, segment_start_seconds: startSeconds, segment_text: text, is_final: final, event_timestamp: eventTime }),
+      body: JSON.stringify({ call_id: call.id, transcription_sid: input.transcriptionSid, sequence_id: input.sequenceId, track, segment_start_seconds: startSeconds, segment_audio_timestamp: providerStartAt == null ? null : new Date(providerStartAt).toISOString(), segment_text: text, is_final: final, event_timestamp: eventTime }),
     })
     addedSegment = inserted.length > 0
   }
@@ -375,6 +396,44 @@ export async function saveLuxorRecordingCopy(input: { callSid: string; recording
   return updated ?? call
 }
 
+type TranscriptRow = {
+  id: string; call_id: string; sequence_id: number; track: string; segment_text: string
+  event_timestamp: string | null; segment_audio_timestamp: string | null; segment_start_seconds: number | null
+}
+
+async function getTranscriptRows(callFilter: string) {
+  const pageSize = 500
+  const rows: TranscriptRow[] = []
+  // PostgREST caps responses; request deterministic pages so long transcripts
+  // and lists of many calls do not silently lose turns.
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await supabaseRest<TranscriptRow[]>(
+      `luxor_call_transcript_segments?select=id,call_id,sequence_id,track,segment_text,event_timestamp,segment_audio_timestamp,segment_start_seconds&${callFilter}&order=created_at.asc,id.asc&limit=${pageSize}&offset=${offset}`,
+    )
+    rows.push(...page)
+    if (page.length < pageSize) return rows
+  }
+}
+
+function transcriptRowsInAudioOrder(rows: TranscriptRow[], recordingStartedAt: string | null | undefined) {
+  const recordingStartMs = Date.parse(recordingStartedAt || '')
+  return rows.map((row) => {
+    const audioMs = Date.parse(row.segment_audio_timestamp || '')
+    const storedOffset = row.segment_start_seconds == null ? null : Number(row.segment_start_seconds)
+    const startSeconds = storedOffset != null && Number.isFinite(storedOffset) ? storedOffset
+      : Number.isFinite(audioMs) && Number.isFinite(recordingStartMs) ? Math.max(0, (audioMs - recordingStartMs) / 1000) : null
+    // Callback timestamps are only an approximate ordering fallback, never a seek point.
+    const orderMs = Number.isFinite(audioMs) ? audioMs
+      : startSeconds != null && Number.isFinite(recordingStartMs) ? recordingStartMs + startSeconds * 1000
+        : Date.parse(row.event_timestamp || '')
+    return { ...row, segment_start_seconds: startSeconds, orderMs }
+  }).sort((a, b) => {
+    if (Number.isFinite(a.orderMs) && Number.isFinite(b.orderMs) && a.orderMs !== b.orderMs) return a.orderMs - b.orderMs
+    if (Number.isFinite(a.orderMs) !== Number.isFinite(b.orderMs)) return Number.isFinite(a.orderMs) ? -1 : 1
+    return a.sequence_id - b.sequence_id
+  })
+}
+
 export async function listLuxorCalls(options: {
   limit?: number
   inquiryId?: string | null
@@ -395,22 +454,23 @@ export async function listLuxorCalls(options: {
   const calls = await supabaseRest<LuxorCall[]>(`luxor_calls?${params.toString()}`)
   if (!calls.length) return calls
   const callIds = calls.map((call) => call.id)
-  const rows = await supabaseRest<Array<{ id: string; call_id: string; sequence_id: number; track: string; segment_text: string; event_timestamp: string | null; segment_start_seconds: number | null }>>(
-    `luxor_call_transcript_segments?select=id,call_id,sequence_id,track,segment_text,event_timestamp,segment_start_seconds&call_id=in.(${callIds.join(',')})&order=segment_start_seconds.asc.nullsfirst,sequence_id.asc`,
-  )
-  const segmentsByCall = new Map<string, NonNullable<LuxorCall['transcript_segments']>>()
+  const rows = await getTranscriptRows(`call_id=in.(${callIds.join(',')})`)
+  const rowsByCall = new Map<string, TranscriptRow[]>()
   for (const row of rows) {
-    const segments = segmentsByCall.get(row.call_id) ?? []
-    segments.push({ id: row.id, text: row.segment_text, track: row.track, timestamp: row.event_timestamp || '', final: true, startSeconds: row.segment_start_seconds })
-    segmentsByCall.set(row.call_id, segments)
+    const callRows = rowsByCall.get(row.call_id) ?? []
+    callRows.push(row)
+    rowsByCall.set(row.call_id, callRows)
   }
-  return calls.map((call) => ({ ...call, transcript_segments: segmentsByCall.get(call.id) ?? [] }))
+  return calls.map((call) => ({ ...call, transcript_segments: transcriptRowsInAudioOrder(rowsByCall.get(call.id) ?? [], call.recording_started_at)
+    .map((row) => ({ id: row.id, text: row.segment_text, track: row.track, timestamp: row.event_timestamp || '', final: true, startSeconds: row.segment_start_seconds })) }))
 }
 
 export async function getLuxorTranscriptSegments(callId: string) {
-  return supabaseRest<Array<{ id: string; track: string; segment_text: string; event_timestamp: string | null; sequence_id: number; segment_start_seconds: number | null }>>(
-    `luxor_call_transcript_segments?select=id,track,segment_text,event_timestamp,sequence_id,segment_start_seconds&call_id=eq.${encodeURIComponent(callId)}&order=segment_start_seconds.asc.nullsfirst,sequence_id.asc`,
-  )
+  const [rows, call] = await Promise.all([
+    getTranscriptRows(`call_id=eq.${encodeURIComponent(callId)}`),
+    getLuxorCallById(callId),
+  ])
+  return transcriptRowsInAudioOrder(rows, call?.recording_started_at)
 }
 
 export async function updateLuxorCallDetails(

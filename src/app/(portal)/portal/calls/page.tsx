@@ -42,7 +42,7 @@ import {
 import { PortalAudioPlayer } from '@/components/portal/PortalAudioPlayer'
 import { usePortalVoice } from '@/components/portal/PortalVoiceProvider'
 import { useToast } from '@/components/portal/ToastProvider'
-import type { LuxorCall } from '@/lib/luxorCallTypes'
+import { luxorTranscriptSpeaker, type LuxorCall } from '@/lib/luxorCallTypes'
 import {
   formatPhoneDisplay,
   formatUsDialInput,
@@ -1196,7 +1196,7 @@ export default function CallsPage() {
 
                         {readerTab === 'transcript' &&
                           selectedCall.transcript_segments &&
-                          selectedCall.transcript_segments.length > 0 && (
+                          selectedCall.transcript_segments.some((segment) => segment.startSeconds != null) && (
                             <span className="text-[11px] text-[color:var(--portal-muted)]">
                               Tap time to jump
                             </span>
@@ -1242,27 +1242,22 @@ export default function CallsPage() {
                               segment.startSeconds != null &&
                               currentPlayheadTime >= segment.startSeconds &&
                               currentPlayheadTime < segment.startSeconds + 4
-                            const isCustomer =
-                              segment.track === 'inbound' ||
-                              segment.track === 'caller' ||
-                              segment.track === 'customer' ||
-                              (selectedCall.direction === 'inbound'
-                                ? segment.track === 'outbound_track'
-                                : segment.track === 'inbound_track')
+                            const speaker = luxorTranscriptSpeaker(segment.track)
 
                             return (
                               <button
                                 key={segment.id}
                                 type="button"
+                                disabled={segment.startSeconds == null}
                                 onClick={() => {
                                   if (segment.startSeconds != null) {
                                     setTargetSeekTime(segment.startSeconds)
                                   }
                                 }}
-                                className={`w-full flex items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                                className={`w-full flex items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors enabled:cursor-pointer disabled:cursor-default ${
                                   isSpokenNow
                                     ? 'bg-[#caa24c]/12'
-                                    : 'hover:bg-[color:var(--portal-soft)]/70'
+                                    : 'enabled:hover:bg-[color:var(--portal-soft)]/70'
                                 }`}
                               >
                                 <span className="w-11 shrink-0 pt-0.5 text-xs tabular-nums font-medium text-[#a8792f] dark:text-[#f1d27a]">
@@ -1272,9 +1267,9 @@ export default function CallsPage() {
                                 </span>
                                 <div className="min-w-0 flex-1">
                                   <span className="text-xs font-semibold text-[color:var(--portal-muted)]">
-                                    {isCustomer
+                                    {speaker === 'caller'
                                       ? selectedCall.contact_name || 'Caller'
-                                      : 'Luxor'}
+                                      : speaker === 'luxor' ? 'Luxor' : 'Speaker'}
                                   </span>
                                   <p className="mt-0.5 text-sm leading-relaxed text-[color:var(--portal-text)]">
                                     {segment.text}

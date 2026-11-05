@@ -50,8 +50,8 @@ export async function POST(request: Request) {
             statusCallbackUrl: buildTwilioCallbackUrl('/api/twilio/transcriptions', { recordCallSid }),
             statusCallbackMethod: 'POST',
             track: 'both_tracks',
-            inboundTrackLabel: call?.direction === 'inbound' ? 'luxor_agent' : 'caller',
-            outboundTrackLabel: call?.direction === 'inbound' ? 'caller' : 'luxor_agent',
+            inboundTrackLabel: 'caller',
+            outboundTrackLabel: 'luxor_agent',
             transcriptionEngine: 'google', speechModel: 'telephony', partialResults: false, enableProviderData: true,
           })
           await setLuxorTranscriptionStart(recordCallSid, 'started')

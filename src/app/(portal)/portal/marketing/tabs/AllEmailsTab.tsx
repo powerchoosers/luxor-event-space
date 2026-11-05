@@ -2718,7 +2718,7 @@ function FullEmailFrame({ srcDoc, title }: { srcDoc: string; title: string }) {
   return <iframe srcDoc={srcDoc} title={title} className="block w-full border-0 bg-white" style={{ height }} scrolling="no" onLoad={(event) => onLoad(event.currentTarget)} sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin" />
 }
 
-function ThreadMessage({
+export function ThreadMessage({
   message,
   expanded: initiallyExpanded,
   currentMessage = false,

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState, use } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
@@ -59,8 +59,6 @@ import {
   Upload,
   Languages,
   Menu,
-  PanelRightClose,
-  PanelRightOpen,
   X,
 } from 'lucide-react'
 import { isLuxorInquiryArchived, isLuxorTestInquiry, LUXOR_INQUIRY_PACKAGE_INTEREST_OPTIONS, LUXOR_MAX_GUESTS, LuxorBooking, LuxorDocument, LuxorEmailJob, LuxorInquiry, LuxorLeadEvent, LuxorNote, LuxorTask, LuxorInvoice, LuxorInvoiceLineItem, LuxorPayment, LuxorPaymentInstallment, LuxorVendor, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
@@ -68,9 +66,8 @@ import { LUXOR_DEFAULT_SECURITY_DEPOSIT } from '@/lib/luxorBookingMoney'
 import { saveRecentLead } from '@/lib/luxorRecentLeads'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
-import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar, PortalAnimatedTabs } from '@/components/portal/PortalUI'
+import { PortalPageFrame, PortalStatusBadge, PortalSelect, PortalDatePicker, PortalModal, PortalContactAvatar, PortalCloseButton, PortalFilterBar, PortalAnimatedTabs, PortalButton } from '@/components/portal/PortalUI'
 import { MagicCard } from '@/components/ui/magic-card'
-import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
@@ -98,7 +95,9 @@ import { WeekdayRentalSummary } from '@/components/portal/WeekdayRentalSummary'
 import { LuxorTestLeadPanel } from '@/components/portal/LuxorTestLeadPanel'
 import { LuxorTestLeadWorkflow } from '@/components/portal/LuxorTestLeadWorkflow'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
-import { useDualPaneStickyScroll } from '@/components/portal/useDualPaneStickyScroll'
+import { LeadWorkspaceNav } from '@/components/portal/LeadWorkspaceNav'
+import { LeadActivityDisclosure } from '@/components/portal/LeadActivityDisclosure'
+import { LeadEmailActivity } from '@/components/portal/LeadEmailActivity'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -108,7 +107,7 @@ function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   return normalizeLuxorEmailAddress(lead.email) === normalizeLuxorEmailAddress(address)
 }
 
-import type { LuxorCall } from '@/lib/luxorCallTypes'
+import { luxorTranscriptSpeaker, type LuxorCall } from '@/lib/luxorCallTypes'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { LuxorTextThread } from '@/components/portal/LuxorTextThread'
 import { LuxorThreadPopup } from '@/components/portal/LuxorThreadPopup'
@@ -415,7 +414,7 @@ type EditableLeadField =
 type EventDetailsField = EditableLeadField | 'venue_access_time' | 'event_time'
 
 type LeadDetailInputType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select' | 'event-type'
-type LeadDetailTab = 'overview' | 'activity' | 'proposals' | 'contract' | 'payments' | 'planning' | 'messages' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'notes'
+type LeadDetailTab = 'delivery' | 'details' | 'overview' | 'activity' | 'proposals' | 'contract' | 'payments' | 'planning' | 'messages' | 'tasks' | 'vendors' | 'timeline' | 'documents' | 'notes'
 
 const ACTIVITY_BATCH_SIZE = 18
 const EVENT_TIME_OPTIONS = LUXOR_TIME_DROPDOWN_OPTIONS
@@ -648,7 +647,6 @@ export default function LeadDetailPage({
   const proposalCardMenuTriggerRef = useRef<HTMLButtonElement | null>(null)
   const proposalCardMenuRef = useRef<HTMLDivElement | null>(null)
   const [selectedStageOverride, setSelectedStageOverride] = useState<string | null>(null)
-  const [planningSubTab, setPlanningSubTab] = useState<'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files'>('details')
   const [planningEditSection, setPlanningEditSection] = useState<PlanningEditSection>(null)
   const [savingPlanningSection, setSavingPlanningSection] = useState(false)
   const [planningDraft, setPlanningDraft] = useState<Record<string, string>>({})
@@ -672,7 +670,6 @@ export default function LeadDetailPage({
   const clientSummaryRef = useRef<HTMLElement | null>(null)
   const reduceMotion = useReducedMotion()
   const [showEnrollWorkflowModal, setShowEnrollWorkflowModal] = useState(false)
-  const [showLeadTabOverflow, setShowLeadTabOverflow] = useState(false)
   const [leadLifecycleAction, setLeadLifecycleAction] = useState<LeadLifecycleAction | null>(null)
   const [showEventPicker, setShowEventPicker] = useState(false)
   const eventPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -696,8 +693,6 @@ export default function LeadDetailPage({
   const [eventDetailsDraftEventId, setEventDetailsDraftEventId] = useState<string | null>(null)
   const eventDetailsEditSessionRef = useRef(0)
   const proposalTimingBaselineRef = useRef<{ eventId: string; venueAccessTime: string; eventTime: string } | null>(null)
-  const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
-  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 })
 
   // Vendors Tab States & Actions
   const [allVendors, setAllVendors] = useState<LuxorVendor[]>([])
@@ -938,24 +933,8 @@ export default function LeadDetailPage({
   // Event Summary states
   const [summaryStartTime, setSummaryStartTime] = useState('')
   const [summaryEndTime, setSummaryEndTime] = useState('')
-  const [mobileSectionDrawerOpen, setMobileSectionDrawerOpen] = useState(false)
-  const sectionMenuTriggerRef = useRef<HTMLButtonElement>(null)
-  const sectionMenuPanelRef = useRef<HTMLDivElement>(null)
-  const sectionMenuId = React.useId()
-  const [showClientSidebar, setShowClientSidebar] = useState(true)
-
-  const {
-    containerRef: dualPaneContainerRef,
-    leftPaneRef: dualPaneLeftRef,
-    rightPaneRef: dualPaneRightRef,
-  } = useDualPaneStickyScroll({
-    enabled: showClientSidebar,
-    topOffset: 80,
-    bottomOffset: 24,
-  })
-
   useEffect(() => {
-    if (!editClientSummaryRequested || activeLeadTab !== 'overview') return
+    if (!editClientSummaryRequested || activeLeadTab !== 'details') return
     const frame = window.requestAnimationFrame(() => {
       const summary = clientSummaryRef.current
       if (!summary) return
@@ -965,43 +944,6 @@ export default function LeadDetailPage({
     })
     return () => window.cancelAnimationFrame(frame)
   }, [activeLeadTab, editClientSummaryRequested, reduceMotion])
-
-  useEffect(() => {
-    if (!mobileSectionDrawerOpen) return
-    const panel = sectionMenuPanelRef.current
-    const buttons = () => Array.from(panel?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') || [])
-    const frame = window.requestAnimationFrame(() => {
-      (panel?.querySelector<HTMLButtonElement>('[aria-pressed="true"]') || buttons()[0])?.focus()
-    })
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        event.stopPropagation()
-        setMobileSectionDrawerOpen(false)
-      } else if (event.key === 'Tab') {
-        const controls = buttons()
-        const first = controls[0]
-        const last = controls[controls.length - 1]
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault()
-          last?.focus()
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault()
-          first?.focus()
-        }
-      }
-    }
-    const desktop = window.matchMedia('(min-width: 1280px)')
-    const closeOnDesktop = () => { if (desktop.matches) setMobileSectionDrawerOpen(false) }
-    document.addEventListener('keydown', handleKeyDown, true)
-    desktop.addEventListener('change', closeOnDesktop)
-    return () => {
-      window.cancelAnimationFrame(frame)
-      document.removeEventListener('keydown', handleKeyDown, true)
-      desktop.removeEventListener('change', closeOnDesktop)
-      sectionMenuTriggerRef.current?.focus()
-    }
-  }, [mobileSectionDrawerOpen])
 
   // Tour Attendance states
   const [isEditingTourAttendance, setIsEditingTourAttendance] = useState(false)
@@ -1422,36 +1364,6 @@ export default function LeadDetailPage({
     setTourAssigneeCustom(storedAssignees.find((value) => !['Arianna', 'Carlos', 'Alex'].includes(value)) || '')
     setIsEditingTourAttendance(true)
   }
-
-  useLayoutEffect(() => {
-    let frame = 0
-    const updateIndicator = () => {
-      const activeButton = tabButtonRefs.current[activeLeadTab]
-      if (!activeButton) return
-
-      const nextIndicator = {
-        left: activeButton.offsetLeft,
-        width: activeButton.offsetWidth,
-      }
-      setTabIndicator((current) => {
-        if (current.left === nextIndicator.left && current.width === nextIndicator.width) {
-          return current
-        }
-        return nextIndicator
-      })
-    }
-    const scheduleIndicatorUpdate = () => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(updateIndicator)
-    }
-
-    updateIndicator()
-    window.addEventListener('resize', scheduleIndicatorUpdate)
-    return () => {
-      window.removeEventListener('resize', scheduleIndicatorUpdate)
-      cancelAnimationFrame(frame)
-    }
-  }, [activeLeadTab, lead?.id])
 
   useEffect(() => {
     setShowInternalSignals(false)
@@ -4343,7 +4255,7 @@ export default function LeadDetailPage({
     const requestedPlanningTab = searchParams?.get('planningTab')
     let timeoutId: number | null = null
 
-    if (requestedTab && ['overview', 'activity', 'tasks', 'vendors', 'timeline', 'proposals', 'contract', 'payments', 'planning', 'documents', 'messages', 'notes'].includes(requestedTab)) {
+    if (requestedTab && ['delivery', 'details', 'overview', 'activity', 'tasks', 'vendors', 'timeline', 'proposals', 'contract', 'payments', 'planning', 'documents', 'messages', 'notes'].includes(requestedTab)) {
       setActiveLeadTab(requestedTab as LeadDetailTab)
       if (requestedTab === 'tasks') {
         setShowTaskTools(true)
@@ -4364,10 +4276,12 @@ export default function LeadDetailPage({
     }
 
     if (requestedPlanningTab && ['details', 'vendors', 'fb', 'decor', 'timeline', 'files'].includes(requestedPlanningTab)) {
-      setPlanningSubTab(requestedPlanningTab as 'details' | 'vendors' | 'fb' | 'decor' | 'timeline' | 'files')
+      setActiveLeadTab(requestedPlanningTab === 'vendors' ? 'vendors' : requestedPlanningTab === 'timeline' ? 'timeline' : requestedPlanningTab === 'files' ? 'documents' : 'planning')
     }
 
     if (requestedSection) {
+      if (requestedSection === 'lead-booking') setActiveLeadTab('contract')
+      if (requestedSection === 'lead-billing') setActiveLeadTab('payments')
       timeoutId = window.setTimeout(() => {
         document.getElementById(requestedSection)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 80)
@@ -4388,17 +4302,17 @@ export default function LeadDetailPage({
     return (
       <div className="flex h-96 flex-col items-center justify-center gap-4 text-center">
         <AlertCircle className="h-10 w-10 text-red-500/80" />
-        <h3 className="text-lg font-bold text-white">Dossier Unavailable</h3>
-        <p className="max-w-md text-sm text-zinc-500 leading-relaxed">{error || 'The requested client inquiry could not be found.'}</p>
+        <h3 className="text-lg font-semibold text-[color:var(--portal-text)]">Lead unavailable</h3>
+        <p className="max-w-md text-sm text-[color:var(--portal-muted)] leading-relaxed">{error || 'The requested client inquiry could not be found.'}</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
             onClick={() => fetchAllData()}
-            className="inline-flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-blue-300 transition-all hover:bg-blue-500/15 hover:text-white"
+            className="luxor-gold-raised inline-flex min-h-11 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
           >
             Retry Load
           </button>
-          <Link href="/portal/leads" className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-xs font-bold uppercase tracking-widest text-zinc-300 transition-all hover:text-white">
+          <Link href="/portal/leads" className="inline-flex min-h-11 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
             <ArrowLeft size={12} /> Back to Leads
           </Link>
         </div>
@@ -4413,7 +4327,6 @@ export default function LeadDetailPage({
     latestInvoice,
     noteEntries,
     emailEntries,
-    allActivityEntries,
     activityCounts,
     sortedTasks,
     pendingTaskCount,
@@ -4689,38 +4602,104 @@ export default function LeadDetailPage({
   }
   const openEventDetailsEditor = () => {
     if (!selectedLeadEvent?.id) return
-    if ((selectedStageOverride || activeStage) !== 'inquiry' || activeLeadTab !== 'overview') {
-      setSelectedStageOverride('inquiry')
-      setActiveLeadTab('overview')
-    }
+    setActiveLeadTab('details')
     beginEventDetailsEdit()
     window.setTimeout(() => {
       document.getElementById('event-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 100)
   }
   const renderEventSummaryCard = () => (
-    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Event Summary</p>
-        <button
-          type="button"
-          onClick={openEventDetailsEditor}
-          disabled={!selectedLeadEvent?.id}
-          title={selectedLeadEvent?.id ? 'Edit event details' : 'Select an event to edit its details'}
-          className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <Pencil size={13} /> Edit
-        </button>
-      </div>
-      <div className="space-y-1">
-        {eventDetails.map((item) => (
-          <div key={item.field} className="flex min-w-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] py-2 last:border-b-0">
-            <span className="shrink-0 text-[10px] font-bold uppercase text-[color:var(--portal-muted)]">{item.label}</span>
-            <span className="min-w-0 text-right text-xs font-bold text-[color:var(--portal-text)]">{item.value || 'Not captured'}</span>
-          </div>
-        ))}
-      </div>
-    </section>
+                    <section id="event-details" className="scroll-mt-24 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {isEventDetailsEditing ? (
+                            <>
+                              <button type="button" onClick={cancelEventDetailsEdit} disabled={Boolean(savingLeadField)} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">Cancel</button>
+                              <button type="button" onClick={() => void saveEventDetails()} disabled={Boolean(savingLeadField)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c] px-3 text-xs font-semibold text-white hover:bg-[#b98a3d] disabled:opacity-50"><Check size={13} /> Save</button>
+                            </>
+                          ) : (
+                            <button type="button" onClick={beginEventDetailsEdit} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"><Pencil size={13} /> Edit</button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          {eventDetails.slice(0, 3).map((item) => (
+                            <DetailItem
+                              key={item.label}
+                              icon={item.icon}
+                              label={item.label}
+                              value={item.value}
+                              editValue={item.editValue}
+                              copyValue={undefined}
+                              inputType={item.inputType}
+                              placeholder={item.placeholder}
+                              isMono={item.isMono}
+                              isSaving={savingLeadField === item.field}
+                              onCommit={isEventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
+                              sectionEditing={isEventDetailsEditing && !item.readOnly}
+                              sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
+                              onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
+                              options={item.options}
+                            />
+                          ))}
+                        </div>
+                        <div className="space-y-1">
+                          {eventDetails.slice(3).map((item) => (
+                            <DetailItem
+                              key={item.label}
+                              icon={item.icon}
+                              label={item.label}
+                              value={item.value}
+                              editValue={item.editValue}
+                              copyValue={undefined}
+                              inputType={item.inputType}
+                              placeholder={item.placeholder}
+                              isMono={item.isMono}
+                              isSaving={savingLeadField === item.field}
+                              onCommit={isEventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
+                              sectionEditing={isEventDetailsEditing && !item.readOnly}
+                              sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
+                              onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
+                              options={item.options}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Internal Metadata */}
+                      <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
+                            <p className="mt-1 text-xs text-zinc-650">Source, campaign, and referrer fields.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowInternalSignals((current) => !current)}
+                            className="inline-flex items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f] cursor-pointer"
+                          >
+                            {showInternalSignals ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
+                        {showInternalSignals ? (
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            {internalDetails.map((item) => (
+                              <DetailItem
+                                key={item.label}
+                                label={item.label}
+                                value={item.value}
+                                copyValue={item.value === 'None' || item.value === 'Not captured' ? '' : item.value}
+                                isMono={item.isMono}
+                                subtext={item.subtext}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
+
   )
   const clientDetails: Array<{
     label: string
@@ -4767,175 +4746,13 @@ export default function LeadDetailPage({
     { label: 'Marketing Opt In', value: lead.marketing_opt_in ? 'Yes' : 'No' },
     { label: 'User Agent', value: lead.user_agent || 'Not captured', isMono: true },
   ]
-  const recommendedActions: Array<{
-    icon: React.ReactNode
-    label: string
-    detail: string
-    onClick: () => void
-    disabled?: boolean
-    loading?: boolean
-  }> = []
-  const pushRecommendedAction = (action: (typeof recommendedActions)[number]) => {
-    recommendedActions.push(action)
-  }
-  const derivedLeadStatus = lead.status === 'closed_lost'
-    || lead.pipeline_stage === 'closed_lost'
-    || activeEventForDisplay?.status === 'closed_lost'
-    || activeEventForDisplay?.pipeline_stage === 'closed_lost'
-    ? 'closed_lost'
-    : proposalWorkflowDisplay.workflowStageAdvanced ? 'booked' : lead.status
-
-  if (derivedLeadStatus === 'closed_lost') {
-    pushRecommendedAction({
-      icon: <ArrowLeft size={15} />,
-      label: 'Re-open lead',
-      detail: 'Reopens the lead only; cancelled proposals and contracts stay cancelled',
-      onClick: () => handleGuidedStatusChange('new'),
-      disabled: updatingStatus,
-      loading: updatingStatus,
-    })
-  } else if (derivedLeadStatus === 'new') {
-    pushRecommendedAction({
-      icon: <Phone size={15} />,
-      label: 'Mark contacted',
-      detail: 'Log the first outreach touch',
-      onClick: () => handleGuidedStatusChange('contacted'),
-      disabled: updatingStatus,
-      loading: updatingStatus,
-    })
-  } else if (derivedLeadStatus === 'contacted' || derivedLeadStatus === 'tour_requested') {
-    pushRecommendedAction({
-      icon: <Calendar size={15} />,
-      label: 'Schedule tour & send invite',
-      detail: 'Create one branded calendar invite and later reminders',
-      onClick: () => openTourScheduleModal('new_visit'),
-      disabled: !lead.email,
-    })
-  } else if (derivedLeadStatus === 'tour_confirmed') {
-    pushRecommendedAction({
-      icon: <FileSignature size={15} />,
-      label: 'Mark proposal sent',
-      detail: 'Use after sending pricing',
-      onClick: () => handleGuidedStatusChange('proposal_sent'),
-      disabled: updatingStatus,
-      loading: updatingStatus,
-    })
-  } else if (derivedLeadStatus === 'proposal_sent') {
-    pushRecommendedAction({
-      icon: <MessageSquare size={15} />,
-      label: 'Follow up on proposal',
-      detail: 'Nudge for a decision or objections',
-      onClick: () => {
-        setNoteType('call_log')
-        scrollToSection('lead-activity')
-      },
-    })
-  } else if (derivedLeadStatus === 'booked') {
-    pushRecommendedAction({
-      icon: <FileSignature size={15} />,
-      label: !proposalInvoice
-        ? 'Build final proposal'
-        : !proposalAcceptedAt
-          ? 'Edit proposal'
-          : !agreementBooking
-            ? 'Prepare agreement'
-            : agreementBooking.contract_status === 'signed'
-              ? 'Review booking'
-              : agreementCanBeResent
-                ? 'Resend agreement'
-                : 'Review contract status',
-      detail: !proposalInvoice
-        ? 'Calculate the exact package price for client selection'
-        : !proposalAcceptedAt
-          ? 'Review the locked proposal while the client considers it'
-          : !agreementBooking
-            ? 'The proposal is accepted; prepare the matching agreement without using an older booking'
-            : agreementBooking.contract_status === 'signed'
-              ? 'Contract is already signed'
-              : agreementCanBeResent
-                ? 'The client still needs to sign the current agreement'
-                : 'Open the current contract record and review progress',
-      onClick: !proposalInvoice
-        ? () => openProposalBuilder()
-        : !proposalAcceptedAt
-          ? () => openProposalBuilder(proposalInvoice)
-          : !agreementBooking
-            ? () => handlePrepareAgreement(proposalInvoice)
-            : agreementBooking.contract_status === 'signed'
-              ? () => scrollToSection('lead-booking')
-              : agreementCanBeResent
-                ? () => handleContractRequestAction(agreementBooking, 'resend')
-                : () => scrollToSection('lead-booking'),
-      disabled: updatingStatus,
-      loading: updatingStatus,
-    })
-  }
-
-  if (lead.status === 'new') {
-    pushRecommendedAction({
-      icon: <Calendar size={15} />,
-      label: 'Schedule tour & send invite',
-      detail: lead.email ? 'Create one branded calendar invite and later reminders' : 'Add an email address first',
-      onClick: () => openTourScheduleModal('new_visit'),
-      disabled: !lead.email,
-    })
-  }
-
-  if (['attended', 'no_show', 'cancelled', 'rescheduled'].includes(lead.tour_attendance_status || '')) {
-    pushRecommendedAction({
-      icon: <Calendar size={15} />,
-      label: 'Schedule another visit',
-      detail: 'Create a separate visit and keep each visit’s follow-up history',
-      onClick: () => openTourScheduleModal('new_visit'),
-      disabled: !lead.email || lead.status === 'closed_lost',
-    })
-  }
-
-  pushRecommendedAction({
-    icon: <NotebookPen size={15} />,
-    label: 'Log a quick call note',
-    detail: 'Jump to the activity feed',
-    onClick: () => {
-      setNoteType('call_log')
-      scrollToSection('lead-activity')
-    },
-  })
-
-  pushRecommendedAction({
-    icon: <ReceiptText size={15} />,
-    label: 'Draft booking invoice',
-    detail: 'Create deposit or event invoice',
-    onClick: () => openProposalBuilder(),
-  })
-
-  if (lead.status !== 'closed_lost' && lead.status !== 'booked') {
-    pushRecommendedAction({
-      icon: <FileSignature size={15} />,
-      label: !proposalInvoice
-        ? 'Build final proposal'
-        : proposalAcceptedAt && !agreementBooking
-          ? 'Prepare agreement'
-          : 'Edit proposal',
-      detail: !proposalInvoice
-        ? 'Calculate the exact package price for client selection'
-        : proposalAcceptedAt && !agreementBooking
-          ? 'The proposal is accepted; prepare its matching agreement'
-          : 'Review the current final proposal',
-      onClick: !proposalInvoice
-        ? () => openProposalBuilder()
-        : proposalAcceptedAt && !agreementBooking
-          ? () => handlePrepareAgreement(proposalInvoice)
-          : () => openProposalBuilder(proposalInvoice),
-    })
-  }
-
   const scrollToSection = (sectionId: string) => {
     const tabMap: Record<string, LeadDetailTab> = {
       'lead-overview': 'overview',
       'lead-activity': 'activity',
       'lead-tasks': 'tasks',
-      'lead-booking': 'documents',
-      'lead-billing': 'documents',
+      'lead-booking': 'contract',
+      'lead-billing': 'payments',
       'lead-documents': 'documents',
       'lead-messages': 'messages',
       'lead-notes': 'notes',
@@ -4958,8 +4775,7 @@ export default function LeadDetailPage({
 
   const openClientSummaryEditor = () => {
     setShowActionsMenu(false)
-    setActiveLeadTab('overview')
-    setShowClientSidebar(true)
+    setActiveLeadTab('details')
     setEditClientSummaryRequested(true)
   }
 
@@ -4987,14 +4803,14 @@ export default function LeadDetailPage({
       : isLuxorTestInquiry(lead) && activeFeedTab === 'comms'
         ? 'Use the isolated Test History controls for simulated client communication; this lead does not create production communication records.'
         : activeFeedTab === 'notes'
-      ? 'Use the note box above to capture the first written follow-up or summary.'
+      ? 'Choose Notes to capture the first written follow-up or summary.'
       : activeFeedTab === 'comms'
         ? 'Calls, texts, and emails will appear here as they are recorded.'
         : activeFeedTab === 'calls' || activeFeedTab === 'texts' || activeFeedTab === 'emails'
           ? 'Try another search or time period.'
         : activeFeedTab === 'system'
           ? 'Status changes will appear here automatically when the lead moves.'
-          : 'Use the note box above to add the first update or wait for email history to sync.'
+          : 'Choose Notes to add the first update, or wait for email history to sync.'
   const activityFilterChips = [
     ...(activeFeedTab !== 'all' ? [{
       id: 'type',
@@ -5008,27 +4824,14 @@ export default function LeadDetailPage({
     }] : []),
   ]
 
-  const tabItems: Array<{ id: LeadDetailTab; label: string; count?: number }> = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'activity', label: 'Activity', count: activityCounts.all },
-    { id: 'proposals', label: 'Proposals', count: clientProposals.length },
-    { id: 'contract', label: 'Contract' },
-    { id: 'payments', label: 'Payments' },
-    { id: 'planning', label: 'Planning' },
-    { id: 'messages', label: 'Messages', count: activityCounts.comms },
-    { id: 'tasks', label: 'Tasks', count: pendingTaskCount },
-    { id: 'vendors', label: 'Vendors', count: (lead?.metadata?.vendors as unknown[])?.length || 0 },
-    { id: 'timeline', label: 'Timeline', count: (lead?.metadata?.timeline as unknown[])?.length || 0 },
-    { id: 'documents', label: 'Documents', count: documents.length + signatureRequests.length },
-    { id: 'notes', label: 'Notes', count: activityCounts.notes },
-  ]
-  const primaryLeadTabIds: LeadDetailTab[] = ['overview', 'activity', 'proposals', 'contract', 'payments', 'planning', 'messages', 'tasks']
-  const isPrimaryLeadTab = (tabId: LeadDetailTab) => primaryLeadTabIds.includes(tabId)
-  const primaryLeadTabs = tabItems.filter((item) => isPrimaryLeadTab(item.id))
-  const secondaryLeadTabs = tabItems.filter((item) => !isPrimaryLeadTab(item.id))
   const selectLeadTab = (item: { id: LeadDetailTab }) => {
     setActiveLeadTab(item.id)
-    if (!isPrimaryLeadTab(item.id)) setShowLeadTabOverflow(true)
+    if (item.id === 'overview') {
+      setSelectedStageOverride(null)
+      setActiveFeedTab('all')
+      setActivitySearch('')
+      setActivityWindow('all')
+    }
     if (item.id === 'planning') setSelectedStageOverride('planning')
     if (item.id === 'messages') setActiveFeedTab('comms')
     if (item.id === 'notes') setActiveFeedTab('notes')
@@ -5079,7 +4882,7 @@ export default function LeadDetailPage({
           This lead has no email address yet, so Luxor cannot match campaign activity.
         </p>
       ) : marketingEngagementError ? (
-        <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-4 text-xs leading-5 text-red-200">
+        <p className="rounded-xl bg-red-500/10 px-4 py-4 text-sm leading-6 text-red-700 dark:text-red-300">
           {marketingEngagementError}
         </p>
       ) : loadingMarketingEngagement && !marketingEngagement ? (
@@ -5116,33 +4919,33 @@ export default function LeadDetailPage({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#caa24c]">Most Recent Campaign</p>
-                  <p className="mt-1 text-sm font-bold text-white">
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">
                     {decodeHtmlEntities(marketingTopCampaign.campaign_name || marketingTopCampaign.campaign_subject) || 'Untitled campaign'}
                   </p>
                   {marketingTopCampaign.campaign_subject && marketingTopCampaign.campaign_name !== marketingTopCampaign.campaign_subject ? (
                     <p className="mt-1 text-[11px] text-zinc-400">{decodeHtmlEntities(marketingTopCampaign.campaign_subject)}</p>
                   ) : null}
                 </div>
-                <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[#caa24c]">
+                <span className="rounded-md bg-[#caa24c]/10 px-2 py-0.5 text-xs font-medium text-[#8c6424] dark:text-[#f1d27a]">
                   {marketingTopCampaign.recipient_status}
                 </span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">Audience</p>
-                  <p className="mt-1 text-zinc-300">{marketingTopCampaign.audience_label || 'Manual list'}</p>
+                  <p className="mt-1 text-[color:var(--portal-text)]">{marketingTopCampaign.audience_label || 'Manual list'}</p>
                 </div>
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">Sent</p>
-                  <p className="mt-1 text-zinc-300">{marketingTopCampaign.sent_at ? formatTimelineDate(marketingTopCampaign.sent_at) : 'Not sent yet'}</p>
+                  <p className="mt-1 text-[color:var(--portal-text)]">{marketingTopCampaign.sent_at ? formatTimelineDate(marketingTopCampaign.sent_at) : 'Not sent yet'}</p>
                 </div>
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">Opens</p>
-                  <p className="mt-1 text-zinc-300">{marketingTopCampaign.open_count}</p>
+                  <p className="mt-1 text-[color:var(--portal-text)]">{marketingTopCampaign.open_count}</p>
                 </div>
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-500">Clicks</p>
-                  <p className="mt-1 text-zinc-300">{marketingTopCampaign.click_count}</p>
+                  <p className="mt-1 text-[color:var(--portal-text)]">{marketingTopCampaign.click_count}</p>
                 </div>
               </div>
             </div>
@@ -5172,7 +4975,7 @@ export default function LeadDetailPage({
                         }`}>
                           {event.event_type === 'click' ? <MousePointerClick size={11} /> : <Eye size={11} />}
                         </span>
-                        <p className="text-xs font-bold text-white">
+                        <p className="text-sm font-semibold text-[color:var(--portal-text)]">
                           {event.event_type === 'click' ? 'Clicked a campaign link' : 'Opened a campaign email'}
                         </p>
                       </div>
@@ -5205,6 +5008,12 @@ export default function LeadDetailPage({
     ? { ...lead, event_type: activeEventForDisplay.event_type }
     : lead
   const requestedTourLanguage = getRequestedTourLanguage(lead)
+  const derivedLeadStatus = lead.status === 'closed_lost'
+    || lead.pipeline_stage === 'closed_lost'
+    || activeEventForDisplay?.status === 'closed_lost'
+    || activeEventForDisplay?.pipeline_stage === 'closed_lost'
+    ? 'closed_lost'
+    : proposalWorkflowDisplay.workflowStageAdvanced ? 'booked' : lead.status
 
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0">
@@ -5220,12 +5029,12 @@ export default function LeadDetailPage({
           <ArrowLeft size={13} /> Back to Leads & Clients
         </Link>
         {isLuxorInquiryArchived(lead) ? (
-          <PortalStatusBadge status="Archived" tone="neutral" />
+          <PortalStatusBadge status="Archived" tone="neutral" borderless />
         ) : lead.status === 'tour_confirmed' ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#f1d27a]">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-[#caa24c]/10 px-3 py-1 text-xs font-medium text-[#8c6424] dark:text-[#f1d27a]">
             <Calendar size={12} /> {tourHeaderStatusLabel(lead)}
           </span>
-        ) : <span className="[&>span]:!border-0"><PortalStatusBadge status={proposalWorkflowDisplay.status} /></span>}
+        ) : <PortalStatusBadge status={proposalWorkflowDisplay.status} borderless />}
       </div>
 
       <section className="overflow-visible rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] sm:shadow-2xl sm:shadow-black/10">
@@ -5287,13 +5096,13 @@ export default function LeadDetailPage({
                 ) : null}
 
                 {isGrandOpeningLead ? (
-                  <span className="inline-flex items-center whitespace-nowrap rounded-full border border-[#caa24c]/35 bg-[#caa24c]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] dark:text-[#f1d27a]">
+                  <span className="inline-flex items-center whitespace-nowrap rounded-md bg-[#caa24c]/10 px-2.5 py-1 text-xs font-medium text-[#8c6424] dark:text-[#f1d27a]">
                     Grand Opening
                   </span>
                 ) : null}
 
                 {emailNoticeResolution?.kind === 'warning' && !loadingEmailMessages ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-300">
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 px-2.5 py-1 text-xs font-medium text-rose-700 dark:text-rose-300">
                     {bouncedAddressMatchesCurrentEmail(lead) ? 'Email bounced' : 'Prior email bounced'}
                   </span>
                 ) : null}
@@ -5344,7 +5153,7 @@ export default function LeadDetailPage({
 
               <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:basis-full border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)] sm:border-0 sm:pt-0">
                 {isNewsletter ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
                     Newsletter
                   </span>
                 ) : leadEvents.length > 0 ? (
@@ -5399,7 +5208,7 @@ export default function LeadDetailPage({
                 ) : null}
 
                 {requestedTourLanguage ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2.5 py-1 text-xs font-medium text-[color:var(--portal-muted)]">
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--portal-soft)] px-2.5 py-1 text-xs font-medium text-[color:var(--portal-muted)]">
                     <Languages size={12} className="shrink-0 text-[#caa24c]" />
                     <span className="capitalize">{requestedTourLanguage}</span>
                   </span>
@@ -5458,6 +5267,12 @@ export default function LeadDetailPage({
                       data-contact-actions-menu
                       className="portal-dropdown absolute right-0 top-full mt-2 z-[71] w-72 max-w-[calc(100vw-3rem)] max-h-[calc(100vh-8rem)] overflow-y-auto portal-scrollbar rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 pb-2.5 shadow-2xl backdrop-blur-xl [&_[role=menuitem]]:min-h-11 [&_[role=menuitem]]:text-xs [&_[role=menuitem]]:font-semibold [&_[role=menuitem]]:normal-case [&_[role=menuitem]]:tracking-normal"
                     >
+                      {['closed_lost', 'new', 'tour_confirmed'].includes(derivedLeadStatus) ? (
+                        <button type="button" role="menuitem" disabled={updatingStatus} onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); void handleGuidedStatusChange(derivedLeadStatus === 'closed_lost' ? 'new' : derivedLeadStatus === 'new' ? 'contacted' : 'proposal_sent') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">
+                          <Check size={13} className="text-[#caa24c]" />
+                          {derivedLeadStatus === 'closed_lost' ? 'Re-open lead' : derivedLeadStatus === 'new' ? 'Mark contacted' : 'Mark proposal sent'}
+                        </button>
+                      ) : null}
                       <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setShowEnrollWorkflowModal(true) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <Workflow size={13} className="text-[#caa24c]" />
                         <span>Enroll in workflow</span>
@@ -5475,7 +5290,10 @@ export default function LeadDetailPage({
                       </button>
                       <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setActiveLeadTab('documents') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
                         <FileText size={13} className="text-[#caa24c]" />
-                        <span>View invoices & documents</span>
+                        <span>View files</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setActiveLeadTab('payments') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">
+                        <ReceiptText size={13} className="text-[#caa24c]" /> View payments
                       </button>
                       {hasCancellableTour(lead) ? (
                         <button type="button" role="menuitem" onClick={() => { setShowActionsMenu(false); actionsMenuTriggerRef.current?.focus(); setLeadLifecycleAction('cancel-tour') }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#a8792f] dark:hover:text-[#f1d27a]">
@@ -5553,14 +5371,14 @@ export default function LeadDetailPage({
 
         <section aria-label="Lead essentials" className="grid grid-cols-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 sm:grid-cols-3 xl:grid-cols-6">
           {(isNewsletter ? [
-            { label: 'Current stage', value: (selectedStageOverride || activeStage).replaceAll('_', ' ') },
+            { label: 'Current stage', value: activeStage.replaceAll('_', ' ') },
             { label: 'Contact', value: lead.full_name },
             { label: 'Email', value: lead.email || 'None' },
             { label: 'Phone', value: lead.phone ? formatPhoneDisplay(lead.phone) : 'None' },
             { label: 'Language', value: requestedTourLanguage ? `${requestedTourLanguage}` : 'English' },
             { label: 'Source', value: formatSourceLabel(lead) },
           ] : [
-            { label: 'Current stage', value: (selectedStageOverride || activeStage).replaceAll('_', ' ') },
+            { label: 'Current stage', value: activeStage.replaceAll('_', ' ') },
             { label: 'Event', value: displayEventType },
             { label: 'Event date', value: displayEventDate ? formatDisplayDate(displayEventDate) : 'Date TBD' },
             { label: 'Tour', value: lead.preferred_tour_date ? `${formatDisplayDate(lead.preferred_tour_date)}${lead.preferred_tour_time ? ` · ${formatTimeString(lead.preferred_tour_time)}` : ''}` : 'Not scheduled' },
@@ -5568,7 +5386,7 @@ export default function LeadDetailPage({
             { label: 'Package Interest', value: currentEventPackageInterest || 'Not captured' },
           ]).map((item) => (
             <div key={item.label} className="min-w-0 border-b border-r border-[color:var(--portal-border)] px-3 py-2.5 sm:px-4 sm:py-3 last:border-r-0 sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(3n)]:border-r xl:last:border-r-0">
-              <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{item.label}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{item.label}</p>
               <p className="mt-1 break-words text-[11px] font-bold capitalize text-[color:var(--portal-text)]" title={item.value}>{item.value}</p>
             </div>
           ))}
@@ -5600,212 +5418,25 @@ export default function LeadDetailPage({
             activeStageId={selectedStageOverride || activeStage}
             onStepClick={(stageId) => {
               setSelectedStageOverride(stageId)
+              setActiveFeedTab('all')
+              setActivitySearch('')
+              setActivityWindow('all')
               setActiveLeadTab(stageId === 'proposal' ? 'proposals' : stageId === 'contract' ? 'contract' : ['deposit', 'final_payment'].includes(stageId) ? 'payments' : stageId === 'planning' ? 'planning' : 'overview')
             }}
           />
         </div>
       </section>
 
-      <div
-        className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] shadow-lg shadow-black/10 sm:-top-6 lg:-top-8"
-        style={{
-          backgroundColor: 'color-mix(in srgb, var(--portal-bg) 97%, transparent)',
-          backdropFilter: 'blur(50px)',
-          WebkitBackdropFilter: 'blur(50px)',
-        }}
-      >
-        {/* Compact section navigation for phones and tablets. */}
-        <div className="flex items-stretch gap-3 px-3 py-2.5 md:px-4 md:py-3 xl:hidden">
-          {(() => {
-            const activeItem = tabItems.find((item) => item.id === activeLeadTab) || tabItems[0]
-            return (
-              <button
-                ref={sectionMenuTriggerRef}
-                type="button"
-                onClick={() => setMobileSectionDrawerOpen(true)}
-                aria-haspopup="dialog"
-                aria-expanded={mobileSectionDrawerOpen}
-                aria-controls={sectionMenuId}
-                className="flex min-h-11 min-w-0 w-full flex-1 items-center justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-2 text-left shadow-sm transition-colors hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:min-h-16 md:px-4"
-              >
-                <span className="min-w-0">
-                  <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)] md:text-[10px]">Dossier section</span>
-                  <span className="mt-0.5 flex items-center gap-2 truncate text-xs font-bold text-[color:var(--portal-text)] md:text-sm">
-                    <span>{activeItem.label}</span>
-                    {typeof activeItem.count === 'number' ? (
-                      <span className="rounded-full bg-[#caa24c]/15 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-[#a8792f] dark:text-[#f1d27a] md:text-[11px] md:text-[#8c6529] dark:md:text-[#f1d27a]">
-                        {activeItem.count}
-                      </span>
-                    ) : null}
-                  </span>
-                </span>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border-0 bg-[#caa24c]/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] dark:text-[#f1d27a] md:px-3 md:py-2 md:text-[13px] md:font-semibold md:normal-case md:tracking-normal md:text-[#8c6529] dark:md:text-[#f1d27a]">
-                  <Menu size={13} />
-                  Browse sections
-                  <ChevronDown size={13} />
-                </span>
-              </button>
-            )
-          })()}
-          {(activeLeadTab === 'overview' || activeLeadTab === 'planning') ? (
-            <button
-              type="button"
-              onClick={() => setShowClientSidebar((current) => !current)}
-              aria-pressed={!showClientSidebar}
-              title={showClientSidebar ? 'Hide Client Summary' : 'Show Client Summary'}
-              className={`hidden shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:inline-flex ${!showClientSidebar ? 'border-[#caa24c]/45 bg-[#caa24c]/10 text-[#8c6529] dark:text-[#f1d27a]' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]'}`}
-            >
-              {showClientSidebar ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
-              {showClientSidebar ? 'Focus view' : 'Show summary'}
-            </button>
-          ) : null}
-        </div>
-
-        {/* Full tab bar for wide desktop layouts. */}
-        <div className="hidden bg-transparent px-4 xl:block">
-          <div className="flex items-center justify-between gap-3">
-            <div role="tablist" aria-label="Client sections" className="relative flex min-w-0 flex-1 items-center gap-1 p-1 overflow-x-auto portal-scrollbar">
-              {primaryLeadTabs.map((item) => {
-                const isActive = activeLeadTab === item.id
-                return (
-                  <button
-                    key={item.id}
-                    ref={(node) => {
-                      tabButtonRefs.current[item.id] = node
-                    }}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => selectLeadTab(item)}
-                    className={`relative isolate inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:px-4 sm:text-xs ${isActive ? 'text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
-                  >
-                    {isActive ? (
-                      <motion.span
-                        layoutId="active-lead-dossier-tab-pill"
-                        className="absolute inset-0 rounded-lg bg-[#caa24c]/15 dark:bg-[#caa24c]/10"
-                        transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    <span className="relative z-10 inline-flex items-center gap-2">
-                      {item.label}
-                      {typeof item.count === 'number' ? <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold tabular-nums ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'}`}>{item.count}</span> : null}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button type="button" onClick={() => setShowLeadTabOverflow((current) => !current)} aria-expanded={showLeadTabOverflow} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#a8792f] transition-colors hover:bg-[#caa24c]/10 dark:text-[#f1d27a]">
-                {showLeadTabOverflow ? 'Hide sections' : 'More sections'} <ChevronDown size={12} className={showLeadTabOverflow ? 'rotate-180 transition-transform' : 'transition-transform'} />
-              </button>
-              {(activeLeadTab === 'overview' || activeLeadTab === 'planning') ? (
-                <button
-                  type="button"
-                  onClick={() => setShowClientSidebar((current) => !current)}
-                  title={showClientSidebar ? 'Hide Client Summary sidebar for full-width presentation view' : 'Show Client Summary sidebar'}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg !border-0 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] transition-colors ${
-                    !showClientSidebar
-                      ? 'border-[#caa24c]/45 bg-[#caa24c]/15 text-[#a8792f] dark:text-[#f1d27a]'
-                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]'
-                  }`}
-                >
-                  {showClientSidebar ? <PanelRightClose size={13} /> : <PanelRightOpen size={13} />}
-                  <span className="hidden sm:inline">{showClientSidebar ? 'Focus View' : 'Show Summary'}</span>
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <AnimatePresence initial={false}>
-            {showLeadTabOverflow ? (
-              <motion.div
-                key="additional-lead-sections"
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
-                className="mt-1 overflow-hidden"
-              >
-                <div role="tablist" aria-label="Additional client sections" className="flex flex-wrap gap-1 border-t border-[color:var(--portal-border)] py-1.5">
-                  {secondaryLeadTabs.map((item) => {
-                    const isActive = activeLeadTab === item.id
-                    return <button key={item.id} ref={(node) => { tabButtonRefs.current[item.id] = node }} type="button" role="tab" aria-selected={isActive} onClick={() => selectLeadTab(item)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] ${isActive ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
-                      {item.label}{typeof item.count === 'number' ? <span className="text-[8px] font-bold tabular-nums opacity-70">{item.count}</span> : null}
-                    </button>
-                  })}
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </div>
+      <div className="sticky -top-4 z-30 overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm sm:-top-6 lg:-top-8">
+        <LeadWorkspaceNav activeTab={activeLeadTab} onTabChange={(tab) => selectLeadTab({ id: tab as LeadDetailTab })} counts={{ activity: activityCounts.all, tasks: pendingTaskCount, proposals: clientProposals.length, documents: documents.length + signatureRequests.length }} />
       </div>
 
-      {/* Bottom sheet on phones; centered section chooser on tablets. */}
-      {mobileSectionDrawerOpen && typeof document !== 'undefined' ? createPortal(
-        <div
-          id={sectionMenuId}
-          className="fixed inset-0 z-[70] flex items-end bg-black/60 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-xs md:items-center md:justify-center md:bg-black/45! md:p-6 md:backdrop-blur-none xl:hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Browse dossier sections"
-          onClick={() => setMobileSectionDrawerOpen(false)}
-        >
-          <div
-            ref={sectionMenuPanelRef}
-            className="max-h-[75dvh] w-full overflow-y-auto rounded-t-2xl border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 pb-6 shadow-2xl md:max-h-[80dvh] md:max-w-2xl md:overscroll-contain md:rounded-2xl md:border md:bg-[color:var(--portal-frame)] md:p-6"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#f1d27a]">Client Dossier</p>
-                <h2 className="mt-0.5 text-sm font-bold text-[color:var(--portal-text)] md:text-lg">Choose a section</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMobileSectionDrawerOpen(false)}
-                aria-label="Close sections menu"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:h-11 md:w-11"
-              >
-                <X size={15} />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
-              {tabItems.map((item) => {
-                const isActive = activeLeadTab === item.id
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() => {
-                      selectLeadTab(item)
-                      setMobileSectionDrawerOpen(false)
-                    }}
-                    className={`flex min-h-12 items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 md:min-h-14 md:px-4 ${
-                      isActive
-                        ? 'border-[#caa24c]/50 bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a] md:text-[#8c6529] dark:md:text-[#f1d27a]'
-                        : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 text-[color:var(--portal-text)] hover:border-[#caa24c]/30'
-                    }`}
-                  >
-                    <span className="truncate text-[11px] font-black uppercase tracking-[0.08em] md:text-sm md:font-semibold md:normal-case md:tracking-normal">{item.label}</span>
-                    {typeof item.count === 'number' ? (
-                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums md:text-[11px] ${
-                        isActive ? 'bg-[#caa24c]/20 text-[#a8792f] dark:text-[#f1d27a]' : 'bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
-                      }`}>
-                        {item.count}
-                      </span>
-                    ) : isActive ? (
-                      <Check size={13} className="shrink-0 text-[#caa24c]" />
-                    ) : null}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>,
-        document.body
-      ) : null}
+      {activeLeadTab === 'details' ? <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-2">
+        <ClientSummaryCard summaryRef={clientSummaryRef} lead={clientSummaryLead} isSaving={Boolean(savingLeadField)} onUpdate={handleLeadFieldUpdate} onViewDetails={() => selectLeadTab({ id: 'messages' })} onAvatarUpdate={(newUrl) => setLead((current) => current ? { ...current, metadata: { ...(current.metadata || {}), avatar_url: newUrl } } : null)} />
+        {!isNewsletter ? renderEventSummaryCard() : null}
+      </div> : null}
 
+      {activeLeadTab === 'details' ? <>
       <section id="lead-messages" aria-labelledby="original-inquiry-heading" className="mt-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <h2 id="original-inquiry-heading" className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">
@@ -5847,13 +5478,44 @@ export default function LeadDetailPage({
         ) : null}
       </section>
 
+                    {/* Concierge AI session replay */}
+                    {chatMessages.length > 0 && (
+                      <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
+                        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
+                          <span className="rounded-md bg-[#caa24c]/10 px-2 py-0.5 text-xs font-medium text-[#8c6424] dark:text-[#f1d27a]">Elena</span>
+                        </div>
+                        <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[260px] overflow-y-auto portal-scrollbar">
+                          {chatMessages.map((msg, index) => {
+                            const isUser = msg.role === 'user'
+                            return (
+                              <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
+                                  isUser
+                                    ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
+                                    : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
+                                }`}>
+                                  <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
+                                    {isUser ? 'Client' : 'Elena AI'}
+                                  </div>
+                                  {msg.content}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+      {renderMarketingEngagementCard()}
+      </> : null}
+
       {activeLeadTab === 'overview' || activeLeadTab === 'planning' ? (
-        <div ref={dualPaneContainerRef} className="mt-4 flex flex-col gap-6 pb-12 sm:pb-16 xl:flex-row xl:items-start xl:gap-0">
-          {/* Left Column (Columns 1 & 2): Dossier main sections */}
-          <div ref={dualPaneLeftRef} className="min-w-0 flex-1 space-y-6">
+        <div className={`mt-4 ${activeLeadTab === 'overview' ? '' : 'pb-12 sm:pb-16'}`}>
+          {/* Workspace content */}
+          <div className="min-w-0 space-y-5">
             {activeLeadTab === 'planning' && isLuxorTestInquiry(lead) && activeTestRunId ? <LuxorTestLeadWorkflow leadName={lead.full_name} runId={activeTestRunId} section="planning" onOpenProposal={() => openProposalBuilder()} /> : null}
 
-            
             {/* Stage-specific Content Router */}
             {(() => {
               const currentStage = activeLeadTab === 'planning' ? 'planning' : selectedStageOverride || activeStage
@@ -5866,7 +5528,6 @@ export default function LeadDetailPage({
                       className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
                       gradientColor="rgba(202, 162, 76, 0.08)"
                     >
-                      <BorderBeam size={75} duration={12} colorFrom="#caa24c" colorTo="#f1d27a" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs">
@@ -5959,7 +5620,6 @@ export default function LeadDetailPage({
                       className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
                       gradientColor="rgba(202, 162, 76, 0.08)"
                     >
-                      <BorderBeam size={75} duration={12} colorFrom="#caa24c" colorTo="#f1d27a" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -5980,10 +5640,6 @@ export default function LeadDetailPage({
                           <div className="min-w-0 sm:min-w-[86px]">
                             <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Inquiry</p>
                             <p className="mt-1 text-[10px] font-bold text-[color:var(--portal-text)]">{formatDisplayDate(lead.created_at)}</p>
-                          </div>
-                          <div className="min-w-0 sm:min-w-[86px]">
-                            <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Lead Score</p>
-                            <p className="mt-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">High / Hot</p>
                           </div>
                         </div>
 
@@ -6010,99 +5666,6 @@ export default function LeadDetailPage({
                         </div>
                       </div>
                     </MagicCard>
-
-                    {/* Event Details */}
-                    <section id="event-details" className="scroll-mt-24 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Event Details</p>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {isEventDetailsEditing ? (
-                            <>
-                              <button type="button" onClick={cancelEventDetailsEdit} disabled={Boolean(savingLeadField)} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">Cancel</button>
-                              <button type="button" onClick={() => void saveEventDetails()} disabled={Boolean(savingLeadField)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c] px-3 text-xs font-semibold text-white hover:bg-[#b98a3d] disabled:opacity-50"><Check size={13} /> Save</button>
-                            </>
-                          ) : (
-                            <button type="button" onClick={beginEventDetailsEdit} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"><Pencil size={13} /> Edit</button>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          {eventDetails.slice(0, 3).map((item) => (
-                            <DetailItem
-                              key={item.label}
-                              icon={item.icon}
-                              label={item.label}
-                              value={item.value}
-                              editValue={item.editValue}
-                              copyValue={undefined}
-                              inputType={item.inputType}
-                              placeholder={item.placeholder}
-                              isMono={item.isMono}
-                              isSaving={savingLeadField === item.field}
-                              onCommit={isEventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
-                              sectionEditing={isEventDetailsEditing && !item.readOnly}
-                              sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
-                              onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
-                              options={item.options}
-                            />
-                          ))}
-                        </div>
-                        <div className="space-y-1">
-                          {eventDetails.slice(3).map((item) => (
-                            <DetailItem
-                              key={item.label}
-                              icon={item.icon}
-                              label={item.label}
-                              value={item.value}
-                              editValue={item.editValue}
-                              copyValue={undefined}
-                              inputType={item.inputType}
-                              placeholder={item.placeholder}
-                              isMono={item.isMono}
-                              isSaving={savingLeadField === item.field}
-                              onCommit={isEventDetailsEditing && !item.readOnly && item.field !== 'venue_access_time' && item.field !== 'event_time' ? (value) => handleLeadFieldUpdate(item.field as EditableLeadField, value) : undefined}
-                              sectionEditing={isEventDetailsEditing && !item.readOnly}
-                              sectionDraftValue={eventDetailsDraft[item.field] ?? item.editValue}
-                              onSectionDraftChange={(value) => setEventDetailsDraft((current) => ({ ...current, [item.field]: value }))}
-                              options={item.options}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Internal Metadata */}
-                      <div className="mt-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-500">Internal metadata</p>
-                            <p className="mt-1 text-xs text-zinc-650">Source, campaign, and referrer fields.</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setShowInternalSignals((current) => !current)}
-                            className="inline-flex items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#a8792f] cursor-pointer"
-                          >
-                            {showInternalSignals ? 'Hide' : 'Show'}
-                          </button>
-                        </div>
-                        {showInternalSignals ? (
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            {internalDetails.map((item) => (
-                              <DetailItem
-                                key={item.label}
-                                label={item.label}
-                                value={item.value}
-                                copyValue={item.value === 'None' || item.value === 'Not captured' ? '' : item.value}
-                                isMono={item.isMono}
-                                subtext={item.subtext}
-                              />
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    </section>
 
                     {/* Tour & Proposal Prep Intake */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
@@ -6217,98 +5780,6 @@ export default function LeadDetailPage({
                       )}
                     </section>
 
-                    {/* Recent Activity */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Recent Activity</p>
-                        <button
-                          type="button"
-                          onClick={() => setActiveLeadTab('activity')}
-                          className="text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] hover:text-[#f1d27a] transition-colors cursor-pointer"
-                        >
-                          View all activity &rarr;
-                        </button>
-                      </div>
-
-                      <div className="space-y-4">
-                        {allActivityEntries.length === 0 ? (
-                          <p className="text-xs text-[color:var(--portal-muted)] italic py-4">No recent activity logged yet.</p>
-                        ) : (
-                          allActivityEntries.slice(0, 5).map((entry) => {
-                            const isEmail = entry.kind === 'email'
-                            const isCall = entry.kind === 'call'
-                            return (
-                              <div key={entry.id} className={`group relative flex items-center justify-between rounded-lg border-b border-[color:var(--portal-border)]/50 px-2 py-2 last:border-0 transition-all duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${isEmail ? 'cursor-pointer hover:-translate-y-px hover:bg-[#caa24c]/10 hover:shadow-sm hover:shadow-[#caa24c]/10' : 'hover:bg-[color:var(--portal-soft)]'}`}>
-                                {isEmail ? (
-                                  <Link href={emailReaderUrl(entry.email)} aria-label={`Open email: ${decodeHtmlEntities(entry.email.subject)}`} className="absolute inset-0 z-10 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" />
-                                ) : null}
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-105 ${
-                                    isEmail
-                                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400' 
-                                      : isCall || (entry.kind === 'note' && entry.note.note_type === 'call_log')
-                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                      : entry.kind === 'note' && entry.note.note_type === 'email_log'
-                                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
-                                      : 'bg-zinc-500/10 text-[color:var(--portal-muted)]'
-                                  }`}>
-                                    {isEmail ? (
-                                      <Mail size={13} />
-                                    ) : isCall || (entry.kind === 'note' && entry.note.note_type === 'call_log') ? (
-                                      <Phone size={13} />
-                                    ) : entry.kind === 'text' ? (
-                                      <MessageSquare size={13} />
-                                    ) : (
-                                      <FileText size={13} />
-                                    )}
-                                  </span>
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-bold leading-tight text-[color:var(--portal-text)] truncate transition-colors duration-200 group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">
-                                      {isEmail ? decodeHtmlEntities(entry.email.subject) : isCall ? describeActivityEntry(entry) : entry.kind === 'text' ? compactActivityText(entry.message.body, 45) || 'Text message' : decodeHtmlEntities(entry.note.content).substring(0, 45)}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="ml-2 flex shrink-0 items-center gap-1.5">
-                                  <span className="text-[10px] font-semibold tabular-nums text-[color:var(--portal-muted)] transition-transform duration-200 group-hover:-translate-x-0.5">
-                                    {new Date(entry.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                  </span>
-                                  {isEmail ? <ChevronRight size={14} className="-translate-x-1 text-[#a8792f] opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 dark:text-[#f1d27a]" /> : null}
-                                </div>
-                              </div>
-                            )
-                          })
-                        )}
-                      </div>
-                    </section>
-
-                    {/* Concierge AI session replay */}
-                    {chatMessages.length > 0 && (
-                      <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
-                        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
-                          <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
-                        </div>
-                        <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[260px] overflow-y-auto portal-scrollbar">
-                          {chatMessages.map((msg, index) => {
-                            const isUser = msg.role === 'user'
-                            return (
-                              <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
-                                  isUser
-                                    ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
-                                    : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
-                                }`}>
-                                  <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
-                                    {isUser ? 'Client' : 'Elena AI'}
-                                  </div>
-                                  {msg.content}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
                   </>
                 )
               }
@@ -6321,7 +5792,6 @@ export default function LeadDetailPage({
                       className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
                       gradientColor="rgba(202, 162, 76, 0.08)"
                     >
-                      <BorderBeam size={75} duration={12} colorFrom="#caa24c" colorTo="#f1d27a" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -6412,13 +5882,13 @@ export default function LeadDetailPage({
                             </div>
                             <div className="flex justify-between items-center">
                               <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Status</span>
-                              <span className="rounded bg-[#caa24c]/10 text-[#a8792f] border border-[#caa24c]/20 px-2 py-0.5 text-[9px] font-bold uppercase">{tourDisplayStatus(lead)}</span>
+                              <PortalStatusBadge status={tourDisplayStatus(lead)} borderless />
                             </div>
                           </div>
                         </div>
                         <div className="mt-6 border-t border-[color:var(--portal-border)] pt-4">
                           {tourDisplayStatus(lead) === 'Confirmed' ? (
-                            <span className="mb-3 block rounded-lg border border-emerald-500/20 bg-emerald-500/10 py-1.5 text-center text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400">Tour Confirmed</span>
+                            <span className="mb-3 block rounded-lg bg-emerald-500/10 py-1.5 text-center text-xs font-medium text-emerald-700 dark:text-emerald-300">Tour confirmed</span>
                           ) : null}
                           {!['Completed', 'Cancelled'].includes(tourDisplayStatus(lead)) ? (
                             <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">{lead.tour_attendance_status === 'no_show' ? 'Correct Outcome to Completed' : 'Mark Complete'}</button>
@@ -6583,120 +6053,6 @@ export default function LeadDetailPage({
                       </section>
                     </div>
                     
-                    {/* Files shared through email */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Shared files</p>
-                          <p className="mt-1 text-[10px] text-[color:var(--portal-faint)]">Attachments shared with this client through email appear here.</p>
-                        </div>
-                        <Link href="/portal/emails" className="shrink-0 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] transition-colors hover:text-[#caa24c] dark:text-[#f1d27a]">View email history →</Link>
-                      </div>
-                      {sharedFiles.length ? (
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                          {sharedFiles.map(({ email, attachment }) => {
-                            const size = formatAttachmentSize(attachment.size)
-                            return (
-                            <a key={`${email.id}-${attachment.attachmentId || attachment.attachmentPath || attachment.filename}`} href={emailAttachmentUrl(email, attachment)} target="_blank" rel="noreferrer" aria-label={`Open ${attachment.filename}`} className="group flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-card)] text-[#a8792f] dark:text-[#f1d27a]"><FileText size={16} /></span>
-                              <span className="min-w-0"><span className="block truncate text-[10px] font-bold text-[color:var(--portal-text)]">{attachment.filename}</span><span className="mt-1 block truncate text-[9px] text-[color:var(--portal-muted)]">{size ? `${size} · ` : ''}{decodeHtmlEntities(email.subject) || 'Email attachment'}</span></span>
-                            </a>
-                            )
-                          })}
-                        </div>
-                      ) : sharedAttachmentEmails.length ? (
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                          {sharedAttachmentEmails.map((email) => (
-                            <Link key={email.id} href={emailReaderUrl(email)} className="group flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-card)] text-[#a8792f] dark:text-[#f1d27a]"><FileText size={16} /></span>
-                              <span className="min-w-0"><span className="block truncate text-[10px] font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(email.subject) || 'Email attachment'}</span><span className="mt-1 block text-[9px] text-[color:var(--portal-muted)]">Open email to view files</span></span>
-                            </Link>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-5 text-center"><FileText size={18} className="mx-auto text-[color:var(--portal-faint)]" /><p className="mt-2 text-xs font-semibold text-[color:var(--portal-text)]">No shared files yet</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Files from email and text conversations will be collected here as they are available.</p></div>
-                      )}
-                    </section>
-
-                    {/* Row 2: Chat Replay & Emails */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                      {/* Concierge AI session replay */}
-                      {chatMessages.length > 0 ? (
-                        <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
-                          <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Concierge AI Chat Session Replay</h4>
-                            <span className="rounded border border-[#caa24c]/20 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#a8792f]">Elena AI</span>
-                          </div>
-                          <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[280px] overflow-y-auto portal-scrollbar">
-                            {chatMessages.map((msg, index) => {
-                              const isUser = msg.role === 'user'
-                              return (
-                                <div key={index} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs font-medium leading-relaxed shadow-sm ${
-                                    isUser
-                                      ? 'border border-[#caa24c]/25 bg-[#caa24c]/10 text-[color:var(--portal-text)]'
-                                      : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
-                                  }`}>
-                                    <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${isUser ? 'text-[#a8792f]' : 'text-[color:var(--portal-muted)]'}`}>
-                                      {isUser ? 'Client' : 'Elena AI'}
-                                    </div>
-                                    {msg.content}
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-xl text-center text-zinc-500 space-y-2 flex flex-col justify-center items-center min-h-[200px]">
-                          <MessageSquare size={20} className="text-zinc-700" />
-                          <p className="text-xs uppercase font-bold tracking-wider text-zinc-400">No Concierge Chat</p>
-                          <p className="text-[10px] max-w-xs mx-auto leading-relaxed">This lead was not created via the conversational AI concierge widget.</p>
-                        </div>
-                      )}
-
-                      {/* Zoho Emails */}
-                      <div className="nodal-void-card overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-xl luxor-soft-enter">
-                        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-3">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-[color:var(--portal-muted)]">Email History</h4>
-                          <span className="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-blue-700 dark:text-blue-300">Inbound / Outbound</span>
-                        </div>
-                        <div className="space-y-4 bg-[color:var(--portal-card)] p-4 max-h-[280px] overflow-y-auto portal-scrollbar text-left">
-                          {emailMessages.length === 0 ? (
-                            <p className="py-8 text-center text-xs italic text-[color:var(--portal-muted)]">No emails logged for this address.</p>
-                          ) : (
-                            emailMessages.map((email) => {
-                              const isOutgoing = email.direction === 'outgoing'
-                              const preview = cleanEmailPreview(email.summary)
-                              return (
-                                <Link href={emailReaderUrl(email)} key={email.id} className="block space-y-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
-                                  <div className="flex justify-between items-start gap-2">
-                                    <span className={`rounded border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-widest ${
-                                      isOutgoing
-                                        ? 'border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300'
-                                        : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                                    }`}>
-                                      {isOutgoing ? 'Outbound' : 'Inbound'}
-                                    </span>
-                                    <span className="text-[9px] font-mono text-[color:var(--portal-muted)]">
-                                      {formatTimelineDate(email.receivedAt || '')}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(email.subject) || '(No Subject)'}</p>
-                                  <p className="truncate text-[9px] text-[color:var(--portal-muted)]">
-                                    {isOutgoing ? `To: ${lead.full_name}` : `From: ${lead.full_name}`}
-                                  </p>
-                                  {preview && (
-                                    <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">{preview}</p>
-                                  )}
-                                  <span className="inline-flex text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open full email →</span>
-                                </Link>
-                              )
-                            })
-                          )}
-                        </div>
-                      </div>
-                    </div>
                   </>
                 )
               }
@@ -6712,7 +6068,6 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -6721,10 +6076,10 @@ export default function LeadDetailPage({
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
-                              {planningSubTab === 'fb' || planningSubTab === 'decor' ? 'Customize food & beverage package & decor layout' : 'Review event logistics & planning checklist'}
+                              Review event logistics and planning
                             </h4>
                             <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">
-                              {planningSubTab === 'fb' || planningSubTab === 'decor' ? 'Select menu preferences, bar packages, floor plans, and decor options.' : 'Confirm vendor arrivals, layout specs, and guest counts.'}
+                              Confirm the event details, preferences, and layout.
                             </p>
                           </div>
                         </div>
@@ -6735,26 +6090,7 @@ export default function LeadDetailPage({
                     </MagicCard>
 
                     {/* Sub-tabs for Planning */}
-                    <div className="overflow-x-auto pb-1 portal-scrollbar">
-                      <PortalAnimatedTabs
-                        variant="slider"
-                        tabs={[
-                          { id: 'details', label: 'Event Details' },
-                          { id: 'vendors', label: 'Vendors' },
-                          { id: 'fb', label: 'Food & Beverage' },
-                          { id: 'decor', label: 'Décor & Design' },
-                          { id: 'timeline', label: 'Timeline' },
-                          { id: 'files', label: 'Notes & Files' },
-                        ]}
-                        activeTab={planningSubTab}
-                        onTabChange={(tab) => setPlanningSubTab(tab as typeof planningSubTab)}
-                        ariaLabel="Event planning tabs"
-                      />
-                    </div>
-
-                    {/* Planning sub-tab contents */}
-                    {planningSubTab === 'details' && (
-                      <div className="space-y-6 luxor-soft-enter">
+                    <div className="space-y-5 luxor-soft-enter">
                         {planningEditSection && (
                           <section className="rounded-2xl border border-[#caa24c]/30 bg-[#caa24c]/[0.04] p-5 shadow-sm">
                             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
@@ -6768,7 +6104,7 @@ export default function LeadDetailPage({
                             {planningEditSection === 'event' && (
                               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                                 <label className="sm:col-span-2"><span className="planning-editor-label">Theme / style</span><input value={planningDraft.event_style || ''} onChange={(event) => setPlanningDraft((current) => ({ ...current, event_style: event.target.value }))} placeholder="e.g. modern desert, black tie, garden romance" className="planning-editor-input" /></label>
-                                <div className="sm:col-span-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-muted)]">Event date, time, type, and guest count stay connected to the lead and booking records. Edit those from the Client Summary above so there is one source of truth.</div>
+                                <div className="sm:col-span-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs text-[color:var(--portal-muted)]">Event date, time, type, and guest count stay connected to the lead and booking records. Edit those in Details.</div>
                               </div>
                             )}
 
@@ -6940,72 +6276,7 @@ export default function LeadDetailPage({
                           refreshKey={layoutReviewRefreshKey}
                         />
 
-                        {/* Planning Checklist Summary */}
-                        <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl">
-                          <div className="mb-4 flex items-center justify-between gap-4 border-b border-[color:var(--portal-border)] pb-3">
-                            <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Planning Checklist Progress</p>
-                              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">1 of 5 core planning categories confirmed</p>
-                            </div>
-                            <AnimatedCircularProgressBar
-                              value={20}
-                              max={100}
-                              min={0}
-                              size={52}
-                              strokeWidth={5}
-                              gaugePrimaryColor="#caa24c"
-                              gaugeSecondaryColor="rgba(202, 162, 76, 0.14)"
-                              className="shrink-0"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                            {[
-                              { label: 'Event Details', val: 'Completed', color: 'text-emerald-700 dark:text-emerald-400' },
-                              { label: 'Vendors', val: '0/5 Completed', color: 'text-[color:var(--portal-muted)]' },
-                              { label: 'Food & Beverage', val: '0/4 Completed', color: 'text-[color:var(--portal-muted)]' },
-                              { label: 'Décor & Design', val: '0/4 Completed', color: 'text-[color:var(--portal-muted)]' },
-                              { label: 'Timeline', val: '0/3 Completed', color: 'text-[color:var(--portal-muted)]' },
-                            ].map((item, idx) => (
-                              <div key={idx} className="space-y-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-center">
-                                <p className="text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">{item.label}</p>
-                                <p className={`text-xs font-black uppercase tabular-nums ${item.color}`}>{item.val}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
                       </div>
-                    )}
-
-                    {planningSubTab !== 'details' && (
-                      <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 text-center text-zinc-500 space-y-4 luxor-soft-enter">
-                        <Sparkles size={24} className="mx-auto text-[#caa24c]" />
-                        <p className="text-xs uppercase font-bold tracking-widest text-[color:var(--portal-text)]">
-                          {planningSubTab === 'fb' ? 'Food & Beverage Planning' : planningSubTab === 'decor' ? 'Décor & Design Planning' : planningSubTab === 'vendors' ? 'Vendor Planning' : planningSubTab === 'timeline' ? 'Event Timeline' : 'Event Files'}
-                        </p>
-                        <p className="mx-auto max-w-md text-xs leading-relaxed">
-                          {planningSubTab === 'fb' || planningSubTab === 'decor'
-                            ? 'Track each decision as a task so it has an owner, due date, priority, and completion history.'
-                            : 'Open the dedicated workspace for this part of the event plan.'}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (planningSubTab === 'vendors') setActiveLeadTab('vendors')
-                            else if (planningSubTab === 'timeline') setActiveLeadTab('timeline')
-                            else if (planningSubTab === 'files') setActiveLeadTab('documents')
-                            else {
-                              setTaskTitle(planningSubTab === 'fb' ? 'Food & beverage decision' : 'Décor & design decision')
-                              setTaskPriority('medium')
-                              setShowTaskTools(true)
-                              setActiveLeadTab('tasks')
-                            }
-                          }}
-                          className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] hover:bg-[#caa24c]/15"
-                        >
-                          {planningSubTab === 'fb' || planningSubTab === 'decor' ? 'Create planning task' : 'Open workspace'}
-                        </button>
-                      </div>
-                    )}
                   </>
                 )
               }
@@ -7021,7 +6292,6 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs"><Send size={18} /></span>
@@ -7592,7 +6862,6 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -7713,7 +6982,6 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
                           <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Final payment</p>
@@ -7766,7 +7034,6 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -7895,7 +7162,6 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <BorderBeam size={75} duration={11} colorFrom="#caa24c" colorTo="#dfbd68" borderWidth={1.5} />
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
@@ -7999,247 +7265,25 @@ export default function LeadDetailPage({
             })()}
           </div>
 
-          {/* Right Column: Sticky actions & summary — animates push in from right to left */}
-          <AnimatePresence initial={false}>
-            {showClientSidebar ? (
-              <motion.div
-                key="dossier-client-sidebar"
-                initial={{ width: 0, opacity: 0, x: 56 }}
-                animate={{ width: 'auto', opacity: 1, x: 0 }}
-                exit={{ width: 0, opacity: 0, x: 56 }}
-                transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-                className="w-full shrink-0 overflow-hidden xl:w-auto"
-              >
-                <div ref={dualPaneRightRef} className="min-w-0 space-y-6 py-0.5 pr-0.5 xl:w-[370px] 2xl:w-[420px] xl:pl-6">
-            {(() => {
-              const currentStage = selectedStageOverride || activeStage
-              
-              if (currentStage === 'newsletter' || currentStage === 'inquiry') {
-                return (
-                  <>
-                    <ClientSummaryCard
-                      summaryRef={clientSummaryRef}
-                      lead={clientSummaryLead}
-                      isSaving={Boolean(savingLeadField)}
-                      onUpdate={handleLeadFieldUpdate}
-                      onViewDetails={() => scrollToSection('lead-messages')}
-                      onAvatarUpdate={(newUrl) => {
-                        setLead((current) => current ? {
-                          ...current,
-                          metadata: {
-                            ...(current.metadata || {}),
-                            avatar_url: newUrl
-                          }
-                        } : null)
-                      }}
-                    />
-                    {!isNewsletter ? renderEventSummaryCard() : null}
-
-                    {/* Recommended Actions */}
-                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                      <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Recommended Actions</p>
-                          <p className="mt-1 text-[10px] text-[color:var(--portal-muted)] font-medium">Top priority first</p>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-3">
-                        {recommendedActions.length === 0 ? (
-                          <p className="text-xs text-[color:var(--portal-muted)] italic py-4">No recommended actions at this stage.</p>
-                        ) : (
-                          recommendedActions.map((action, index) => (
-                            <button
-                              key={index}
-                              type="button"
-                              onClick={action.onClick}
-                              disabled={action.disabled}
-                              className="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] hover:bg-[#caa24c]/8 hover:border-[#caa24c]/30 transition-all duration-200 group cursor-pointer"
-                            >
-                              <div className="flex items-center gap-3">
-                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c] shadow-xs group-hover:border-[#caa24c]/50">
-                                  {action.icon}
-                                </span>
-                                <div>
-                                  <p className="text-xs font-bold text-[color:var(--portal-text)] group-hover:text-[#caa24c] transition-colors">{action.label}</p>
-                                  <p className="text-[10px] text-[color:var(--portal-muted)] mt-0.5">{action.detail}</p>
-                                </div>
-                              </div>
-                              <span className="text-[color:var(--portal-muted)] group-hover:text-[#caa24c] transition-colors">
-                                <ChevronRight size={14} />
-                              </span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                      
-                      <div className="mt-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setActiveLeadTab('tasks')}
-                          className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68] transition-colors cursor-pointer"
-                        >
-                          View all tasks &rarr;
-                        </button>
-                      </div>
-                    </section>
-
-                    {renderMarketingEngagementCard()}
-
-                  </>
-                )
-              }
-              
-              // For all stages other than inquiry, render the stage action layout.
-              let nextStepTitle = 'Prepare proposal'
-              let nextStepDetail = 'Draft pricing and confirm the next decision step'
-              let nextStepButton = 'Open Documents'
-              let nextStepAction = () => setActiveLeadTab('documents')
-              
-              if (currentStage === 'proposal') {
-                nextStepTitle = 'Publish the final proposal'
-                nextStepDetail = 'The client selects the locked package; Luxor then creates the matching booking automatically.'
-                nextStepButton = 'Build Final Proposal'
-                nextStepAction = () => openProposalBuilder()
-              } else if (currentStage === 'contract') {
-                nextStepTitle = 'Track contract'
-                nextStepDetail = 'Mark sent or signed manually once handled outside the portal'
-                nextStepButton = 'Open Booking'
-                nextStepAction = () => scrollToSection('lead-booking')
-              } else if (currentStage === 'deposit') {
-                nextStepTitle = 'Record deposit'
-                nextStepDetail = 'Manually mark deposit paid after payment is confirmed'
-                nextStepButton = latestBooking ? 'Mark Initial Payment Paid' : 'Build Final Proposal'
-                nextStepAction = latestBooking ? () => handleRecordManualPayment(latestBooking, 'deposit') : () => openProposalBuilder()
-              } else if (currentStage === 'planning') {
-                nextStepTitle = 'Confirm planning details'
-                nextStepDetail = 'Fill any missing event details before final balance'
-                nextStepButton = latestBooking ? 'Confirm Planning' : 'Build Final Proposal'
-                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'planning') : () => openProposalBuilder()
-              } else if (currentStage === 'final_payment') {
-                nextStepTitle = 'Collect final payment'
-                nextStepDetail = finalBalanceInvoice ? 'Send the secure balance link; Stripe advances the stage after payment' : 'Create an invoice before collecting the balance'
-                nextStepButton = finalBalanceInvoice ? finalBalanceInvoice.status === 'draft' ? 'Finalize & Send Secure Payment Link' : 'Send Secure Payment Link' : 'Create Invoice'
-                nextStepAction = finalBalanceInvoice ? () => openPaymentRequest(finalBalanceInvoice) : () => setIsInvoiceModalOpen(true)
-              } else if (currentStage === 'event') {
-                nextStepTitle = 'Close out event'
-                nextStepDetail = 'Finish inspection, deposit return, and review readiness'
-                nextStepButton = 'Close Out Event'
-                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'event') : () => openProposalBuilder()
-              } else if (currentStage === 'closing') {
-                nextStepTitle = 'Finish closeout'
-                nextStepDetail = 'Confirm the event inspection and security-deposit decision, then move the booking to its separate completion step'
-                nextStepButton = 'Finish Closeout'
-                nextStepAction = latestBooking ? () => handleBookingMilestone(latestBooking, 'closing') : () => openProposalBuilder()
-              }
-
-              return (
-                <>
-                  <ClientSummaryCard
-                      summaryRef={clientSummaryRef}
-                    lead={clientSummaryLead}
-                    isSaving={Boolean(savingLeadField)}
-                    onUpdate={handleLeadFieldUpdate}
-                    onViewDetails={() => scrollToSection('lead-messages')}
-                    onAvatarUpdate={(newUrl) => {
-                      setLead((current) => current ? {
-                        ...current,
-                        metadata: {
-                          ...(current.metadata || {}),
-                          avatar_url: newUrl
-                        }
-                      } : null)
-                    }}
-                  />
-                  {!isNewsletter ? renderEventSummaryCard() : null}
-
-                  {/* NEXT STEP */}
-                  <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                    <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Next Step</p>
-                    </div>
-                    <div className="flex items-start gap-4 text-left">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] border border-[#caa24c]/20">
-                        <Calendar size={18} />
-                      </span>
-                      <div>
-                        <h4 className="text-xs font-bold text-[color:var(--portal-text)] leading-tight">{nextStepTitle}</h4>
-                        <p className="mt-1 text-[10px] text-[color:var(--portal-muted)] leading-relaxed">{nextStepDetail}</p>
-                      </div>
-                    </div>
-                    <div className="mt-5">
-                      <button
-                        type="button"
-                        onClick={nextStepAction}
-                        className="w-full py-2.5 rounded-lg bg-[#caa24c] hover:bg-[#dfbd68] text-xs font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#caa24c]/10 transition-all cursor-pointer active:scale-95"
-                      >
-                        {nextStepButton}
-                      </button>
-                    </div>
-                  </section>
-
-                  {renderMarketingEngagementCard()}
-
-                  {/* RECENT ACTIVITY */}
-                  <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
-                    <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Recent Activity</p>
-                    </div>
-                    <div className="space-y-4 text-left">
-                      {allActivityEntries.length ? allActivityEntries.slice(0, 3).map((entry) => {
-                        const isEmail = entry.kind === 'email'
-                        return <div key={entry.id} className="group relative flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-[color:var(--portal-soft)]">
-                          {isEmail ? <Link href={emailReaderUrl(entry.email)} aria-label={`Open email: ${decodeHtmlEntities(entry.email.subject)}`} className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" /> : <button type="button" onClick={() => setActiveLeadTab('activity')} aria-label="Open activity" className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" />}
-                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
-                            {entry.kind === 'email' ? <Mail size={11} /> : entry.kind === 'call' ? <Phone size={11} /> : entry.kind === 'text' ? <MessageSquare size={11} /> : <Check size={11} className="stroke-[3]" />}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-bold leading-tight text-[color:var(--portal-text)] group-hover:text-[#a8792f] dark:group-hover:text-[#f1d27a]">{entry.kind === 'email' ? decodeHtmlEntities(entry.email.subject) : describeActivityEntry(entry)}</p>
-                            <p className="mt-0.5 text-[9px] text-[color:var(--portal-muted)]">{formatTimelineDate(entry.createdAt)}</p>
-                          </div>
-                        </div>
-                      }) : (
-                        <p className="text-xs text-[color:var(--portal-muted)]">No recent activity logged yet.</p>
-                      )}
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-[color:var(--portal-border)] text-center">
-                      <button
-                        type="button"
-                        onClick={() => setActiveLeadTab('activity')}
-                        className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68] transition-colors cursor-pointer"
-                      >
-                        View All Activity &rarr;
-                      </button>
-                    </div>
-                  </section>
-                </>
-              )
-            })()}
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
         </div>
-      ) : (
-        <div className={`mt-3 grid gap-6 pb-12 sm:pb-16 ${
-          activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
-            ? 'lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]'
-            : 'lg:grid-cols-1'
-        }`}>
-          {activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
-            <div className="space-y-6">
+      ) : null}
+      {activeLeadTab !== 'planning' ? (
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-5 pb-12 sm:pb-16">
+          {activeLeadTab === 'overview' || activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' || activeLeadTab === 'delivery' ? (
+            <div className="min-w-0 space-y-6">
+              {activeLeadTab === 'overview' ? <h2 className="px-1 text-base font-semibold text-[color:var(--portal-text)]">Activity</h2> : null}
               {activeLeadTab === 'notes' ? (
                 <form
                   onSubmit={handlePostNote}
-                  className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter"
+                  className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5"
                 >
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                     <div>
-                      <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
-                        <NotebookPen size={16} className="text-zinc-500" />
-                        Manual Note
+                      <h3 className="flex items-center gap-2.5 text-base font-semibold text-[color:var(--portal-text)]">
+                        <NotebookPen size={16} className="text-[color:var(--portal-muted)]" />
+                        Add a note
                       </h3>
-                      <p className="mt-1 text-xs text-zinc-600">Save a private note to this client record.</p>
+                      <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Save a private note to this client record.</p>
                     </div>
                     <PortalSelect
                       value={noteType}
@@ -8253,10 +7297,11 @@ export default function LeadDetailPage({
                   </div>
 
                   <textarea
+                    aria-label="Private note"
                     value={noteContent}
                     onChange={(event) => setNoteContent(event.target.value)}
                     placeholder="Type the note here..."
-                    className="min-h-32 w-full rounded-xl border border-zinc-900 bg-zinc-950/70 p-4 text-sm leading-6 text-zinc-200 outline-none transition-colors placeholder:text-zinc-700 focus:border-[#caa24c]/40"
+                    className="min-h-32 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-text)] outline-none transition-colors placeholder:text-[color:var(--portal-muted)] focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                   />
 
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -8269,20 +7314,20 @@ export default function LeadDetailPage({
                             setNoteType(template.type)
                             setNoteContent(template.value)
                           }}
-                          className="rounded-full border border-zinc-850 bg-zinc-950/60 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-500 transition-colors hover:border-[#caa24c]/25 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
+                          className="min-h-10 rounded-lg px-3 py-2 text-xs font-medium text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                         >
                           {template.label}
                         </button>
                       ))}
                     </div>
-                    <button
+                    <PortalButton
                       type="submit"
                       disabled={submittingNote || !noteContent.trim()}
-                      className="inline-flex items-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-[#caa24c]/10 transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:opacity-45"
+                      variant="primary"
                     >
                       <Send size={12} />
                       {submittingNote ? 'Saving...' : 'Save Note'}
-                    </button>
+                    </PortalButton>
                   </div>
                 </form>
               ) : null}
@@ -8291,36 +7336,31 @@ export default function LeadDetailPage({
                 <LuxorTextThread inquiryId={lead.id} phone={lead.phone} contactName={lead.full_name} />
               ) : null}
 
-              {activeLeadTab === 'messages' ? (
+              {activeLeadTab === 'delivery' ? (
                 <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                   <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Tour Email Delivery</p>
-                      <p className="mt-1 text-[10px] text-zinc-600">Saved confirmations, reminders, delivery status, and scheduled send times</p>
+                      <p className="text-sm font-semibold text-[color:var(--portal-text)]">Tour email delivery</p>
+                      <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Confirmations, reminders, and scheduled send times</p>
                     </div>
                     <button type="button" onClick={() => openTourScheduleModal('new_visit')} disabled={!lead.email} className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-[#caa24c] disabled:opacity-40">
                       Schedule Tour
                     </button>
                   </div>
                   {tourEmailJobs.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-zinc-850 px-4 py-6 text-center text-xs text-zinc-600">No tour emails have been saved for this client yet.</p>
+                    <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-center text-sm text-[color:var(--portal-muted)]">No tour emails have been saved for this client yet.</p>
                   ) : (
                     <div className="space-y-2">
                       {tourEmailJobs.map((job) => (
-                        <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-900 bg-black/20 px-4 py-3">
+                        <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[color:var(--portal-soft)] px-4 py-3">
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-bold text-zinc-200">{decodeHtmlEntities(job.subject)}</p>
-                            <p className="mt-1 text-[9px] uppercase tracking-wider text-zinc-600">
+                            <p className="break-words text-sm font-semibold text-[color:var(--portal-text)]">{decodeHtmlEntities(job.subject)}</p>
+                            <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">
                               {job.job_type.replaceAll('_', ' ')} · {job.sent_at ? `Sent ${formatTimelineDate(job.sent_at)}` : `Scheduled ${formatTimelineDate(job.scheduled_for)}`}
                             </p>
                             {job.last_error ? <p className="mt-1 text-[10px] text-red-400">{job.last_error}</p> : null}
                           </div>
-                          <span className={`rounded border px-2 py-1 text-[8px] font-black uppercase tracking-widest ${
-                            job.status === 'sent' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' :
-                            job.status === 'failed' ? 'border-red-500/20 bg-red-500/10 text-red-400' :
-                            job.status === 'cancelled' ? 'border-zinc-700 bg-zinc-800/40 text-zinc-500' :
-                            'border-amber-500/20 bg-amber-500/10 text-amber-400'
-                          }`}>{job.status}</span>
+                          <PortalStatusBadge status={job.status} borderless />
                         </div>
                       ))}
                     </div>
@@ -8328,6 +7368,7 @@ export default function LeadDetailPage({
                 </section>
               ) : null}
 
+              {activeLeadTab !== 'messages' && activeLeadTab !== 'delivery' ? <>
               <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-xl shadow-black/10">
                 <PortalFilterBar
                   searchValue={activitySearch}
@@ -8377,7 +7418,7 @@ export default function LeadDetailPage({
                   <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{activityEmptyCopy}</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="min-w-0 space-y-3">
                   {visibleActivityEntries.map((entry) => {
                     if (entry.kind === 'call') {
                       const call = entry.call
@@ -8385,17 +7426,12 @@ export default function LeadDetailPage({
                       const savedTranscript = typeof call.metadata?.voicemail_transcript === 'string' ? call.metadata.voicemail_transcript : typeof call.metadata?.transcript === 'string' ? call.metadata.transcript : ''
                       const hasTranscript = Boolean(call.transcript_segments?.length || savedTranscript)
                       return (
-                        <div key={entry.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-                          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                            <span className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--portal-muted)]"><Phone size={14} aria-hidden="true" /> Call</span>
-                            <span className="text-xs text-[color:var(--portal-muted)]">{formatActivityDate(entry.createdAt)}</span>
-                          </div>
-                          <p className="text-sm font-semibold text-[color:var(--portal-text)]">{describeActivityEntry(entry)}</p>
-                          <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{formatPhoneDisplay(otherNumber)} · {call.duration_seconds === null ? call.status : formatCallDuration(call.duration_seconds)}</p>
+                        <LeadActivityDisclosure key={entry.id} icon={<Phone size={16} />} label={call.is_voicemail ? 'Voicemail' : 'Call'} title={describeActivityEntry(entry)} description={`${formatPhoneDisplay(otherNumber)} · ${call.duration_seconds === null ? call.status.replaceAll('_', ' ') : formatCallDuration(call.duration_seconds)}`} preview={call.notes || savedTranscript || (call.recording_sid ? 'Recording available' : undefined)} timestamp={formatActivityDate(entry.createdAt)} badge={<PortalStatusBadge status={call.status} borderless />}>
                           {call.recording_sid ? (
                             <div className="mt-3">
                               <PortalAudioPlayer
-                                variant="compact"
+                                variant="full"
+                                title={call.is_voicemail ? 'Voicemail recording' : 'Call recording'}
                                 audioId={`luxor-call-audio-${call.id}`}
                                 durationSeconds={call.recording_duration_seconds}
                                 src={`/api/twilio/recordings/${call.recording_sid}?inquiryId=${encodeURIComponent(id)}`}
@@ -8406,28 +7442,25 @@ export default function LeadDetailPage({
                           ) : null}
                           {call.is_voicemail && !hasTranscript ? <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">No transcript is available for this voicemail.</p> : null}
                           {hasTranscript || (call.recording_consent_status === 'consented' && !call.is_voicemail) ? (
-                          <div className="mt-3 overflow-hidden rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--portal-border)] p-3">
-                              <div className="inline-flex rounded-lg bg-[color:var(--portal-soft)] p-1" role="tablist" aria-label="Call details">
-                                <button type="button" role="tab" aria-selected={(callViewModes[call.id] || 'transcript') === 'transcript'} onClick={() => setCallViewModes((current) => ({ ...current, [call.id]: 'transcript' }))} className={`min-h-9 rounded-md px-3 text-xs font-semibold text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${(callViewModes[call.id] || 'transcript') === 'transcript' ? 'bg-[color:var(--portal-card)] shadow-sm' : ''}`}>Transcript</button>
-                                <button type="button" role="tab" aria-selected={(callViewModes[call.id] || 'transcript') === 'summary'} onClick={() => void showCallSummary(call)} disabled={!call.summary_text && call.transcription_status !== 'completed'} className={`min-h-9 rounded-md px-3 text-xs font-semibold text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${(callViewModes[call.id] || 'transcript') === 'summary' ? 'bg-[color:var(--portal-card)] shadow-sm' : ''}`}>Summary</button>
-                              </div>
+                          <div className="mt-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <PortalAnimatedTabs tabs={[{ id: 'transcript', label: 'Transcript' }, { id: 'summary', label: 'Summary' }]} activeTab={callViewModes[call.id] || 'transcript'} onTabChange={(tab) => tab === 'summary' ? void showCallSummary(call) : setCallViewModes((current) => ({ ...current, [call.id]: 'transcript' }))} ariaLabel={`Call ${call.id} details`} className="!w-auto" />
                               <span className="text-[10px] text-[color:var(--portal-muted)]">{hasTranscript || call.transcription_status === 'completed' ? 'Transcript ready' : call.transcription_status === 'failed' ? 'Transcript unavailable' : 'Transcript processing'}</span>
                             </div>
                             {(callViewModes[call.id] || 'transcript') === 'transcript' ? (
-                              <div role="tabpanel" className="max-h-80 space-y-3 overflow-y-auto p-3 sm:p-4">
+                              <div className="portal-scrollbar mt-3 max-h-80 space-y-3 overflow-y-auto rounded-lg bg-[color:var(--portal-soft)] p-3 sm:p-4">
                                 {(call.transcript_segments || []).length ? call.transcript_segments?.map((segment) => {
                                   const seekSeconds = typeof segment.startSeconds === 'number' ? segment.startSeconds : null
                                   return (
                                     <button type="button" key={segment.id} onClick={() => seekCallRecording(call.id, seekSeconds)} disabled={typeof seekSeconds !== 'number' || !call.recording_sid} className="grid w-full grid-cols-[4.25rem_minmax(0,1fr)] gap-2 rounded-md text-left text-sm leading-6 hover:bg-[color:var(--portal-soft)] disabled:cursor-default disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] sm:grid-cols-[5rem_minmax(0,1fr)]">
-                                      <span className="pt-0.5 text-[10px] font-semibold text-[color:var(--portal-muted)]">{segment.track === 'caller' || segment.track === 'customer' || (call.direction === 'inbound' ? segment.track === 'outbound_track' : segment.track === 'inbound_track') ? 'Caller' : 'Luxor'}</span>
+                                      <span className="pt-0.5 text-[10px] font-semibold text-[color:var(--portal-muted)]">{luxorTranscriptSpeaker(segment.track) === 'caller' ? 'Caller' : luxorTranscriptSpeaker(segment.track) === 'luxor' ? 'Luxor' : 'Speaker'}</span>
                                       <span className="break-words text-[color:var(--portal-text)]">{segment.text}</span>
                                     </button>
                                   )
                                 }) : savedTranscript ? <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">{savedTranscript}</p> : <p className="text-sm text-[color:var(--portal-muted)]">{call.transcription_status === 'failed' ? 'The call transcript could not be processed.' : call.transcription_status === 'completed' ? 'No transcript text was captured.' : 'Transcript will appear here when Twilio finishes processing.'}</p>}
                               </div>
                             ) : (
-                              <div role="tabpanel" className="min-h-24 p-4">
+                              <div className="mt-3 min-h-24 rounded-lg bg-[color:var(--portal-soft)] p-4">
                                 {generatingCallSummaryId === call.id || call.summary_status === 'generating' ? <p className="text-sm text-[color:var(--portal-muted)]">Preparing call summary…</p>
                                   : call.summary_text ? <p className="whitespace-pre-wrap text-sm leading-6 text-[color:var(--portal-text)]">{call.summary_text}</p>
                                     : call.summary_status === 'failed' ? <p className="text-sm text-[color:var(--portal-muted)]">Summary could not be generated. Select Summary to retry.</p>
@@ -8436,7 +7469,7 @@ export default function LeadDetailPage({
                             )}
                           </div>
                           ) : null}
-                          <div className="mt-3 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
+                          <div className="mt-4 border-t border-[color:var(--portal-border)] pt-4">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--portal-muted)]">Call notes</p>
                               {editingCallSummaryId !== call.id ? (
@@ -8445,14 +7478,14 @@ export default function LeadDetailPage({
                                   onClick={() => { setCallSummaryDraft(call.notes || ''); setEditingCallSummaryId(call.id) }}
                                   className="rounded-md px-2 py-1 text-[10px] font-semibold text-[#8c6529] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] dark:text-[#f1d27a]"
                                 >
-                                  {call.notes ? 'Edit summary' : 'Add summary'}
+                                  {call.notes ? 'Edit note' : 'Add note'}
                                 </button>
                               ) : null}
                             </div>
                             {editingCallSummaryId === call.id ? (
                               <div className="mt-2 space-y-2">
                                 <textarea
-                                  aria-label="Call summary"
+                                  aria-label="Call note"
                                   value={callSummaryDraft}
                                   onChange={(event) => setCallSummaryDraft(event.target.value)}
                                   maxLength={2000}
@@ -8463,7 +7496,7 @@ export default function LeadDetailPage({
                                 <div className="flex justify-end gap-2">
                                   <button type="button" onClick={() => { setEditingCallSummaryId(null); setCallSummaryDraft('') }} className="rounded-md px-3 py-1.5 text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">Cancel</button>
                                   <button type="button" disabled={savingCallSummaryId === call.id} onClick={() => void saveCallSummary(call.id)} className="rounded-md bg-[#caa24c] px-3 py-1.5 text-xs font-semibold text-[#211a13] disabled:cursor-not-allowed disabled:opacity-60">
-                                    {savingCallSummaryId === call.id ? 'Saving…' : 'Save summary'}
+                                    {savingCallSummaryId === call.id ? 'Saving…' : 'Save note'}
                                   </button>
                                 </div>
                               </div>
@@ -8474,82 +7507,54 @@ export default function LeadDetailPage({
                             )}
                           </div>
                           <Link href="/portal/calls" className="mt-2 inline-block text-[9px] font-black uppercase tracking-wider text-[#caa24c] hover:text-[#f1d27a]">Open call record →</Link>
-                        </div>
+                        </LeadActivityDisclosure>
                       )
                     }
 
                     if (entry.kind === 'text') {
                       const message = entry.message
                       return (
-                        <div key={entry.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <span className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--portal-muted)]"><MessageSquare size={14} aria-hidden="true" /> Text {message.direction === 'inbound' ? 'received' : 'sent'}</span>
-                            <span className="text-xs text-[color:var(--portal-muted)]">{formatActivityDate(entry.createdAt)}</span>
-                          </div>
+                        <LeadActivityDisclosure key={entry.id} icon={<MessageSquare size={16} />} label={message.direction === 'inbound' ? 'Text received' : 'Text sent'} title={message.direction === 'inbound' ? `Message from ${lead.full_name}` : `Message to ${lead.full_name}`} preview={message.body || 'Text message without written content'} timestamp={formatActivityDate(entry.createdAt)} badge={message.direction === 'outbound' ? <PortalStatusBadge status={message.status} borderless /> : undefined}>
                           {message.body ? <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">{message.body}</p> : <p className="text-sm text-[color:var(--portal-muted)]">Text message without written content</p>}
                           {message.media_urls?.length ? <p className="mt-2 text-xs text-[color:var(--portal-muted)]">{message.media_urls.length} attachment{message.media_urls.length === 1 ? '' : 's'}</p> : null}
-                          {message.direction === 'outbound' ? <p className="mt-2 text-xs capitalize text-[color:var(--portal-muted)]">{message.status}</p> : null}
                           <button type="button" onClick={() => { setActiveLeadTab('messages'); setActiveFeedTab('comms') }} className="mt-2 min-h-10 text-xs font-semibold text-[#8c6424] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:text-[#f1d27a]">Open text conversation</button>
-                        </div>
+                        </LeadActivityDisclosure>
                       )
                     }
 
                     if (entry.kind === 'email') {
                       const email = entry.email
-                      const isOutgoing = email.direction === 'outgoing'
-                      const emailSummary = cleanEmailPreview(email.summary)
-
                       return (
-                        <Link href={emailReaderUrl(email)} key={entry.id} className="group block rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:p-5">
-                          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                            <span className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--portal-muted)]">
-                              <Mail size={14} aria-hidden="true" /> {isOutgoing ? 'Email sent' : 'Email received'}
-                            </span>
-                            <span className="text-xs text-[color:var(--portal-muted)]">{formatActivityDate(entry.createdAt)}</span>
-                          </div>
-                          <p className="text-sm font-semibold text-[color:var(--portal-text)]">{decodeHtmlEntities(email.subject) || '(No subject)'}</p>
-                          <p className="mt-1 break-words text-xs text-[color:var(--portal-muted)]">
-                            From {email.from || 'Unknown'} {email.to ? `to ${email.to}` : ''}
-                          </p>
-                          {emailSummary ? (
-                            <p className="mt-2 break-words text-xs leading-5 text-[color:var(--portal-muted)]">{emailSummary}</p>
-                          ) : null}
-                          <span className="mt-2 inline-flex text-[9px] font-black uppercase tracking-wider text-[#caa24c]">Open full email →</span>
-                        </Link>
+                        <LeadEmailActivity key={entry.id} email={email} inquiry={lead} onReplySent={(message) => setEmailMessages((current) => [...current.filter((item) => item.id !== message.id), { ...message, direction: 'outgoing' }])} />
                       )
                     }
 
                     const note = entry.note
-                    const noteContent = compactActivityText(note.content)
-                    let badgeColor = 'border-zinc-800/50 bg-zinc-800 text-zinc-400'
+                    const readableNote = decodeHtmlEntities(note.content
+                      .replace(/<br\s*\/?>|<\/(?:div|p|li)>/gi, '\n')
+                      .replace(/<\/?(?:div|p|span|b|strong|i|em|u|ul|ol|li|a)(?:\s[^>]*)?>/gi, ''))
+                      .replace(/\n{3,}/g, '\n\n').trim()
+                    const noteContent = compactActivityText(readableNote, 180)
+                    let badgeColor = 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
                     let typeLabel = 'System Log'
                     if (note.note_type === 'note') {
-                      badgeColor = 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+                      badgeColor = 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
                       typeLabel = 'Note'
                     } else if (note.note_type === 'call_log') {
-                      badgeColor = 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                      badgeColor = 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                       typeLabel = 'Call Log'
                     } else if (note.note_type === 'email_log') {
-                      badgeColor = 'border-purple-500/20 bg-purple-500/10 text-purple-400'
+                      badgeColor = 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
                       typeLabel = 'Email'
                     } else if (note.note_type === 'status_change') {
-                      badgeColor = 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                      badgeColor = 'bg-amber-500/10 text-amber-800 dark:text-amber-300'
                       typeLabel = 'Status'
                     }
 
                     return (
-                      <div key={note.id} className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-                        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                          <span className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--portal-muted)]"><FileText size={14} aria-hidden="true" /> {note.author}</span>
-                          <div className="flex items-center gap-3">
-                            <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${badgeColor}`}>
-                              {typeLabel}
-                            </span>
-                            <span className="text-xs text-[color:var(--portal-muted)]">{formatActivityDate(note.created_at)}</span>
-                          </div>
-                        </div>
-                        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">{noteContent}</p>
-                      </div>
+                      <LeadActivityDisclosure key={note.id} icon={<FileText size={16} />} label={typeLabel} title={compactActivityText(readableNote.split('\n')[0], 90) || typeLabel} description={note.author} preview={readableNote.includes('\n') ? noteContent.replace(/\n+/g, ' ') : undefined} timestamp={formatActivityDate(note.created_at)} badge={<span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${badgeColor}`}>{typeLabel}</span>}>
+                        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)]">{readableNote}</p>
+                      </LeadActivityDisclosure>
                     )
                   })}
                   {hiddenActivityCount > 0 ? (
@@ -8561,84 +7566,57 @@ export default function LeadDetailPage({
                       >
                         Show {Math.min(ACTIVITY_BATCH_SIZE, hiddenActivityCount)} more activity items
                       </button>
-                      <p className="mt-2 text-center text-[9px] font-medium uppercase tracking-[0.16em] text-zinc-600">
-                        {hiddenActivityCount} more hidden to keep this tab smooth
+                      <p className="mt-2 text-center text-xs text-[color:var(--portal-muted)]">
+                        {hiddenActivityCount} more entries
                       </p>
                     </div>
                   ) : null}
                 </div>
               )}
+              </> : null}
             </div>
           ) : null}
 
-          {/* Sidebar Panel Column */}
-          <div className={`space-y-6 ${activeLeadTab === 'proposals' ? 'min-w-0' : ''} ${
-            activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes'
-              ? 'lg:sticky lg:top-20 lg:self-start'
-              : ''
-          }`}>
-            {activeLeadTab === 'activity' || activeLeadTab === 'messages' || activeLeadTab === 'notes' ? (
-              <div className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter">
-                <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                  <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
-                    <ClipboardCheck size={16} className="text-zinc-500" />
-                    Recommended Actions
-                  </h3>
-                  <span className="text-[9px] font-black uppercase tracking-[0.16em] text-zinc-600">Top priority first</span>
-                </div>
-                <div className="grid gap-2.5">
-                  {recommendedActions.map((action, index) => (
-                    <ClientActionButton
-                      key={`${action.label}-${index}`}
-                      icon={action.icon}
-                      label={action.label}
-                      detail={action.detail}
-                      onClick={action.onClick}
-                      disabled={action.disabled}
-                      loading={action.loading}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
+          <div className="min-w-0 space-y-5">
           {activeLeadTab === 'tasks' ? (
-          <div id="lead-tasks" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+          <div id="lead-tasks" className="scroll-mt-24 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
             <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-              <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
-                <Briefcase size={16} className="text-zinc-500" />
-                Tasks & Checklist
+              <h3 className="flex items-center gap-2.5 text-base font-semibold text-[color:var(--portal-text)]">
+                <Briefcase size={16} className="text-[color:var(--portal-muted)]" />
+                Tasks
               </h3>
               <div className="flex items-center gap-3">
-                <span className="font-mono text-xs text-zinc-500">{pendingTaskCount} remaining</span>
+                <span className="text-xs tabular-nums text-[color:var(--portal-muted)]">{pendingTaskCount} remaining</span>
                 <button
                   type="button"
                   onClick={() => setShowTaskTools((current) => !current)}
-                  className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-400 transition-colors hover:border-[#caa24c]/20 hover:bg-[#caa24c]/10 hover:text-[#f1d27a]"
+                  aria-expanded={showTaskTools}
+                  className="min-h-11 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                 >
-                  {showTaskTools ? 'Hide' : 'Open'}
+                  {showTaskTools ? 'Hide checklist' : 'Open checklist'}
                 </button>
               </div>
             </div>
 
             {!showTaskTools ? (
-              <div className="rounded-xl border border-dashed border-zinc-900/80 bg-zinc-950/35 px-4 py-4 text-xs leading-5 text-zinc-500">
-                <p className="font-semibold text-zinc-300">
+              <div className="rounded-xl bg-[color:var(--portal-soft)] px-4 py-4 text-sm leading-6 text-[color:var(--portal-muted)]">
+                <p className="font-semibold text-[color:var(--portal-text)]">
                   {pendingTaskCount === 0 ? 'No follow-up tasks right now.' : `${pendingTaskCount} pending task${pendingTaskCount === 1 ? '' : 's'} ready to review.`}
                 </p>
-                <p className="mt-1 text-zinc-600">Open the checklist when you need to add a follow-up, due date, or priority.</p>
+                <p className="mt-1">Open the checklist to review or add a follow-up.</p>
               </div>
             ) : (
               <>
-                <form onSubmit={handleAddTask} className="mb-6 space-y-3 rounded-lg border border-zinc-900 bg-zinc-950/50 p-3">
+                <form onSubmit={handleAddTask} className="mb-5 space-y-3 rounded-xl bg-[color:var(--portal-soft)] p-3 sm:p-4">
                   <input
                     type="text"
+                    aria-label="New task"
                     value={taskTitle}
                     onChange={(e) => setTaskTitle(e.target.value)}
                     placeholder="New follow-up task..."
-                    className="w-full rounded border border-zinc-900 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-300 outline-none focus:border-blue-500"
+                    className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                   />
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <PortalDatePicker
                       value={taskDueDate}
                       onChange={setTaskDueDate}
@@ -8656,60 +7634,63 @@ export default function LeadDetailPage({
                       ]}
                     />
                   </div>
-                  <button
+                  <PortalButton
                     type="submit"
                     disabled={submittingTask || !taskTitle.trim()}
-                    className="w-full rounded bg-blue-600 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+                    variant="primary"
+                    className="w-full sm:w-auto"
                   >
-                    Add Task
-                  </button>
+                    {submittingTask ? 'Adding…' : 'Add task'}
+                  </PortalButton>
                 </form>
 
                 {sortedTasks.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-zinc-900 px-4 py-5 text-xs leading-5 text-zinc-500">
-                    <p className="font-semibold text-zinc-300">No follow-up tasks yet.</p>
-                    <p className="mt-1 text-zinc-600">Add a task now so the next step does not get lost in the notes.</p>
+                  <div className="px-1 py-4 text-sm leading-6 text-[color:var(--portal-muted)]">
+                    <p className="font-semibold text-[color:var(--portal-text)]">No follow-up tasks yet.</p>
+                    <p className="mt-1">Add the next action and its due date above.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {sortedTasks.map((task) => {
                       const isCompleted = task.status === 'completed'
                       const isHighlightedTask = searchParams?.get('highlightTask') === task.id
-                      let prioColor = 'border-zinc-800 bg-zinc-500/5 text-zinc-500'
-                      if (task.priority === 'high') prioColor = 'border-amber-500/10 bg-amber-500/5 text-amber-500'
-                      else if (task.priority === 'urgent') prioColor = 'border-red-500/10 bg-red-500/5 text-red-500'
+                      let prioColor = 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
+                      if (task.priority === 'high') prioColor = 'bg-amber-500/10 text-amber-800 dark:text-amber-300'
+                      else if (task.priority === 'urgent') prioColor = 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
 
                       return (
                         <div
                           key={task.id}
-                          className={`flex items-start justify-between gap-3 rounded-lg border p-3 transition-colors hover:border-zinc-800 ${
-                            isHighlightedTask ? 'border-[#caa24c] bg-[#caa24c]/8 shadow-[0_0_0_1px_rgba(202,162,76,0.2)]' : 'border-zinc-900'
+                          className={`flex items-start justify-between gap-3 rounded-xl border p-3 transition-colors ${
+                            isHighlightedTask ? 'border-[#caa24c] bg-[#caa24c]/8' : 'border-[color:var(--portal-border)]'
                           }`}
                         >
                           <button
                             type="button"
                             onClick={() => handleToggleTask(task)}
-                            className="mt-0.5 rounded p-0.5 text-zinc-500 transition-colors hover:text-blue-500"
+                            aria-label={isCompleted ? `Mark ${task.title} as pending` : `Complete ${task.title}`}
+                            aria-pressed={isCompleted}
+                            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                           >
                             {isCompleted ? (
                               <CheckCircle2 size={16} className="text-emerald-500" />
                             ) : (
-                              <Circle size={16} className="text-zinc-700" />
+                              <Circle size={18} className="text-[color:var(--portal-muted)]" />
                             )}
                           </button>
-                          <div className="min-w-0 flex-1">
-                            <p className={`truncate text-xs font-bold leading-tight text-white/95 ${isCompleted ? 'font-medium text-zinc-600 line-through' : ''}`}>
+                          <div className="min-w-0 flex-1 py-1">
+                            <p className={`break-words text-sm leading-5 ${isCompleted ? 'font-normal text-[color:var(--portal-muted)] line-through' : 'font-semibold text-[color:var(--portal-text)]'}`}>
                               {task.title}
                             </p>
                             {task.due_date ? (
-                              <p className="mt-1 flex items-center gap-1 text-[10px] font-mono text-zinc-500">
+                              <p className="mt-1 flex items-center gap-1 text-xs text-[color:var(--portal-muted)]">
                                 <Clock size={10} /> {new Date(task.due_date).toLocaleDateString()}
                               </p>
                             ) : (
-                              <p className="mt-1 text-[10px] text-zinc-600">No due date</p>
+                              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">No due date</p>
                             )}
                           </div>
-                          <span className={`rounded border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider ${prioColor}`}>
+                          <span className={`mt-1 rounded-full px-2 py-1 text-[11px] font-medium capitalize ${prioColor}`}>
                             {task.priority}
                           </span>
                         </div>
@@ -8723,25 +7704,25 @@ export default function LeadDetailPage({
           ) : null}
 
           {activeLeadTab === 'vendors' ? (
-          <div id="lead-vendors" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+          <div id="lead-vendors" className="scroll-mt-24 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
               <div>
-                <h3 className="flex items-center gap-2.5 font-semibold text-white/90">
-                  <Briefcase size={16} className="text-zinc-500" />
+                <h3 className="flex items-center gap-2.5 text-base font-semibold text-[color:var(--portal-text)]">
+                  <Briefcase size={16} className="text-[color:var(--portal-muted)]" />
                   Vendors
                 </h3>
-                <p className="mt-1 text-xs text-zinc-600">Track vendor options and notes for this event.</p>
+                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Track vendor options and notes for this event.</p>
               </div>
-              <button
+              <PortalButton
                 type="button"
                 onClick={() => {
                   setIsVendorModalOpen(true)
                   void fetchVendors()
                 }}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#f1d27a] transition-colors hover:bg-[#caa24c]/12"
+                variant="primary"
               >
-                <Plus size={12} /> Add Vendor
-              </button>
+                <Plus size={14} /> Add vendor
+              </PortalButton>
             </div>
 
             {linkedVendors.length === 0 ? (
@@ -8751,13 +7732,13 @@ export default function LeadDetailPage({
                   setIsVendorModalOpen(true)
                   void fetchVendors()
                 }}
-                className="w-full rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/25 px-5 py-10 text-center transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5"
+                className="w-full rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/40 px-5 py-8 text-center transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
               >
-                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-[#caa24c]/20 bg-[#caa24c]/10 text-[#caa24c]">
+                <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#a8792f] dark:text-[#f1d27a]">
                   <Plus size={18} />
                 </span>
-                <span className="mt-4 block text-xs font-black uppercase tracking-[0.2em] text-zinc-300">Add event vendors</span>
-                <span className="mt-2 block text-xs leading-5 text-zinc-600">No vendors are linked yet. Add DJs, catering, decorators, photographers, or other vendor notes for this lead.</span>
+                <span className="mt-3 block text-sm font-semibold text-[color:var(--portal-text)]">Add event vendors</span>
+                <span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">No vendors are linked yet. Add the people and services supporting this event.</span>
               </button>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
@@ -8766,21 +7747,23 @@ export default function LeadDetailPage({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold text-[color:var(--portal-text)]">{vendor?.name || 'Vendor record unavailable'}</p>
-                        <p className="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">{vendor?.vendor_type || 'Linked vendor'}</p>
+                        <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{vendor?.vendor_type || 'Linked vendor'}</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => toggleVendorSelection(ref.id)}
-                        className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300 cursor-pointer"
+                        aria-label={`Remove ${vendor?.name || 'vendor'} from this event`}
+                        className="min-h-11 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-rose-300"
                       >
                         Remove
                       </button>
                     </div>
-                    <div className="mt-3 grid gap-2 text-[10px] text-[color:var(--portal-muted)] sm:grid-cols-2">
+                    <div className="mt-3 grid gap-2 break-words text-xs text-[color:var(--portal-muted)] sm:grid-cols-2">
                       <span>{vendor?.phone || 'No phone'}</span>
                       <span>{vendor?.email || 'No email'}</span>
                     </div>
                     <textarea
+                      aria-label={`Notes for ${vendor?.name || 'vendor'}`}
                       value={ref.notes || ''}
                       onChange={(event) => updateVendorNotes(ref.id, event.target.value)}
                       placeholder="Vendor notes for this event..."
@@ -8794,22 +7777,22 @@ export default function LeadDetailPage({
           ) : null}
 
           {activeLeadTab === 'timeline' ? (
-          <div id="lead-timeline" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
+          <div id="lead-timeline" className="scroll-mt-24 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
               <div>
-                <h3 className="flex items-center gap-2.5 font-semibold text-[color:var(--portal-text)]">
-                  <Clock size={16} className="text-[#a8792f] dark:text-[#caa24c]" />
-                  Event Timeline
+                <h3 className="flex items-center gap-2.5 text-base font-semibold text-[color:var(--portal-text)]">
+                  <Clock size={16} className="text-[color:var(--portal-muted)]" />
+                  Run of show
                 </h3>
-                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Build the run of show without needing to advance the lead stage.</p>
+                <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Plan setup, arrivals, and the order of the event.</p>
               </div>
-              <button
+              <PortalButton
                 type="button"
                 onClick={() => openTimelineModal(null)}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#caa24c]/40 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#a8792f] dark:text-[#f1d27a] transition-all hover:bg-[#caa24c]/20 cursor-pointer"
+                variant="primary"
               >
-                <Plus size={12} /> Add Step
-              </button>
+                <Plus size={14} /> Add step
+              </PortalButton>
             </div>
 
             {timelineItems.length === 0 ? (
@@ -8821,7 +7804,7 @@ export default function LeadDetailPage({
                 <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                   <Plus size={18} />
                 </span>
-                <span className="mt-4 block text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">Add timeline step</span>
+                <span className="mt-4 block text-sm font-semibold text-[color:var(--portal-text)]">Add the first step</span>
                 <span className="mt-2 block text-xs leading-5 text-[color:var(--portal-muted)]">No timeline steps are planned yet. Add setup, vendor arrivals, ceremony, dinner, breakdown, or custom event milestones.</span>
               </button>
             ) : (
@@ -8831,7 +7814,7 @@ export default function LeadDetailPage({
                     <span className="absolute -left-[31px] top-5 flex h-3 w-3 rounded-full border border-[#caa24c] bg-[color:var(--portal-card)]" />
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="font-mono text-xs font-black text-[#a8792f] dark:text-[#caa24c]">{item.time}</p>
+                        <p className="text-xs font-semibold tabular-nums text-[#a8792f] dark:text-[#caa24c]">{item.time}</p>
                         <p className="mt-1 text-sm font-bold text-[color:var(--portal-text)]">{item.title}</p>
                         {item.description ? <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{item.description}</p> : null}
                       </div>
@@ -8839,14 +7822,16 @@ export default function LeadDetailPage({
                         <button
                           type="button"
                           onClick={() => openTimelineModal(originalIndex)}
-                          className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40 hover:text-[#a8792f] cursor-pointer"
+                          aria-label={`Edit ${item.title}`}
+                          className="min-h-11 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => deleteTimelineItem(originalIndex)}
-                          className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300 cursor-pointer"
+                          aria-label={`Delete ${item.title}`}
+                          className="min-h-11 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-rose-300"
                         >
                           Delete
                         </button>
@@ -9131,7 +8116,7 @@ export default function LeadDetailPage({
           </section>
           ) : null}
 
-          {activeLeadTab === 'documents' || activeLeadTab === 'contract' ? (
+          {activeLeadTab === 'documents' ? (
           <div id="lead-documents" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -9175,7 +8160,7 @@ export default function LeadDetailPage({
           </div>
           ) : null}
 
-          {activeLeadTab === 'documents' || activeLeadTab === 'contract' ? (
+          {activeLeadTab === 'contract' ? (
           <div id="lead-booking" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
             <h3 className="mb-6 flex items-center justify-between font-semibold text-[color:var(--portal-text)]">
               <span className="flex items-center gap-2.5">
@@ -9231,7 +8216,7 @@ export default function LeadDetailPage({
                           {(booking.package_name || 'No package').replaceAll('_', ' ')} • {(booking.contract_status || 'not_sent').replaceAll('_', ' ')}
                         </p>
                       </div>
-                      <PortalStatusBadge status={booking.status} />
+                      <PortalStatusBadge status={booking.status} borderless />
                     </div>
                     <WeekdayRentalSummary booking={booking} />
                     <div className="mt-3 grid gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[10px] sm:grid-cols-3">
@@ -9318,9 +8303,48 @@ export default function LeadDetailPage({
           </div>
           ) : null}
 
-          {activeLeadTab === 'documents' ? (
-          <div id="lead-billing" className="nodal-void-card rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 backdrop-blur-xl shadow-2xl luxor-soft-enter scroll-mt-24">
-            <h3 className="mb-6 flex items-center justify-between font-semibold text-white/90">
+          {activeLeadTab === 'documents' ? <>                    {/* Files shared through email */}
+                    <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Shared files</p>
+                          <p className="mt-1 text-[10px] text-[color:var(--portal-faint)]">Attachments shared with this client through email appear here.</p>
+                        </div>
+                        <Link href="/portal/emails" className="shrink-0 text-[9px] font-black uppercase tracking-[0.14em] text-[#a8792f] transition-colors hover:text-[#caa24c] dark:text-[#f1d27a]">View email history →</Link>
+                      </div>
+                      {sharedFiles.length ? (
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          {sharedFiles.map(({ email, attachment }) => {
+                            const size = formatAttachmentSize(attachment.size)
+                            return (
+                            <a key={`${email.id}-${attachment.attachmentId || attachment.attachmentPath || attachment.filename}`} href={emailAttachmentUrl(email, attachment)} target="_blank" rel="noreferrer" aria-label={`Open ${attachment.filename}`} className="group flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-card)] text-[#a8792f] dark:text-[#f1d27a]"><FileText size={16} /></span>
+                              <span className="min-w-0"><span className="block truncate text-[10px] font-bold text-[color:var(--portal-text)]">{attachment.filename}</span><span className="mt-1 block truncate text-[9px] text-[color:var(--portal-muted)]">{size ? `${size} · ` : ''}{decodeHtmlEntities(email.subject) || 'Email attachment'}</span></span>
+                            </a>
+                            )
+                          })}
+                        </div>
+                      ) : sharedAttachmentEmails.length ? (
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          {sharedAttachmentEmails.map((email) => (
+                            <Link key={email.id} href={emailReaderUrl(email)} className="group flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-card)] text-[#a8792f] dark:text-[#f1d27a]"><FileText size={16} /></span>
+                              <span className="min-w-0"><span className="block truncate text-[10px] font-bold text-[color:var(--portal-text)]">{decodeHtmlEntities(email.subject) || 'Email attachment'}</span><span className="mt-1 block text-[9px] text-[color:var(--portal-muted)]">Open email to view files</span></span>
+                            </Link>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/60 px-4 py-5 text-center"><FileText size={18} className="mx-auto text-[color:var(--portal-faint)]" /><p className="mt-2 text-xs font-semibold text-[color:var(--portal-text)]">No shared files yet</p><p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">Files from email and text conversations will be collected here as they are available.</p></div>
+                      )}
+                    </section>
+
+</> : null}
+
+          {activeLeadTab === 'payments' && !isLuxorTestInquiry(lead) ? (
+          <details id="lead-billing" className="group rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 scroll-mt-24">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[color:var(--portal-text)] [&::-webkit-details-marker]:hidden">Invoice actions<ChevronDown size={16} className="shrink-0 text-[color:var(--portal-muted)] transition-transform group-open:rotate-180" /></summary>
+            <div className="mt-4">
+            <h3 className="mb-6 flex items-center justify-between font-semibold text-[color:var(--portal-text)]">
               <span className="flex items-center gap-2.5">
                 <FileText size={16} className="text-zinc-500" />
                 Invoices & Revenue
@@ -9334,9 +8358,9 @@ export default function LeadDetailPage({
             </h3>
 
             {sortedInvoices.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-zinc-900 p-4 text-xs leading-5 text-zinc-500">
-                <p className="font-semibold text-zinc-300">No invoice records generated yet.</p>
-                <p className="mt-1 text-zinc-600">Draft the deposit or event invoice when the numbers are ready.</p>
+              <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-4 text-xs leading-5 text-[color:var(--portal-muted)]">
+                <p className="font-semibold text-[color:var(--portal-text)]">No invoice records generated yet.</p>
+                <p className="mt-1">Draft the deposit or event invoice when the numbers are ready.</p>
                 <button
                   type="button"
                   onClick={() => openProposalBuilder()}
@@ -9361,7 +8385,7 @@ export default function LeadDetailPage({
                           {inv.due_date ? ` • Due ${new Date(inv.due_date).toLocaleDateString()}` : ''}
                         </p>
                       </div>
-                      <PortalStatusBadge status={inv.status} />
+                      <PortalStatusBadge status={inv.status} borderless />
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-[10px]">
                       <div><span className="block text-[color:var(--portal-muted)]">Paid</span><span className="font-mono text-emerald-700 dark:text-emerald-400">{formatMoney(getInvoicePaidTotal(inv.id))}</span></div>
@@ -9397,7 +8421,8 @@ export default function LeadDetailPage({
                 })}
               </div>
             )}
-          </div>
+            </div>
+          </details>
           ) : null}
 
           {activeLeadTab === 'payments' ? (isLuxorTestInquiry(lead)
@@ -9420,7 +8445,7 @@ export default function LeadDetailPage({
           ) : null}
         </div>
       </div>
-      )}
+      ) : null}
 
       {typeof document !== 'undefined' ? createPortal(
         <LeadMobileActionBar
@@ -10094,40 +9119,42 @@ export default function LeadDetailPage({
 
       {/* Legacy invoice builder retained as a fallback while the new proposal builder is validated. */}
       <PortalModal isOpen={false} onClose={() => setIsInvoiceModalOpen(false)} maxWidth="max-w-xl">
-        <div className="flex items-center justify-between border-b border-zinc-900 bg-white/[0.02] px-6 py-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">Draft Event Invoice</h3>
+        <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 sm:px-6">
+              <h3 className="text-base font-semibold text-[color:var(--portal-text)]">Draft Event Invoice</h3>
               <PortalCloseButton onClick={() => setIsInvoiceModalOpen(false)} aria-label="Close invoice draft modal" />
             </div>
             
-            <form onSubmit={(event) => { event.preventDefault(); void handleCreateInvoice('save') }} className="flex-1 overflow-y-auto p-6 space-y-4 portal-scrollbar bg-[#080706]">
+            <form onSubmit={(event) => { event.preventDefault(); void handleCreateInvoice('save') }} className="portal-scrollbar flex-1 space-y-5 overflow-y-auto bg-[color:var(--portal-card)] p-5 text-[color:var(--portal-text)] sm:p-6">
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Invoice Description / Summary</label>
+                <label htmlFor="lead-invoice-description" className="text-xs font-medium text-[color:var(--portal-text)]">Invoice description</label>
                 <input
+                  id="lead-invoice-description"
                   type="text"
                   required
                   value={invoiceDesc}
                   onChange={(e) => setInvoiceDesc(e.target.value)}
                   placeholder="e.g. Wedding Booking & Reception fee"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-3 py-2 outline-none focus:border-blue-500"
+                  className="min-h-11 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c] focus:ring-2 focus:ring-[#caa24c]/20"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Client Name</label>
+                  <label htmlFor="lead-invoice-client" className="text-xs font-medium text-[color:var(--portal-text)]">Client name</label>
                   <input
+                    id="lead-invoice-client"
                     type="text"
                     disabled
                     value={lead.full_name}
-                    className="w-full bg-zinc-900/50 border border-zinc-800 text-xs text-zinc-500 rounded px-3 py-2 outline-none cursor-not-allowed"
+                    className="min-h-11 w-full cursor-not-allowed rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-muted)] outline-none"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Due Date</label>
+                  <span className="text-xs font-medium text-[color:var(--portal-text)]">Due date</span>
                   <PortalDatePicker
                     value={invoiceDueDate}
                     onChange={setInvoiceDueDate}
-                    className="w-full"
+                    className="w-full [&>button]:min-h-11"
                     placeholder="Due Date"
                   />
                 </div>
@@ -10135,13 +9162,15 @@ export default function LeadDetailPage({
 
               {/* Line Items builder */}
               <div className="space-y-3 pt-2">
-                <div className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/5 p-3">
-                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[#caa24c]">Add from Packages.xlsx</label>
+                <div className="rounded-xl bg-[color:var(--portal-soft)] p-3">
+                  <span className="mb-2 block text-xs font-medium text-[color:var(--portal-text)]">Add a service</span>
                   <div className="flex items-center gap-2">
                     <div className="min-w-0 flex-1">
                       <PortalSelect
                         value={selectedCatalogItem}
                         onChange={setSelectedCatalogItem}
+                        aria-label="Service to add to invoice"
+                        buttonClassName="min-h-11 sm:min-h-11"
                         placeholder="Choose a service"
                         options={LUXOR_SERVICE_CATALOG.map((item) => ({
                           value: item.id,
@@ -10149,57 +9178,61 @@ export default function LeadDetailPage({
                         }))}
                       />
                     </div>
-                    <button type="button" onClick={addCatalogItem} disabled={!selectedCatalogItem} className="rounded-lg bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider text-white disabled:opacity-40">
+                    <PortalButton type="button" onClick={addCatalogItem} disabled={!selectedCatalogItem} className="min-h-11">
                       Add
-                    </button>
+                    </PortalButton>
                   </div>
-                  <p className="mt-2 text-[10px] leading-4 text-zinc-500">Prices remain editable. Custom-priced and approximate workbook items must be confirmed before sending.</p>
+                  <p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Prices remain editable. Confirm custom and approximate prices before sending.</p>
                 </div>
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">Line Items</label>
+                  <span className="text-xs font-semibold text-[color:var(--portal-text)]">Line items</span>
                   <button
                     type="button"
                     onClick={addInvoiceItem}
-                    className="text-[9px] font-black uppercase text-blue-500 tracking-wider flex items-center gap-1"
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
                   >
-                    <Plus size={12} /> Add Row
+                    <Plus size={14} /> Add row
                   </button>
                 </div>
 
                 <div className="space-y-2">
                   {invoiceItems.map((item, index) => (
-                    <div key={index} className="flex gap-2 items-center">
+                    <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.75rem] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_3.5rem_6rem_2.75rem]">
                       <input
                         type="text"
                         required
+                        aria-label={`Item ${index + 1} description`}
                         value={item.description}
                         onChange={(e) => handleInvoiceItemChange(index, 'description', e.target.value)}
                         placeholder="Item description..."
-                        className="flex-1 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-500"
+                        className="col-span-3 min-h-11 min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c] focus:ring-2 focus:ring-[#caa24c]/20 sm:col-span-1"
                       />
                       <input
                         type="number"
                         min="1"
                         required
+                        aria-label={`Item ${index + 1} quantity`}
                         value={item.quantity}
                         onChange={(e) => handleInvoiceItemChange(index, 'quantity', e.target.value)}
                         placeholder="Qty"
-                        className="w-14 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-500 text-center"
+                        className="min-h-11 min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-2 text-center text-sm tabular-nums text-[color:var(--portal-text)] outline-none focus:border-[#caa24c] focus:ring-2 focus:ring-[#caa24c]/20"
                       />
                       <input
                         type="number"
                         min="0"
                         required
+                        aria-label={`Item ${index + 1} unit price`}
                         value={item.unitPrice}
                         onChange={(e) => handleInvoiceItemChange(index, 'unitPrice', e.target.value)}
                         placeholder="Price"
-                        className="w-24 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded px-2.5 py-1.5 outline-none focus:border-blue-500 text-right font-mono"
+                        className="min-h-11 min-w-0 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-2 text-right text-sm tabular-nums text-[color:var(--portal-text)] outline-none focus:border-[#caa24c] focus:ring-2 focus:ring-[#caa24c]/20"
                       />
                       {invoiceItems.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeInvoiceItem(index)}
-                          className="text-zinc-600 hover:text-red-400 p-1"
+                          aria-label={`Remove invoice item ${index + 1}`}
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-red-500/10 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 dark:hover:text-red-300"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -10210,40 +9243,42 @@ export default function LeadDetailPage({
               </div>
 
               {/* Financial Totals */}
-              <div className="bg-zinc-950/70 border border-zinc-900 rounded-xl p-4 space-y-2 text-right">
-                <div className="flex justify-between text-xs text-zinc-500">
+              <div className="space-y-3 rounded-xl bg-[color:var(--portal-soft)] p-4 text-right">
+                <div className="flex justify-between text-sm text-[color:var(--portal-muted)]">
                   <span>Subtotal:</span>
-                  <span className="font-mono text-zinc-300">${getInvoiceSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="tabular-nums text-[color:var(--portal-text)]">${getInvoiceSubtotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3 text-xs text-zinc-500 border-b border-zinc-900/50 pb-2">
+                <div className="flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3 text-sm text-[color:var(--portal-muted)]">
                   <label className="flex items-center gap-2">Tax rate
-                    <input type="number" min="0" step="0.01" value={invoiceTaxRate} onChange={(event) => setInvoiceTaxRate(event.target.value)} className="w-20 rounded border border-zinc-800 bg-zinc-950 px-2 py-1 text-right font-mono text-zinc-300" />%
+                    <input type="number" min="0" step="0.01" value={invoiceTaxRate} onChange={(event) => setInvoiceTaxRate(event.target.value)} className="min-h-11 w-20 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-2 text-right tabular-nums text-[color:var(--portal-text)] outline-none focus:border-[#caa24c] focus:ring-2 focus:ring-[#caa24c]/20" />%
                   </label>
-                  <span className="font-mono text-zinc-300">${getInvoiceTax().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="tabular-nums text-[color:var(--portal-text)]">${getInvoiceTax().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-                <div className="flex justify-between text-sm font-bold text-white pt-1">
+                <div className="flex justify-between text-sm font-semibold text-[color:var(--portal-text)]">
                   <span>Total Amount Due:</span>
-                  <span className="font-mono text-[#caa24c]">${getInvoiceTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="tabular-nums">${getInvoiceTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold tracking-widest text-zinc-500">Invoice Notes / Memo</label>
+                <label htmlFor="lead-invoice-notes" className="text-xs font-medium text-[color:var(--portal-text)]">Invoice notes</label>
                 <textarea
+                  id="lead-invoice-notes"
                   value={invoiceNotes}
                   onChange={(e) => setInvoiceNotes(e.target.value)}
                   placeholder="Notes shown on invoice..."
-                  className="w-full h-16 bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 rounded p-2 outline-none focus:border-blue-500 leading-relaxed font-sans"
+                  className="min-h-24 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm leading-relaxed text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c] focus:ring-2 focus:ring-[#caa24c]/20"
                 />
               </div>
 
-              <button
+              <PortalButton
                 type="submit"
+                variant="primary"
                 disabled={submittingInvoice}
-                className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-widest shadow-xl shadow-blue-600/20 disabled:opacity-40"
+                className="min-h-11 w-full"
               >
-                Create Invoice
-              </button>
+                {submittingInvoice ? 'Creating invoice…' : 'Create invoice'}
+              </PortalButton>
             </form>
       </PortalModal>
 
@@ -10253,152 +9288,67 @@ export default function LeadDetailPage({
 function ClientDossierLoading() {
   return (
     <PortalPageFrame className="max-w-[1560px] !gap-0">
-
-      {/* 1. Header Back & Status */}
-      <div className="mb-4 flex shrink-0 items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-mono font-bold text-[#caa24c]">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#caa24c] opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#caa24c]" />
-          </span>
-          <span className="uppercase tracking-widest text-[10px]">Syncing Client Dossier Telemetry...</span>
+      <span role="status" className="sr-only">Loading lead</span>
+      <div aria-hidden="true">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="h-3 w-36 rounded luxor-skeleton" />
+          <div className="h-6 w-20 rounded-full luxor-skeleton" />
         </div>
-        <div className="h-6 w-24 luxor-skeleton rounded-full animate-pulse" />
-      </div>
 
-      {/* 2. Top Header Card */}
-      <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 lg:p-6 shadow-2xl shadow-black/10">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-          <div className="flex min-w-0 gap-4">
-            <div className="h-20 w-20 shrink-0 rounded-full luxor-skeleton animate-pulse" />
-            <div className="min-w-0 pt-1 flex-1 space-y-3">
-              <div className="h-8 w-64 max-w-full luxor-skeleton rounded animate-pulse" />
-              <div className="flex flex-wrap gap-4 mt-2">
-                <div className="h-4 w-20 luxor-skeleton rounded" />
-                <div className="h-4 w-24 luxor-skeleton rounded" />
-                <div className="h-4 w-20 luxor-skeleton rounded" />
-              </div>
-              <div className="h-3.5 w-44 luxor-skeleton rounded mt-2" />
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-            <div className="h-9 w-28 luxor-skeleton rounded-lg" />
-            <div className="h-9 w-28 luxor-skeleton rounded-lg" />
-            <div className="h-9 w-32 luxor-skeleton rounded-lg animate-pulse" />
-          </div>
-        </div>
-        <div className="border-t border-[color:var(--portal-border)] mt-5 pt-5">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="flex flex-col items-center text-center space-y-2">
-                <div className="h-8 w-8 rounded-full luxor-skeleton animate-pulse" />
-                <div className="h-3.5 w-16 luxor-skeleton rounded" />
-                <div className="h-3 w-10 luxor-skeleton rounded" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Sticky Tab Bar */}
-      <div className="sticky -top-4 z-30 -mt-px overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/50 backdrop-blur-xl px-4 py-3 sm:-top-6 lg:-top-8">
-        <div className="flex min-w-max gap-5">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <div key={index} className="h-6 w-16 luxor-skeleton rounded-full" />
-          ))}
-        </div>
-      </div>
-
-      {/* 4. Split Column Layout */}
-      <div className="mt-3 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.95fr)]">
-        <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Next Step Skeleton */}
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10">
-              <div className="flex items-start gap-4">
-                <div className="h-12 w-12 shrink-0 rounded-full luxor-skeleton animate-pulse" />
-                <div className="min-w-0 flex-1 space-y-2.5">
-                  <div className="h-3 w-16 luxor-skeleton rounded" />
-                  <div className="h-5 w-36 luxor-skeleton rounded" />
-                  <div className="h-4 w-48 luxor-skeleton rounded" />
-                  <div className="h-8 w-32 luxor-skeleton rounded-lg mt-1" />
+        <section className="overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+          <div className="flex flex-col gap-4 p-4 sm:p-5 md:flex-row md:items-start md:justify-between lg:p-6">
+            <div className="flex min-w-0 flex-1 items-center gap-3 sm:items-start sm:gap-4">
+              <div className="h-12 w-12 shrink-0 rounded-full luxor-skeleton sm:h-16 sm:w-16" />
+              <div className="min-w-0 flex-1 space-y-3 py-1">
+                <div className="h-7 w-56 max-w-full rounded luxor-skeleton sm:h-9" />
+                <div className="flex flex-wrap gap-2">
+                  <div className="h-4 w-20 rounded luxor-skeleton" />
+                  <div className="h-4 w-24 rounded luxor-skeleton" />
                 </div>
-              </div>
-            </section>
-
-            {/* Client Details Skeleton */}
-            <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="space-y-2">
-                  <div className="h-3 w-20 luxor-skeleton rounded" />
-                  <div className="h-5 w-32 luxor-skeleton rounded" />
-                </div>
-                <div className="h-5 w-5 luxor-skeleton rounded" />
-              </div>
-              <div className="space-y-4">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg luxor-skeleton" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-3 w-12 luxor-skeleton rounded" />
-                      <div className="h-4 w-40 luxor-skeleton rounded" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          {/* Event Details Skeleton */}
-          <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
-              <div className="space-y-2">
-                <div className="h-3 w-20 luxor-skeleton rounded" />
-                <div className="h-4 w-48 luxor-skeleton rounded" />
+                <div className="h-3 w-40 max-w-full rounded luxor-skeleton" />
               </div>
             </div>
-            <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="flex items-center gap-3 min-h-[72px]">
-                  <div className="h-8 w-8 rounded-lg luxor-skeleton" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-3 w-16 luxor-skeleton rounded" />
-                    <div className="h-4 w-32 luxor-skeleton rounded" />
-                  </div>
-                </div>
-              ))}
+            <div className="flex shrink-0 gap-2">
+              {Array.from({ length: 3 }).map((_, index) => <div key={index} className="h-10 w-10 rounded-lg luxor-skeleton" />)}
             </div>
           </div>
 
-          {/* Message Payload Skeleton */}
-          <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6">
-            <div className="h-3 w-32 luxor-skeleton rounded mb-3" />
-            <div className="space-y-2">
-              <div className="h-4 w-full luxor-skeleton rounded" />
-              <div className="h-4 w-5/6 luxor-skeleton rounded" />
+          <div className="grid grid-cols-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 sm:grid-cols-3 xl:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, index) => <div key={index} className="min-w-0 space-y-2 border-b border-r border-[color:var(--portal-border)] px-3 py-3 sm:px-4 xl:border-b-0">
+              <div className="h-2.5 w-16 rounded luxor-skeleton" />
+              <div className="h-3 w-24 max-w-full rounded luxor-skeleton" />
+            </div>)}
+          </div>
+
+          <div className="border-t border-[color:var(--portal-border)] px-5 py-4 lg:px-6">
+            <div className="flex items-center gap-3 md:hidden">
+              <div className="h-8 w-8 shrink-0 rounded-full luxor-skeleton" />
+              <div className="flex-1 space-y-2"><div className="h-2.5 w-24 rounded luxor-skeleton" /><div className="h-4 w-36 rounded luxor-skeleton" /></div>
             </div>
+            <div className="hidden grid-cols-10 gap-3 md:grid">
+              {Array.from({ length: 10 }).map((_, index) => <div key={index} className="flex min-w-0 flex-col items-center gap-2"><div className="h-7 w-7 rounded-full luxor-skeleton" /><div className="h-2.5 w-full max-w-16 rounded luxor-skeleton" /></div>)}
+            </div>
+          </div>
+        </section>
+
+        <div className="overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1 shadow-sm">
+          <div className="flex min-h-14 items-center gap-3 px-3 md:hidden"><div className="h-4 w-4 rounded luxor-skeleton" /><div className="space-y-2"><div className="h-2 w-20 rounded luxor-skeleton" /><div className="h-3 w-28 rounded luxor-skeleton" /></div></div>
+          <div className="hidden grid-cols-7 gap-2 md:grid">
+            {Array.from({ length: 7 }).map((_, index) => <div key={index} className="flex h-10 min-w-0 items-center px-3"><div className="h-3 w-full max-w-20 rounded luxor-skeleton" /></div>)}
           </div>
         </div>
 
-        {/* Sidebar Recommended Actions Column Skeleton */}
-        <div className="space-y-6 lg:sticky lg:top-20 lg:self-start">
-          <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-              <div className="h-5 w-40 luxor-skeleton rounded" />
-              <div className="h-3 w-20 luxor-skeleton rounded" />
+        <div className="mt-4 space-y-4">
+          <section className="flex flex-col gap-4 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div className="flex min-w-0 flex-1 items-start gap-3"><div className="h-10 w-10 shrink-0 rounded-xl luxor-skeleton" /><div className="min-w-0 flex-1 space-y-2.5"><div className="h-2.5 w-20 rounded luxor-skeleton" /><div className="h-4 w-64 max-w-full rounded luxor-skeleton" /><div className="h-3 w-96 max-w-full rounded luxor-skeleton" /></div></div>
+            <div className="h-10 w-36 shrink-0 rounded-lg luxor-skeleton" />
+          </section>
+          <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4"><div className="h-3 w-28 rounded luxor-skeleton" /><div className="h-8 w-16 rounded-lg luxor-skeleton" /></div>
+            <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => <div key={index} className="space-y-2"><div className="h-2.5 w-20 rounded luxor-skeleton" /><div className="h-4 w-36 max-w-full rounded luxor-skeleton" /></div>)}
             </div>
-            <div className="grid gap-2.5">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="flex items-center gap-3 rounded-xl border border-[color:var(--portal-border)] p-3">
-                  <div className="h-8 w-8 rounded-lg luxor-skeleton shrink-0" />
-                  <div className="flex-1 space-y-2 min-w-0">
-                    <div className="h-4 w-32 luxor-skeleton rounded" />
-                    <div className="h-3 w-40 luxor-skeleton rounded" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          </section>
         </div>
       </div>
     </PortalPageFrame>
@@ -10480,7 +9430,7 @@ function ClientSummaryCard({
   }
 
   return (
-    <section ref={summaryRef} className="flex min-h-[260px] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
+    <section ref={summaryRef} className="flex min-h-[260px] flex-col rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter">
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-4">
         <div className="flex min-w-0 items-center gap-3">
           <PortalContactAvatar
@@ -10491,7 +9441,7 @@ function ClientSummaryCard({
             onAvatarUpdate={onAvatarUpdate}
           />
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#caa24c]">Client Summary</p>
+            <p className="text-xs font-semibold text-[color:var(--portal-muted)]">Client summary</p>
             {sectionEditing ? (
               <input
                 aria-label="Client name"
@@ -10507,7 +9457,7 @@ function ClientSummaryCard({
           {sectionEditing ? (
             <>
               <button type="button" onClick={cancelSummaryEdit} disabled={isSaving} className="min-h-9 rounded-lg px-2.5 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50">Cancel</button>
-              <button type="button" onClick={() => void saveSummary()} disabled={isSaving} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c] px-2.5 text-xs font-semibold text-white hover:bg-[#b98a3d] disabled:opacity-50"><Check size={13} /> Save</button>
+              <button type="button" onClick={() => void saveSummary()} disabled={isSaving} className="luxor-gold-raised inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-white disabled:opacity-50"><Check size={13} /> Save</button>
             </>
           ) : (
             <button type="button" onClick={beginSummaryEdit} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] px-2.5 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]"><Pencil size={13} /> Edit</button>
@@ -10530,8 +9480,8 @@ function ClientSummaryCard({
         ))}
       </div>
       <EventContacts inquiryId={lead.id} />
-      <div className="mt-4 border-t border-zinc-100/5 pt-3 dark:border-zinc-850/30">
-        <button type="button" onClick={onViewDetails} className="w-full rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/8 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#caa24c] transition-colors hover:bg-[#caa24c]/14 hover:text-[#f1d27a]">
+      <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3">
+        <button type="button" onClick={onViewDetails} className="min-h-11 w-full rounded-lg bg-[color:var(--portal-soft)] px-4 py-2.5 text-xs font-semibold text-[#8c6424] transition-colors hover:bg-[#caa24c]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:text-[#f1d27a]">
           Open Messages &rarr;
         </button>
       </div>
@@ -10586,23 +9536,23 @@ function EventContacts({ inquiryId }: { inquiryId: string }) {
   return <>
     <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event contacts</p>
-        <button type="button" onClick={() => setAdding((value) => !value)} className="inline-flex items-center gap-1 text-[10px] font-bold text-[#a8792f] hover:text-[#caa24c] dark:text-[#f1d27a]"><Plus size={12} /> Add</button>
+        <p className="text-xs font-semibold text-[color:var(--portal-muted)]">Event contacts</p>
+        <button type="button" onClick={() => setAdding((value) => !value)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[#8c6424] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:text-[#f1d27a]"><Plus size={14} /> Add</button>
       </div>
-      {loading ? <div className="h-10 rounded-xl luxor-skeleton" /> : contacts.length === 0 && !adding ? <button type="button" onClick={() => setAdding(true)} className="flex w-full items-center gap-2 rounded-xl border border-dashed border-[#caa24c]/30 bg-[#caa24c]/5 px-3 py-2.5 text-left text-[10px] text-[color:var(--portal-muted)] hover:border-[#caa24c]/55"><Plus size={14} className="text-[#caa24c]" /> Add another person to this event</button> : null}
+      {loading ? <div className="h-11 rounded-xl luxor-skeleton" /> : contacts.length === 0 && !adding ? <button type="button" onClick={() => setAdding(true)} className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2.5 text-left text-xs text-[color:var(--portal-muted)] hover:border-[#caa24c]/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><Plus size={14} className="text-[#8c6424] dark:text-[#f1d27a]" /> Add another person to this event</button> : null}
       <div className="space-y-1.5">
         {contacts.map((contact) => <div key={contact.id} className="group flex items-center gap-2 rounded-xl bg-[color:var(--portal-soft)] px-2 py-2">
           <PortalContactAvatar name={contact.full_name} size="sm" />
-          <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold text-[color:var(--portal-text)]">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="truncate text-[9px] text-[color:var(--portal-muted)]">{contact.email || 'No email'}{contact.phone ? ` · ${formatPhoneDisplay(contact.phone)}` : ''}</p></div>
+          <div className="min-w-0 flex-1"><p className="break-words text-xs font-semibold text-[color:var(--portal-text)]">{contact.full_name}{contact.role_label ? ` · ${contact.role_label}` : ''}</p><p className="mt-0.5 break-words text-xs text-[color:var(--portal-muted)] [overflow-wrap:anywhere]">{contact.email || 'No email'}{contact.phone ? ` · ${formatPhoneDisplay(contact.phone)}` : ''}</p></div>
           <button type="button" onClick={() => setRemoving(contact)} className="portal-contact-remove-action p-1 text-[color:var(--portal-muted)] opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100 focus:opacity-100" aria-label={`Remove ${contact.full_name}`}><Trash2 size={12} /></button>
         </div>)}
       </div>
       {adding ? <form onSubmit={addContact} className="mt-2 space-y-2 rounded-xl border border-[#caa24c]/25 bg-[color:var(--portal-soft)] p-3">
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" autoFocus />
-        <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email (optional)" type="email" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" />
-        <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Phone (optional)" type="tel" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" />
-        <input value={role} onChange={(event) => setRole(event.target.value)} placeholder="Role, e.g. Co-host (optional)" className="w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-2 text-[10px] text-[color:var(--portal-text)] outline-none" />
-        <div className="flex justify-end gap-2"><button type="button" onClick={() => setAdding(false)} className="px-2 py-1 text-[9px] font-bold text-[color:var(--portal-muted)]">Cancel</button><button type="submit" disabled={busy || !name.trim()} className="rounded-lg bg-[#caa24c] px-3 py-1.5 text-[9px] font-bold text-white disabled:opacity-50">{busy ? 'Saving…' : 'Add contact'}</button></div>
+        <input aria-label="Event contact full name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/50" autoFocus />
+        <input aria-label="Event contact email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email (optional)" type="email" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/50" />
+        <input aria-label="Event contact phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Phone (optional)" type="tel" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/50" />
+        <input aria-label="Event contact role" value={role} onChange={(event) => setRole(event.target.value)} placeholder="Role, e.g. Co-host (optional)" className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/50" />
+        <div className="flex justify-end gap-2"><button type="button" onClick={() => setAdding(false)} className="min-h-11 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">Cancel</button><button type="submit" disabled={busy || !name.trim()} className="luxor-gold-raised min-h-11 rounded-lg px-3 text-xs font-semibold text-white disabled:opacity-50">{busy ? 'Saving…' : 'Add contact'}</button></div>
       </form> : null}
     </div>
     <PortalModal isOpen={Boolean(removing)} onClose={() => !busy && setRemoving(null)} maxWidth="max-w-sm"><div className="bg-[color:var(--portal-card)] p-5"><h3 className="text-sm font-bold text-[color:var(--portal-text)]">Remove event contact?</h3><p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Remove {removing?.full_name} from this event? Their own record is not deleted.</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setRemoving(null)} className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-bold text-[color:var(--portal-text)]">Cancel</button><button type="button" onClick={removeContact} disabled={busy} className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-50">{busy ? 'Removing…' : 'Remove person'}</button></div></div></PortalModal>
@@ -10994,7 +9944,7 @@ function ClientActionButton({
         loading ? 'opacity-100 ring-1 ring-[#caa24c]/25' : 'disabled:opacity-45'
       }`}
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c] transition-colors group-hover:border-[#caa24c]/50 shadow-xs">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#caa24c]/10 text-[#8c6424] dark:text-[#f1d27a]">
         {loading ? (
           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#caa24c]/25 border-t-[#caa24c]" />
         ) : (
@@ -11002,10 +9952,10 @@ function ClientActionButton({
         )}
       </span>
       <span className="min-w-0">
-        <span className="block text-xs font-bold text-[color:var(--portal-text)] group-hover:text-[#caa24c] transition-colors">
+        <span className="block text-xs font-semibold text-[color:var(--portal-text)] transition-colors group-hover:text-[#8c6424] dark:group-hover:text-[#f1d27a]">
           {loading ? 'Saving next step...' : label}
         </span>
-        <span className="mt-1 block text-[9px] font-medium leading-4 text-[color:var(--portal-muted)]">
+        <span className="mt-1 block text-xs leading-5 text-[color:var(--portal-muted)]">
           {loading ? 'Updating the lead record now' : detail}
         </span>
       </span>
@@ -11150,7 +10100,7 @@ function DetailItem({
       }`}
     >
       {icon ? (
-        <span className={`${compact ? '' : 'mt-0.5'} flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#a8792f]`}>
+        <span className={`${compact ? '' : 'mt-0.5'} flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c]/10 text-[#8c6424] dark:text-[#f1d27a]`}>
           {icon}
         </span>
       ) : null}
@@ -11269,8 +10219,8 @@ function DetailItem({
                   onClick={copyDetail}
                   className={`inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border transition-all ${
                     copied
-                      ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
-                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/25 hover:text-[#a8792f]'
+                      ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/25 hover:text-[#8c6424] dark:hover:text-[#f1d27a]'
                   }`}
                 >
                   {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -11284,7 +10234,7 @@ function DetailItem({
                     event.stopPropagation()
                     onCompose()
                   }}
-                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/25 hover:text-[#a8792f]"
+                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/25 hover:text-[#8c6424] dark:hover:text-[#f1d27a]"
                 >
                   <Mail size={13} />
                 </button>
@@ -11297,7 +10247,7 @@ function DetailItem({
                     event.stopPropagation()
                     onCall()
                   }}
-                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-emerald-500/25 hover:text-emerald-400"
+                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-emerald-500/25 hover:text-emerald-700 dark:hover:text-emerald-300"
                 >
                   <Phone size={13} />
                 </button>
@@ -11310,7 +10260,7 @@ function DetailItem({
                     event.stopPropagation()
                     startEditing()
                   }}
-                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/25 hover:text-[#a8792f]"
+                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/25 hover:text-[#8c6424] dark:hover:text-[#f1d27a]"
                 >
                   <Pencil size={13} />
                 </button>
@@ -11319,39 +10269,7 @@ function DetailItem({
           ) : null}
         </div>
       )}
-      {subtext && <p className="mt-1 text-[9px] font-medium italic text-[#a8792f]">{subtext}</p>}
-      </div>
-    </div>
-  )
-}
-
-function LeadStatCard({
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  label: string
-  value: string
-  detail: string
-  tone: 'blue' | 'gold' | 'green' | 'slate'
-}) {
-  const toneClasses = {
-    blue: 'border-blue-500/15 bg-blue-500/5 text-blue-400',
-    gold: 'border-[#caa24c]/18 bg-[#caa24c]/8 text-[#f1d27a]',
-    green: 'border-emerald-500/15 bg-emerald-500/5 text-emerald-400',
-    slate: 'border-zinc-800 bg-zinc-950/70 text-zinc-400',
-  }
-
-  return (
-    <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 shadow-xl shadow-black/10">
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">{label}</p>
-        <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${toneClasses[tone]}`}>Live</span>
-      </div>
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <p className="max-w-[70%] font-serif tabular-nums text-lg font-bold leading-tight text-[color:var(--portal-text)]">{value}</p>
-        <p className="pb-1 text-right text-[11px] font-medium leading-4 text-[color:var(--portal-muted)]">{detail}</p>
+      {subtext && <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{subtext}</p>}
       </div>
     </div>
   )
@@ -11416,9 +10334,9 @@ function SignalMetric({
 }) {
   return (
     <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3">
-      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{label}</p>
+      <p className="text-xs font-medium text-[color:var(--portal-muted)]">{label}</p>
       <p className="mt-2 font-serif text-lg font-bold tabular-nums text-[color:var(--portal-text)]">{value}</p>
-      <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">{detail}</p>
+      <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{detail}</p>
     </div>
   )
 }
