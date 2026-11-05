@@ -4,7 +4,7 @@ import { LuxorEmailJob, LuxorInquiry } from './luxorInquiryTypes'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { sendLuxorResendEmail } from './luxorResendMailServer'
 import { luxorMailAddress, luxorMailProvider } from './luxorMailConfig'
-import { supabaseRest } from './supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
 
 type InquirySnapshot = Pick<LuxorInquiry, 'id' | 'full_name' | 'email' | 'phone' | 'event_type' | 'guest_count' | 'budget'
   | 'target_date' | 'message' | 'source' | 'flow' | 'preferred_tour_date' | 'preferred_tour_time' | 'metadata'>
@@ -244,6 +244,28 @@ function buildBrandedNotificationHtml(inquiry: InquirySnapshot, aiSummary: strin
 export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promise<{ status: 'sent' | 'skipped' }> {
   if (job.job_type !== 'inquiry_notification' || job.status !== 'sending') throw new Error('Internal alert must be claimed before delivery.')
   const cancellationKind = job.metadata.notificationKind
+  if (cancellationKind === 'staff_reminder') {
+    const { sourceId, sourceKind, sourceDate, sourceTime, sourceName, leadId, leadName } = job.metadata
+    if (job.inquiry_id !== null || job.recipient_email.toLowerCase() !== 'a.patterson@luxoratlaspalmas.com'
+      || typeof sourceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sourceId)
+      || typeof sourceName !== 'string' || (sourceDate !== null && typeof sourceDate !== 'string') || (sourceTime !== null && typeof sourceTime !== 'string')
+      || (leadId !== null && (typeof leadId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(leadId))) || (leadName !== null && typeof leadName !== 'string')
+      || job.metadata.notificationRendered !== true) throw new Error('Staff reminder identity is invalid.')
+    if (sourceKind === 'task') {
+      const [task] = await supabaseRestStrict<Array<{ title: string; status: string; due_date: string | null; due_at: string | null; inquiry_id: string | null }>>(`luxor_tasks?select=title,status,due_date,due_at,inquiry_id&id=eq.${encodeURIComponent(sourceId)}&limit=1`)
+      if (!task || task.status !== 'pending' || task.title !== sourceName || task.due_date !== sourceDate || task.due_at !== sourceTime || task.inquiry_id !== leadId) return { status: 'skipped' }
+      if (leadId) {
+        const [lead] = await supabaseRestStrict<Array<{ full_name: string }>>(`luxor_inquiries?select=full_name&id=eq.${encodeURIComponent(leadId)}&limit=1`)
+        if (!lead || lead.full_name !== leadName) return { status: 'skipped' }
+      }
+    } else if (sourceKind === 'promotion') {
+      const [promotion] = await supabaseRestStrict<Array<{ name: string; active: boolean; expires_on: string | null }>>(`luxor_promotions?select=name,active,expires_on&id=eq.${encodeURIComponent(sourceId)}&limit=1`)
+      if (!promotion || !promotion.active || promotion.name !== sourceName || promotion.expires_on !== sourceDate) return { status: 'skipped' }
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+      const part = (type: string) => parts.find(item => item.type === type)?.value
+      if (typeof sourceDate !== 'string' || `${part('year')}-${part('month')}-${part('day')}` > sourceDate) return { status: 'skipped' }
+    } else throw new Error('Staff reminder source is invalid.')
+  }
   if (cancellationKind === 'tour_cancellation' || cancellationKind === 'tour_cancellation_client') {
     const inquiryId = job.metadata.tourInquiryId
     const eventId = job.metadata.calendarEventId
@@ -299,7 +321,7 @@ export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promi
   const send = provider === 'resend' ? sendLuxorResendEmail : sendLuxorZohoEmail
   await send({
     to: frozen.recipient_email, subject: frozen.subject, content: frozen.body,
-    from: 'booking@luxoratlaspalmas.com', fromName: cancellationKind === 'tour_cancellation_client' ? 'Luxor Event Space' : 'Luxor Lead Alerts',
+    from: 'booking@luxoratlaspalmas.com', fromName: cancellationKind === 'staff_reminder' ? 'Luxor Reminders' : cancellationKind === 'tour_cancellation_client' ? 'Luxor Event Space' : 'Luxor Lead Alerts',
     idempotencyKey: `email-job/${frozen.id}`,
   })
   return { status: 'sent' }

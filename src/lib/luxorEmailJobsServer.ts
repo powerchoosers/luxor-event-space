@@ -1285,7 +1285,9 @@ export async function processLuxorEmailJobs(
         }
         await updateLuxorEmailJob(job.id, delivery.status === 'sent'
           ? { status: 'sent', sent_at: new Date().toISOString(), last_error: null }
-          : { status: 'cancelled', last_error: 'Tour or attendee is no longer eligible for this calendar revision.' })
+          : { status: 'cancelled', last_error: job.metadata.notificationKind === 'staff_reminder'
+            ? 'Reminder skipped because its source changed or is no longer active.'
+            : 'Tour or attendee is no longer eligible for this calendar revision.' })
         results.push({ id: job.id, status: delivery.status })
         continue
       }

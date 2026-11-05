@@ -7,6 +7,7 @@ import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCale
 import { LuxorAvailabilityCalendar } from '@/components/portal/LuxorAvailabilityCalendar'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
 import { AddCalendarTaskModal } from '@/components/portal/AddCalendarTaskModal'
+import { StaffReminders } from '@/components/portal/StaffReminders'
 import { PortalAnimatedTabs, PortalButton, PortalModal, PortalPageFrame, PortalPageHeader, PortalSkeleton, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard, type PortalStatusTone } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
@@ -100,7 +101,20 @@ export default function CalendarPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [addTaskOpen, setAddTaskOpen] = useState(false)
+  const [remindersOpen, setRemindersOpen] = useState(false)
+  const [reminderCount, setReminderCount] = useState<number | null>(null)
   const { notify } = useToast()
+
+  const loadReminderCount = useCallback(async () => {
+    try {
+      const response = await fetch('/api/portal/staff-reminders', { cache: 'no-store' })
+      if (!response.ok) throw new Error('Reminders unavailable')
+      const result = await response.json() as { pendingCount: number }
+      setReminderCount(result.pendingCount)
+    } catch { setReminderCount(null) }
+  }, [])
+
+  useEffect(() => { void loadReminderCount() }, [loadReminderCount])
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
@@ -395,7 +409,7 @@ export default function CalendarPage() {
         titleClassName="text-lg sm:text-2xl"
         mobileActionsInline
         actions={
-          <PortalButton type="button" variant="primary" size="sm" onClick={() => setAddTaskOpen(true)}><Plus size={15} aria-hidden="true" /> Add Task</PortalButton>
+          <div className="flex flex-wrap gap-2"><PortalButton type="button" variant="secondary" size="sm" onClick={() => setRemindersOpen(true)}>Reminders{reminderCount ? ` (${reminderCount})` : ''}</PortalButton><PortalButton type="button" variant="primary" size="sm" onClick={() => setAddTaskOpen(true)}><Plus size={15} aria-hidden="true" /> Add Task</PortalButton></div>
         }
       />
 
@@ -508,6 +522,7 @@ export default function CalendarPage() {
         )}
       </PortalTabTransition>
       <AddCalendarTaskModal isOpen={addTaskOpen} onClose={() => setAddTaskOpen(false)} onCreated={async () => { notify({ title: 'Task added', variant: 'success' }); await loadData() }} />
+      <StaffReminders open={remindersOpen} onClose={() => { setRemindersOpen(false); void loadReminderCount() }} tasks={data.tasks} />
       <PortalModal
         isOpen={scheduleOpen}
         onClose={() => setScheduleOpen(false)}
