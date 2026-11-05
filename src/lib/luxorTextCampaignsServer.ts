@@ -6,7 +6,7 @@ import { normalizePhoneNumber } from './luxorCallsServer'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment } from './luxorInquiryTypes'
 import { createOrUpdateLuxorMessage } from './luxorMessagesServer'
 import { getActiveLuxorPhoneNumber } from './luxorPhoneNumbersServer'
-import { supabaseRest } from './supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
 import { areLuxorTourNotificationsEnabled } from './luxorTourNotificationsServer'
 import {
   assertLuxorAutomatedSmsAllowed,
@@ -33,6 +33,19 @@ import { recordLuxorTestSmsSimulation } from './luxorTestLeadServer'
 import { CUSTOM_WORKFLOW_EXECUTION_ENABLED, isCustomWorkflowJobBlockedFromLegacyDispatch } from './luxorCustomWorkflowFeatureGates'
 
 const MAX_CAMPAIGN_RECIPIENTS = 1000
+
+class TourBookingEligibilityError extends Error {}
+
+async function hasSignedBookingForTourText(job: LuxorTextJob) {
+  if (!['tour_confirmation', 'tour_reminder'].includes(job.job_type)) return false
+  if (!job.inquiry_id) throw new TourBookingEligibilityError('Tour text held because its lead could not be verified.')
+  try {
+    const bookings = await supabaseRestStrict<Array<{ id: string }>>(`luxor_bookings?select=id&inquiry_id=eq.${encodeURIComponent(job.inquiry_id)}&status=in.(confirmed,completed)&contract_status=eq.signed&limit=1`)
+    return bookings.length > 0
+  } catch {
+    throw new TourBookingEligibilityError('Tour text held because booking eligibility could not be verified.')
+  }
+}
 const MAX_CAMPAIGN_BODY_LENGTH = 480
 const DEFAULT_DAILY_SEGMENT_LIMIT = 1800
 const DEFAULT_WORKER_BATCH_SIZE = 10
@@ -676,6 +689,13 @@ async function processTextJob(job: LuxorTextJob, options: { customWorkflowDispat
     if (isCustomWorkflowJob && (!isWithinSmsSendWindow() || !await authorizeCustomWorkflowTextJob(job.id))) {
       return { id: job.id, status: 'skipped' as const, error: 'custom_workflow_dispatch_window_or_eligibility_changed' }
     }
+    if (!isCustomWorkflowJob && await hasSignedBookingForTourText(job)) {
+      const reason = 'Tour follow-up stopped because the client has a confirmed booking and signed contract.'
+      await supabaseRest(`luxor_text_jobs?id=eq.${encodeURIComponent(job.id)}&status=eq.sending`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'cancelled', last_error: reason, updated_at: new Date().toISOString() }),
+      })
+      return { id: job.id, status: 'skipped' as const, error: reason }
+    }
     providerAttemptStarted = true
     const sent = await client.messages.create({
       to: destination,
@@ -740,6 +760,12 @@ async function processTextJob(job: LuxorTextJob, options: { customWorkflowDispat
     return { id: job.id, status: 'sent' as const }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Text delivery failed.'
+    if (error instanceof TourBookingEligibilityError && !providerAttemptStarted && !providerAccepted) {
+      await supabaseRest(`luxor_text_jobs?id=eq.${encodeURIComponent(job.id)}&status=eq.sending`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'queued', scheduled_for: new Date(Date.now() + 5 * 60_000).toISOString(), last_error: message, updated_at: new Date().toISOString() }),
+      })
+      return { id: job.id, status: 'skipped' as const, error: message }
+    }
     if (isCustomWorkflowJob) {
       if (customStepAccepted) {
         console.error('Custom workflow text was accepted but its conversation history update failed:', message)

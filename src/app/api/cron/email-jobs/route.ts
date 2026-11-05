@@ -6,6 +6,7 @@ import { isLuxorZohoAuthorizationError, verifyLuxorMailConnection } from '@/lib/
 import { processPendingLuxorResendEvents } from '@/lib/luxorResendWebhookServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { processPendingLuxorBillIntakes } from '@/lib/luxorBillIntakeServer'
+import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -94,6 +95,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // The bounded RPC only cancels acquisition work; it never calls a provider.
+    // Acquisition delivery has its own fail-closed eligibility check, so an
+    // unavailable reconciliation should not block unrelated receipts.
+    let reconciliationError: string | null = null
+    try {
+      await supabaseRestStrict<number>('rpc/luxor_reconcile_signed_booking_followups', {
+        method: 'POST', body: JSON.stringify({ p_limit: 25 }),
+      })
+    } catch (error) {
+      reconciliationError = error instanceof Error ? error.message : 'Unknown database error.'
+      console.error('Signed-booking follow-up reconciliation failed; check the database migration and retry:', reconciliationError)
+    }
     const outsideSendWindow = !Number.isFinite(centralHour) || centralHour < SEND_WINDOW_START_HOUR || centralHour >= SEND_WINDOW_END_HOUR
     // Reconcile finished sequences before claiming other work so a busy
     // transactional queue cannot starve day-30 recovery.
@@ -118,6 +131,13 @@ export async function POST(request: NextRequest) {
         error: failed.error || 'Scheduled email delivery failed.',
         metadata: { reason: provider === 'zoho' && isLuxorZohoAuthorizationError(failed.error) ? authorizationReason : 'delivery', provider },
       })
+    } else if (reconciliationError) {
+      await safelyRecordLuxorWorkerHealth('email_jobs', {
+        status: 'error',
+        error: `Signed-booking follow-up reconciliation failed: ${reconciliationError}`,
+        processed: results.length,
+        metadata: { reason: 'follow_up_reconciliation', provider },
+      })
     } else {
       await safelyRecordLuxorWorkerHealth('email_jobs', {
         status: outsideSendWindow && !results.length ? 'idle' : 'healthy',
@@ -126,6 +146,7 @@ export async function POST(request: NextRequest) {
       })
     }
     return NextResponse.json({ success: true, processed: results.length, results,
+      ...(reconciliationError ? { reconciliationWarning: 'Signed-booking follow-up cleanup failed. Check worker health and the database migration.' } : {}),
       ...(outsideSendWindow && !testResults.length && !followUpResults.length ? { skipped: 'outside_customer_send_window', sendWindow: '8:00 AM-8:00 PM America/Chicago' } : {}) })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Email processing failed.'

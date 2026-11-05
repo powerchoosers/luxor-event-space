@@ -890,6 +890,34 @@ const POST_CONTRACT_PAYMENT_REMINDER_TYPES = new Set<LuxorEmailJobKind>([
   'installment_payment_reminder',
 ])
 
+class BookingFollowUpEligibilityError extends Error {}
+
+/** Guard only sales follow-ups; booking, payment and event communications remain deliverable. */
+async function cancelFollowUpForSignedBooking(job: LuxorEmailJob) {
+  const brochureDelivery = job.job_type === 'booking_package' && job.metadata?.flow_stage === 'brochure_delivery'
+  if (job.test_run_id || job.calendar_method === 'CANCEL' || (!brochureDelivery && !job.automation_enrollment_id && !['tour_confirmation', 'tour_reminder', 'tour_no_show_reschedule'].includes(job.job_type))) return false
+  if (!job.inquiry_id) throw new BookingFollowUpEligibilityError('Follow-up held because its lead could not be verified.')
+
+  let bookings: Array<{ id: string }>
+  try {
+    bookings = await supabaseRestStrict<Array<{ id: string }>>(`luxor_bookings?select=id&inquiry_id=eq.${encodeURIComponent(job.inquiry_id)}&status=in.(confirmed,completed)&contract_status=eq.signed&limit=1`)
+  } catch {
+    throw new BookingFollowUpEligibilityError('Follow-up held because booking eligibility could not be verified.')
+  }
+  if (!bookings.length) return false
+
+  const cancelled = await supabaseRest<LuxorEmailJob[]>(`luxor_email_jobs?select=id&id=eq.${encodeURIComponent(job.id)}&status=eq.sending`, {
+    method: 'PATCH', headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ status: 'cancelled', last_error: 'Sales follow-up stopped because the client has a confirmed booking and signed contract.', updated_at: new Date().toISOString() }),
+  })
+  if (cancelled.length && job.automation_enrollment_id && job.automation_step_key) {
+    await supabaseRest(`luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(job.automation_enrollment_id)}&step_key=eq.${encodeURIComponent(job.automation_step_key)}&status=in.(scheduled,email_queued,processing)`, {
+      method: 'PATCH', body: JSON.stringify({ status: 'cancelled', outcome: 'booked', updated_at: new Date().toISOString() }),
+    })
+  }
+  return true
+}
+
 /**
  * Refresh payment-reminder emails immediately before delivery. Checkout links
  * expire quickly, so storing an old URL in a queued job is not enough. This
@@ -1236,6 +1264,10 @@ export async function processLuxorEmailJobs(
           if (!claimed) { results.push({ id: job.id, status: 'skipped' }); continue }
           job = claimed
         }
+        if (await cancelFollowUpForSignedBooking(job)) {
+          results.push({ id: job.id, status: 'skipped' })
+          continue
+        }
         let delivery: { status: 'sent' | 'skipped' }
         if (job.job_type === 'transactional_notice') {
           const { deliverLuxorTransactionalNotice } = await import('./luxorTransactionalNoticeServer')
@@ -1395,6 +1427,10 @@ export async function processLuxorEmailJobs(
         results.push({ id: job.id, status: 'skipped' })
         continue
       }
+      if (!isCustomWorkflowJob && await cancelFollowUpForSignedBooking(job)) {
+        results.push({ id: job.id, status: 'skipped' })
+        continue
+      }
       providerAttemptStarted = true
       const providerResult = job.test_run_id
         ? await sendLuxorTestEmail({
@@ -1470,6 +1506,14 @@ export async function processLuxorEmailJobs(
       results.push({ id: job.id, status: 'sent' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Email send failed.'
+      if (error instanceof BookingFollowUpEligibilityError && !providerAttemptStarted && !providerAccepted) {
+        await supabaseRest(`luxor_email_jobs?id=eq.${encodeURIComponent(job.id)}&status=eq.sending`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'queued', last_error: message, scheduled_for: new Date(Date.now() + 5 * 60_000).toISOString(), updated_at: new Date().toISOString() }),
+        })
+        results.push({ id: job.id, status: 'skipped', error: message })
+        continue
+      }
       if (error instanceof LuxorBookingDepositPausedError && !providerAttemptStarted && !providerAccepted) {
         await supabaseRest<LuxorEmailJob[]>(`luxor_email_jobs?select=id&id=eq.${encodeURIComponent(job.id)}&status=eq.${markSending ? 'queued' : 'sending'}&updated_at=eq.${encodeURIComponent(job.updated_at)}`, {
           method: 'PATCH', headers: { Prefer: 'return=representation' },

@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listTasksByInquiry, listAllTasks, createTask, updateTask } from '@/lib/luxorTasksServer'
 import { getAllowedZohoPortalEmails, getLuxorPortalSession } from '@/lib/luxorPortalAuth'
-import { supabaseRest } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
+
+async function hasSignedBooking(inquiryId: string) {
+  const bookings = await supabaseRestStrict<Array<{ id: string }>>(
+    `luxor_bookings?select=id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=in.(confirmed,completed)&contract_status=eq.signed&limit=1`,
+  )
+  return bookings.length > 0
+}
+
+function isProspectFollowUp(description: unknown) {
+  return typeof description === 'string' && description.toLowerCase().startsWith('[follow-up:')
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,6 +62,7 @@ export async function POST(request: NextRequest) {
       const inquiry = await getLuxorInquiry(inquiryId)
       if (!inquiry) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 })
       if (isLuxorInquiryArchived(inquiry)) return NextResponse.json({ error: 'Archived leads cannot receive new follow-up tasks.' }, { status: 409 })
+      if (isProspectFollowUp(description) && await hasSignedBooking(inquiryId)) return NextResponse.json({ error: 'This client has a signed booking and no longer needs prospect follow-up.' }, { status: 409 })
     }
     if (taskType != null && !['todo', 'call', 'email', 'meeting', 'other'].includes(taskType)) return NextResponse.json({ error: 'Unsupported task type.' }, { status: 400 })
     if (!inquiryId && (!taskType || !dueDate)) return NextResponse.json({ error: 'Standalone tasks need a type and due date.' }, { status: 400 })
@@ -63,6 +75,7 @@ export async function POST(request: NextRequest) {
     const assignee = typeof assignedTo === 'string' && assignedTo ? assignedTo.trim().toLowerCase() : session.email
     if (!getAllowedZohoPortalEmails().includes(assignee)) return NextResponse.json({ error: 'Assignee must be an authorized portal user.' }, { status: 400 })
     const task = await createTask(inquiryId || null, title, description, dueDate, priority, { dueAt: dueAt || null, assignedTo: assignee, taskType: taskType || null })
+    if (isProspectFollowUp(description) && task?.status === 'cancelled') return NextResponse.json({ error: 'This client has a signed booking and no longer needs prospect follow-up.' }, { status: 409 })
     return NextResponse.json(task, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create task.'
@@ -101,6 +114,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Assignee must be an authorized portal user.' }, { status: 400 })
     }
     const updatedTask = await updateTask(id, updates)
+    if (updates.status === 'pending' && updatedTask?.status === 'cancelled') return NextResponse.json({ error: 'This client has a signed booking and no longer needs prospect follow-up.' }, { status: 409 })
     if (updatedTask?.automation_enrollment_id && updatedTask.automation_step_key && updates.status) {
       await supabaseRest(
         `luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(updatedTask.automation_enrollment_id)}&step_key=eq.${encodeURIComponent(updatedTask.automation_step_key)}`,

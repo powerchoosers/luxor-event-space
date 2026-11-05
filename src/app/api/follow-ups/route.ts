@@ -1,22 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorFollowUpSetup, isLuxorBrochureFollowUpSendingEnabled, updateLuxorFollowUpTemplate, recordLuxorFollowUpResponse, controlLuxorBrochureFollowUp, setLuxorFollowUpDisposition } from '@/lib/luxorFollowUpsServer'
-import { supabaseRest } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestCount, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import type { LuxorFollowUpAction, LuxorFollowUpEnrollment } from '@/lib/luxorFollowUpsServer'
 import { getLuxorInquiry, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { classifyAutomationStatus } from '@/lib/luxorAutomationsLibrary'
 import { getLuxorPhoneRoutingSettings } from '@/lib/luxorPhoneRoutingServer'
 
+async function listSignedBookedInquiryIds() {
+  const path = 'luxor_bookings?select=id,inquiry_id&status=in.(confirmed,completed)&contract_status=eq.signed&inquiry_id=not.is.null&order=id.asc'
+  const expected = await supabaseRestCount(path)
+  const rows: Array<{ id: string; inquiry_id: string }> = []
+  for (let offset = 0; offset < expected; offset += 500) {
+    const page = await supabaseRestStrict<Array<{ id: string; inquiry_id: string }>>(`${path}&limit=500&offset=${offset}`)
+    if (page.length !== Math.min(500, expected - offset)) throw new Error('Signed bookings could not be fully verified. Refresh and try again.')
+    rows.push(...page)
+  }
+  if (new Set(rows.map((row) => row.id)).size !== expected || await supabaseRestCount(path) !== expected) throw new Error('Signed bookings changed while loading. Refresh and try again.')
+  return [...new Set(rows.map((row) => row.inquiry_id))]
+}
+
 export async function GET(request: NextRequest) {
   if (!await getLuxorPortalSession()) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
   try {
     const inquiryId = request.nextUrl.searchParams.get('inquiryId')
     if (request.nextUrl.searchParams.get('dashboard') === '1') {
-      const [setup, sendingEnabled, phoneSettings] = await Promise.all([
+      const [setup, sendingEnabled, phoneSettings, signedBookedInquiryIds] = await Promise.all([
         getLuxorFollowUpSetup(),
         isLuxorBrochureFollowUpSendingEnabled(),
         getLuxorPhoneRoutingSettings(),
+        listSignedBookedInquiryIds(),
       ])
       const sequenceStatus = !setup.automation
         ? 'unknown'
@@ -30,14 +44,14 @@ export async function GET(request: NextRequest) {
       const enrollmentById = new Map(activeEnrollments.map((item) => [item.id, item.inquiry_id]))
       const pausedEnrollmentIds = enrollments.filter((item) => item.status === 'paused').map((item) => item.id)
       const ids = [...enrollmentById.keys()]
-      if (!ids.length) return NextResponse.json({ emailActions: [], pausedEnrollmentIds, pausedEnrollments: enrollments.filter((item) => item.status === 'paused'), sequenceStatus, missedCallTextEnabled: phoneSettings.missed_call_text_enabled, inboundTextReplyEnabled: phoneSettings.inbound_text_reply_enabled })
+      if (!ids.length) return NextResponse.json({ emailActions: [], pausedEnrollmentIds, pausedEnrollments: enrollments.filter((item) => item.status === 'paused'), signedBookedInquiryIds, sequenceStatus, missedCallTextEnabled: phoneSettings.missed_call_text_enabled, inboundTextReplyEnabled: phoneSettings.inbound_text_reply_enabled })
       const actions = await supabaseRest<Array<{ id: string; enrollment_id: string; step_key: string; scheduled_at: string; status: string; channel: string; email_job_id: string | null }>>(
         `luxor_follow_up_actions?select=id,enrollment_id,step_key,scheduled_at,status,channel,email_job_id&channel=eq.email&status=in.(email_queued,scheduled)&enrollment_id=in.(${ids.map(encodeURIComponent).join(',')})&order=scheduled_at.asc&limit=1000`,
       )
       return NextResponse.json({ emailActions: actions.flatMap((item) => {
         const inquiry_id = enrollmentById.get(item.enrollment_id)
         return inquiry_id ? [{ ...item, inquiry_id }] : []
-      }), pausedEnrollmentIds, pausedEnrollments: enrollments.filter((item) => item.status === 'paused'), sequenceStatus, missedCallTextEnabled: phoneSettings.missed_call_text_enabled, inboundTextReplyEnabled: phoneSettings.inbound_text_reply_enabled })
+      }), pausedEnrollmentIds, pausedEnrollments: enrollments.filter((item) => item.status === 'paused'), signedBookedInquiryIds, sequenceStatus, missedCallTextEnabled: phoneSettings.missed_call_text_enabled, inboundTextReplyEnabled: phoneSettings.inbound_text_reply_enabled })
     }
     if (inquiryId) {
       const historyPage = Math.max(0, Math.min(100, Number(request.nextUrl.searchParams.get('historyPage') || '0') || 0))
@@ -95,6 +109,13 @@ export async function POST(request: NextRequest) {
     }
     if (targetInquiry.archived_at || targetInquiry.status === 'closed_lost' || targetInquiry.pipeline_stage === 'closed_lost') {
       return NextResponse.json({ error: 'Archived leads cannot receive active follow-up changes.' }, { status: 409 })
+    }
+
+    if (action === 'resume' || (action === 'recover_overdue' && body.decision === 'reschedule')) {
+      const bookings = await supabaseRestStrict<Array<{ id: string }>>(
+        `luxor_bookings?select=id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=in.(confirmed,completed)&contract_status=eq.signed&limit=1`,
+      )
+      if (bookings.length) return NextResponse.json({ error: 'Follow-up cannot be scheduled for a client with a signed booking.' }, { status: 409 })
     }
 
     if (action === 'response') {

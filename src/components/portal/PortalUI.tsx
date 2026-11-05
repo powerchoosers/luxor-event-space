@@ -675,7 +675,7 @@ export function PortalFilterBar({
               value={searchValue}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder={searchPlaceholder}
-              className={`h-9.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] pl-9 text-xs font-medium text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10 ${
+              className={`h-9.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] pl-9 text-xs font-medium text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10 [&::-webkit-search-cancel-button]:hidden ${
                 searchValue && hasFilterControls ? 'pr-16' : hasFilterControls || searchValue ? 'pr-10' : 'pr-4'
               }`}
             />

@@ -157,7 +157,7 @@ export async function enrollLuxorBrochureLead(inquiry: LuxorInquiry, existingBro
       `luxor_follow_up_enrollments?select=*&inquiry_id=eq.${encodeURIComponent(inquiry.id)}&automation_key=eq.brochure_lead&limit=1`,
     )
   }
-  if (!enrollment) return null
+  if (!enrollment || enrollment.status !== 'active') return null
 
   const steps = scheduleBrochureFollowUpOffsets(enrollment.started_at, templates)
   const stepTimes = new Map(steps.map((step) => [step.step_key, step.scheduled_at]))

@@ -15,6 +15,7 @@ import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { useToast } from '@/components/portal/ToastProvider'
 import { saveRecentLead } from '@/lib/luxorRecentLeads'
+import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 
 type Channel = 'email' | 'phone'
 type Activity = { id: string; at: string; kind: 'note' | 'call' | 'email' | 'follow-up'; label: string; detail: string }
@@ -122,6 +123,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const [tasks, setTasks] = useState<LuxorTask[]>([])
   const [assignees, setAssignees] = useState<string[]>([])
   const [emailActions, setEmailActions] = useState<EmailAction[]>([])
+  const [signedBookedIds, setSignedBookedIds] = useState<Set<string> | null>(null)
   const [pausedEnrollmentIds, setPausedEnrollmentIds] = useState<string[]>([])
   const [pausedSequenceRecords, setPausedSequenceRecords] = useState<PausedEnrollment[]>([])
   const [loading, setLoading] = useState(true)
@@ -238,20 +240,43 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
       ])
       if (!response.ok || !emailResponse.ok) throw new Error('Follow-up tasks could not be loaded.')
       const result = (await response.json()) as { tasks: LuxorTask[]; assignees: string[] }
-      const emailResult = (await emailResponse.json()) as { emailActions: EmailAction[]; pausedEnrollmentIds?: string[]; pausedEnrollments?: PausedEnrollment[]; sequenceStatus: 'active' | 'draft' | 'paused' | 'unknown' | 'local-preview'; missedCallTextEnabled: boolean; inboundTextReplyEnabled: boolean }
+      const emailResult = (await emailResponse.json()) as { emailActions: EmailAction[]; pausedEnrollmentIds?: string[]; pausedEnrollments?: PausedEnrollment[]; signedBookedInquiryIds?: string[]; sequenceStatus: 'active' | 'draft' | 'paused' | 'unknown' | 'local-preview'; missedCallTextEnabled: boolean; inboundTextReplyEnabled: boolean }
+      if (!Array.isArray(emailResult.signedBookedInquiryIds)) throw new Error('Signed bookings could not be verified.')
       setTasks(result.tasks)
       setAssignees(result.assignees)
       setEmailActions(emailResult.emailActions)
+      setSignedBookedIds(new Set(emailResult.signedBookedInquiryIds))
       setPausedEnrollmentIds(emailResult.pausedEnrollmentIds ?? [])
       setPausedSequenceRecords(emailResult.pausedEnrollments ?? [])
       setAssignee((current) => current || result.assignees[0] || '')
       await Promise.all(Array.from(expandedRowIdsRef.current, (inquiryId) => loadExpandedCardDetails(inquiryId, 0, false, true)))
     } catch (error) {
+      setSignedBookedIds(null)
       notify({ title: 'Follow-up tasks could not be loaded', description: error instanceof Error ? error.message : 'Try again in a moment.', variant: 'error' })
     } finally { setLoading(false) }
   }, [loadExpandedCardDetails, notify])
 
   useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    const supabase = getPortalSupabaseClient()
+    let timer: number | null = null
+    const scheduleRefresh = () => {
+      if (timer !== null) return
+      timer = window.setTimeout(() => { timer = null; void refresh() }, 250)
+    }
+    const refreshWhenVisible = () => { if (document.visibilityState === 'visible') scheduleRefresh() }
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    const channel = supabase?.channel('luxor-follow-up-booking-refresh')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'luxor_bookings' }, scheduleRefresh)
+      .subscribe()
+    return () => {
+      if (timer !== null) window.clearTimeout(timer)
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      if (supabase && channel) void supabase.removeChannel(channel)
+    }
+  }, [refresh])
   useEffect(() => {
     if (!cardMenuLeadId) return
     const focusFrame = window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`#follow-up-menu-${CSS.escape(cardMenuLeadId)} [role="menuitem"]`)?.focus())
@@ -294,6 +319,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
   const followUpTasks = useMemo(() => tasks.filter((task): task is LuxorTask & { inquiry_id: string } => Boolean(task.inquiry_id) && isLuxorFollowUpTask(task)), [tasks])
   const completedTourLeads = useMemo(() => getCompletedTourLeads(leads.filter((lead) => !isLuxorInquiryArchived(lead))), [leads])
   const rows = useMemo<FollowUpRow[]>(() => {
+    if (!signedBookedIds) return []
     const entries: Array<{ inquiryId: string; id: string; channel: Channel; title: string; dueAt: string | null; dueDate: string | null; status: string; assignee: string; task?: LuxorTask }> = [
       ...followUpTasks.filter((task) => task.status === 'pending' && !(task.automation_enrollment_id && pausedEnrollments.has(task.automation_enrollment_id))).map((task) => ({ inquiryId: task.inquiry_id, id: task.id, channel: taskChannel(task), title: task.title, dueAt: task.due_at ?? null, dueDate: task.due_date ?? null, status: stateFor(task.due_at ?? null, task.due_date ?? null, today), assignee: task.assigned_to ?? 'Unassigned', task })),
       ...emailActions.map((action) => ({ inquiryId: action.inquiry_id, id: action.id, channel: 'email' as const, title: `Email ${action.step_key.replace('email_', '#')}`, dueAt: action.scheduled_at, dueDate: null, status: stateFor(action.scheduled_at, null, today), assignee: 'Automated' })),
@@ -303,7 +329,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     for (const entry of entries) grouped.set(entry.inquiryId, [...(grouped.get(entry.inquiryId) ?? []), entry])
     const activityRows = [...grouped.entries()].flatMap(([inquiryId, items]) => {
       const lead = leadById.get(inquiryId)
-      if (!lead || isLuxorInquiryArchived(lead)) return []
+      if (!lead || isLuxorInquiryArchived(lead) || signedBookedIds.has(inquiryId)) return []
       const ordered = [...items].sort((a, b) => {
         const aDate = a.dueAt ?? a.dueDate
         const bDate = b.dueAt ?? b.dueDate
@@ -321,14 +347,14 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
     const completedByLead = new Map(completedTourLeads.map((lead) => [lead.id, lead]))
     const rowsWithStatus = activityRows.map((row) => completedByLead.has(row.inquiryId) ? { ...row, postTourStatus: postTourStatus(row.inquiryId) } : row)
     const rowsByLead = new Set(activityRows.map((row) => row.inquiryId))
-    const missingPostTourRows = completedTourLeads.filter((lead) => !rowsByLead.has(lead.id)).map((lead) => ({
+    const missingPostTourRows = completedTourLeads.filter((lead) => !signedBookedIds.has(lead.id) && !rowsByLead.has(lead.id)).map((lead) => ({
       inquiryId: lead.id,
       next: { id: `post-tour-${lead.id}`, channel: 'email' as const, title: 'Post-Tour Follow-Up', dueAt: null, dueDate: null, status: postTourStatus(lead.id), assignee: 'Unassigned' },
       activities: [{ id: `post-tour-${lead.id}-activity`, at: lead.preferred_tour_date || '', kind: 'follow-up' as const, label: 'Completed tour', detail: `Tour date: ${lead.preferred_tour_date || 'Not recorded'}${lead.preferred_tour_time ? ` · ${lead.preferred_tour_time}` : ''}` }],
       postTourStatus: postTourStatus(lead.id),
     }))
     return [...rowsWithStatus, ...missingPostTourRows].sort((a, b) => (a.next.dueAt ?? a.next.dueDate ?? '').localeCompare(b.next.dueAt ?? b.next.dueDate ?? ''))
-  }, [followUpTasks, emailActions, leadById, pausedEnrollmentIds, pausedSequenceRecords, today, completedTourLeads])
+  }, [followUpTasks, emailActions, leadById, pausedEnrollmentIds, pausedSequenceRecords, today, completedTourLeads, signedBookedIds])
 
   const completedRows = useMemo<FollowUpRow[]>(() => {
     const completedTasks = followUpTasks.filter((task) => task.status === 'completed')
@@ -947,7 +973,10 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
                           : <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={state} tone={followUpStatusTone(state)} borderless /><span className="break-words font-medium text-[color:var(--portal-muted)]">· {dateLabel(row.next.dueAt, row.next.dueDate)}</span></p>}
                         {row.postTourStatus && !row.next.id.startsWith('post-tour-') && <p className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs"><PortalStatusBadge status={row.postTourStatus} tone={followUpStatusTone(row.postTourStatus)} borderless /><span className="break-words font-medium text-[color:var(--portal-muted)]">· Tour {lead.preferred_tour_date || 'date not recorded'}{lead.preferred_tour_time ? ` at ${lead.preferred_tour_time}` : ''}</span></p>}
                       </div>
-                      <div className="flex items-center gap-1.5 sm:shrink-0" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+                      <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+                      <button type="button" onClick={() => openLeadWorkspaceFromCard(lead)} aria-label={`View lead profile for ${lead.full_name}`} className="portal-inline-action inline-flex h-9 min-h-9 items-center gap-1 rounded-lg bg-[color:var(--portal-soft)]/60 px-2.5 text-xs font-semibold text-[#8c6529] hover:bg-[#caa24c]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:text-[#dfbd68] lg:hidden [@media(pointer:coarse)]:inline-flex">
+                        View lead <ChevronRight size={14} aria-hidden="true" />
+                      </button>
                       {(() => {
                         const hasPhone = Boolean(lead.phone?.trim())
                         const unavailableLabel = 'Call unavailable: no phone number on this lead'
