@@ -78,7 +78,7 @@ type VoiceContextValue = {
   sendDigit: (digit: string) => void
   dismissBridgeNotice: () => void
   minimizeCall: () => void
-  openCallView: () => void
+  openCallView: (options?: { showKeypad?: boolean }) => void
 }
 
 const VoiceContext = createContext<VoiceContextValue | null>(null)
@@ -115,11 +115,16 @@ export function PortalVoiceProvider({ children, canUsePhone, canViewLeadDetails,
 
   useEffect(() => { routerRef.current = router }, [router])
 
-  const openCallView = useCallback(() => {
+  const openCallView = useCallback((options?: { showKeypad?: boolean }) => {
     const { pathname: currentPath, search, hash } = window.location
     if (currentPath !== '/portal/calls') callReturnPathRef.current = `${currentPath}${search}${hash}`
     setIsPanelOpen(false)
-    if (currentPath !== '/portal/calls') routerRef.current.push('/portal/calls')
+    const destination = options?.showKeypad ? '/portal/calls?tab=keypad' : '/portal/calls'
+    if (currentPath !== '/portal/calls' || (options?.showKeypad && !new URLSearchParams(window.location.search).has('tab'))) {
+      routerRef.current.push(destination)
+    } else if (options?.showKeypad && new URLSearchParams(window.location.search).get('tab') !== 'keypad') {
+      routerRef.current.replace(destination)
+    }
   }, [])
 
   const navigateToMobileCall = useCallback(() => {
@@ -1018,7 +1023,9 @@ export function PortalPhoneButton({
     <button
       type="button"
       onClick={() => {
-        if (activeCall?.mode === 'ring_phone' || (window.matchMedia('(max-width: 767px)').matches && (activeCall || isStartingCall))) openCallView()
+        const isMobile = window.matchMedia('(max-width: 767px)').matches
+        if (activeCall?.mode === 'ring_phone' || (isMobile && (activeCall || isStartingCall))) openCallView()
+        else if (isMobile) openCallView({ showKeypad: true })
         else if (isPanelOpen) closePanel()
         else openPanel()
       }}

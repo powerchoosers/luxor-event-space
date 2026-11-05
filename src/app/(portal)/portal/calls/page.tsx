@@ -32,6 +32,7 @@ import {
   X,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import {
@@ -90,16 +91,27 @@ const KEYPAD_KEYS: Array<{ digit: string; letters?: string }> = [
 export default function CallsPage() {
   const { notify } = useToast()
   const { openPanel, phoneState, startCall, enablePhone, activeCall, isStartingCall, startingCallTarget } = usePortalVoice()
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const reduceMotion = useReducedMotion()
   const showCall = Boolean(activeCall) || isStartingCall
+  const keypadRequestedOnEntry = searchParams.get('tab') === 'keypad'
 
   const [calls, setCalls] = useState<LuxorCall[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false)
   const [expandedVoicemailId, setExpandedVoicemailId] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState<PhoneAppTab>('recents')
+  const [activeTab, setActiveTab] = useState<PhoneAppTab>(() => keypadRequestedOnEntry ? 'keypad' : 'recents')
   const [pendingPhoneTab, setPendingPhoneTab] = useState<PhoneAppTab | null>(null)
+  const [skipNextPhoneTabTransition, setSkipNextPhoneTabTransition] = useState(keypadRequestedOnEntry)
+  useEffect(() => {
+    if (!keypadRequestedOnEntry) return
+    setSkipNextPhoneTabTransition(true)
+    setPendingPhoneTab(null)
+    setActiveTab('keypad')
+    router.replace('/portal/calls', { scroll: false })
+  }, [keypadRequestedOnEntry, router])
   useEffect(() => {
     if (!pendingPhoneTab) return
     const timer = window.setTimeout(() => {
@@ -108,6 +120,10 @@ export default function CallsPage() {
     }, reduceMotion ? 0 : 150)
     return () => window.clearTimeout(timer)
   }, [pendingPhoneTab, reduceMotion])
+  const requestPhoneTab = (tab: PhoneAppTab) => {
+    setSkipNextPhoneTabTransition(false)
+    setPendingPhoneTab(activeTab === tab ? null : tab)
+  }
   const [recentsFilter, setRecentsFilter] = useState<RecentsFilter>('all')
   const [readerTab, setReaderTab] = useState<ReaderTab>('transcript')
   const [isEditingList, setIsEditingList] = useState(false)
@@ -881,11 +897,11 @@ export default function CallsPage() {
             aria-label="Phone navigation"
             className="relative isolate shrink-0 grid grid-cols-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/90 backdrop-blur-xl px-2 py-1.5"
           >
-            <motion.span aria-hidden="true" className="pointer-events-none absolute top-1.5 bottom-1.5 left-2 w-[calc((100%-1rem)/3)] rounded-xl bg-[color:var(--portal-soft)]" initial={false} animate={{ x: `${(pendingPhoneTab || activeTab) === 'recents' ? 0 : (pendingPhoneTab || activeTab) === 'voicemail' ? 100 : 200}%` }} transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} />
+            <motion.span aria-hidden="true" className="pointer-events-none absolute top-1.5 bottom-1.5 left-2 w-[calc((100%-1rem)/3)] rounded-xl bg-[color:var(--portal-soft)]" initial={false} animate={{ x: `${(pendingPhoneTab || activeTab) === 'recents' ? 0 : (pendingPhoneTab || activeTab) === 'voicemail' ? 100 : 200}%` }} transition={reduceMotion || skipNextPhoneTabTransition ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} />
             <button
               type="button"
               aria-pressed={activeTab === 'recents'}
-              onClick={() => setPendingPhoneTab(activeTab === 'recents' ? null : 'recents')}
+              onClick={() => requestPhoneTab('recents')}
               className={`relative isolate flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
                 activeTab === 'recents'
                   ? 'text-[#a8792f] dark:text-[#f1d27a]'
@@ -906,7 +922,7 @@ export default function CallsPage() {
             <button
               type="button"
               aria-pressed={activeTab === 'voicemail'}
-              onClick={() => setPendingPhoneTab(activeTab === 'voicemail' ? null : 'voicemail')}
+              onClick={() => requestPhoneTab('voicemail')}
               className={`relative isolate flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
                 activeTab === 'voicemail'
                   ? 'text-[#a8792f] dark:text-[#f1d27a]'
@@ -927,7 +943,7 @@ export default function CallsPage() {
             <button
               type="button"
               aria-pressed={activeTab === 'keypad'}
-              onClick={() => setPendingPhoneTab(activeTab === 'keypad' ? null : 'keypad')}
+              onClick={() => requestPhoneTab('keypad')}
               className={`relative isolate flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-colors cursor-pointer ${
                 activeTab === 'keypad'
                   ? 'text-[#a8792f] dark:text-[#f1d27a]'

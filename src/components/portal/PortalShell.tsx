@@ -1217,7 +1217,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               onClick={() => setIsNewLeadDrawerOpen(true)}
               aria-label="Add new client or lead"
               title="Add new client or lead"
-              className="luxor-gold-raised inline-flex h-9.5 w-9.5 min-w-[2.375rem] aspect-square shrink-0 items-center justify-center rounded-xl text-white shadow-xs transition-all active:scale-95 cursor-pointer"
+              className="luxor-gold-raised inline-flex h-9 w-9 !min-h-9 !min-w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-xs transition-all active:scale-95 cursor-pointer"
             >
               <Plus size={16} strokeWidth={2.5} aria-hidden="true" />
             </button>
