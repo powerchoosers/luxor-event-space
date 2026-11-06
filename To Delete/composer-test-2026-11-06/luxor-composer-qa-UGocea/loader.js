@@ -1,0 +1,1 @@
+const ts=require("C:\\Users\\lewis\\Documents\\luxor-event-space\\node_modules\\typescript\\lib\\typescript.js");module.exports=function(s){return ts.transpileModule(s,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2020}}).outputText}
