@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import { FilePenLine, Loader2 } from 'lucide-react'
+import { Sparkles, Loader2, X } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 type Props = {
   channel: 'email' | 'sms'
@@ -90,18 +91,85 @@ export function ComposerAiActions({ channel, value, setValue, contextKey, contex
       if (mounted.current) setBusy(null)
     }
   }
-  const buttonClass = 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#986c24] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-[#f1d27a]'
-  return <div className="min-w-0">
-    {promptOpen && !polishOnly ? <div className="flex flex-wrap items-end gap-2 pb-1">
-      <label className="min-w-0 flex-1 text-xs text-[color:var(--portal-muted)]">Direction for Elena <span className="font-normal">(optional)</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} maxLength={2000} rows={2} className="mt-1 min-h-11 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2 text-base text-[color:var(--portal-text)] focus:outline-none focus:ring-2 focus:ring-[#caa24c]/50" /></label>
-      <button type="button" className={buttonClass} disabled={disabled || Boolean(busy)} onClick={() => void run('write')}>{busy === 'write' ? <Loader2 size={15} className="animate-spin" /> : <FilePenLine size={15} />} Draft</button>
-      <button type="button" className={buttonClass} onClick={() => setPromptOpen(false)}>Close</button>
-    </div> : null}
-    <div className="flex flex-wrap items-center gap-x-2">
-      {!polishOnly && !promptOpen ? <button type="button" className={buttonClass} disabled={disabled || Boolean(busy)} onClick={() => setPromptOpen(true)}><FilePenLine size={15} /> Write with Elena</button> : null}
-      <button type="button" className={buttonClass} disabled={disabled || Boolean(busy) || !value.trim()} onClick={() => void run('polish')}>{busy === 'polish' ? <Loader2 size={15} className="animate-spin" /> : null} {busy === 'polish' ? 'Polishing…' : 'Polish'}</button>
+  const buttonClass =
+    'group inline-flex items-center gap-1.5 rounded-full border border-[#caa24c]/30 bg-linear-to-r from-[#caa24c]/10 via-[#caa24c]/5 to-transparent px-3 py-1 text-xs font-medium text-[#986c24] transition-all hover:border-[#caa24c]/60 hover:bg-[#caa24c]/15 hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[#f1d27a]'
+
+  if (polishOnly && !value.trim()) return null
+
+  return (
+    <div className="min-w-0">
+      {promptOpen && !polishOnly ? (
+        <div className="flex flex-wrap items-end gap-2 pb-2">
+          <label className="min-w-0 flex-1 text-xs text-[color:var(--portal-muted)]">
+            Direction for Elena <span className="font-normal">(optional)</span>
+            <textarea
+              value={instruction}
+              onChange={(event) => setInstruction(event.target.value)}
+              maxLength={2000}
+              rows={2}
+              placeholder="e.g., mention Saturday tour availability and parking details"
+              className="mt-1 min-h-11 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2 text-xs text-[color:var(--portal-text)] focus:outline-none focus:ring-2 focus:ring-[#caa24c]/50"
+            />
+          </label>
+          <button type="button" className={buttonClass} disabled={disabled || Boolean(busy)} onClick={() => void run('write')}>
+            {busy === 'write' ? <Loader2 size={13} className="animate-spin text-[#caa24c]" /> : <Sparkles size={13} className="text-[#caa24c]" />}
+            <span>{busy === 'write' ? 'Drafting…' : 'Draft'}</span>
+          </button>
+          <button type="button" className={buttonClass} onClick={() => setPromptOpen(false)}>
+            <X size={13} />
+            <span>Close</span>
+          </button>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {!polishOnly && !promptOpen ? (
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={disabled || Boolean(busy)}
+            onClick={() => {
+              if (channel === 'sms') {
+                void run('write')
+              } else {
+                setPromptOpen(true)
+              }
+            }}
+          >
+            {busy === 'write' ? (
+              <Loader2 size={13} className="animate-spin text-[#caa24c]" />
+            ) : (
+              <Sparkles size={13} className="text-[#caa24c] transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
+            )}
+            <span>{busy === 'write' ? 'Elena is drafting…' : 'Write with Elena'}</span>
+          </button>
+        ) : null}
+        <AnimatePresence>
+          {value.trim() ? (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              type="button"
+              className={buttonClass}
+              disabled={disabled || Boolean(busy)}
+              onClick={() => void run('polish')}
+            >
+              {busy === 'polish' ? (
+                <Loader2 size={13} className="animate-spin text-[#caa24c]" />
+              ) : (
+                <Sparkles size={13} className="text-[#caa24c] transition-transform duration-300 group-hover:scale-110" />
+              )}
+              <span>{busy === 'polish' ? 'Polishing…' : 'Polish with Elena'}</span>
+            </motion.button>
+          ) : null}
+        </AnimatePresence>
+        {status ? (
+          <p role="status" aria-live="polite" className="break-words text-[11px] italic text-[color:var(--portal-muted)]">
+            {status}
+          </p>
+        ) : null}
+      </div>
     </div>
-    {busy === 'write' ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">Elena is drafting…</p> : null}
-    {status ? <p role="status" aria-live="polite" className="break-words text-xs leading-5 text-[color:var(--portal-muted)]">{status}</p> : null}
-  </div>
+  )
 }

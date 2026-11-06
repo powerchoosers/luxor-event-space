@@ -10,14 +10,15 @@ import {
   ChevronDown,
   ExternalLink,
   Loader2,
-  Maximize2
+  Maximize2,
+  Sparkles,
 } from 'lucide-react'
 import Link from 'next/link'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { useToast } from './ToastProvider'
 import { PortalSmsConsentBadge } from './PortalSmsConsentBadge'
-import { ComposerAiActions } from './ComposerAiActions'
+import { TextAnimate } from '@/components/ui/text-animate'
 
 export interface LuxorDraggableTextModalProps {
   inquiryId?: string
@@ -38,6 +39,12 @@ export function LuxorDraggableTextModal({
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [isOptedOut, setIsOptedOut] = useState(false)
+  const [draftingWithElena, setDraftingWithElena] = useState(false)
+  const [polishingWithElena, setPolishingWithElena] = useState(false)
+  const [animatingDraft, setAnimatingDraft] = useState(false)
+  const [animatingDraftText, setAnimatingDraftText] = useState('')
+  const [aiStatus, setAiStatus] = useState<string | null>(null)
+  const aiInFlight = useRef(false)
   const [isMinimized, setIsMinimized] = useState(false)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
   const [isClosing, setIsClosing] = useState(false)
@@ -46,7 +53,22 @@ export function LuxorDraggableTextModal({
   const dragRef = useRef<{ id: number; x: number; y: number; left: number; top: number } | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const measureRef = useRef<HTMLDivElement>(null)
+  const [textareaHeight, setTextareaHeight] = useState(20)
   const closeTimerRef = useRef<number | null>(null)
+
+  useLayoutEffect(() => {
+    if (!measureRef.current) return
+    const measured = measureRef.current.offsetHeight
+    let target = 20
+    if (measured > 45) {
+      target = 60
+    } else if (measured > 25) {
+      target = 40
+    }
+    setTextareaHeight(target)
+  }, [body])
+  const cardHeight = textareaHeight + (body.trim() && !draftingWithElena && !animatingDraft ? 36 : 18)
 
   const fit = useCallback((x: number, y: number) => {
     if (typeof window === 'undefined') return { x, y }
@@ -186,6 +208,88 @@ export function LuxorDraggableTextModal({
     } finally {
       setSending(false)
     }
+  }
+
+  const draftWithElena = async () => {
+    if (!phone || aiInFlight.current || draftingWithElena || sending || isOptedOut) return
+    aiInFlight.current = true
+    setDraftingWithElena(true)
+    setAnimatingDraft(false)
+    setAnimatingDraftText('')
+    setAiStatus(null)
+    try {
+      const response = await fetch('/api/portal/composer-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'write',
+          channel: 'sms',
+          draft: body,
+          instruction: '',
+          context: JSON.stringify({
+            name: contactName,
+            messages: messages.slice(0, 20).reverse().map(({ direction, body: msgBody }) => ({ direction, body: msgBody })),
+          }),
+        }),
+      })
+      const data = (await response.json()) as { draft?: string; error?: string }
+      if (!response.ok || !data.draft?.trim()) throw new Error(data.error || 'Elena could not draft a response.')
+      const cleanDraft = data.draft.trim()
+      setAnimatingDraftText(cleanDraft)
+      setAnimatingDraft(true)
+    } catch (error) {
+      setAiStatus(error instanceof Error ? error.message : 'Elena could not draft a reply.')
+      notify({ title: 'Elena Draft', description: error instanceof Error ? error.message : 'Could not draft response.', variant: 'error' })
+    } finally {
+      aiInFlight.current = false
+      setDraftingWithElena(false)
+    }
+  }
+
+  const polishWithElena = async () => {
+    if (!phone || !body.trim() || aiInFlight.current || polishingWithElena || sending || isOptedOut) return
+    const currentBody = body
+    aiInFlight.current = true
+    setPolishingWithElena(true)
+    setAnimatingDraft(false)
+    setAnimatingDraftText('')
+    setAiStatus(null)
+    try {
+      const response = await fetch('/api/portal/composer-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'polish',
+          channel: 'sms',
+          draft: currentBody,
+          instruction: '',
+          context: JSON.stringify({
+            name: contactName,
+            messages: messages.slice(0, 20).reverse().map(({ direction, body: msgBody }) => ({ direction, body: msgBody })),
+          }),
+        }),
+      })
+      const data = (await response.json()) as { draft?: string; error?: string }
+      if (!response.ok || !data.draft?.trim()) throw new Error(data.error || 'Elena could not polish your draft.')
+      const cleanDraft = data.draft.trim()
+      setAnimatingDraftText(cleanDraft)
+      setAnimatingDraft(true)
+      setAiStatus('Polished')
+      setTimeout(() => setAiStatus(null), 3000)
+    } catch (error) {
+      setAiStatus(error instanceof Error ? error.message : 'Elena could not polish your draft.')
+      notify({ title: 'Elena Polish', description: error instanceof Error ? error.message : 'Could not polish draft.', variant: 'error' })
+    } finally {
+      aiInFlight.current = false
+      setPolishingWithElena(false)
+    }
+  }
+
+  const finishAnimation = (text: string) => {
+    setBody(text)
+    setAnimatingDraft(false)
+    setAnimatingDraftText('')
+    if (textareaRef.current) textareaRef.current.focus()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -413,34 +517,155 @@ export function LuxorDraggableTextModal({
 
           {/* Pinned Composer Footer */}
           <footer className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
-            <ComposerAiActions channel="sms" value={body} setValue={setBody} contextKey={phone || inquiryId || ''} context={JSON.stringify({ name: contactName, messages: messages.slice(0, 20).reverse().map(({ direction, body }) => ({ direction, body })) })} disabled={!phone || sending || isOptedOut} />
-            <div className="relative flex items-end gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-1.5 focus-within:border-[#caa24c]/50 focus-within:ring-2 focus-within:ring-[#caa24c]/15">
-              <textarea
-                ref={textareaRef}
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={!phone || sending || isOptedOut}
-                rows={2}
-                placeholder={
-                  isOptedOut
-                    ? 'Texting disabled (Recipient opted out)'
-                    : phone
-                    ? `Message ${contactName || 'client'}…`
-                    : 'No phone number available'
-                }
-                className="portal-scrollbar min-h-[44px] max-h-28 w-full resize-none bg-transparent px-2 py-1 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] disabled:opacity-50"
-              />
-              <button
+            <motion.div
+              animate={{ height: cardHeight }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              className="relative flex items-end gap-2 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-1.5 focus-within:border-[#caa24c]/50 focus-within:ring-2 focus-within:ring-[#caa24c]/15"
+            >
+              <div className="min-w-0 flex-1">
+                <motion.div
+                  animate={{ height: textareaHeight }}
+                  transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                  className="relative overflow-hidden"
+                >
+                  <div
+                    ref={measureRef}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 top-0 -z-10 invisible whitespace-pre-wrap break-words text-xs leading-5"
+                  >
+                    {body ? (body.endsWith('\n') ? body + ' ' : body) : ' '}
+                  </div>
+                  {draftingWithElena ? (
+                    <div className="flex h-5 items-center gap-2 px-1">
+                      <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                        <span className="absolute h-full w-full animate-ping rounded-full bg-[#caa24c]/30" />
+                        <Sparkles size={11} className="animate-spin text-[#caa24c]" style={{ animationDuration: '3s' }} />
+                      </span>
+                      <p className="elena-working-shimmer truncate text-[11px] font-semibold text-[color:var(--portal-text)]">
+                        Elena is drafting a reply…
+                      </p>
+                    </div>
+                  ) : animatingDraft && animatingDraftText ? (
+                    <div
+                      onClick={() => finishAnimation(animatingDraftText)}
+                      title="Click to edit"
+                      className="h-full cursor-text px-1"
+                    >
+                      <TextAnimate
+                        animation="blurInUp"
+                        by="word"
+                        duration={Math.min(1.8, Math.max(0.5, animatingDraftText.split(/\s+/).length * 0.04))}
+                        className="text-xs leading-5 text-[color:var(--portal-text)]"
+                        onAnimationComplete={() => {
+                          setTimeout(() => finishAnimation(animatingDraftText), 350)
+                        }}
+                      >
+                        {animatingDraftText}
+                      </TextAnimate>
+                    </div>
+                  ) : (
+                    <textarea
+                      ref={textareaRef}
+                      value={body}
+                      onChange={(e) => setBody(e.target.value.slice(0, 1600))}
+                      onKeyDown={handleKeyDown}
+                      disabled={!phone || sending || isOptedOut}
+                      rows={1}
+                      placeholder={
+                        isOptedOut
+                          ? 'Texting disabled (Recipient opted out)'
+                          : phone
+                          ? `Message ${contactName || 'client'}…`
+                          : 'No phone number available'
+                      }
+                      className={`portal-scrollbar portal-input-transparent relative w-full resize-none bg-transparent p-0 m-0 border-0 text-xs leading-5 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] disabled:opacity-50 ${
+                        textareaHeight >= 60 ? 'h-[60px] overflow-y-auto' : 'h-full overflow-hidden'
+                      }`}
+                    />
+                  )}
+                </motion.div>
+                {body.trim() && !draftingWithElena && !animatingDraft ? (
+                  <div className="flex h-4 items-center gap-1.5 whitespace-nowrap overflow-hidden px-1 pt-1 text-[9px] leading-4 text-[color:var(--portal-muted)]">
+                    <span>{body.length} / 1600<span className="hidden sm:inline"> · Enter to send</span></span>
+                    <span aria-hidden="true" className="opacity-35 select-none">|</span>
+                    <button
+                      type="button"
+                      onClick={() => void polishWithElena()}
+                      disabled={polishingWithElena || sending || isOptedOut}
+                      title="Polish grammar and clarity with Elena"
+                      className="transition-colors hover:text-[#caa24c] focus-visible:outline-none focus-visible:underline disabled:opacity-50 dark:hover:text-[#f1d27a]"
+                    >
+                      {polishingWithElena ? 'Polishing…' : 'Polish with Elena'}
+                    </button>
+                    {aiStatus ? (
+                      <span role="status" aria-live="polite" className="italic opacity-80">
+                        ({aiStatus})
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <motion.button
+                animate={{
+                  width: body.trim() ? 68 : 78,
+                  backgroundColor: body.trim() ? '#caa24c' : '#ffffff',
+                  color: body.trim() ? '#ffffff' : '#8c6218',
+                }}
+                transition={{
+                  width: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                  backgroundColor: { duration: 0.2 },
+                  color: { duration: 0.2 },
+                }}
+                style={{ height: 32 }}
                 type="button"
-                onClick={() => void handleSend()}
-                disabled={!phone || !body.trim() || sending || isOptedOut}
-                aria-label="Send text message"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#caa24c] text-white transition-colors hover:bg-[#d8b564] disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-50"
+                onClick={() => {
+                  if (body.trim()) {
+                    void handleSend()
+                  } else {
+                    void draftWithElena()
+                  }
+                }}
+                disabled={!phone || (body.trim() ? sending || isOptedOut : draftingWithElena || sending || isOptedOut)}
+                aria-label={body.trim() ? 'Send text message' : 'Draft reply with Elena'}
+                title={body.trim() ? 'Send text message' : 'Draft reply automatically with Elena'}
+                className="relative flex h-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border-0 text-[11px] font-semibold shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-              </button>
-            </div>
+                <AnimatePresence initial={false}>
+                  {body.trim() ? (
+                    <motion.span
+                      key="send-mode"
+                      initial={{ opacity: 0, filter: 'blur(4px)' }}
+                      animate={{ opacity: 1, filter: 'blur(0px)' }}
+                      exit={{ opacity: 0, filter: 'blur(4px)' }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                      className="absolute inset-0 flex items-center justify-center gap-1"
+                    >
+                      {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                      <span>Send</span>
+                    </motion.span>
+                  ) : (
+                    <motion.span
+                      key="elena-mode"
+                      initial={{ opacity: 0, filter: 'blur(4px)' }}
+                      animate={{ opacity: 1, filter: 'blur(0px)' }}
+                      exit={{ opacity: 0, filter: 'blur(4px)' }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                      className="absolute inset-0 flex items-center justify-center gap-1.5"
+                    >
+                      {draftingWithElena ? (
+                        <Loader2 size={12} className="animate-spin text-[#caa24c]" />
+                      ) : (
+                        <span className="relative flex h-4 w-4 shrink-0 overflow-hidden rounded-full ring-1 ring-[#caa24c]/40">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="/luxor-concierge.png" alt="" className="h-full w-full object-cover" />
+                        </span>
+                      )}
+                      <span>{draftingWithElena ? '…' : 'Elena'}</span>
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.button>
+            </motion.div>
             <div className="mt-1.5 flex items-center justify-between px-1 text-[9px] text-[color:var(--portal-muted)]">
               <span>Press Enter to send · Shift+Enter for new line</span>
               {phone && <span className="font-mono">{formatPhoneDisplay(phone)}</span>}

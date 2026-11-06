@@ -1,10 +1,10 @@
 'use client'
 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, Mail, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, UserPlus, X } from 'lucide-react'
+import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, Mail, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, Sparkles, UserPlus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useDeferredValue } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { formatPhoneDisplay, normalizePhoneNumber } from '@/lib/luxorPhoneClient'
@@ -12,7 +12,7 @@ import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { PortalContactAvatar, PortalCloseButton, PortalSkeleton, PortalSkeletonTransition, PortalTabTransition } from './PortalUI'
 import { PortalSmsConsentBadge, type SmsConsentState } from './PortalSmsConsentBadge'
 import { useToast } from './ToastProvider'
-import { ComposerAiActions } from './ComposerAiActions'
+import { TextAnimate } from '@/components/ui/text-animate'
 
 type Conversation = {
   key: string
@@ -54,8 +54,30 @@ export function LuxorMessenger() {
   const [consentRequestSending, setConsentRequestSending] = useState(false)
   const [manualOptInLoading, setManualOptInLoading] = useState(false)
   const [mediaGalleryOpen, setMediaGalleryOpen] = useState(false)
+  const [draftingWithElena, setDraftingWithElena] = useState(false)
+  const [polishingWithElena, setPolishingWithElena] = useState(false)
+  const [animatingDraft, setAnimatingDraft] = useState(false)
+  const [animatingDraftText, setAnimatingDraftText] = useState('')
+  const [aiStatus, setAiStatus] = useState<string | null>(null)
+  const aiInFlight = useRef(false)
   const threadScrollRef = useRef<HTMLDivElement>(null)
   const optionsRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const measureRef = useRef<HTMLDivElement>(null)
+  const [textareaHeight, setTextareaHeight] = useState(24)
+
+  useLayoutEffect(() => {
+    if (!measureRef.current) return
+    const measured = measureRef.current.offsetHeight
+    let target = 24
+    if (measured > 56) {
+      target = 72
+    } else if (measured > 32) {
+      target = 48
+    }
+    setTextareaHeight(target)
+  }, [body])
+  const cardHeight = textareaHeight + 46
   const loadMessages = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
     try {
@@ -216,6 +238,100 @@ export function LuxorMessenger() {
     } finally {
       setSending(false)
     }
+  }
+
+  useEffect(() => {
+    setDraftingWithElena(false)
+    setPolishingWithElena(false)
+    setAnimatingDraft(false)
+    setAnimatingDraftText('')
+    setAiStatus(null)
+    aiInFlight.current = false
+  }, [selectedConversation?.key])
+
+  const draftWithElena = async () => {
+    if (!selectedConversation || aiInFlight.current || draftingWithElena || sending || smsConsent?.status === 'opted_out') return
+    const convKey = selectedConversation.key
+    aiInFlight.current = true
+    setDraftingWithElena(true)
+    setAnimatingDraft(false)
+    setAnimatingDraftText('')
+    setAiStatus(null)
+    try {
+      const response = await fetch('/api/portal/composer-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'write',
+          channel: 'sms',
+          draft: body,
+          instruction: '',
+          context: JSON.stringify({
+            name: selectedConversation.contactName,
+            messages: selectedConversation.messages.slice(-20).map(({ direction, body: msgBody }) => ({ direction, body: msgBody })),
+          }),
+        }),
+      })
+      const data = (await response.json()) as { draft?: string; error?: string }
+      if (!response.ok || !data.draft?.trim()) throw new Error(data.error || 'Elena could not draft a response.')
+      const cleanDraft = data.draft.trim()
+      if (selectedConversation.key !== convKey) return
+      setAnimatingDraftText(cleanDraft)
+      setAnimatingDraft(true)
+    } catch (error) {
+      setAiStatus(error instanceof Error ? error.message : 'Elena could not draft a reply.')
+      notify({ title: 'Elena Draft', description: error instanceof Error ? error.message : 'Could not draft response.', variant: 'error' })
+    } finally {
+      aiInFlight.current = false
+      setDraftingWithElena(false)
+    }
+  }
+
+  const polishWithElena = async () => {
+    if (!selectedConversation || !body.trim() || aiInFlight.current || polishingWithElena || sending) return
+    const convKey = selectedConversation.key
+    const currentBody = body
+    aiInFlight.current = true
+    setPolishingWithElena(true)
+    setAnimatingDraft(false)
+    setAnimatingDraftText('')
+    setAiStatus(null)
+    try {
+      const response = await fetch('/api/portal/composer-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'polish',
+          channel: 'sms',
+          draft: currentBody,
+          instruction: '',
+          context: JSON.stringify({
+            name: selectedConversation.contactName,
+            messages: selectedConversation.messages.slice(-20).map(({ direction, body: msgBody }) => ({ direction, body: msgBody })),
+          }),
+        }),
+      })
+      const data = (await response.json()) as { draft?: string; error?: string }
+      if (!response.ok || !data.draft?.trim()) throw new Error(data.error || 'Elena could not polish your draft.')
+      const cleanDraft = data.draft.trim()
+      if (selectedConversation.key !== convKey) return
+      setAnimatingDraftText(cleanDraft)
+      setAnimatingDraft(true)
+      setAiStatus('Polished')
+      setTimeout(() => setAiStatus(null), 3000)
+    } catch (error) {
+      setAiStatus(error instanceof Error ? error.message : 'Elena could not polish your draft.')
+      notify({ title: 'Elena Polish', description: error instanceof Error ? error.message : 'Could not polish draft.', variant: 'error' })
+    } finally {
+      aiInFlight.current = false
+      setPolishingWithElena(false)
+    }
+  }
+
+  const finishAnimation = (text: string) => {
+    setBody(text)
+    setAnimatingDraft(false)
+    setAnimatingDraftText('')
   }
 
   const requestSmsConsent = async () => {
@@ -466,17 +582,170 @@ export function LuxorMessenger() {
           </div>
           {selectedConversation && !newMessageOpen ? (
             <div className="shrink-0 border-t border-[color:var(--portal-border)]/70 bg-[color:var(--portal-card)] p-3 sm:p-4">
-              <ComposerAiActions channel="sms" value={body} setValue={setBody} contextKey={selectedConversation.key} context={JSON.stringify({ name: selectedConversation.contactName, messages: selectedConversation.messages.slice(-20).map(({ direction, body }) => ({ direction, body })) })} disabled={sending || smsConsent?.status === 'opted_out'} />
-              <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-transparent bg-[color:var(--portal-soft)] p-2 transition-all focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10">
+              <motion.div
+                animate={{ height: cardHeight }}
+                transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                className="mx-auto flex max-w-4xl items-end gap-2 overflow-hidden rounded-2xl border border-transparent bg-[color:var(--portal-soft)] p-2 transition-colors focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10"
+              >
                 <div className="min-w-0 flex-1 px-2 py-1">
-                  <div className="relative">
-                    {!body ? <span key={selectedConversation.key} aria-hidden="true" className="luxor-pane-enter-desktop pointer-events-none absolute inset-x-0 top-0 truncate text-sm leading-6 text-[color:var(--portal-muted)]">Message {selectedConversation.contactName}</span> : null}
-                    <textarea value={body} onChange={(event) => setBody(event.target.value.slice(0, 1600))} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} rows={1} aria-label={`Message ${selectedConversation.contactName}`} className="portal-input-transparent relative max-h-32 min-h-7 w-full resize-none bg-transparent text-sm leading-6 text-[color:var(--portal-text)] outline-none" />
+                  <motion.div
+                    animate={{ height: textareaHeight }}
+                    transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                    className="relative overflow-hidden"
+                  >
+                    <div
+                      ref={measureRef}
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-0 top-0 -z-10 invisible whitespace-pre-wrap break-words text-sm leading-6"
+                    >
+                      {body ? (body.endsWith('\n') ? body + ' ' : body) : ' '}
+                    </div>
+                    {draftingWithElena ? (
+                      <div className="flex h-6 items-center gap-2">
+                        <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+                          <span className="absolute h-full w-full animate-ping rounded-full bg-[#caa24c]/30" />
+                          <Sparkles size={13} className="animate-spin text-[#caa24c]" style={{ animationDuration: '3s' }} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="elena-working-shimmer truncate text-xs font-semibold leading-6 tracking-wide text-[color:var(--portal-text)]">
+                            Elena is drafting a reply for {selectedConversation.contactName}…
+                          </p>
+                        </div>
+                      </div>
+                    ) : animatingDraft && animatingDraftText ? (
+                      <div
+                        onClick={() => finishAnimation(animatingDraftText)}
+                        title="Click to edit"
+                        className="h-full cursor-text"
+                      >
+                        <TextAnimate
+                          animation="blurInUp"
+                          by="word"
+                          duration={Math.min(1.8, Math.max(0.5, animatingDraftText.split(/\s+/).length * 0.04))}
+                          className="text-sm leading-6 text-[color:var(--portal-text)]"
+                          onAnimationComplete={() => {
+                            setTimeout(() => finishAnimation(animatingDraftText), 350)
+                          }}
+                        >
+                          {animatingDraftText}
+                        </TextAnimate>
+                      </div>
+                    ) : (
+                      <>
+                        {!body ? (
+                          <span
+                            key={selectedConversation.key}
+                            aria-hidden="true"
+                            className="luxor-pane-enter-desktop pointer-events-none absolute inset-x-0 top-0 truncate text-sm leading-6 text-[color:var(--portal-muted)]"
+                          >
+                            Message {selectedConversation.contactName}
+                          </span>
+                        ) : null}
+                        <textarea
+                          ref={textareaRef}
+                          value={body}
+                          onChange={(event) => setBody(event.target.value.slice(0, 1600))}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                              event.preventDefault()
+                              void sendMessage()
+                            }
+                          }}
+                          rows={1}
+                          aria-label={`Message ${selectedConversation.contactName}`}
+                          className={`portal-input-transparent portal-scrollbar relative w-full resize-none bg-transparent p-0 m-0 border-0 text-sm leading-6 text-[color:var(--portal-text)] outline-none ${
+                            textareaHeight >= 72 ? 'h-[72px] overflow-y-auto' : 'h-full overflow-hidden'
+                          }`}
+                        />
+                      </>
+                    )}
+                  </motion.div>
+                  <div className="mt-1 flex h-4 items-center gap-1.5 whitespace-nowrap overflow-hidden text-[11px] leading-4 text-[color:var(--portal-muted)]">
+                    <p className="tabular-nums">
+                      {body.length} / 1600<span className="hidden sm:inline"> · Enter to send</span>
+                    </p>
+                    {body.trim() && !draftingWithElena && !animatingDraft ? (
+                      <>
+                        <span aria-hidden="true" className="opacity-35 select-none">|</span>
+                        <button
+                          type="button"
+                          onClick={() => void polishWithElena()}
+                          disabled={polishingWithElena || sending || smsConsent?.status === 'opted_out'}
+                          title="Polish grammar and clarity with Elena"
+                          className="transition-colors hover:text-[#caa24c] focus-visible:outline-none focus-visible:underline disabled:opacity-50 dark:hover:text-[#f1d27a]"
+                        >
+                          {polishingWithElena ? 'Polishing…' : 'Polish with Elena'}
+                        </button>
+                        {aiStatus ? (
+                          <span role="status" aria-live="polite" className="italic opacity-80">
+                            ({aiStatus})
+                          </span>
+                        ) : null}
+                      </>
+                    ) : null}
                   </div>
-                  <div className="mt-1 flex items-center justify-between gap-2"><p className="tabular-nums text-[11px] text-[color:var(--portal-muted)]">{body.length} / 1600 · Enter to send</p></div>
                 </div>
-                <button type="button" onClick={() => void sendMessage()} disabled={!body.trim() || sending} className="luxor-gold-raised flex h-9.5 min-w-9.5 items-center justify-center gap-1.5 rounded-xl px-3.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-45">{sending ? <Loader2 size={15} className="animate-spin"/> : <><Send size={14}/><span className="hidden sm:inline">Send</span></>}</button>
-              </div>
+                <motion.button
+                  animate={{
+                    width: body.trim() ? 80 : 92,
+                    backgroundColor: body.trim() ? '#caa24c' : '#ffffff',
+                    color: body.trim() ? '#ffffff' : '#8c6218',
+                  }}
+                  transition={{
+                    width: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                    backgroundColor: { duration: 0.2 },
+                    color: { duration: 0.2 },
+                  }}
+                  style={{ height: 38 }}
+                  type="button"
+                  onClick={() => {
+                    if (body.trim()) {
+                      void sendMessage()
+                    } else {
+                      void draftWithElena()
+                    }
+                  }}
+                  disabled={body.trim() ? sending : (draftingWithElena || sending || smsConsent?.status === 'opted_out')}
+                  aria-label={body.trim() ? 'Send message' : 'Draft reply with Elena'}
+                  title={body.trim() ? 'Send text message' : 'Draft reply automatically with Elena'}
+                  className="relative flex h-[38px] shrink-0 items-center justify-center overflow-hidden rounded-xl border-0 text-xs font-semibold shadow-xs disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <AnimatePresence initial={false}>
+                    {body.trim() ? (
+                      <motion.span
+                        key="send-mode"
+                        initial={{ opacity: 0, filter: 'blur(4px)' }}
+                        animate={{ opacity: 1, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, filter: 'blur(4px)' }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                        className="absolute inset-0 flex items-center justify-center gap-1.5"
+                      >
+                        {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                        <span>Send</span>
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        key="elena-mode"
+                        initial={{ opacity: 0, filter: 'blur(4px)' }}
+                        animate={{ opacity: 1, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, filter: 'blur(4px)' }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                        className="absolute inset-0 flex items-center justify-center gap-1.5"
+                      >
+                        {draftingWithElena ? (
+                          <Loader2 size={13} className="animate-spin text-[#caa24c]" />
+                        ) : (
+                          <span className="relative flex h-4.5 w-4.5 shrink-0 overflow-hidden rounded-full ring-1 ring-[#caa24c]/40">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src="/luxor-concierge.png" alt="" className="h-full w-full object-cover" />
+                          </span>
+                        )}
+                        <span>{draftingWithElena ? '…' : 'Elena'}</span>
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
+              </motion.div>
             </div>
           ) : null}
         </PortalSkeletonTransition>
