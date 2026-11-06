@@ -257,6 +257,26 @@ input[type='checkbox'] + div svg,
   fill: none !important;
 }
 
+/* Portal icons use filled paths; keep selection marks visible in both themes. */
+body[data-portal-theme] .portal-checkbox[aria-checked='true'] svg,
+body[data-portal-theme] .portal-checkbox[aria-checked='mixed'] svg {
+  fill: #fff !important;
+  stroke: #fff !important;
+}
+body[data-portal-theme] .portal-checkbox[aria-checked='false'] {
+  border-color: color-mix(in srgb, var(--portal-muted) 55%, var(--portal-card)) !important;
+}
+body[data-portal-theme] .portal-checkbox[aria-checked='false'] svg {
+  fill: var(--portal-muted) !important;
+  stroke: var(--portal-muted) !important;
+}
+@media (min-width: 1024px) {
+  body.portal-shell aside.portal-bulk-action-deck {
+    border: 1px solid color-mix(in srgb, var(--portal-muted) 35%, var(--portal-card)) !important;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.14) !important;
+  }
+}
+
 body[data-portal-theme='light'] aside,
 body[data-portal-theme='light'] header,
 body[data-portal-theme='light'] .nodal-void-card,
@@ -1701,6 +1721,17 @@ thead.sticky th,
   font-weight: 600 !important;
   letter-spacing: 0.01em !important;
   text-transform: none;
+}
+
+/* Cover subpixel gaps where the sticky pipeline header meets the scroll viewport. */
+.lead-pipeline-table .portal-data-table thead {
+  background: color-mix(in srgb, var(--portal-soft) 55%, var(--portal-card));
+  box-shadow: 0 -2px 0 1px color-mix(in srgb, var(--portal-soft) 55%, var(--portal-card));
+}
+
+body[data-portal-theme] .lead-pipeline-table tbody .portal-checkbox[aria-checked='false'] {
+  border-color: transparent !important;
+  background: transparent !important;
 }
 
 .portal-data-table tbody tr {

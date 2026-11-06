@@ -50,6 +50,8 @@ Do not run `npm run build` after every small change. During normal iteration, pr
 
 ## Current Site Conventions
 
+- For frontend changes to the public site or owner portal, use the `luxor-design` skill at `C:/Users/lewis/.codex/skills/luxor-design/SKILL.md` alongside this repository guidance.
+
 - Public site routes include `/`, `/events`, `/spaces`, `/gallery`, `/pricing`, `/visit`, and `/tour`. Header and footer navigation should point to these real pages, not homepage hash anchors, unless a section jump is intentional.
 - Portal routes live under `/portal` and are private owner-workspace routes. Do not place portal login screens inside the public `(site)` route group because that adds the public header, footer, and Elena concierge widget.
 - The portal login route is `/portal/login` and should use the dedicated `(auth)` layout. It signs users in through Zoho via `/api/auth/zoho/login` and returns through `/api/auth/callback/zoho`.

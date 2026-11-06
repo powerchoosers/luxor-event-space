@@ -76,7 +76,7 @@ export function PortalPaymentSettings() {
           <input value={qrCodeUrl} onChange={(event) => setQrCodeUrl(event.target.value)} inputMode="url" placeholder="https://…" className="mt-1.5 h-10.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] px-3.5 text-sm text-[color:var(--portal-text)] outline-none transition-all placeholder:text-[color:var(--portal-muted)] focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10" />
           <span className="mt-1.5 block text-xs leading-4 text-[color:var(--portal-muted)]">Optional. Paste a secure image URL for the QR code the client can scan with their phone.</span>
         </label>
-        <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-xs font-semibold text-white shadow-2xs transition hover:bg-[#b8903f] disabled:cursor-wait disabled:opacity-45">
+        <button type="button" onClick={() => void save()} disabled={saving} className="luxor-gold-raised inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold !text-white disabled:cursor-wait disabled:opacity-45">
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
           {saving ? 'Saving payment details' : 'Save Zelle details'}
         </button>

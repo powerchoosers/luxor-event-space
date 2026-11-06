@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useMemo, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import {
   FileText,
@@ -13,7 +13,8 @@ import {
   TrendingDown,
   RefreshCw,
   Eye,
-  Plus
+  Plus,
+  X
 } from 'lucide-react'
 import {
   PortalPageFrame,
@@ -28,7 +29,7 @@ import {
   PortalStatusBadge,
   PortalSelect,
   PortalButton,
-  PortalTableSkeleton,
+  PortalSkeleton,
   PortalStaggerGroup,
   PortalStaggerCard
 } from '@/components/portal/PortalUI'
@@ -58,6 +59,7 @@ const FINANCE_TABS: Array<{ id: Tab; label: string; description: string; icon: R
 ]
 
 export default function FinancesPage() {
+  const reduceMotion = useReducedMotion()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
@@ -524,6 +526,7 @@ type LuxorBookingExpense = {
           >
             <div className="overflow-x-auto">
               <PortalStickyTable minWidth="980px">
+                <caption className="sr-only">{loading ? 'Loading invoices' : 'Invoices'}</caption>
                 <PortalStickyThead>
                   <tr className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em] border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/80">
                     <th className="px-8 py-5">Invoice ID</th>
@@ -534,9 +537,27 @@ type LuxorBookingExpense = {
                     <th className="px-8 py-5 text-right">Actions</th>
                   </tr>
                 </PortalStickyThead>
-                <tbody className="divide-y divide-[color:var(--portal-border)]/50">
+                <AnimatePresence mode="wait">
+                  <motion.tbody
+                    key={loading ? 'loading' : 'loaded'}
+                    className="divide-y divide-[color:var(--portal-border)]/50 motion-reduce:!opacity-100 motion-reduce:![filter:none]"
+                    aria-busy={loading}
+                    initial={{ opacity: 0, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    exit={reduceMotion ? { opacity: 1 } : { opacity: 0, filter: 'blur(4px)' }}
+                    transition={{ duration: reduceMotion ? 0 : 0.16 }}
+                  >
                   {loading ? (
-                    <PortalTableSkeleton cols={6} rows={5} />
+                    Array.from({ length: 5 }, (_, row) => (
+                      <tr key={row} aria-hidden="true">
+                        <td className="px-8 py-5"><PortalSkeleton className="h-3 w-16 rounded" /></td>
+                        <td className="px-6 py-5"><div className="space-y-1"><PortalSkeleton className="h-3 w-28 rounded" /><PortalSkeleton className="h-2.5 w-20 rounded" /></div></td>
+                        <td className="px-6 py-5"><PortalSkeleton className="h-4 w-20 rounded" /></td>
+                        <td className="px-6 py-5"><PortalSkeleton className="h-3 w-20 rounded" /></td>
+                        <td className="px-6 py-5"><PortalSkeleton className="h-5 w-16 rounded-md" /></td>
+                        <td className="px-8 py-5"><PortalSkeleton className="ml-auto h-3 w-32 rounded" /></td>
+                      </tr>
+                    ))
                   ) : filteredInvoices.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-8 py-12 text-center text-xs text-[color:var(--portal-muted)]">No invoices matching criteria.</td>
@@ -556,12 +577,12 @@ type LuxorBookingExpense = {
                           ) : (
                             <p className="text-xs font-bold text-[color:var(--portal-text)] leading-none">{inv.client_name}</p>
                           )}
-                          <p className="text-[10px] text-[color:var(--portal-muted)] mt-1">{inv.event_type || 'Quinceañera'}</p>
+                          <p className="text-[10px] text-[color:var(--portal-muted)] mt-1">{inv.event_type || 'Event not specified'}</p>
                         </td>
                         <td className="px-6 py-5 tabular-nums font-bold text-[color:var(--portal-text)]">${Number(inv.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{inv.due_date || 'TBD'}</td>
                         <td className="px-6 py-5">
-                          <PortalStatusBadge status={inv.status} />
+                          <PortalStatusBadge status={inv.status} borderless />
                         </td>
                         <td className="px-8 py-5 text-right">
                           <span className="text-[10px] font-medium text-[color:var(--portal-muted)]">Use send and payment workflows</span>
@@ -569,7 +590,8 @@ type LuxorBookingExpense = {
                       </tr>
                     ))
                   )}
-                </tbody>
+                </motion.tbody>
+                </AnimatePresence>
               </PortalStickyTable>
             </div>
           </PortalTableCard>
@@ -627,16 +649,16 @@ type LuxorBookingExpense = {
         {/* EXPENSES TAB */}
         {activeTab === 'expenses' && (
           <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Operations Expense Ledger</h3>
-              <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Operations expense ledger</h3>
+              <div className="flex flex-wrap items-center gap-3">
                 {cancelledExpenseCount > 0 && <button type="button" onClick={() => setShowCancelledExpenses((show) => !show)} className="text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">{showCancelledExpenses ? 'Hide' : 'Show'} removed ({cancelledExpenseCount})</button>}
                 <button
                   type="button"
                   onClick={() => { setExpenseActionError(null); setIsAddingExpense(!isAddingExpense) }}
-                  className="flex items-center gap-2 bg-[#caa24c]/15 border border-[#caa24c]/30 hover:bg-[#caa24c]/25 text-[#a37d2c] dark:text-[#f1d27a] px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+                  className="luxor-gold-raised inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold !text-white"
                 >
-                  <Plus size={14} /> Log Operational Cost
+                  {isAddingExpense ? <X size={14} /> : <Plus size={14} />} {isAddingExpense ? 'Close form' : 'Log expense'}
                 </button>
               </div>
             </div>
@@ -648,7 +670,7 @@ type LuxorBookingExpense = {
                 <h4 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Log Operational Expense</h4>
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Booking (optional)</label>
+                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Booking (optional)</label>
                     <PortalSelect
                       value={expenseBookingId}
                       onChange={setExpenseBookingId}
@@ -664,8 +686,9 @@ type LuxorBookingExpense = {
                     <p className="text-[10px] text-[color:var(--portal-muted)]">Leave this set to general overhead for costs that are not tied to one event.</p>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Category</label>
+                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Category</label>
                     <PortalSelect
+                      aria-label="Expense category"
                       value={expenseCategory}
                       onChange={setExpenseCategory}
                       options={[
@@ -678,7 +701,7 @@ type LuxorBookingExpense = {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Expense status</label>
+                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Expense status</label>
                     <PortalSelect
                       value={expenseStatus}
                       onChange={setExpenseStatus}
@@ -691,8 +714,9 @@ type LuxorBookingExpense = {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Cost (USD)</label>
+                    <label htmlFor="expense-amount" className="text-xs font-semibold text-[color:var(--portal-muted)]">Cost (USD)</label>
                     <input
+                      id="expense-amount"
                       type="number"
                       required
                       value={expenseAmount}
@@ -702,8 +726,9 @@ type LuxorBookingExpense = {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-[color:var(--portal-muted)]">Description</label>
+                    <label htmlFor="expense-description" className="text-xs font-semibold text-[color:var(--portal-muted)]">Description</label>
                     <input
+                      id="expense-description"
                       type="text"
                       required
                       value={expenseDesc}
@@ -715,7 +740,7 @@ type LuxorBookingExpense = {
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
                   <button type="button" onClick={() => setIsAddingExpense(false)} className="px-3 py-2 border border-transparent text-xs font-bold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] cursor-pointer">Cancel</button>
-                  <button type="submit" className="px-4 py-2 bg-[#caa24c] hover:bg-[#b58d3b] text-white text-xs font-bold uppercase tracking-wider rounded-lg cursor-pointer transition-all">Save Cost</button>
+                  <button type="submit" className="luxor-gold-raised min-h-10 rounded-lg px-4 py-2 text-xs font-bold !text-white">Save Cost</button>
                 </div>
               </form>
             )}

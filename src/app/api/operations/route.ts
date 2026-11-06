@@ -23,7 +23,7 @@ export type LuxorVendor = {
   name: string
   email: string | null
   phone: string | null
-  rating: string
+  rating: string | null
   coi_active: boolean
 }
 
@@ -137,8 +137,8 @@ export async function POST(request: NextRequest) {
           name: data.name,
           email: data.email || null,
           phone: data.phone || null,
-          rating: data.rating || '5.0 ⭐',
-          coi_active: data.coi_active !== undefined ? Boolean(data.coi_active) : true,
+          rating: typeof data.rating === 'string' && data.rating.trim() ? data.rating.trim() : null,
+          coi_active: data.coi_active === true,
         }),
       })
       created = res
@@ -201,6 +201,10 @@ export async function PATCH(request: NextRequest) {
     else if (type === 'task') table = 'luxor_maintenance_tasks'
     else {
       return NextResponse.json({ error: 'Invalid operation type.' }, { status: 400 })
+    }
+
+    if (type === 'vendor' && Object.prototype.hasOwnProperty.call(updates, 'rating')) {
+      updates.rating = typeof updates.rating === 'string' && updates.rating.trim() ? updates.rating.trim() : null
     }
 
     const [updated] = await supabaseRest<(LuxorBill | LuxorInventoryItem | LuxorVendor | LuxorCleaningLog | LuxorUtilityReading | LuxorMaintenanceTask)[]>(`${table}?select=*&id=eq.${encodeURIComponent(id)}`, {

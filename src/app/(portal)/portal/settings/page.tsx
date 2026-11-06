@@ -514,7 +514,7 @@ export default function SettingsPage() {
                     ['Primary mailbox', 'booking@luxoratlaspalmas.com'],
                     ['Public website', 'www.luxoratlaspalmas.com'],
                   ].map(([label, value]) => (
-                    <div key={label} className="min-w-0 rounded-xl bg-[color:var(--portal-soft)] p-3.5">
+                    <div key={label} className={`min-w-0 rounded-xl bg-[color:var(--portal-soft)] p-3.5 ${label === 'Primary mailbox' || label === 'Public website' ? 'col-span-full' : ''}`}>
                       <p className="text-[11px] font-medium text-[color:var(--portal-muted)]">{label}</p>
                       <p title={value} className="mt-1 break-words text-sm font-semibold text-[color:var(--portal-text)]">{value}</p>
                     </div>

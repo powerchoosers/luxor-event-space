@@ -110,7 +110,7 @@ export function PortalBulkRowSelector({
       onClick={(event) => { event.stopPropagation(); onChange() }}
       className={`portal-checkbox group/selector relative inline-flex h-[18px] w-[18px] !min-w-[18px] !min-h-[18px] !max-w-[18px] !max-h-[18px] shrink-0 items-center justify-center rounded-[4px] border text-[9px] font-mono font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/55 cursor-pointer ${
         checked
-          ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-xs'
+          ? 'luxor-gold-raised text-white'
           : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-faint)] hover:border-[#caa24c]/60 hover:text-[color:var(--portal-text)] focus-visible:border-[#caa24c]'
       }`}
     >
@@ -145,7 +145,7 @@ export function PortalBulkHeaderSelector({
       className={`portal-checkbox relative inline-flex h-[18px] w-[18px] !min-w-[18px] !min-h-[18px] !max-w-[18px] !max-h-[18px] shrink-0 items-center justify-center rounded-[4px] border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/55 cursor-pointer ${
         state === 'none'
           ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-transparent hover:border-[#caa24c]/60'
-          : 'border-[#caa24c] bg-[#caa24c] text-white shadow-xs'
+          : 'luxor-gold-raised text-white'
       }`}
     >
       {state === 'some' ? <Minus size={11} strokeWidth={3} className="!stroke-white" /> : state === 'all' ? <Check size={11} strokeWidth={3} className="!stroke-white" /> : null}
@@ -185,7 +185,7 @@ export function PortalBulkActionDeck({
           exit={{ opacity: 0, y: 12 }}
           transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
           aria-label="Bulk actions"
-          className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-4xl overflow-hidden rounded-2xl border border-[#caa24c]/30 bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 sm:bottom-6"
+          className="portal-bulk-action-deck fixed inset-x-4 bottom-4 z-50 mx-auto max-w-4xl overflow-hidden rounded-2xl border border-[#caa24c]/30 bg-[color:var(--portal-card)] shadow-2xl shadow-black/30 sm:bottom-6"
         >
           {!allMatching && selectedCount >= pageCount && totalCount > pageCount ? (
             <div className="border-b border-[color:var(--portal-border)] bg-[#caa24c]/7 px-4 py-2 text-center text-[11px] text-[color:var(--portal-muted)]">
@@ -197,7 +197,7 @@ export function PortalBulkActionDeck({
           ) : null}
           <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <span className="flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#caa24c] px-2 font-mono text-xs font-black text-white">{selectedCount}</span>
+              <span className="luxor-gold-raised flex h-8 min-w-8 items-center justify-center rounded-lg px-2 font-mono text-xs font-black !text-white">{selectedCount}</span>
               <div>
                 <p className="text-xs font-bold text-[color:var(--portal-text)]">{pluralize(noun, selectedCount)} selected</p>
                 <p className="text-[10px] text-[color:var(--portal-muted)]">{allMatching ? 'All matching records are selected' : 'Choose an action for this selection'}</p>
@@ -210,10 +210,10 @@ export function PortalBulkActionDeck({
                   type="button"
                   disabled={Boolean(busyAction) || action.disabled}
                   onClick={() => onAction(action.id)}
-                  className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-[10px] font-black uppercase tracking-[0.1em] transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                  className={`inline-flex h-9 items-center gap-2 rounded-lg border-0 px-3 text-[10px] font-black uppercase tracking-[0.1em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-45 ${
                     action.tone === 'danger'
-                      ? 'border-red-500/25 bg-red-500/7 text-red-500 hover:bg-red-500/12 dark:text-red-300'
-                      : 'border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:border-[#caa24c]/35'
+                      ? 'bg-red-500/7 text-red-500 hover:bg-red-500/12 dark:text-red-300'
+                      : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] hover:bg-[#caa24c]/15'
                   }`}
                 >
                   {busyAction === action.id ? <Loader2 size={13} className="animate-spin" /> : action.icon}

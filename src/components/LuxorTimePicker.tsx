@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Clock3, ChevronDown } from 'lucide-react'
@@ -20,8 +20,8 @@ function timePickerParts(value: string) {
   }
 }
 
-export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time', label = 'Preferred time', className = '' }: { value: string; onChange: (value: string) => void; placeholder?: string; label?: string; className?: string }) {
-  const trigger = useRef<HTMLButtonElement>(null)
+export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time', label = 'Preferred time', className = '', renderTrigger }: { value: string; onChange: (value: string) => void; placeholder?: string; label?: string; className?: string; renderTrigger?: (props: { ref: RefObject<HTMLElement | null>; open: boolean; show: () => void }) => ReactNode }) {
+  const trigger = useRef<HTMLElement>(null)
   const dialog = useRef<HTMLDivElement>(null)
   const periodButtons = useRef<Array<HTMLButtonElement | null>>([])
   const reduced = useReducedMotion()
@@ -110,13 +110,16 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
     window.addEventListener('scroll', scheduleForPageScroll, true)
     window.visualViewport?.addEventListener('resize', schedule)
     window.visualViewport?.addEventListener('scroll', schedule)
-    const frame = requestAnimationFrame(() => dialog.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus())
+    const frame = requestAnimationFrame(() => { if (!renderTrigger) dialog.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus() })
+    const outside = (event: PointerEvent) => { if (renderTrigger && event.target instanceof Node && !trigger.current?.contains(event.target) && !dialog.current?.contains(event.target)) setOpen(false) }
+    document.addEventListener('pointerdown', outside)
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close() }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => {
       cancelAnimationFrame(frame)
+      document.removeEventListener('pointerdown', outside)
       cancelAnimationFrame(positionFrame)
       window.removeEventListener('resize', schedule)
       window.removeEventListener('scroll', scheduleForPageScroll, true)
@@ -124,7 +127,7 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
       window.visualViewport?.removeEventListener('scroll', schedule)
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [open, close, updatePosition])
+  }, [open, close, updatePosition, Boolean(renderTrigger)])
   const columns: TimeColumn<string | number>[] = [
     { name: 'Hour', options: Array.from({ length: 12 }, (_, i) => i + 1), selected: hour, set: (n) => setHour(Number(n)), format: (n) => String(n) },
     { name: 'Minute', options: Array.from({ length: 60 }, (_, i) => i), selected: minute, set: (n) => setMinute(Number(n)), format: (n) => String(n).padStart(2, '0') },
@@ -160,18 +163,18 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
   }
   const apply = () => { let h = hour % 12; if (period === 'PM') h += 12; onChange(String(h).padStart(2, '0') + ':' + String(minute).padStart(2, '0')); close() }
   return <div className={'relative min-w-0 ' + className}>
-    <button ref={trigger} type="button" aria-haspopup="dialog" aria-expanded={open} aria-label={value ? label + ', ' + display + '. Change time' : placeholder} onClick={() => open ? close() : show()} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-[#d8c4a4] bg-[#fffdfa] px-3.5 text-left text-sm text-[#3b2b1d] transition hover:border-[#caa24c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/30">
+    {renderTrigger ? renderTrigger({ ref: trigger, open, show: () => { if (!open) show() } }) : <button ref={trigger as RefObject<HTMLButtonElement | null>} type="button" aria-haspopup="dialog" aria-expanded={open} aria-label={value ? label + ', ' + display + '. Change time' : placeholder} onClick={() => open ? close() : show()} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-[#d8c4a4] bg-[#fffdfa] px-3.5 text-left text-sm text-[#3b2b1d] transition hover:border-[#caa24c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/30">
       {display}<span className="flex items-center gap-2 text-[#8d672b]"><Clock3 aria-hidden="true" className="h-4 w-4"/><ChevronDown aria-hidden="true" className="h-3.5 w-3.5"/></span>
-    </button>
+    </button>}
     {typeof document !== 'undefined' ? createPortal(<AnimatePresence initial={false}>
       {open ? <>
-        <motion.button type="button" aria-label="Close time picker" tabIndex={-1} onClick={close} className="fixed inset-0 z-[9980] bg-transparent" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0 : 0.16 }}/>
+        <motion.button type="button" data-portal-popover="true" aria-label="Close time picker" tabIndex={-1} onClick={close} className={`fixed inset-0 z-[9980] bg-transparent ${renderTrigger ? 'pointer-events-none' : ''}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0 : 0.16 }}/>
         <motion.div ref={dialog} role="dialog" aria-modal="false" aria-label={label} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.99 }} transition={{ duration: reduced ? 0 : 0.18 }} style={{ position: 'fixed', top: position.top, left: position.left, width: position.width, colorScheme: 'light' }} className="public-calendar-scroll luxor-public-time-scroll z-[9981] overflow-visible overscroll-contain rounded-2xl border border-[#d8c4a4] bg-[#fffdfa] p-3 text-[#3b2b1d] shadow-[0_18px_48px_-24px_rgba(55,37,19,0.48)] sm:p-4">
           <div className="grid grid-cols-2 gap-2">{columns.map((column, columnIndex) => <div key={column.name} role="listbox" aria-label={column.name} onKeyDown={(event) => handleColumnKeyDown(event, columnIndex)} className="public-calendar-scroll luxor-public-time-scroll overflow-y-auto overscroll-contain rounded-xl border border-[#eadfce] p-1" style={{ height: position.wheelHeight }}>{column.options.map((option) => <button key={String(option)} type="button" role="option" aria-selected={column.selected === option} tabIndex={column.selected === option ? 0 : -1} onClick={() => column.set(option)} className={'w-full rounded-lg px-2 py-2 text-center text-sm tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ' + (column.selected === option ? 'bg-[#f0e7d9] font-semibold text-[#33291f]' : 'text-[#6f5f4f] hover:bg-[#f7efe3]')}>{column.format(option)}</button>)}</div>)}</div>
           <div role="group" aria-label="AM or PM" className="mt-2 grid grid-cols-2 gap-2">
             {(['AM', 'PM'] as const).map((option, index) => <button key={option} ref={(node) => { periodButtons.current[index] = node }} type="button" aria-pressed={period === option} onClick={() => setPeriod(option)} className={'min-h-9 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ' + (period === option ? 'border-[#caa24c] bg-[#f0e7d9] text-[#33291f]' : 'border-[#eadfce] text-[#6f5f4f] hover:bg-[#f7efe3]')}>{option}</button>)}
           </div>
-          <div className="mt-3 flex justify-end gap-2 border-t border-[#eadfce] pt-3"><button type="button" onClick={close} className="min-h-10 rounded-xl border border-[#d8c4a4] px-4 text-sm font-medium text-[#6f4d1f] hover:bg-[#f7efe3]">Cancel</button><button type="button" onClick={apply} className="min-h-10 rounded-xl bg-[#caa24c] px-5 text-sm font-semibold text-white hover:bg-[#b98a3d]">Done</button></div>
+          <div className="mt-3 flex justify-end gap-2 border-t border-[#eadfce] pt-3"><button type="button" onClick={close} className="min-h-10 rounded-xl border border-[#d8c4a4] px-4 text-sm font-medium text-[#6f4d1f] hover:bg-[#f7efe3]">Cancel</button><button type="button" onClick={apply} className={`min-h-10 rounded-xl px-5 text-sm font-semibold ${renderTrigger ? 'luxor-gold-raised !text-white' : 'bg-[#caa24c] text-white hover:bg-[#b98a3d]'}`}>Done</button></div>
         </motion.div>
       </> : null}
     </AnimatePresence>, document.body) : null}

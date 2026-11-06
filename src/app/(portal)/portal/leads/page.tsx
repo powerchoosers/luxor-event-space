@@ -20,7 +20,6 @@ import {
   UserCheck,
   FileCheck,
   Trash2,
-  ArrowRightLeft,
   ListPlus,
   ListMinus,
   Languages,
@@ -86,7 +85,6 @@ import {
 } from '@/components/portal/LeadLifecycleActionSheet'
 import {
   PortalBulkActionDeck,
-  PortalBulkChoiceDialog,
   PortalBulkConfirmDialog,
   PortalBulkHeaderSelector,
   PortalBulkListDialog,
@@ -98,15 +96,6 @@ import FollowUpsTab from '@/components/portal/FollowUpsTab'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { LuxorCrmRecordCard, LuxorCrmSecondaryAction, luxorCrmStatusTone } from '@/components/portal/LuxorCrmRecordCard'
 import { NewLeadDrawer } from '@/components/portal/NewLeadDrawer'
-
-const INQUIRY_STATUS_OPTIONS: { value: LuxorInquiryStatus; label: string }[] = [
-  { value: 'new', label: 'New' },
-  { value: 'contacted', label: 'Contacted' },
-  { value: 'tour_requested', label: 'Tour Time Needed' },
-  { value: 'tour_confirmed', label: 'Tour Confirmed' },
-  { value: 'proposal_sent', label: 'Proposal Sent' },
-  { value: 'booked', label: 'Booked' },
-]
 
 const PIPELINE_COLUMNS: { id: LuxorPipelineStage; label: string; short: string; tone: string; status?: LuxorInquiryStatus }[] = [
   { id: 'newsletter', label: 'Newsletter', short: 'Newsletter', tone: 'blue', status: 'new' },
@@ -192,9 +181,7 @@ export default function LeadsPage() {
   const bulkSelection = usePortalBulkSelection<string>()
   const [bulkBusy, setBulkBusy] = useState<string | null>(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
-  const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
   const [bulkEnrollWorkflowOpen, setBulkEnrollWorkflowOpen] = useState(false)
-  const [bulkStatus, setBulkStatus] = useState<LuxorInquiryStatus>('contacted')
   const [bulkListMode, setBulkListMode] = useState<'add' | 'remove' | null>(null)
   const [marketingListNames, setMarketingListNames] = useState<string[]>([])
   const [lifecycleLead, setLifecycleLead] = useState<LuxorInquiry | null>(null)
@@ -394,20 +381,19 @@ export default function LeadsPage() {
   const matchingLeadIds = useMemo(() => sortedLeads.map((lead) => lead.id), [sortedLeads])
   const bulkSelectedCount = bulkSelection.selectedCount(matchingLeadIds.length)
 
-  const runLeadBulkAction = useCallback(async (action: 'set_status' | 'delete', value?: LuxorInquiryStatus) => {
+  const runLeadBulkAction = useCallback(async (action: 'delete') => {
     const ids = bulkSelection.resolveIds(matchingLeadIds)
     if (!ids.length) return
-    setBulkBusy(action === 'set_status' ? (value || action) : action)
+    setBulkBusy(action)
     try {
       const response = await fetch('/api/portal/bulk-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource: 'inquiries', action, ids, value }),
+        body: JSON.stringify({ resource: 'inquiries', action, ids }),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; warning?: string }
       if (!response.ok) throw new Error(payload.error || 'Unable to update the selected leads.')
-      if (action === 'delete') setLeads((current) => current.filter((lead) => !ids.includes(lead.id)))
-      else if (value) setLeads((current) => current.map((lead) => ids.includes(lead.id) ? { ...lead, status: value, pipeline_stage: stageForBulkStatus(value) } : lead))
+      setLeads((current) => current.filter((lead) => !ids.includes(lead.id)))
       bulkSelection.clear()
       setConfirmBulkDelete(false)
       if (payload.warning) alert(payload.warning)
@@ -621,6 +607,7 @@ export default function LeadsPage() {
           footerClassName="max-md:hidden"
           className="max-md:border-b-0"
           controls={
+            <>
             <PortalFilterBar
               searchValue={searchTerm}
               onSearchChange={setSearchTerm}
@@ -661,6 +648,8 @@ export default function LeadsPage() {
                 />
               </div>
             </PortalFilterBar>
+            <p className="hidden px-6 pb-2 text-xs text-[color:var(--portal-muted)] md:block xl:hidden">Scroll sideways to see more columns and actions <span aria-hidden="true">→</span></p>
+            </>
           }
           footer={
             <div className="hidden w-full items-center justify-between gap-4 text-xs font-medium text-[color:var(--portal-muted)] select-none md:flex">
@@ -671,7 +660,7 @@ export default function LeadsPage() {
             </div>
           }
         >
-          <div className="hidden md:block">
+          <div className="lead-pipeline-table hidden md:block">
           <PortalStickyTable minWidth="1170px">
             <PortalStickyThead>
               <tr className="whitespace-nowrap bg-[color:var(--portal-soft)] text-xs font-semibold text-[color:var(--portal-muted)]">
@@ -810,20 +799,20 @@ export default function LeadsPage() {
                           <button
                             type="button"
                             onClick={() => startLuxorBrowserCall({ phoneNumber: lead.phone!, contactName: lead.full_name, inquiryId: lead.id })}
-                            className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[color:var(--portal-muted)] transition-all hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-md border-0 bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:bg-emerald-500/10 hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-emerald-400"
                             title={`Call ${formatPhoneDisplay(lead.phone)}`}
                           >
                             <Phone size={14} />
                           </button>
                         ) : null}
                         {lead.phone ? (
-                          <Link href={`/portal/leads/${lead.id}?tab=messages`} className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[#a8792f]" title="Text client">
+                          <Link href={`/portal/leads/${lead.id}?tab=messages`} className="inline-flex h-9 w-9 items-center justify-center rounded-md border-0 bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:bg-[#caa24c]/10 hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45" title="Text client">
                             <MessageSquare size={14} />
                           </Link>
                         ) : null}
                         <Link
                           href={`/portal/leads/${lead.id}`}
-                          className="rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-2 text-[color:var(--portal-muted)] transition-all hover:border-[#caa24c]/35 hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)]"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-md border-0 bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] transition-colors hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                           title="Open Dossier"
                         >
                           <ExternalLink size={14} />
@@ -885,14 +874,12 @@ export default function LeadsPage() {
         onSelectAll={bulkSelection.selectAllMatching}
         onClear={bulkSelection.clear}
         onAction={(action) => {
-          if (action === 'status') setBulkStatusOpen(true)
           if (action === 'enroll-workflow') setBulkEnrollWorkflowOpen(true)
           if (action === 'add-list') void openBulkList('add')
           if (action === 'remove-list') void openBulkList('remove')
           if (action === 'delete') setConfirmBulkDelete(true)
         }}
         actions={[
-          { id: 'status', label: 'Change status', icon: <ArrowRightLeft size={13} /> },
           { id: 'enroll-workflow', label: 'Enroll in workflow', icon: <Workflow size={13} /> },
           { id: 'add-list', label: 'Add to list', icon: <ListPlus size={13} /> },
           { id: 'remove-list', label: 'Remove from list', icon: <ListMinus size={13} /> },
@@ -907,23 +894,6 @@ export default function LeadsPage() {
           bulkSelection.clear()
           void fetchLeads()
         }}
-      />
-      <PortalBulkChoiceDialog
-        open={bulkStatusOpen}
-        title="Change lead status"
-        description={`Update ${bulkSelectedCount} selected ${bulkSelectedCount === 1 ? 'lead' : 'leads'} together.`}
-        label="New status"
-        value={bulkStatus}
-        options={INQUIRY_STATUS_OPTIONS}
-        confirmLabel="Update leads"
-        busy={Boolean(bulkBusy)}
-        onValueChange={(value) => setBulkStatus(value as LuxorInquiryStatus)}
-        onConfirm={() => {
-          if (bulkStatus === 'closed_lost') return
-          setBulkStatusOpen(false)
-          void runLeadBulkAction('set_status', bulkStatus)
-        }}
-        onClose={() => setBulkStatusOpen(false)}
       />
       <PortalBulkListDialog
         open={bulkListMode !== null}
@@ -1144,14 +1114,6 @@ function getPipelineStage(lead: LuxorInquiry): LuxorPipelineStage {
   if (lead.status === 'tour_requested' || lead.status === 'tour_confirmed') return 'tour'
   if (lead.status === 'proposal_sent') return 'proposal'
   if (lead.status === 'booked') return 'contract'
-  return 'inquiry'
-}
-
-function stageForBulkStatus(status: LuxorInquiryStatus): LuxorPipelineStage {
-  if (status === 'tour_requested' || status === 'tour_confirmed') return 'tour'
-  if (status === 'proposal_sent') return 'proposal'
-  if (status === 'booked') return 'contract'
-  if (status === 'closed_lost') return 'closed_lost'
   return 'inquiry'
 }
 

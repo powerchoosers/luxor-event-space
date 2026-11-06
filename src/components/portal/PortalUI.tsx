@@ -1050,6 +1050,7 @@ export function PortalModal({
   zIndex,
   className = '',
   fullScreenOnCompact = false,
+  animateClose = false,
 }: {
   isOpen: boolean
   onClose: () => void
@@ -1062,10 +1063,12 @@ export function PortalModal({
   zIndex?: number
   className?: string
   fullScreenOnCompact?: boolean
+  animateClose?: boolean
 }) {
   const depth = React.useContext(ModalDepthContext)
   const computedZIndex = zIndex ?? (200 + depth * 10)
   const [mounted, setMounted] = React.useState(false)
+  const [holdVisible, setHoldVisible] = React.useState(isOpen && animateClose)
   const dialogRef = React.useRef<HTMLDivElement>(null)
   const previouslyFocusedRef = React.useRef<HTMLElement | null>(null)
   const onCloseRef = React.useRef(onClose)
@@ -1090,6 +1093,10 @@ export function PortalModal({
   React.useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
+
+  React.useEffect(() => {
+    if (isOpen && animateClose) setHoldVisible(true)
+  }, [isOpen, animateClose])
 
   React.useEffect(() => {
     setMounted(true)
@@ -1163,12 +1170,15 @@ export function PortalModal({
 
   return createPortal(
     <AnimatePresence initial={false} mode="wait">
-      {isOpen && (
+      {(isOpen || (animateClose && holdVisible)) && (
         <motion.div
           initial={isCompactFullScreen ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={isCompactFullScreen ? {} : { opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+          animate={{ opacity: isOpen ? 1 : 0 }}
+          exit={animateClose || isCompactFullScreen ? {} : { opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.26, ease: [0.23, 1, 0.32, 1] }}
+          onAnimationComplete={() => { if (animateClose && !isOpen) setHoldVisible(false) }}
+          aria-hidden={!isOpen}
+          inert={!isOpen}
           style={{ zIndex: computedZIndex }}
           className={`fixed inset-0 flex items-center justify-center p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4 ${fullScreenOnCompact ? 'max-lg:!p-0' : ''}`}
         >
@@ -1188,9 +1198,9 @@ export function PortalModal({
             aria-label={title ? undefined : ariaLabel ?? 'Portal dialog'}
             tabIndex={-1}
             initial={dialogInitial}
-            animate={dialogAnimate}
+            animate={isOpen ? dialogAnimate : dialogExit}
             exit={dialogExit}
-            transition={{ duration: reduceMotion && isCompactFullScreen ? 0 : isCompactFullScreen ? 0.36 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: reduceMotion ? 0 : isCompactFullScreen ? 0.36 : 0.26, ease: [0.23, 1, 0.32, 1] }}
             className={`relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full ${maxWidth} ${className} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''}`}
           >
             <ModalDepthContext.Provider value={depth + 1}>

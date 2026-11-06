@@ -8,7 +8,7 @@ import {
   Trash2,
   Sparkles
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import { LuxorInvoice, type LuxorBooking, type LuxorPayment, type LuxorPaymentInstallment, type LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 import { formatLuxorPaymentCalendarDate, getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
@@ -20,7 +20,7 @@ import {
   PortalStickyThead,
   PortalTableCard,
   PortalStatusBadge,
-  PortalTableSkeleton
+  PortalSkeleton
 } from '@/components/portal/PortalUI'
 import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
@@ -34,6 +34,7 @@ import {
 } from '@/components/portal/PortalBulkSelection'
 
 export default function InvoicesPage() {
+  const reduceMotion = useReducedMotion()
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
@@ -240,7 +241,7 @@ export default function InvoicesPage() {
         title="Revenue & Invoicing"
         actions={
           <div className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">
-            {invoices.length} total invoice records
+            {loading ? 'Loading invoices…' : error ? 'Invoice count unavailable' : `${invoices.length} total invoice records`}
           </div>
         }
       />
@@ -255,21 +256,21 @@ export default function InvoicesPage() {
           value={financialSummary ? `$${financialSummary.eventPaymentsReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
           trend={financialSummary ? `${financialSummary.eventPaymentRows.length} payment rows` : 'Verified records required'}
           highlight
-          gaugePercent={financialSummary && financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.eventPaymentsReceived / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0}
+          gaugePercent={financialSummary ? (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.eventPaymentsReceived / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0) : undefined}
         />
         <StatsPanel
           label="Signed, Confirmed Event Balance Outstanding"
           value={financialSummary ? `$${financialSummary.outstandingEventReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
           trend={financialSummary ? `${financialSummary.acceptedInvoiceRows.length} signed, confirmed obligations` : 'Verified records required'}
           isNegative={Boolean(financialSummary?.outstandingEventReceivable)}
-          progress={financialSummary && financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.outstandingEventReceivable / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0}
+          progress={financialSummary ? (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable > 0 ? (financialSummary.outstandingEventReceivable / (financialSummary.eventPaymentsReceived + financialSummary.outstandingEventReceivable)) * 100 : 0) : undefined}
         />
         <StatsPanel
           label="Overdue Installment Remainder"
           value={financialSummary ? `$${financialSummary.overdueEventReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : financeLoading ? 'Verifying…' : 'Unavailable'}
           trend="Past due in Chicago time"
           isNegative={Boolean(financialSummary?.overdueEventReceivable)}
-          progress={financialSummary && financialSummary.outstandingEventReceivable > 0 ? (financialSummary.overdueEventReceivable / financialSummary.outstandingEventReceivable) * 100 : 0}
+          progress={financialSummary ? (financialSummary.outstandingEventReceivable > 0 ? (financialSummary.overdueEventReceivable / financialSummary.outstandingEventReceivable) * 100 : 0) : undefined}
         />
       </div>
       <div className="grid shrink-0 grid-cols-1 gap-3 text-xs sm:grid-cols-3">
@@ -296,6 +297,7 @@ export default function InvoicesPage() {
         }
       >
         <PortalStickyTable minWidth="980px">
+          <caption className="sr-only">{loading ? 'Loading invoices' : 'Invoices'}</caption>
           <PortalStickyThead>
             <tr className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em] border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/80">
               <th className="w-14 px-4 py-5 text-center"><PortalBulkHeaderSelector state={bulkSelection.pageSelectionState(matchingInvoiceIds)} onChange={() => bulkSelection.selectPage(matchingInvoiceIds)} /></th>
@@ -307,9 +309,28 @@ export default function InvoicesPage() {
               <th className="px-8 py-5 text-right">Actions</th>
             </tr>
           </PortalStickyThead>
-          <tbody className="divide-y divide-[color:var(--portal-border)]/50">
+          <AnimatePresence mode="wait">
+                  <motion.tbody
+                    key={loading ? 'loading' : 'loaded'}
+                    className="divide-y divide-[color:var(--portal-border)]/50 motion-reduce:!opacity-100 motion-reduce:![filter:none]"
+                    aria-busy={loading}
+                    initial={{ opacity: 0, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    exit={reduceMotion ? { opacity: 1 } : { opacity: 0, filter: 'blur(4px)' }}
+                    transition={{ duration: reduceMotion ? 0 : 0.16 }}
+                  >
             {loading ? (
-              <PortalTableSkeleton cols={7} rows={5} />
+              Array.from({ length: 5 }, (_, row) => (
+                <tr key={row} aria-hidden="true">
+                  <td className="px-4 py-6"><PortalSkeleton className="mx-auto h-4 w-4 rounded" /></td>
+                  <td className="px-4 py-6"><PortalSkeleton className="h-3 w-16 rounded" /></td>
+                  <td className="px-6 py-6"><div className="space-y-1"><PortalSkeleton className="h-3.5 w-28 rounded" /><PortalSkeleton className="h-2.5 w-20 rounded" /></div></td>
+                  <td className="px-6 py-6"><PortalSkeleton className="h-4 w-20 rounded" /></td>
+                  <td className="px-6 py-6"><div className="space-y-1"><PortalSkeleton className="h-3 w-20 rounded" /><PortalSkeleton className="h-2.5 w-16 rounded" /></div></td>
+                  <td className="px-6 py-6"><div className="space-y-1.5"><PortalSkeleton className="h-2.5 w-20 rounded" /><PortalSkeleton className="h-5 w-16 rounded-md" /></div></td>
+                  <td className="px-8 py-6"><PortalSkeleton className="ml-auto h-8 w-20 rounded-lg" /></td>
+                </tr>
+              ))
             ) : error ? (
               <tr>
                 <td colSpan={7} className="px-8 py-12 text-sm text-rose-600 dark:text-rose-400">
@@ -358,10 +379,10 @@ export default function InvoicesPage() {
                   <td className="px-6 py-6">
                     <div className="flex flex-col items-start gap-1.5">
                       <span className="text-[9px] font-semibold uppercase tracking-wide text-[color:var(--portal-muted)]">Stored lifecycle</span>
-                      <PortalStatusBadge status={inv.status} />
+                      <PortalStatusBadge status={inv.status} borderless />
                       {financeVerified && !financeRows.testInvoiceIds.has(inv.id.toLowerCase()) ? (() => {
                         const collection = getInvoiceCollectionDisplayState(inv, invoices, payments, installments, new Date(), financialSummary || undefined, bookings.find((booking) => booking.id === inv.booking_id) || null)
-                        return collection.collectionStatus ? <span aria-label={`Collection status: ${collection.collectionStatus}`} className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2.5 py-1 text-[10px] font-semibold text-[#8b6424]">Collection: {collection.collectionStatus}</span> : null
+                        return collection.collectionStatus ? <span aria-label={`Collection status: ${collection.collectionStatus}`} className="rounded-full bg-[#caa24c]/10 px-2.5 py-1 text-[10px] font-semibold text-[#8b6424] dark:text-[#f1d27a]">Collection: {collection.collectionStatus}</span> : null
                       })() : null}
                     </div>
                   </td>
@@ -388,7 +409,8 @@ export default function InvoicesPage() {
                 </tr>
               ))
             )}
-          </tbody>
+          </motion.tbody>
+                </AnimatePresence>
         </PortalStickyTable>
       </PortalTableCard>
       <PortalBulkActionDeck
@@ -454,10 +476,10 @@ function StatsPanel({
         <div className="flex items-center justify-between gap-2 mb-3 relative z-10">
           <p className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em]">{label}</p>
           <span
-            className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider tabular-nums shrink-0 ${
+            className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider tabular-nums shrink-0 ${
               isNegative
-                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
+                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
             }`}
           >
             {trend}

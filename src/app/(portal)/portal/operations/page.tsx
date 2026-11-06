@@ -106,7 +106,7 @@ type EditFormData = {
   vendor_type?: string
   email?: string | null
   phone?: string | null
-  rating?: string
+  rating?: string | null
   coi_active?: boolean
 }
 
@@ -204,8 +204,8 @@ function OperationsPageContent() {
   const [vendorName, setVendorName] = useState('')
   const [vendorEmail, setVendorEmail] = useState('')
   const [vendorPhone, setVendorPhone] = useState('')
-  const [vendorRating, setVendorRating] = useState('5.0 ⭐')
-  const [vendorCoi, setVendorCoi] = useState('true')
+  const [vendorRating, setVendorRating] = useState('')
+  const [vendorCoi, setVendorCoi] = useState('false')
 
   // State for interactive features
   const [readinessTasks, setReadinessTasks] = useState<ReadinessTask[]>([])
@@ -535,6 +535,8 @@ function OperationsPageContent() {
       setVendorName('')
       setVendorEmail('')
       setVendorPhone('')
+      setVendorRating('')
+      setVendorCoi('false')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save vendor profile.')
     }
@@ -967,7 +969,7 @@ function OperationsPageContent() {
                         <h4 className="text-sm font-serif text-white mt-1">{v.name}</h4>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold text-[#caa24c] bg-[#caa24c]/5 border border-[#caa24c]/10 px-2 py-0.5 rounded">{v.rating || '5.0 ⭐'}</span>
+                      <span className="text-[10px] text-[color:var(--portal-muted)]">{v.rating?.trim() || 'Unrated'}</span>
                     </div>
                     <div className="space-y-1 text-xs text-zinc-400">
                       <p className="truncate">Email: {v.email || 'N/A'}</p>
@@ -977,7 +979,6 @@ function OperationsPageContent() {
                       <span className={v.coi_active ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
                         {v.coi_active ? 'COI Active / Verified' : 'COI Pending / Inactive'}
                       </span>
-                      <span className="text-zinc-550 font-mono">Contract locked</span>
                     </div>
                   </div>
                 ))
@@ -988,49 +989,49 @@ function OperationsPageContent() {
       )}
 
       {activeTab === 'utilities' && (() => {
-        const electricReading = utilities.find((u: LuxorUtilityReading) => u.sensor_type === 'electric') || { current_load: '14.5 kWh', previous_bill_total: 375.00, anomaly_status: 'Optimal' }
-        const waterReading = utilities.find((u: LuxorUtilityReading) => u.sensor_type === 'water') || { current_load: '1.2 GPM', previous_bill_total: 105.80, anomaly_status: 'Optimal' }
+        const electricReading = utilities.find((u: LuxorUtilityReading) => u.sensor_type === 'electric')
+        const waterReading = utilities.find((u: LuxorUtilityReading) => u.sensor_type === 'water')
 
         return (
           <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#caa24c] flex items-center gap-2">
-                  <Zap size={16} /> Electrical Smart Sensor (TXU)
+                  <Zap size={16} /> Electricity
                 </h3>
                 <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
-                    <span className="text-zinc-550">Current load</span>
-                    <span className="text-white font-mono font-bold">{electricReading.current_load}</span>
+                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-[color:var(--portal-border)]">
+                    <span className="text-[color:var(--portal-muted)]">Current load</span>
+                    <span className="text-[color:var(--portal-text)] font-mono font-bold">{electricReading?.current_load || 'Not available'}</span>
                   </div>
-                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
-                    <span className="text-zinc-550">Previous Bill Total</span>
-                    <span className="text-white font-mono font-bold">${Number(electricReading.previous_bill_total || 0).toFixed(2)}</span>
+                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-[color:var(--portal-border)]">
+                    <span className="text-[color:var(--portal-muted)]">Previous Bill Total</span>
+                    <span className="text-[color:var(--portal-text)] font-mono font-bold">{electricReading?.previous_bill_total == null ? 'Not available' : `$${Number(electricReading.previous_bill_total).toFixed(2)}`}</span>
                   </div>
                   <div className="flex justify-between text-xs font-medium">
-                    <span className="text-zinc-550">Alert Threshold Status</span>
-                    <span className="text-emerald-400 font-bold uppercase tracking-wider text-[10px]">{electricReading.anomaly_status}</span>
+                    <span className="text-[color:var(--portal-muted)]">Alert Threshold Status</span>
+                    <span className="text-[color:var(--portal-text)] font-semibold text-xs">{electricReading?.anomaly_status || 'Not available'}</span>
                   </div>
                 </div>
               </div>
 
               <div className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-400 flex items-center gap-2">
-                  <Droplet size={16} /> Water Sensor (City SmartSensor)
+                  <Droplet size={16} /> Water
                 </h3>
                 <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
-                    <span className="text-zinc-555">Current usage rate</span>
-                    <span className="text-white font-mono font-bold">{waterReading.current_load}</span>
+                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-[color:var(--portal-border)]">
+                    <span className="text-[color:var(--portal-muted)]">Current usage rate</span>
+                    <span className="text-[color:var(--portal-text)] font-mono font-bold">{waterReading?.current_load || 'Not available'}</span>
                   </div>
-                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-zinc-900">
-                    <span className="text-zinc-555">Previous Bill Total</span>
-                    <span className="text-white font-mono font-bold">${Number(waterReading.previous_bill_total || 0).toFixed(2)}</span>
+                  <div className="flex justify-between text-xs font-medium pb-2 border-b border-[color:var(--portal-border)]">
+                    <span className="text-[color:var(--portal-muted)]">Previous Bill Total</span>
+                    <span className="text-[color:var(--portal-text)] font-mono font-bold">{waterReading?.previous_bill_total == null ? 'Not available' : `$${Number(waterReading.previous_bill_total).toFixed(2)}`}</span>
                   </div>
                   <div className="flex justify-between text-xs font-medium">
-                    <span className="text-zinc-555">Spike anomaly monitor</span>
-                    <span className="text-emerald-400 font-bold uppercase tracking-wider text-[10px]">
-                      {waterReading.anomaly_status === 'Optimal' ? 'No Leaks Detected' : waterReading.anomaly_status}
+                    <span className="text-[color:var(--portal-muted)]">Spike anomaly monitor</span>
+                    <span className="text-[color:var(--portal-text)] font-semibold text-xs">
+                      {waterReading?.anomaly_status || 'Not available'}
                     </span>
                   </div>
                 </div>
@@ -1200,7 +1201,7 @@ function OperationsPageContent() {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
+              className="luxor-gold-raised rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-widest text-white transition-all"
             >
               Save Bill
             </button>
@@ -1267,7 +1268,7 @@ function OperationsPageContent() {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
+              className="luxor-gold-raised rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-widest text-white transition-all"
             >
               Log Ticket
             </button>
@@ -1352,7 +1353,7 @@ function OperationsPageContent() {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
+              className="luxor-gold-raised rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-widest text-white transition-all"
             >
               Audit Item
             </button>
@@ -1425,6 +1426,7 @@ function OperationsPageContent() {
                 value={vendorRating}
                 onChange={setVendorRating}
                 options={[
+                  { value: '', label: 'Unrated' },
                   { value: '5.0 ⭐', label: '5.0 ⭐' },
                   { value: '4.9 ⭐', label: '4.9 ⭐' },
                   { value: '4.8 ⭐', label: '4.8 ⭐' },
@@ -1440,7 +1442,7 @@ function OperationsPageContent() {
                 onChange={setVendorCoi}
                 options={[
                   { value: 'true', label: 'Yes - Active COI' },
-                  { value: 'false', label: 'No - Pending COI' }
+                  { value: 'false', label: 'Not verified' }
                 ]}
               />
             </div>
@@ -1455,7 +1457,7 @@ function OperationsPageContent() {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
+              className="luxor-gold-raised rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-widest text-white transition-all"
             >
               Add Vendor
             </button>
@@ -1717,9 +1719,11 @@ function OperationsPageContent() {
                   <div className="space-y-1">
                     <label className="text-[9px] uppercase font-bold text-zinc-550">Rating</label>
                     <PortalSelect
-                      value={editFormData.rating || '5.0 ⭐'}
-                      onChange={(val) => setEditFormData({ ...editFormData, rating: val })}
+                      value={editFormData.rating || ''}
+                      onChange={(val) => setEditFormData({ ...editFormData, rating: val || null })}
                       options={[
+                        { value: '', label: 'Unrated' },
+                        ...((editFormData.rating && !['5.0 ⭐', '4.9 ⭐', '4.8 ⭐', '4.7 ⭐', '4.5 ⭐'].includes(editFormData.rating)) ? [{ value: editFormData.rating, label: editFormData.rating }] : []),
                         { value: '5.0 ⭐', label: '5.0 ⭐' },
                         { value: '4.9 ⭐', label: '4.9 ⭐' },
                         { value: '4.8 ⭐', label: '4.8 ⭐' },
@@ -1735,7 +1739,7 @@ function OperationsPageContent() {
                       onChange={(val) => setEditFormData({ ...editFormData, coi_active: val === 'true' })}
                       options={[
                         { value: 'true', label: 'Yes - Active COI' },
-                        { value: 'false', label: 'No - Pending COI' }
+                        { value: 'false', label: 'Not verified' }
                       ]}
                     />
                   </div>
@@ -1768,7 +1772,7 @@ function OperationsPageContent() {
                 <button
                   type="submit"
                   disabled={submittingEdit}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all disabled:opacity-50"
+                  className="luxor-gold-raised rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-widest text-white transition-all disabled:opacity-50"
                 >
                   {submittingEdit ? 'Saving...' : 'Save Changes'}
                 </button>

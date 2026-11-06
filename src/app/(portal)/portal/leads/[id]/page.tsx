@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, use } from 'r
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
+import { LuxorTimePicker } from '@/components/LuxorTimePicker'
 import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
 import { LeadPaymentsDashboard } from '@/components/portal/LeadPaymentsDashboard'
 import { PortalAudioPlayer } from '@/components/portal/PortalAudioPlayer'
@@ -907,21 +908,29 @@ export default function LeadDetailPage({
     await (selectedLeadEvent ? handleEventMetadataUpdate({ timeline: nextTimeline }) : handleMetadataUpdate({ timeline: nextTimeline }))
   }
 
+  const parseTimelineTime = (value: string) => {
+    const match = /^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*$/i.exec(value)
+    if (!match) return null
+    const hour = Number(match[1]), minute = Number(match[2] || 0), period = match[3]?.toUpperCase()
+    if (minute > 59 || (period ? hour < 1 || hour > 12 : hour > 23)) return null
+    const hour24 = period ? (hour % 12) + (period === 'PM' ? 12 : 0) : hour
+    return { value: `${String(hour24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`, display: `${hour24 % 12 || 12}:${String(minute).padStart(2, '0')} ${hour24 >= 12 ? 'PM' : 'AM'}` }
+  }
+
   const handleTimelineSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!timelineTime.trim() || !timelineTitle.trim()) return
 
-    let formattedTime = timelineTime.trim().toUpperCase()
-    if (/^\d+\s*(AM|PM)$/.test(formattedTime)) {
-      const match = formattedTime.match(/^(\d+)\s*(AM|PM)$/)
-      if (match) formattedTime = `${match[1]}:00 ${match[2]}`
-    }
-    if (/^\d+:\d+$/.test(formattedTime)) {
-      formattedTime = `${formattedTime} PM`
+    const parsed = parseTimelineTime(timelineTime)
+    if (!parsed) {
+      const input = document.getElementById('timeline-time') as HTMLInputElement | null
+      input?.setCustomValidity('Enter a valid time, such as 4:00 PM.')
+      input?.reportValidity()
+      return
     }
 
     const item = {
-      time: formattedTime,
+      time: parsed.display,
       title: timelineTitle.trim(),
       description: timelineDescription.trim() || undefined,
     }
@@ -4348,6 +4357,16 @@ export default function LeadDetailPage({
   const originalInquiryText = lead.message?.trim() || (isNewsletterLead(lead) ? 'No event or tour request was included with this signup.' : 'No written request was included with this inquiry.')
   const isLongOriginalInquiry = originalInquiryText.length > 320
   const isOriginalInquiryExpanded = expandedOriginalInquiryId === lead.id
+  const renderOriginalInquiryCard = () => (
+    <section aria-label="Original inquiry" className="min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Original inquiry</h2>
+        <p className="text-xs text-[color:var(--portal-muted)]">{formatSourceLabel(lead)} · {formatDisplayDate(lead.created_at)}</p>
+      </div>
+      <p className={`mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--portal-text)] ${isLongOriginalInquiry && !isOriginalInquiryExpanded ? 'line-clamp-4' : ''}`}>{originalInquiryText}</p>
+      {isLongOriginalInquiry ? <button type="button" aria-expanded={isOriginalInquiryExpanded} onClick={() => setExpandedOriginalInquiryId(isOriginalInquiryExpanded ? null : lead.id)} className="mt-2 min-h-10 text-xs font-semibold text-[#8c6529] underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:text-[#f1d27a]">{isOriginalInquiryExpanded ? 'Show less' : 'Read full request'}</button> : null}
+    </section>
+  )
   const activeEventMetadata = activeEventForDisplay?.metadata || lead.metadata || {}
   const agreementBooking = proposalInvoice ? proposalBooking : latestBooking
   const bookingContractAmount = Number(agreementBooking?.contract_total || 0)
@@ -5678,6 +5697,8 @@ export default function LeadDetailPage({
                       </div>
                     </MagicCard>
 
+                    {renderOriginalInquiryCard()}
+
                     {/* Tour & Proposal Prep Intake */}
                     <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
                       <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
@@ -5837,10 +5858,10 @@ export default function LeadDetailPage({
                       </div>
                     </MagicCard>
 
-                    {/* Row 1: Tour Details & Tour Attendance */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Tour details and preparation */}
+                    <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2 xl:grid-cols-[minmax(19rem,0.9fr)_minmax(0,1.4fr)]">
                       {/* Tour Details */}
-                      <section id="lead-tour-details" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 flex flex-col justify-between min-h-[260px] luxor-soft-enter">
+                      <section id="lead-tour-details" className="min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 luxor-soft-enter">
                         <div>
                           <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Tour Details</p>
@@ -5852,7 +5873,7 @@ export default function LeadDetailPage({
                             </div>
                             <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-4">
                               <span className="shrink-0 text-[color:var(--portal-muted)]">Tour time</span>
-                              <span className="min-w-0 font-medium text-[color:var(--portal-text)]">{lead.preferred_tour_time || '3:00 PM'}</span>
+                              <span className="min-w-0 font-medium text-[color:var(--portal-text)]">{lead.preferred_tour_time || 'Not scheduled'}</span>
                             </div>
                             {emailResendCandidate ? (
                               <div className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-3">
@@ -5913,6 +5934,9 @@ export default function LeadDetailPage({
                         </div>
                       </section>
                       
+                      {/* Tour right column */}
+                      <div className="min-w-0 space-y-5">
+                      {renderOriginalInquiryCard()}
                       {/* Tour Attendance & Notes */}
                       <section className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-xl shadow-black/10 space-y-4 luxor-soft-enter">
                         {isEditingTourAttendance ? (
@@ -6062,6 +6086,7 @@ export default function LeadDetailPage({
                           </>
                         )}
                       </section>
+                      </div>
                     </div>
                     
                   </>
@@ -7812,7 +7837,7 @@ export default function LeadDetailPage({
                 onClick={() => openTimelineModal(null)}
                 className="w-full rounded-2xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 px-5 py-10 text-center transition-colors hover:border-[#caa24c]/35 hover:bg-[#caa24c]/5 cursor-pointer"
               >
-                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
+                <span className="luxor-gold-raised mx-auto flex h-12 w-12 items-center justify-center rounded-full !text-white">
                   <Plus size={18} />
                 </span>
                 <span className="mt-4 block text-sm font-semibold text-[color:var(--portal-text)]">Add the first step</span>
@@ -8668,7 +8693,7 @@ export default function LeadDetailPage({
       </PortalModal>
 
       {/* Timeline item modal */}
-      <PortalModal isOpen={isTimelineModalOpen} onClose={() => setIsTimelineModalOpen(false)} maxWidth="max-w-lg">
+      <PortalModal isOpen={isTimelineModalOpen} onClose={() => setIsTimelineModalOpen(false)} maxWidth="max-w-lg" animateClose>
         <div className="flex items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-4">
           <div>
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">{timelineEditIndex === null ? 'Add Timeline Step' : 'Edit Timeline Step'}</h3>
@@ -8678,39 +8703,49 @@ export default function LeadDetailPage({
         </div>
         <form onSubmit={handleTimelineSubmit} className="space-y-4 bg-[color:var(--portal-card)] p-6">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Time</label>
-            <input
-              type="text"
-              required
-              value={timelineTime}
-              onChange={(event) => setTimelineTime(event.target.value)}
-              placeholder="e.g. 4:00 PM"
-              className="portal-input-transparent w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
-            />
+            <label htmlFor="timeline-time" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Time</label>
+            <LuxorTimePicker value={parseTimelineTime(timelineTime)?.value || ''} onChange={(value) => { const parsed = parseTimelineTime(value); if (parsed) { (document.getElementById('timeline-time') as HTMLInputElement | null)?.setCustomValidity(''); setTimelineTime(parsed.display) } }} label="Timeline time" renderTrigger={({ ref, open, show }) => (
+              <input
+                ref={ref as React.RefObject<HTMLInputElement | null>}
+                id="timeline-time"
+                type="text"
+                required
+                value={timelineTime}
+                onClick={show}
+                aria-haspopup="dialog"
+                aria-expanded={open}
+                onChange={(event) => { event.currentTarget.setCustomValidity(''); setTimelineTime(event.target.value) }}
+                onBlur={() => { const parsed = parseTimelineTime(timelineTime); if (parsed) setTimelineTime(parsed.display) }}
+                placeholder="e.g. 4:00 PM"
+                className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
+              />
+            )} />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Step Title</label>
+            <label htmlFor="timeline-title" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Step Title</label>
             <input
+              id="timeline-title"
               type="text"
               required
               value={timelineTitle}
               onChange={(event) => setTimelineTitle(event.target.value)}
               placeholder="e.g. Vendor load-in"
-              className="portal-input-transparent w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
+              className="w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Description</label>
+            <label htmlFor="timeline-description" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Description</label>
             <textarea
+              id="timeline-description"
               value={timelineDescription}
               onChange={(event) => setTimelineDescription(event.target.value)}
               placeholder="Optional details, owner, or notes..."
-              className="portal-input-transparent h-24 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
+              className="h-24 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-xs leading-5 text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/50 placeholder:text-[color:var(--portal-faint)]"
             />
           </div>
           <button
             type="submit"
-            className="w-full rounded-xl bg-[#caa24c] py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#dfbd68]"
+            className="luxor-gold-raised min-h-11 w-full rounded-xl py-2.5 text-xs font-black uppercase tracking-[0.14em] !text-white"
           >
             {timelineEditIndex === null ? 'Add Step' : 'Save Step'}
           </button>
