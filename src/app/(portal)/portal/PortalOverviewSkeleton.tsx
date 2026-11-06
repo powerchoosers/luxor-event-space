@@ -1,5 +1,5 @@
 import React from 'react'
-import { Calendar, Bell, ListTodo, Clock } from 'lucide-react'
+import { Calendar, ListTodo, Clock } from 'lucide-react'
 import { PortalSkeleton } from '@/components/portal/PortalUI'
 
 export function PortalOverviewSkeleton() {
@@ -78,7 +78,7 @@ export function PortalOverviewSkeleton() {
         </div>
 
         {/* Summary card skeletons */}
-        <div className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-3">
+        <div className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
           {/* Bookings Card Skeleton */}
           <div className="portal-card-surface flex h-full min-h-[156px] w-full flex-col rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
             <span className="text-[#caa24c] mb-3 block opacity-60"><Calendar size={22} strokeWidth={1.5} /></span>
@@ -104,22 +104,6 @@ export function PortalOverviewSkeleton() {
             </div>
           </div>
 
-          {/* Needs Attention Card Skeleton */}
-          <div className="portal-card-surface flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-            <div>
-              <span className="text-[#caa24c] mb-3 block opacity-60">
-                <Bell size={22} strokeWidth={1.5} />
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEEDS ATTENTION</p>
-              <div className="my-1">
-                <PortalSkeleton className="h-8 w-16 rounded-lg" />
-              </div>
-              <PortalSkeleton className="h-3 w-12 rounded opacity-60 mt-1" />
-            </div>
-            <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50">
-              <PortalSkeleton className="h-3.5 w-28 rounded opacity-70" />
-            </div>
-          </div>
         </div>
 
         {/* BOTTOM ROW: 3 Columns Skeletons */}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Download, Eye, FileText, LoaderCircle, Mail, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { LuxorInvoice } from '@/lib/luxorInquiryTypes'
@@ -39,6 +39,8 @@ export function ProposalDeliveryPreview({
   const [emailPreview, setEmailPreview] = useState<ProposalEmailPreview | null>(null)
   const [emailError, setEmailError] = useState<string | null>(null)
   const [loadingEmail, setLoadingEmail] = useState(false)
+  const emailFrameObserver = useRef<ResizeObserver | null>(null)
+  useEffect(() => () => emailFrameObserver.current?.disconnect(), [])
   const tabId = useId()
   const reduceMotion = useReducedMotion()
 
@@ -138,7 +140,7 @@ export function ProposalDeliveryPreview({
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {!isBreakdown && downloadUrl ? <a href={downloadUrl} className="hidden min-h-9 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] transition hover:border-[#caa24c]/40 hover:text-[#8c6529] dark:hover:text-[#f1d27a] sm:inline-flex"><Download size={13} /> Download PDF</a> : null}
+                {!isBreakdown && downloadUrl ? <a href={downloadUrl} className="luxor-gold-raised hidden min-h-9 items-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest text-white sm:inline-flex"><Download size={13} /> Download PDF</a> : null}
                 <PortalCloseButton onClick={onClose} aria-label="Close client delivery preview" />
               </div>
             </div>
@@ -147,7 +149,7 @@ export function ProposalDeliveryPreview({
                 <p className="truncate text-[11px] text-[color:var(--portal-muted)]"><span className="mr-1 font-black uppercase tracking-[0.12em] text-[9px]">To</span>{' '}{emailPreview?.recipient || clientEmail || 'Client email required before publishing'}</p>
                 {!isBreakdown ? <p className="truncate text-[10px] text-[color:var(--portal-muted)]"><span className="mr-1 font-black uppercase tracking-[0.12em] text-[8px]">Attachment</span>{' '}{emailPreview?.attachmentFileName || attachmentLabel}</p> : null}
               </div>
-              {!isBreakdown ? <div className="inline-flex w-fit rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1" role="tablist" aria-label="Client delivery formats">
+              {!isBreakdown ? <div className="inline-flex w-fit rounded-lg bg-[color:var(--portal-soft)] p-1" role="tablist" aria-label="Client delivery formats">
                 <button
                   id={`${tabId}-email-tab`}
                   type="button"
@@ -206,7 +208,16 @@ export function ProposalDeliveryPreview({
                     <button type="button" onClick={() => void loadEmailPreview()} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#a8792f]/35 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] transition hover:bg-[#fbf8f2]"><RefreshCw size={13} /> Retry preview</button>
                   </div>
                 ) : emailPreview ? (
-                  <iframe title="Exact client proposal email preview" srcDoc={emailPreview.html} className="block h-[min(61vh,720px)] min-h-[520px] w-full bg-white" sandbox="" />
+                  <iframe title="Exact client proposal email preview" srcDoc={emailPreview.html} className="block min-h-[520px] w-full bg-white" sandbox="allow-same-origin" scrolling="no" onLoad={(event) => {
+                    const frame = event.currentTarget
+                    const document = frame.contentDocument
+                    if (!document?.body) return
+                    emailFrameObserver.current?.disconnect()
+                    const resize = () => { frame.style.height = `${Math.max(520, document.body.scrollHeight)}px` }
+                    resize()
+                    emailFrameObserver.current = new ResizeObserver(resize)
+                    emailFrameObserver.current.observe(document.body)
+                  }} />
                 ) : null}
               </div>
             </section>

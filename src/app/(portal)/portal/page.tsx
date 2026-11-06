@@ -5,7 +5,6 @@ import { PortalHomeReady, PortalHomeTransition } from "@/components/portal/Porta
 import {
   Calendar,
   DollarSign,
-  Bell,
   ListTodo,
   ChevronRight,
   Plus,
@@ -24,6 +23,7 @@ import { listRecentNotes } from "@/lib/luxorNotesServer";
 import { listAllTasks } from "@/lib/luxorTasksServer";
 import { listAllBills } from "@/lib/luxorInvoicesServer";
 import { isLuxorNonRevenueTestInquiry, LuxorInquiry, LuxorNote, LuxorPayment, LuxorTask, LuxorBill } from "@/lib/luxorInquiryTypes";
+import { TodayPriorities } from "@/components/portal/TodayPriorities";
 import { ThisWeekCalendar } from "@/components/portal/ThisWeekCalendar";
 import { BillsDueCard } from "@/components/portal/BillsDueCard";
 import { PortalMarketingSalesSection } from "@/components/portal/PortalMarketingSalesSection";
@@ -144,13 +144,13 @@ async function PortalOverviewContent() {
   const bookingsCount = activeBookingsThisMonth.length;
 
   // Card 3: Next Event
-  // Get next upcoming confirmed/tentative booking (sorted by event_date asc, event_date >= today)
+  // Only signed, active bookings belong in the next event card.
   const todayMidnight = new Date(currentYear, currentMonth, currentDayNumber);
   const upcomingBookings = businessBookings
     .filter(b => {
       if (!b.event_date) return false;
       const eventDate = new Date(b.event_date + 'T00:00:00');
-      return eventDate >= todayMidnight && (b.status === 'confirmed' || b.status === 'tentative');
+      return eventDate >= todayMidnight && b.contract_status === 'signed' && (b.status === 'confirmed' || b.status === 'tentative');
     })
     .sort((a, b) => new Date(a.event_date!).getTime() - new Date(b.event_date!).getTime());
 
@@ -198,15 +198,11 @@ async function PortalOverviewContent() {
     nextBookingDateFormatted = `${weekday}, ${month} ${dayNum}, ${yearNum}${timeStr ? ` • ${timeStr}` : ''}`;
   }
 
-  // Card 4: Needs Attention
   const businessLeads = leads.filter((lead) => !isLuxorNonRevenueTestInquiry(lead));
   const businessTasks = tasks.filter((task) => !task.inquiry_id || !testInquiryIds.has(task.inquiry_id));
-  const newLeadsCount = businessLeads.filter(l => l.status === 'new' || l.status === 'tour_requested').length;
-  const overdueTasksCount = businessTasks.filter(t => t.status === 'pending' && t.due_date && t.due_date <= todayDateStr).length;
-  const needsAttentionCount = newLeadsCount + overdueTasksCount;
 
   // --- Today's Priorities ---
-  const priorities: { title: string; meta: string; href: string; isOverdue?: boolean }[] = [];
+  const priorities: { title: string; meta: string; href: string; isOverdue?: boolean; taskId?: string; bounce?: boolean; rank: number }[] = [];
 
   // 1. Tours today
   const toursToday = businessLeads.filter(l => l.preferred_tour_date === todayDateStr && !['attended', 'no_show', 'cancelled'].includes(l.tour_attendance_status || ''));
@@ -217,9 +213,13 @@ async function PortalOverviewContent() {
     priorities.push({
       title: `${toursToday.length} Tour${toursToday.length > 1 ? 's' : ''} today`,
       meta: timeRange,
-      href: '/portal/calendar'
+      href: '/portal/calendar', rank: 0
     });
   }
+
+  businessLeads.filter((lead) => lead.status === 'new' && lead.created_at && luxorTodayKey(new Date(lead.created_at)) === todayDateStr).forEach((lead) => {
+    priorities.push({ title: `New inquiry · ${lead.full_name}`, meta: 'Today', href: `/portal/leads/${lead.id}`, rank: 1 });
+  });
 
   // 2. Pending tasks due today or overdue
   const pendingTasksTodayOrOverdue = businessTasks
@@ -232,7 +232,10 @@ async function PortalOverviewContent() {
       title: contact ? `${t.title} · ${contact.full_name}` : t.title,
       meta: t.due_date === todayDateStr ? 'Due today' : 'Overdue',
       href: t.inquiry_id ? `/portal/leads/${t.inquiry_id}?tab=tasks` : '/portal/leads',
-      isOverdue: t.due_date! < todayDateStr
+      isOverdue: t.due_date! < todayDateStr,
+      taskId: t.id,
+      bounce: t.title === 'Review bounced email address',
+      rank: t.title === 'Review bounced email address' ? 5 : t.due_date === todayDateStr ? 2 : 3
     });
   });
 
@@ -247,11 +250,11 @@ async function PortalOverviewContent() {
       title: `Bill due: ${b.service}`,
       meta: b.due_date === todayDateStr ? 'Due today' : 'Due tomorrow',
       href: '/portal/operations?tab=bills',
-      isOverdue: false
+      isOverdue: false, rank: 1
     });
   });
 
-  const activePriorities = priorities.slice(0, 5);
+  const activePriorities = priorities.sort((a, b) => a.rank - b.rank).filter((item, index, items) => !item.bounce || items.findIndex((candidate) => candidate.bounce) === index).slice(0, 5);
 
   // --- Rolling Calendar Outlook (Past 3 Days to Future 10 Days) ---
   const calendarDays = [];
@@ -411,20 +414,7 @@ async function PortalOverviewContent() {
               <ListTodo className="h-5 w-5 text-[#caa24c]" strokeWidth={1.5} />
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">TODAY&apos;S PRIORITIES</h3>
             </div>
-            <div className="space-y-4">
-              {activePriorities.length > 0 ? (
-                activePriorities.map((item, idx) => (
-                  <Link key={idx} href={item.href} className="flex items-center justify-between gap-3 border-b border-dashed border-[color:var(--portal-border)]/30 pb-3 text-left no-underline last:border-b-0 last:pb-0 hover:text-[#a8792f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]">
-                    <span className="text-xs font-medium text-[color:var(--portal-text)]">{item.title}</span>
-                    <span className={`text-[10px] font-bold ${item.isOverdue ? 'text-[#b93c3c] bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded' : 'text-[color:var(--portal-muted)]'} tabular-nums shrink-0`}>{item.meta}</span>
-                  </Link>
-                ))
-              ) : (
-                <div className="py-8 text-center text-xs text-[color:var(--portal-muted)] italic">
-                  All caught up! No priorities pending.
-                </div>
-              )}
-            </div>
+            <TodayPriorities items={activePriorities} />
           </div>
           <div className="mt-6 pt-4 border-t border-[color:var(--portal-border)]/50">
             <Link href="/portal/leads" className="text-[#caa24c] hover:text-[#b0883b] transition-colors flex items-center justify-center gap-1 font-bold text-xs">
@@ -445,7 +435,7 @@ async function PortalOverviewContent() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 2xl:grid-cols-3">
+      <div className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
         {/* Bookings Card */}
         <div className="min-w-0 w-full h-full">
           <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
@@ -484,8 +474,8 @@ async function PortalOverviewContent() {
                     <Calendar size={22} strokeWidth={1.5} />
                   </span>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
-                  <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug">No Upcoming Events</p>
-                  <p className="text-xs text-[color:var(--portal-muted)] mt-1">None scheduled</p>
+                  <p className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug">No upcoming signed events</p>
+                  <p className="text-xs text-[color:var(--portal-muted)] mt-1">No signed bookings scheduled</p>
                 </div>
                 <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">
                   --
@@ -495,24 +485,6 @@ async function PortalOverviewContent() {
           </MagicCard>
         </div>
 
-        {/* Needs Attention Card */}
-        <div className="min-w-0 w-full h-full">
-          <MagicCard className="flex h-full min-h-[156px] w-full flex-col justify-between rounded-2xl p-4 sm:min-h-[180px] sm:p-6">
-            <div>
-              <span className="text-[#caa24c] mb-3 block">
-                <Bell size={22} strokeWidth={1.5} />
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEEDS ATTENTION</p>
-              <p data-home-reveal className="text-3xl font-extrabold text-[color:var(--portal-text)] tabular-nums tracking-tight">{needsAttentionCount}</p>
-              <p className="text-xs text-[color:var(--portal-muted)] mt-0.5">items</p>
-            </div>
-            <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50">
-              <Link href="/portal/leads" className="text-[#caa24c] hover:text-[#b0883b] transition-colors inline-flex items-center gap-1 font-bold text-xs">
-                View leads <ChevronRight size={14} className="translate-y-[0.5px]" />
-              </Link>
-            </div>
-          </MagicCard>
-        </div>
       </div>
 
       {/* Recent activity and quick actions */}

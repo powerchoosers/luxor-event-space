@@ -604,6 +604,10 @@ export default function LeadDetailPage({
   const [publicationPending, setPublicationPending] = useState(false)
   const [breakdownPublished, setBreakdownPublished] = useState(false)
   const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null)
+  const [proposalToResend, setProposalToResend] = useState<{ invoice: LuxorInvoice; target: LuxorInvoice | null; label: string } | null>(null)
+  const [resendConfirmationOpen, setResendConfirmationOpen] = useState(false)
+  const [resendConfirmationBusy, setResendConfirmationBusy] = useState(false)
+  const resendConfirmationBusyRef = useRef(false)
   const [paymentRequestInvoice, setPaymentRequestInvoice] = useState<LuxorInvoice | null>(null)
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<LuxorInvoice | null>(null)
   const [documentPreview, setDocumentPreview] = useState<{ title: string; url: string } | null>(null)
@@ -3964,6 +3968,26 @@ export default function LeadDetailPage({
     }
   }
 
+  const confirmProposalResend = async () => {
+    if (!proposalToResend || resendConfirmationBusyRef.current) return
+    resendConfirmationBusyRef.current = true
+    setResendConfirmationBusy(true)
+    try {
+      await handleSendProposalRecord(proposalToResend.invoice, true)
+      setResendConfirmationOpen(false)
+    } finally {
+      resendConfirmationBusyRef.current = false
+      setResendConfirmationBusy(false)
+    }
+  }
+
+  const resendDeliverySnapshot = asProposalRecord(proposalToResend?.target?.proposal_context?.delivery_snapshot)
+  const resendEmailSnapshot = asProposalRecord(resendDeliverySnapshot?.proposal_email)
+  const savedResendRecipient = resendEmailSnapshot
+    && ['subject', 'html', 'recipient_email', 'review_url'].every((key) => typeof resendEmailSnapshot[key] === 'string' && resendEmailSnapshot[key])
+    ? String(resendEmailSnapshot.recipient_email)
+    : null
+
   const saveBookingPaymentPreference = async (booking: LuxorBooking, changes: Partial<{ method: 'card' | 'zelle' | 'cash' | 'check'; amount: 'deposit' | 'full' }>) => {
     const current = (booking.metadata?.client_payment_preference || {}) as { method?: 'card' | 'zelle' | 'cash' | 'check'; amount?: 'deposit' | 'full' }
     const preference = { method: changes.method || current.method || 'card', amount: changes.amount || current.amount || 'deposit', setBy: 'owner', selectedAt: new Date().toISOString() }
@@ -6174,34 +6198,34 @@ export default function LeadDetailPage({
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Event Information</p>
                               <button type="button" onClick={() => beginPlanningEdit('event')} className="text-[10px] font-bold uppercase text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68]">Edit</button>
                             </div>
-                            <div className="space-y-2 text-xs">
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Event Date</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{latestBooking?.event_date ? formatDisplayDate(latestBooking.event_date) : activeEventForDisplay?.target_date ? formatDisplayDate(activeEventForDisplay.target_date) : 'Date not set'}</span>
+                            <div className="space-y-3 text-sm leading-5">
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Event date</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{latestBooking?.event_date ? formatDisplayDate(latestBooking.event_date) : activeEventForDisplay?.target_date ? formatDisplayDate(activeEventForDisplay.target_date) : 'Date not set'}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Event Time</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'Time not set'}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Event time</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{summaryStartTime && summaryEndTime ? `${formatTimeString(summaryStartTime)} – ${formatTimeString(summaryEndTime)}` : 'Time not set'}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Duration</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Duration</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{formatEventDuration(summaryStartTime, summaryEndTime)}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Event Type</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{activeEventForDisplay?.event_type || lead.event_type || 'Event type not captured'}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Event type</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{activeEventForDisplay?.event_type || lead.event_type || 'Event type not captured'}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Location</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">Luxor at Las Palmas Events</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Location</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">Luxor at Las Palmas Events</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Guest Count</span>
-                                <span className="font-bold tabular-nums text-[color:var(--portal-text)]">{(activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} Expected Guests` : 'Guest count not captured'}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Guest count</span>
+                                <span className="min-w-0 break-words font-medium tabular-nums text-[color:var(--portal-text)]">{(activeEventForDisplay?.guest_count ?? lead.guest_count) ? `${activeEventForDisplay?.guest_count ?? lead.guest_count} Expected Guests` : 'Guest count not captured'}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Theme / Style</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.event_style || 'Not captured')}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Theme / style</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.event_style || 'Not captured')}</span>
                               </div>
                             </div>
                           </section>
@@ -6212,26 +6236,26 @@ export default function LeadDetailPage({
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Client Preferences</p>
                               <button type="button" onClick={() => beginPlanningEdit('preferences')} className="text-[10px] font-bold uppercase text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68]">Edit</button>
                             </div>
-                            <div className="space-y-3 text-xs">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Color Palette</span>
+                            <div className="space-y-3 text-sm leading-5">
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-center gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Color palette</span>
                                 <div className="flex gap-1.5">
                                   {(Array.isArray(activeEventMetadata.color_palette) && activeEventMetadata.color_palette.length > 0 ? activeEventMetadata.color_palette.map(String) : PLANNING_COLOR_OPTIONS[0].colors).map((color) => (
                                     <span key={color} title={color} className="h-4.5 w-4.5 rounded-full border border-black/10" style={{ backgroundColor: color }} />
                                   ))}
                                 </div>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Music Style</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.music_style || 'Not captured')}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Music style</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.music_style || 'Not captured')}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Lighting</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.lighting_preference || 'Not captured')}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Lighting</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.lighting_preference || 'Not captured')}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Special Requests</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.special_requests || activeEventForDisplay?.notes || lead.message || 'None captured')}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Special requests</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.special_requests || activeEventForDisplay?.notes || lead.message || 'None captured')}</span>
                               </div>
                             </div>
                           </section>
@@ -6247,26 +6271,26 @@ export default function LeadDetailPage({
                                 <button type="button" onClick={() => setLayoutDesignerOpen(true)} className="rounded-lg bg-[#caa24c] px-3 py-2 text-[9px] font-black uppercase tracking-wider !text-white hover:bg-[#dfbd68]">Open layout builder</button>
                               </div>
                             </div>
-                            <div className="grid grid-cols-5 gap-4">
-                              <div className="col-span-2 border border-[color:var(--portal-border)] rounded-xl bg-[color:var(--portal-soft)] p-2 flex items-center justify-center flex-col text-[color:var(--portal-muted)]">
+                            <div className="grid grid-cols-1 gap-4 min-[1450px]:grid-cols-5">
+                              <div className="min-h-16 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-2 flex items-center justify-center flex-col text-[color:var(--portal-muted)] min-[1450px]:col-span-2">
                                 <span className="text-[8px] font-bold uppercase text-center">{PLANNING_LAYOUT_OPTIONS.find((option) => option.id === activeEventMetadata.floor_plan_layout)?.label || 'Layout not selected'}</span>
                               </div>
-                              <div className="col-span-3 space-y-2 text-xs">
-                                <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Head Table</span>
-                                  <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.head_table || 'Not captured')}</span>
+                              <div className="min-w-0 space-y-3 text-sm leading-5 min-[1450px]:col-span-3">
+                                <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                  <span className="text-[color:var(--portal-muted)]">Head table</span>
+                                  <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.head_table || 'Not captured')}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Dance Floor</span>
-                                  <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.dance_floor || 'Not captured')}</span>
+                                <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                  <span className="text-[color:var(--portal-muted)]">Dance floor</span>
+                                  <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.dance_floor || 'Not captured')}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Stage</span>
-                                  <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.stage_needed || 'Not captured')}</span>
+                                <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                  <span className="text-[color:var(--portal-muted)]">Stage</span>
+                                  <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.stage_needed || 'Not captured')}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Other Areas</span>
-                                  <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.other_areas || 'Not captured')}</span>
+                                <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                  <span className="text-[color:var(--portal-muted)]">Other areas</span>
+                                  <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.other_areas || 'Not captured')}</span>
                                 </div>
                               </div>
                             </div>
@@ -6278,26 +6302,26 @@ export default function LeadDetailPage({
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Decor Overview</p>
                               <button type="button" onClick={() => beginPlanningEdit('decor')} className="text-[10px] font-bold uppercase text-[#a8792f] dark:text-[#caa24c] hover:text-[#dfbd68]">Edit</button>
                             </div>
-                            <div className="space-y-2 text-xs">
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Selected Package</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{activeEventForDisplay?.package_interest || latestBooking?.package_name || lead.package_interest || 'Not selected'}</span>
+                            <div className="space-y-3 text-sm leading-5">
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Selected package</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{activeEventForDisplay?.package_interest || latestBooking?.package_name || lead.package_interest || 'Not selected'}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Décor Style</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.decor_style || 'Not captured')}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Décor style</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.decor_style || 'Not captured')}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Centerpieces</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.centerpieces || 'Not captured')}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Centerpieces</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.centerpieces || 'Not captured')}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Linens</span>
-                                <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.linens || 'Not captured')}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Linens</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.linens || 'Not captured')}</span>
                               </div>
-                              <div className="flex justify-between items-start">
-                                <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] mt-0.5">Additional Notes</span>
-                                <span className="font-bold text-[color:var(--portal-text)] text-right max-w-[60%]">{tourNotes || 'No planning notes captured yet.'}</span>
+                              <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                                <span className="text-[color:var(--portal-muted)]">Additional notes</span>
+                                <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{tourNotes || 'No planning notes captured yet.'}</span>
                               </div>
                             </div>
                           </section>
@@ -6678,15 +6702,15 @@ export default function LeadDetailPage({
                       >
                         <div>
                           <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-500">Agreement Status</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Agreement Status</p>
                           </div>
-                          <div className="space-y-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Document Type</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{contractBooking ? 'Venue rental agreement' : proposalAcceptedAt ? 'Agreement delivery pending' : 'Proposal acceptance needed'}</span>
+                          <div className="space-y-3 text-sm leading-5">
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Document type</span>
+                              <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{contractBooking ? 'Venue rental agreement' : proposalAcceptedAt ? 'Agreement delivery pending' : 'Proposal acceptance needed'}</span>
                             </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Status</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Status</span>
                               <AnimatePresence mode="wait">
                                 <motion.span
                                   key={agreementStatusLabel}
@@ -6694,14 +6718,14 @@ export default function LeadDetailPage({
                                   animate={{ opacity: 1, scale: 1 }}
                                   exit={{ opacity: 0, scale: 0.85 }}
                                   transition={{ duration: 0.2 }}
-                                  className="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase"
+                                  className="inline-block w-fit max-w-full rounded bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300"
                                 >
                                   {agreementStatusLabel}
                                 </motion.span>
                               </AnimatePresence>
                             </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Sent Date</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Sent date</span>
                               <AnimatePresence mode="wait">
                                 <motion.span
                                   key={agreementSentAt || 'unsent'}
@@ -6709,14 +6733,14 @@ export default function LeadDetailPage({
                                   animate={{ opacity: 1, x: 0 }}
                                   exit={{ opacity: 0, x: -6 }}
                                   transition={{ duration: 0.2 }}
-                                  className="font-bold text-[color:var(--portal-text)]"
+                                  className="min-w-0 break-words font-medium text-[color:var(--portal-text)]"
                                 >
                                   {agreementSentAt ? formatDisplayDate(agreementSentAt) : agreementDeliveryPending ? 'Delivery pending' : agreementDeliveryFailed ? 'Delivery failed' : 'Not confirmed'}
                                 </motion.span>
                               </AnimatePresence>
                             </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Signed Date</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Signed date</span>
                               <AnimatePresence mode="wait">
                                 <motion.span
                                   key={contractBooking?.contract_signed_at || 'unsigned'}
@@ -6724,15 +6748,15 @@ export default function LeadDetailPage({
                                   animate={{ opacity: 1, x: 0 }}
                                   exit={{ opacity: 0, x: -6 }}
                                   transition={{ duration: 0.2 }}
-                                  className="font-bold text-zinc-500"
+                                  className="min-w-0 break-words font-medium text-[color:var(--portal-text)]"
                                 >
                                   {contractBooking?.contract_signed_at ? formatDisplayDate(contractBooking.contract_signed_at) : 'Pending'}
                                 </motion.span>
                               </AnimatePresence>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-zinc-500">Signers</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{lead.full_name}{lead.email ? `, ${lead.email}` : ''}</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Signers</span>
+                              <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{lead.full_name}{lead.email ? `, ${lead.email}` : ''}</span>
                             </div>
                           </div>
                         </div>
@@ -6944,26 +6968,26 @@ export default function LeadDetailPage({
                               className="shrink-0"
                             />
                           </div>
-                          <div className="space-y-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Invoice Number</span>
-                              <span className="font-bold tabular-nums text-[color:var(--portal-text)]">{depositInvoice ? depositInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
+                          <div className="space-y-3 text-sm leading-5">
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Invoice number</span>
+                              <span className="min-w-0 break-words font-medium tabular-nums text-[color:var(--portal-text)]">{depositInvoice ? depositInvoice.id.slice(0, 8).toUpperCase() : 'No invoice'}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Deposit Due Date</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">Due with agreement signature</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Deposit due date</span>
+                              <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">Due with agreement signature</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Initial Payment + Security</span>
-                              <span className="font-serif font-bold tabular-nums text-sm text-[#a8792f] dark:text-[#caa24c]">{formatMoney(initialPaymentInvoiceTotal)}</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Initial payment + security</span>
+                              <span className="min-w-0 break-words font-medium tabular-nums text-[color:var(--portal-text)]">{formatMoney(initialPaymentInvoiceTotal)}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Paid Status</span>
-                              <span className="rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[9px] font-bold uppercase">{depositBalance <= 0 && initialPaymentInvoiceTotal > 0 ? 'paid / held' : 'pending'}</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Paid status</span>
+                              <span className="inline-block w-fit max-w-full rounded bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">{depositBalance <= 0 && initialPaymentInvoiceTotal > 0 ? 'paid / held' : 'pending'}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Remaining Balance</span>
-                              <span className="font-bold tabular-nums text-[color:var(--portal-text)]">{formatMoney(depositBalance)}</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Remaining balance</span>
+                              <span className="min-w-0 break-words font-medium tabular-nums text-[color:var(--portal-text)]">{formatMoney(depositBalance)}</span>
                             </div>
                           </div>
                         </div>
@@ -7098,26 +7122,26 @@ export default function LeadDetailPage({
                           <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">On-Site operations</p>
                           </div>
-                          <div className="space-y-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Head Contact</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{lead.full_name}</span>
+                          <div className="space-y-3 text-sm leading-5">
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Head contact</span>
+                              <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{lead.full_name}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Assigned Coordinator</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.event_coordinator || 'Not assigned')}</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Assigned coordinator</span>
+                              <span className="min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.event_coordinator || 'Not assigned')}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Gate Access Code</span>
-                              <span className="tabular-nums font-bold text-[#a8792f] dark:text-[#caa24c]">{String(activeEventMetadata.gate_access_code || 'Not set')}</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Gate access code</span>
+                              <span className="min-w-0 break-words tabular-nums font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.gate_access_code || 'Not set')}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Backdoor Code</span>
-                              <span className="tabular-nums font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.backdoor_code || 'Not set')}</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Backdoor code</span>
+                              <span className="tabular-nums min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.backdoor_code || 'Not set')}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Emergency Line</span>
-                              <span className="tabular-nums font-bold text-[color:var(--portal-text)]">{String(activeEventMetadata.emergency_contact || 'Not set')}</span>
+                            <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-start gap-4">
+                              <span className="text-[color:var(--portal-muted)]">Emergency line</span>
+                              <span className="tabular-nums min-w-0 break-words font-medium text-[color:var(--portal-text)]">{String(activeEventMetadata.emergency_contact || 'Not set')}</span>
                             </div>
                           </div>
                         </div>
@@ -8092,7 +8116,14 @@ export default function LeadDetailPage({
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button type="button" onClick={() => openProposalDeliveryPreview(proposal)} disabled={isProposalBreakdown && typeof breakdownDelivery?.html !== 'string'} title={isProposalBreakdown && typeof breakdownDelivery?.html !== 'string' ? 'Send the breakdown email before it can be reviewed here.' : undefined} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:cursor-not-allowed disabled:opacity-45"><Eye size={12} /> {isProposalBreakdown ? 'View breakdown email' : 'View proposal'}</button>
-                      {proposalCardState.canResend ? <button type="button" onClick={() => void handleSendProposalRecord(proposal, !isProposalBreakdown || individualProposalSent)} disabled={!lead.email || sendingInvoiceId === (relatedFinalProposal?.id || proposal.id)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === (relatedFinalProposal?.id || proposal.id) ? 'Sending…' : isProposalBreakdown ? individualProposalSent ? 'Resend individual proposal' : 'Send individual proposal' : 'Resend proposal'}</button> : null}
+                      {proposalCardState.canResend ? <button type="button" onClick={() => {
+                        if (isProposalBreakdown && !individualProposalSent) {
+                          void handleSendProposalRecord(proposal, false)
+                        } else {
+                          setProposalToResend({ invoice: proposal, target: isProposalBreakdown ? null : proposal, label: isProposalBreakdown ? 'individual proposal' : proposalLabel.toLowerCase() })
+                          setResendConfirmationOpen(true)
+                        }
+                      }} disabled={!lead.email || sendingInvoiceId === (relatedFinalProposal?.id || proposal.id)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)] disabled:opacity-40"><Send size={12} /> {sendingInvoiceId === (relatedFinalProposal?.id || proposal.id) ? 'Sending…' : isProposalBreakdown ? individualProposalSent ? 'Resend individual proposal' : 'Send individual proposal' : 'Resend proposal'}</button> : null}
                       {proposalCardState.canDuplicate ? <button type="button" onClick={() => duplicateProposalDraft(proposal)} aria-label={`Duplicate ${proposalLabel} to a new draft`} title="Starts a new draft from these saved event selections. Review the current price and discount before saving." className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-text)]"><Copy size={12} /> Duplicate</button> : null}
                       {proposalCardState.canEditDraft || proposalCardState.canRevise ? <button type="button" onClick={() => openProposalBuilder(proposal)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#caa24c]/35 bg-[#caa24c]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#8c6529] dark:text-[#f1d27a]"><FileText size={12} /> {proposalCardState.canRevise ? 'Revise proposal' : 'Edit draft'}</button> : null}
                       <div className="relative">
@@ -8800,6 +8831,25 @@ export default function LeadDetailPage({
           </form>
 
         ) : null}
+      </PortalModal>
+
+      <PortalModal
+        isOpen={resendConfirmationOpen}
+        onClose={() => { if (!resendConfirmationBusyRef.current) setResendConfirmationOpen(false) }}
+        title="Resend proposal?"
+        maxWidth="max-w-md"
+        animateClose
+      >
+        <p className="text-sm leading-6 text-[color:var(--portal-text)]">
+          Send {proposalToResend?.label || 'this proposal'} to {lead.full_name} again?
+        </p>
+        {savedResendRecipient ? <p className="mt-2 break-all text-sm text-[color:var(--portal-muted)]">Email: {savedResendRecipient}</p> : <p className="mt-2 text-sm text-[color:var(--portal-muted)]">The saved proposal will be emailed to the client again.</p>}
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <PortalButton onClick={() => setResendConfirmationOpen(false)} disabled={resendConfirmationBusy}>Cancel</PortalButton>
+          <PortalButton variant="primary" onClick={() => void confirmProposalResend()} disabled={resendConfirmationBusy}>
+            {resendConfirmationBusy ? 'Sending…' : 'Resend proposal'}
+          </PortalButton>
+        </div>
       </PortalModal>
 
       <PortalModal

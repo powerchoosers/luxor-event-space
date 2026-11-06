@@ -163,7 +163,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
               BILLS DUE
             </h3>
             {overdueBills.length > 0 && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 shrink-0">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 shrink-0">
                 {overdueBills.length} Late
               </span>
             )}
@@ -195,7 +195,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                 {overdueBills.map(bill => (
                   <div
                     key={bill.id}
-                    className="flex items-center justify-between gap-3 p-3 rounded-xl border border-rose-500/20 bg-rose-500/[0.04] dark:bg-rose-500/[0.08] transition-all hover:border-rose-500/35"
+                    className="flex items-center justify-between gap-3 p-3 rounded-xl bg-rose-500/[0.04] dark:bg-rose-500/[0.08]"
                   >
                     <div className="flex flex-col min-w-0 pr-1">
                       <div className="flex items-center gap-2">
@@ -228,7 +228,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                         type="button"
                         onClick={() => handleTogglePaid(bill)}
                         disabled={updatingId === bill.id}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border border-emerald-500/35 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                         title="Mark as paid in database"
                       >
                         {updatingId === bill.id ? (
@@ -291,7 +291,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                         type="button"
                         onClick={() => handleTogglePaid(bill)}
                         disabled={updatingId === bill.id}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                         title="Mark as paid"
                       >
                         {updatingId === bill.id ? (

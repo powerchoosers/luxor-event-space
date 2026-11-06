@@ -87,7 +87,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
             type="button"
             onClick={() => scrollToPage(Math.max(1, currentPage - 1))}
             disabled={currentPage <= 1 || !pageCount}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] transition hover:border-[#caa24c]/45 hover:text-[#8c6529] disabled:cursor-not-allowed disabled:opacity-35 dark:hover:text-[#f1d27a]"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Previous PDF page"
           >
             <ChevronLeft size={15} />
@@ -96,7 +96,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
             type="button"
             onClick={() => scrollToPage(Math.min(pageCount, currentPage + 1))}
             disabled={currentPage >= pageCount || !pageCount}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] transition hover:border-[#caa24c]/45 hover:text-[#8c6529] disabled:cursor-not-allowed disabled:opacity-35 dark:hover:text-[#f1d27a]"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Next PDF page"
           >
             <ChevronRight size={15} />
@@ -106,7 +106,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
             type="button"
             onClick={() => setZoom(ZOOM_STEPS[Math.max(0, zoomIndex - 1)])}
             disabled={zoomIndex === 0}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] transition hover:border-[#caa24c]/45 hover:text-[#8c6529] disabled:cursor-not-allowed disabled:opacity-35 dark:hover:text-[#f1d27a]"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Zoom out PDF"
           >
             <ZoomOut size={14} />
@@ -116,7 +116,7 @@ function PdfDocumentViewer({ url, title }: PortalPdfViewerProps) {
             type="button"
             onClick={() => setZoom(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, zoomIndex + 1)])}
             disabled={zoomIndex === ZOOM_STEPS.length - 1}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)] transition hover:border-[#caa24c]/45 hover:text-[#8c6529] disabled:cursor-not-allowed disabled:opacity-35 dark:hover:text-[#f1d27a]"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-text)] transition hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Zoom in PDF"
           >
             <ZoomIn size={14} />
