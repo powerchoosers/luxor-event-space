@@ -6,6 +6,11 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Clock3, ChevronDown } from 'lucide-react'
 
 type TimeColumn<T extends string | number> = { name: string; options: T[]; selected: T; set: (value: T) => void; format: (value: T) => string }
+type CustomTriggerProps = { open: boolean; show: () => void }
+
+function CustomTrigger({ render, open, show }: CustomTriggerProps & { render: (props: CustomTriggerProps) => ReactNode }) {
+  return render({ open, show })
+}
 
 function timePickerParts(value: string) {
   const match = /^(\d{2}):(\d{2})$/.exec(value)
@@ -20,7 +25,7 @@ function timePickerParts(value: string) {
   }
 }
 
-export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time', label = 'Preferred time', className = '', renderTrigger }: { value: string; onChange: (value: string) => void; placeholder?: string; label?: string; className?: string; renderTrigger?: (props: { ref: RefObject<HTMLElement | null>; open: boolean; show: () => void }) => ReactNode }) {
+export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time', label = 'Preferred time', className = '', renderTrigger }: { value: string; onChange: (value: string) => void; placeholder?: string; label?: string; className?: string; renderTrigger?: (props: { open: boolean; show: () => void }) => ReactNode }) {
   const trigger = useRef<HTMLElement>(null)
   const dialog = useRef<HTMLDivElement>(null)
   const periodButtons = useRef<Array<HTMLButtonElement | null>>([])
@@ -97,7 +102,7 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
     updatePosition()
     setOpen(true)
   }
-  const close = useCallback(() => { setOpen(false); requestAnimationFrame(() => trigger.current?.focus()) }, [])
+  const close = useCallback(() => { setOpen(false); requestAnimationFrame(() => (trigger.current?.querySelector<HTMLElement>('input, button, [tabindex]') || trigger.current)?.focus()) }, [])
   useEffect(() => {
     if (!open) return
     const positionFrame = requestAnimationFrame(updatePosition)
@@ -163,7 +168,7 @@ export function LuxorTimePicker({ value, onChange, placeholder = 'Select a time'
   }
   const apply = () => { let h = hour % 12; if (period === 'PM') h += 12; onChange(String(h).padStart(2, '0') + ':' + String(minute).padStart(2, '0')); close() }
   return <div className={'relative min-w-0 ' + className}>
-    {renderTrigger ? renderTrigger({ ref: trigger, open, show: () => { if (!open) show() } }) : <button ref={trigger as RefObject<HTMLButtonElement | null>} type="button" aria-haspopup="dialog" aria-expanded={open} aria-label={value ? label + ', ' + display + '. Change time' : placeholder} onClick={() => open ? close() : show()} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-[#d8c4a4] bg-[#fffdfa] px-3.5 text-left text-sm text-[#3b2b1d] transition hover:border-[#caa24c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/30">
+    {renderTrigger ? <div ref={trigger as RefObject<HTMLDivElement | null>}><CustomTrigger render={renderTrigger} open={open} show={() => { if (!open) show() }} /></div> : <button ref={trigger as RefObject<HTMLButtonElement | null>} type="button" aria-haspopup="dialog" aria-expanded={open} aria-label={value ? label + ', ' + display + '. Change time' : placeholder} onClick={() => open ? close() : show()} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-[#d8c4a4] bg-[#fffdfa] px-3.5 text-left text-sm text-[#3b2b1d] transition hover:border-[#caa24c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/30">
       {display}<span className="flex items-center gap-2 text-[#8d672b]"><Clock3 aria-hidden="true" className="h-4 w-4"/><ChevronDown aria-hidden="true" className="h-3.5 w-3.5"/></span>
     </button>}
     {typeof document !== 'undefined' ? createPortal(<AnimatePresence initial={false}>

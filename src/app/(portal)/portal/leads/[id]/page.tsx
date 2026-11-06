@@ -8737,9 +8737,8 @@ export default function LeadDetailPage({
         <form onSubmit={handleTimelineSubmit} className="space-y-4 bg-[color:var(--portal-card)] p-6">
           <div className="space-y-1.5">
             <label htmlFor="timeline-time" className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--portal-muted)]">Time</label>
-            <LuxorTimePicker value={parseTimelineTime(timelineTime)?.value || ''} onChange={(value) => { const parsed = parseTimelineTime(value); if (parsed) { (document.getElementById('timeline-time') as HTMLInputElement | null)?.setCustomValidity(''); setTimelineTime(parsed.display) } }} label="Timeline time" renderTrigger={({ ref, open, show }) => (
+            <LuxorTimePicker value={parseTimelineTime(timelineTime)?.value || ''} onChange={(value) => { const parsed = parseTimelineTime(value); if (parsed) { (document.getElementById('timeline-time') as HTMLInputElement | null)?.setCustomValidity(''); setTimelineTime(parsed.display) } }} label="Timeline time" renderTrigger={({ open, show }) => (
               <input
-                ref={ref as React.RefObject<HTMLInputElement | null>}
                 id="timeline-time"
                 type="text"
                 required
