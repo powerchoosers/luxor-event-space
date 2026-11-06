@@ -123,7 +123,7 @@ function resolveTheme(theme: LuxorSystemEmailInput['theme']) {
 export function renderLuxorSystemEmail(input: LuxorSystemEmailInput) {
   const t = resolveTheme(input.theme)
   const details = input.details?.length
-    ? `<tr><td style="padding:0 42px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;background:${t.surfaceAlt};border:1px solid ${t.border};border-radius:${Math.max(12, t.radius - 6)}px;overflow:hidden"><tr>${input.details.map((detail, index) => `<td style="width:${100 / input.details!.length}%;padding:17px 18px;vertical-align:top;${index ? `border-left:1px solid ${t.border};` : ''}"><p style="margin:0 0 7px;color:${t.accent};font-family:${t.fontBody};font-size:9px;font-weight:800;letter-spacing:.19em;text-transform:uppercase">${detail.label}</p><p style="margin:0;color:${t.mode === 'brand' ? '#f7efe3' : t.text};font-family:${t.fontBody};font-size:13px;line-height:1.55">${detail.value}</p></td>`).join('')}</tr></table></td></tr>`
+    ? `<tr><td class="luxor-pad" style="padding:0 42px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;border-spacing:0;background:${t.surfaceAlt};border:1px solid ${t.border};border-radius:${Math.max(12, t.radius - 6)}px;overflow:hidden"><tr>${input.details.map((detail, index) => `<td class="luxor-detail${index === 0 ? ' luxor-detail-first' : ''}" style="width:${100 / input.details!.length}%;padding:17px 18px;vertical-align:top;${index ? `border-left:1px solid ${t.border};` : ''}"><p style="margin:0 0 7px;color:${t.accent};font-family:${t.fontBody};font-size:9px;font-weight:800;letter-spacing:.19em;text-transform:uppercase">${detail.label}</p><p style="margin:0;color:${t.mode === 'brand' ? '#f7efe3' : t.text};font-family:${t.fontBody};font-size:13px;line-height:1.55">${detail.value}</p></td>`).join('')}</tr></table></td></tr>`
     : ''
   const actions = input.actions?.length
     ? `<tr><td align="center" style="padding:22px 42px 38px">${input.actions.map((action) => action.tone === 'secondary'
@@ -142,7 +142,7 @@ export function renderLuxorSystemEmail(input: LuxorSystemEmailInput) {
   <title>${input.title}</title>
   <style>
     body,table,td,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}table,td{mso-table-lspace:0;mso-table-rspace:0}table{border-collapse:collapse!important}img{border:0;display:block;height:auto;line-height:100%;outline:none;text-decoration:none}a{text-decoration:none}
-    @media(max-width:640px){.luxor-shell{width:100%!important}.luxor-pad{padding-left:24px!important;padding-right:24px!important}.luxor-title{font-size:34px!important}.luxor-detail{display:block!important;width:100%!important;border-left:0!important;border-top:1px solid ${t.border}!important}}
+    @media(max-width:640px){.luxor-shell{width:100%!important}.luxor-pad{padding-left:24px!important;padding-right:24px!important}.luxor-title{font-size:34px!important}.luxor-detail{display:block!important;width:auto!important;border-left:0!important;border-top:1px solid ${t.border}!important}.luxor-detail-first{border-top:0!important}}
     @media(prefers-color-scheme:dark){.luxor-canvas{background:#050505!important}.luxor-shell{background:#0a0807!important;border-color:#3a2e1d!important}.luxor-copy{color:#d7c29a!important}.luxor-title{color:#f7efe3!important}.luxor-header{background:#080605!important}.luxor-footer{background:#080605!important}}
   </style>
 </head>

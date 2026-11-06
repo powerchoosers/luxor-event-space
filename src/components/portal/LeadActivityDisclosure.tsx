@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
 
 type LeadActivityDisclosureProps = {
@@ -22,14 +21,24 @@ export function LeadActivityDisclosure({ icon, label, title, description, previe
   const [hasOpened, setHasOpened] = useState(defaultOpen)
   const contentId = useId()
   const contentRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
+  const [contentHeight, setContentHeight] = useState<number | null>(null)
   const onExpandRef = useRef(onExpand)
-  const reduceMotion = useReducedMotion()
 
   useEffect(() => { onExpandRef.current = onExpand }, [onExpand])
   useEffect(() => {
     if (open) onExpandRef.current?.()
     else contentRef.current?.querySelectorAll('audio').forEach((audio) => audio.pause())
   }, [open])
+  useEffect(() => {
+    const inner = innerRef.current
+    if (!hasOpened || !inner) return
+    const measure = () => setContentHeight(inner.offsetHeight)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(inner)
+    return () => observer.disconnect()
+  }, [hasOpened])
 
   const toggle = () => {
     if (!open) setHasOpened(true)
@@ -48,8 +57,10 @@ export function LeadActivityDisclosure({ icon, label, title, description, previe
       </span>
       <ChevronDown size={16} aria-hidden="true" className={`mt-0.5 shrink-0 text-[color:var(--portal-muted)] transition-transform duration-200 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
     </button>
-    <motion.div ref={contentRef} id={contentId} aria-hidden={!open} inert={!open} initial={false} animate={{ height: open ? 'auto' : 0, opacity: open ? 1 : 0 }} transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
-      {hasOpened ? <div className="border-t border-[color:var(--portal-border)] px-4 py-4 sm:px-5">{children}</div> : null}
-    </motion.div>
+    <div ref={contentRef} id={contentId} aria-hidden={!open} inert={!open} style={{ height: open ? (contentHeight ?? (defaultOpen ? 'auto' : 0)) : 0 }} className={`overflow-hidden transition-[height,opacity] duration-300 ease-in-out motion-reduce:transition-none ${open ? 'opacity-100' : 'opacity-0'}`}>
+      <div ref={innerRef}>
+        {hasOpened ? <div className="border-t border-[color:var(--portal-border)] px-4 py-4 sm:px-5">{children}</div> : null}
+      </div>
+    </div>
   </article>
 }

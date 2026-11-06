@@ -11,9 +11,21 @@ import { LeadActivityDisclosure } from './LeadActivityDisclosure'
 import { PortalButton, PortalModal } from './PortalUI'
 import { PortalPdfViewer } from './PortalPdfViewer'
 
+function EmailLoading() {
+  return <div role="status" className="space-y-4 py-2 text-sm text-[color:var(--portal-muted)]">
+    <div className="flex items-center gap-2"><Loader2 size={15} className="animate-spin motion-reduce:animate-none" /> Loading email…</div>
+    <div aria-hidden="true" className="space-y-3 rounded-xl bg-[color:var(--portal-soft)] p-4">
+      <div className="h-2.5 w-2/3 rounded-full bg-[color:var(--portal-border)]" />
+      <div className="h-2.5 w-full rounded-full bg-[color:var(--portal-border)]" />
+      <div className="h-2.5 w-5/6 rounded-full bg-[color:var(--portal-border)]" />
+      <div className="h-2.5 w-1/2 rounded-full bg-[color:var(--portal-border)]" />
+    </div>
+  </div>
+}
+
 const ThreadMessage = dynamic(() => import('@/app/(portal)/portal/marketing/tabs/AllEmailsTab').then((module) => module.ThreadMessage), {
   ssr: false,
-  loading: () => <p role="status" className="py-4 text-sm text-[color:var(--portal-muted)]">Opening email…</p>,
+  loading: () => <EmailLoading />,
 })
 
 type Attachment = NonNullable<EmailMessageItem['attachments']>[number]
@@ -158,7 +170,7 @@ function LeadEmailActivityContent({ email, inquiry, onReplySent }: Props) {
       badge={email.deliveryStatus ? <span className="rounded-md bg-[color:var(--portal-soft)] px-2 py-0.5 text-[10px] font-semibold capitalize text-[color:var(--portal-muted)]">{email.deliveryStatus.replaceAll('_', ' ')}</span> : undefined}
       onExpand={() => { void loadDetail() }}
     >
-      {loading ? <p role="status" className="flex items-center gap-2 py-4 text-sm text-[color:var(--portal-muted)]"><Loader2 size={15} className="animate-spin" /> Opening email…</p> : error ? <div role="alert" className="space-y-3"><p className="text-sm text-[color:var(--portal-muted)]">{error}</p><PortalButton onClick={() => { void loadDetail() }}>Try again</PortalButton></div> : message ? <>
+      {loading || (!message && !error) ? <EmailLoading /> : error ? <div role="alert" className="space-y-3"><p className="text-sm text-[color:var(--portal-muted)]">{error}</p><PortalButton onClick={() => { void loadDetail() }}>Try again</PortalButton></div> : message ? <>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <PortalButton variant="primary" onClick={() => { setReplyOpen(true); setReplyError(null); setSent(false) }}><Reply size={14} /> Reply</PortalButton>
           {message.htmlContent ? <PortalButton variant="ghost" onClick={() => setBlockExternalImages((current) => !current)} aria-pressed={!blockExternalImages}>{blockExternalImages ? 'Load external images' : 'Block external images'}</PortalButton> : null}
