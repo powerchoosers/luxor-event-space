@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
-import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getOperationsSession } from '@/lib/luxorOperationsAccess'
 import { LUXOR_INVOICES_MAILBOX } from '@/lib/luxorSharedMailboxes'
 import { saveLuxorMailAttachment } from '@/lib/luxorMailboxServer'
 import { processPendingLuxorBillIntakes } from '@/lib/luxorBillIntakeServer'
@@ -14,7 +14,7 @@ function safeFilename(value: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getLuxorPortalSession()
+  const session = await getOperationsSession()
   if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
 
   try {

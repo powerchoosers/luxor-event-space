@@ -54,6 +54,7 @@ import {
 import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog, LuxorMaintenanceTask } from '@/app/api/operations/route'
 import type { LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 import { BillsPayableLedger } from '@/components/portal/BillsPayableLedger'
+import { LUXOR_BILL_CATEGORIES, isLuxorBillCategory, type LuxorBillCategory } from '@/lib/luxorBillCategories'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
@@ -93,6 +94,8 @@ type EditFormData = {
   service?: string
   provider?: string
   amount?: number | string
+  amount_state?: 'known' | 'unknown' | 'variable' | null
+  bill_category?: LuxorBillCategory | null
   frequency?: string
   due_date?: string | null
   status?: string
@@ -304,7 +307,8 @@ function OperationsPageContent() {
   }, [activeTab, bulkSelection.clear])
 
   const bulkType = activeTab === 'bills' ? 'bill' : activeTab === 'maintenance' ? 'task' : activeTab === 'inventory' ? 'inventory' : activeTab === 'vendors' ? 'vendor' : null
-  const bulkRecords = bulkType === 'bill' ? bills : bulkType === 'task' ? maintenanceTasks : bulkType === 'inventory' ? inventory : bulkType === 'vendor' ? vendors : []
+  const preferredVendors = vendors.filter((vendor) => vendor.vendor_type !== 'Service Company')
+  const bulkRecords = bulkType === 'bill' ? bills : bulkType === 'task' ? maintenanceTasks : bulkType === 'inventory' ? inventory : bulkType === 'vendor' ? preferredVendors : []
   const bulkRecordIds = bulkRecords.map((record) => record.id)
   const bulkSelectedCount = bulkSelection.selectedCount(bulkRecordIds.length)
 
@@ -545,9 +549,18 @@ function OperationsPageContent() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingItem || !editFormData) return
+    if (editingItem.type === 'bill' && editFormData.amount_state === 'known' && (editFormData.amount === '' || editFormData.amount == null || !Number.isFinite(Number(editFormData.amount)) || Number(editFormData.amount) < 0)) {
+      alert('Enter a valid amount, or choose unknown or variable.')
+      return
+    }
     setSubmittingEdit(true)
     try {
-      const payload = {
+      const payload = editingItem.type === 'bill' ? {
+        type: 'bill', id: editingItem.data.id, expectedUpdatedAt: editingItem.data.updated_at, service: editFormData.service, provider: editFormData.provider,
+        frequency: editFormData.frequency, due_date: editFormData.due_date || null, status: editFormData.status,
+        bill_category: editFormData.bill_category || null,
+        amount_state: editFormData.amount_state, ...(editFormData.amount_state === 'known' ? { amount: Number(editFormData.amount) } : {}),
+      } : {
         type: editingItem.type,
         id: editingItem.data.id,
         ...editFormData
@@ -616,7 +629,7 @@ function OperationsPageContent() {
   const completedCount = readinessTasks.filter((t) => t.checked).length
   const readinessScore = readinessTasks.length ? Math.round((completedCount / readinessTasks.length) * 100) : 0
   const openBills = bills.filter((bill) => bill.status !== 'paid')
-  const unpaidBillsTotal = openBills.reduce((sum, bill) => sum + Number(bill.amount || 0), 0)
+  const unpaidBillsTotal = openBills.filter((bill) => bill.amount_state === 'known').reduce((sum, bill) => sum + Number(bill.amount || 0), 0)
   const pendingMaintenance = maintenanceTasks.filter((task) => task.status === 'pending')
   const lowSupplyItems = suppliesCounts.filter((item) => item.status === 'Low')
   const sensorsOnline = utilities.length > 0
@@ -672,6 +685,12 @@ function OperationsPageContent() {
           <PortalCardSkeleton count={4} />
           <div className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-8 h-64 luxor-skeleton" />
         </div>
+      ) : error ? (
+        <div role="alert" className="m-4 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5">
+          <p className="text-sm font-semibold text-[color:var(--portal-text)]">Operations could not load</p>
+          <p className="mt-1 text-sm text-[color:var(--portal-muted)]">{error}</p>
+          <PortalButton type="button" onClick={() => void loadOperationsData()} className="mt-4">Try again</PortalButton>
+        </div>
       ) : (
         <>
           {/* DASHBOARD TAB */}
@@ -687,7 +706,7 @@ function OperationsPageContent() {
 
                     <PortalStaggerGroup className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <PortalStaggerCard>
-              <StatsCard icon={<DollarSign size={16} />} label="Open bills" value={`$${unpaidBillsTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} subtitle={`${openBills.length} awaiting payment`} tone="gold" onClick={() => router.push('/portal/operations?tab=bills')} />
+              <StatsCard icon={<DollarSign size={16} />} label="Open bills" value={`$${unpaidBillsTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} subtitle={`${openBills.length} awaiting payment · confirmed amounts only`} tone="gold" onClick={() => router.push('/portal/operations?tab=bills')} />
             </PortalStaggerCard>
             <PortalStaggerCard>
               <StatsCard icon={<Wrench size={16} />} label="Maintenance" value={String(pendingMaintenance.length)} subtitle="Open facility tasks" tone={pendingMaintenance.length ? 'gold' : 'green'} onClick={() => router.push('/portal/operations?tab=maintenance')} />
@@ -768,7 +787,7 @@ function OperationsPageContent() {
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Needs attention</p>
               <h3 className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">Next operational actions</h3>
               <div className="mt-4 space-y-2">
-                <AttentionRow icon={<DollarSign size={15} />} title={`${openBills.length} bill${openBills.length === 1 ? '' : 's'} waiting`} detail={`${unpaidBillsTotal.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} open`} onClick={() => router.push('/portal/operations?tab=bills')} urgent={openBills.length > 0} />
+                <AttentionRow icon={<DollarSign size={15} />} title={`${openBills.length} bill${openBills.length === 1 ? '' : 's'} waiting`} detail={`${unpaidBillsTotal.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} confirmed`} onClick={() => router.push('/portal/operations?tab=bills')} urgent={openBills.length > 0} />
                 <AttentionRow icon={<Package size={15} />} title={`${lowSupplyItems.length} low-stock item${lowSupplyItems.length === 1 ? '' : 's'}`} detail={lowSupplyItems.length ? 'Review inventory levels' : 'Inventory is in range'} onClick={() => router.push('/portal/operations?tab=inventory')} urgent={lowSupplyItems.length > 0} />
                 <AttentionRow icon={pendingMaintenance.length ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />} title={pendingMaintenance.length ? `${pendingMaintenance.length} facility task${pendingMaintenance.length === 1 ? '' : 's'} open` : 'No open facility tasks'} detail={pendingMaintenance.length ? 'Review the maintenance queue' : 'Maintenance queue is clear'} onClick={() => router.push('/portal/operations?tab=maintenance')} urgent={pendingMaintenance.length > 0} />
               </div>
@@ -782,6 +801,8 @@ function OperationsPageContent() {
         <BillsPayableLedger
           bills={bills}
           intakes={billIntakes}
+          vendors={vendors}
+          onVendorChanged={(vendor) => setVendors((current) => current.some((item) => item.id === vendor.id) ? current.map((item) => item.id === vendor.id ? vendor : item) : [...current, vendor])}
           onAddBill={() => setIsBillModalOpen(true)}
           onBillChanged={(bill) => setBills((current) => current.map((item) => item.id === bill.id ? bill : item))}
           onIntakeChanged={(intake) => setBillIntakes((current) => current.map((item) => item.id === intake.id ? intake : item))}
@@ -956,10 +977,10 @@ function OperationsPageContent() {
 
           <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {vendors.length === 0 ? (
+              {preferredVendors.length === 0 ? (
                 <div className="col-span-3 text-center py-12 text-xs text-zinc-505">No preferred vendors logged.</div>
               ) : (
-                vendors.map((v, idx) => (
+                preferredVendors.map((v, idx) => (
                   <div key={v.id || idx} className={`luxor-glass-card rounded-2xl p-5 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-3 cursor-pointer hover:border-[#caa24c]/40 transition-all ${bulkSelection.isSelected(v.id) ? 'border-[#caa24c]/45 bg-[#caa24c]/5' : ''}`} onClick={() => setEditingItem({ type: 'vendor', data: v })}>
                     <div className="flex justify-between items-start">
                       <div className="flex items-start gap-3">
@@ -1484,34 +1505,42 @@ function OperationsPageContent() {
             {editingItem.type === 'bill' && (
               <>
                 <div className="space-y-1">
-                  <label className="text-[9px] uppercase font-bold text-zinc-550">Service Name</label>
+                  <label htmlFor="edit-bill-title" className="text-xs font-semibold text-[color:var(--portal-muted)]">Bill title</label>
                   <input
+                    id="edit-bill-title"
                     type="text"
                     required
                     value={editFormData.service || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, service: e.target.value })}
-                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                    className="w-full rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-sm text-[color:var(--portal-text)]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] uppercase font-bold text-zinc-550">Provider / Account</label>
+                  <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Category</label>
+                  <PortalSelect aria-label="Bill category" value={editFormData.bill_category || ''} onChange={(value) => setEditFormData({ ...editFormData, bill_category: isLuxorBillCategory(value) ? value : null })} options={[{ value: '', label: 'Not categorized' }, ...LUXOR_BILL_CATEGORIES.map((value) => ({ value, label: value }))]} />
+                  {editingItem.type === 'bill' && 'extracted_fields' in editingItem.data && isLuxorBillCategory(editingItem.data.extracted_fields?.category_suggestion) ? <p className="text-xs text-[color:var(--portal-muted)]">Suggested: {editingItem.data.extracted_fields.category_suggestion}. Select a category to confirm it.</p> : null}
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="edit-bill-provider" className="text-xs font-semibold text-[color:var(--portal-muted)]">Provider / Account</label>
                   <input
+                    id="edit-bill-provider"
                     type="text"
                     required
                     value={editFormData.provider || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, provider: e.target.value })}
-                    className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                    className="w-full rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-sm text-[color:var(--portal-text)]"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[9px] uppercase font-bold text-zinc-550">Amount (USD)</label>
+                    <label htmlFor="edit-bill-amount" className="text-xs font-semibold text-[color:var(--portal-muted)]">Amount (USD)</label>
                     <input
+                      id="edit-bill-amount"
                       type="number"
-                      required
-                      value={editFormData.amount !== undefined ? editFormData.amount : ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, amount: e.target.value })}
-                      className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                      min="0" step="0.01"
+                      value={editFormData.amount_state === 'known' ? (editFormData.amount ?? '') : ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, amount: e.target.value, amount_state: e.target.value === '' ? 'unknown' : 'known' })}
+                      className="w-full rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-sm text-[color:var(--portal-text)]"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1527,6 +1556,7 @@ function OperationsPageContent() {
                     />
                   </div>
                 </div>
+                <PortalSelect value={editFormData.amount_state || 'legacy'} onChange={(value) => setEditFormData({ ...editFormData, amount_state: value === 'legacy' ? null : value as 'known' | 'unknown' | 'variable' })} options={[{ value: 'legacy', label: 'Legacy amount not confirmed' }, { value: 'known', label: 'Known amount' }, { value: 'unknown', label: 'Unknown amount' }, { value: 'variable', label: 'Variable amount' }]} />
                 <div className="space-y-1">
                   <label className="text-[9px] uppercase font-bold text-zinc-550">Due Date</label>
                   <PortalDatePicker

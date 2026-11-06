@@ -1,7 +1,7 @@
 import { isLuxorTestAvailabilityBooking } from './luxorAvailability'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment, LuxorPaymentRefundView } from './luxorInquiryTypes'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from './luxorTestLeadPolicy'
-import { installmentDisplayState, invoiceEventObligation, isLuxorBookingReceivableEligible, refundableSecurityAmount } from './luxorPaymentDashboardModel'
+import { chicagoCalendarDate, installmentDisplayState, installmentPaidAmount, invoiceEventObligation, isLuxorBookingReceivableEligible, refundableSecurityAmount } from './luxorPaymentDashboardModel'
 
 export type LuxorFinanceExpense = {
   booking_id: string | null
@@ -12,7 +12,7 @@ export type LuxorFinanceExpense = {
 export type LuxorInvoiceFinancialSummary = {
   acceptedInvoices: LuxorInvoice[]
   acceptedInvoiceRows: Array<{ invoice: LuxorInvoice; eventObligation: number; received: number; outstanding: number; overdue: number }>
-  eventPaymentRows: Array<{ amount: number; paid_at: string | null; received_date: string | null }>
+  eventPaymentRows: Array<{ id: string; category: string | null; amount: number; paid_at: string | null; received_date: string | null }>
   unallocatedPaymentRows: Array<{ amount: number; paid_at: string | null; reason: string }>
   knownPaidCashTotal: number
   refundRecordCount: number
@@ -186,7 +186,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
   let eventPaymentsReceived = 0
   let securityDepositsHeld = 0
   let unallocatedPayments = 0
-  const eventPaymentRows: Array<{ amount: number; paid_at: string | null; received_date: string | null }> = []
+  const eventPaymentRows: LuxorInvoiceFinancialSummary['eventPaymentRows'] = []
   const unallocatedPaymentRows: Array<{ amount: number; paid_at: string | null; reason: string }> = []
   for (const payment of payments) {
     if (payment.metadata?.is_test_record === true) continue
@@ -251,7 +251,19 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     }
     const depositPortion = amount - eventPortion
     eventPaymentsReceived = money(eventPaymentsReceived + eventPortion)
-    eventPaymentRows.push({ amount: money(eventPortion), paid_at: payment.paid_at, received_date: payment.received_date || null })
+    const paymentKind = String(payment.metadata?.payment_kind || '').toLowerCase()
+    const savedAllocations = Array.isArray(payment.metadata?.installment_allocations) ? payment.metadata.installment_allocations : []
+    const savedAllocationTotal = savedAllocations.reduce((sum: number, row: unknown) => {
+      if (!row || typeof row !== 'object') return sum
+      const value = Number((row as Record<string, unknown>).amount)
+      return Number.isFinite(value) && value > 0 ? sum + value : sum
+    }, 0)
+    const category = (paymentKind === 'deposit' && (!invoice?.invoice_kind || invoice.invoice_kind === 'deposit')) || (!paymentKind && invoice?.invoice_kind === 'deposit') ? 'Booking Deposits'
+      : paymentKind === 'full' ? 'Full Payments'
+      : savedAllocations.length && Math.abs(money(savedAllocationTotal) - eventPortion) < 0.005 ? 'Installment Payments'
+      : paymentKind === 'additional_services' ? 'Additional Services'
+      : paymentKind === 'other_revenue' ? 'Other Revenue' : null
+    eventPaymentRows.push({ id: payment.id, category, amount: money(eventPortion), paid_at: payment.paid_at, received_date: payment.received_date || null })
     if (depositPortion) securityDepositsHeld = money(securityDepositsHeld + depositPortion)
     eventReceiptsByMaster.set(master.id, money((eventReceiptsByMaster.get(master.id) || 0) + eventPortion))
   }
@@ -296,7 +308,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     if (refund.refund_kind === 'security_deposit') securityDepositsHeld = money(Math.max(0, securityDepositsHeld - amount))
     else {
       eventPaymentsReceived = money(eventPaymentsReceived - amount)
-      eventPaymentRows.push({ amount: -money(amount), paid_at: refund.completed_at, received_date: null })
+      eventPaymentRows.push({ id: refund.id, category: null, amount: -money(amount), paid_at: refund.completed_at, received_date: null })
     }
   }
 
@@ -355,4 +367,280 @@ export function getLuxorBusinessInquiries(inquiries: LuxorInquiry[], testInquiry
 /** Only paid costs count against cash receipts; incurred, planned, and cancelled rows are excluded. */
 export function getLuxorPaidFinanceExpenses<TExpense extends LuxorFinanceExpense>(expenses: TExpense[]) {
   return expenses.filter((expense) => expense.status === 'paid')
+}
+
+/**
+ * A paid status establishes an all-time ledger total, but incurred_on is not
+ * evidence of when money was paid. Do not use this result for a date range.
+ * Call with the already test-filtered business expense rows.
+ */
+export function getLuxorPaidExpenseBreakdown(expenses: Array<LuxorFinanceExpense & { id: string; amount: number; category: string | null }>) {
+  const paid = getLuxorPaidFinanceExpenses(expenses)
+  const ids = new Set<string>()
+  const categories = new Map<string, number>()
+  for (const expense of paid) {
+    const id = expense.id?.trim()
+    const amount = Number(expense.amount)
+    if (!id || ids.has(id) || expense.amount == null || String(expense.amount).trim() === '' || !Number.isFinite(amount) || amount < 0) {
+      return { available: false as const, reason: 'Paid expense records need reconciliation.', total: null, categories: [] }
+    }
+    ids.add(id)
+    const category = expense.category?.trim() || 'Uncategorized'
+    categories.set(category, money((categories.get(category) || 0) + amount))
+  }
+  const rows = [...categories].map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount || a.category.localeCompare(b.category))
+  return { available: true as const, reason: null, total: money(rows.reduce((sum, row) => sum + row.amount, 0)), categories: rows }
+}
+
+export type LuxorFinanceAllocationRow = { payment_id: string; installment_id: string; amount: number }
+
+/**
+ * Check inputs before using the existing finance helpers for an overview.
+ * The allocation table and payment metadata are two representations of the
+ * same allocations: compare them, never add them together. An unavailable
+ * table is different from an empty table. Issues block dependent forecasts;
+ * this function does not change the ledger or assign unallocated payments.
+ */
+export function inspectLuxorFinanceOverviewSources(input: {
+  invoices: LuxorInvoice[]
+  payments: LuxorPayment[]
+  installments: LuxorPaymentInstallment[]
+  allocations: LuxorFinanceAllocationRow[] | null
+}) {
+  const issues: string[] = []
+  function unique<T extends { id: string }>(rows: T[], label: string): T[] {
+    const byId = new Map<string, T>()
+    for (const row of rows) {
+      if (!row.id || byId.has(row.id)) {
+        issues.push(`Duplicate or missing ${label} identity`)
+        continue
+      }
+      byId.set(row.id, row)
+    }
+    return [...byId.values()]
+  }
+  const invoices = unique(input.invoices, 'invoice')
+  const payments = unique(input.payments, 'payment')
+  const installments = unique(input.installments, 'installment')
+  const superseded = new Set(invoices.filter((invoice) => invoice.proposal_accepted_at && invoice.status !== 'draft' && invoice.status !== 'cancelled' && invoice.offer_status !== 'withdrawn').map((invoice) => invoice.supersedes_invoice_id).filter(Boolean))
+  const mastersByBooking = new Map<string, number>()
+  const currentMasters: LuxorInvoice[] = []
+  for (const invoice of invoices) {
+    if (!invoice.booking_id || invoice.parent_invoice_id || (invoice.invoice_kind ?? 'event') !== 'event' || !invoice.proposal_accepted_at || invoice.status === 'draft' || invoice.status === 'cancelled' || invoice.offer_status === 'withdrawn' || superseded.has(invoice.id)) continue
+    mastersByBooking.set(invoice.booking_id, (mastersByBooking.get(invoice.booking_id) || 0) + 1)
+    currentMasters.push(invoice)
+  }
+  if ([...mastersByBooking.values()].some((count) => count > 1)) issues.push('Multiple accepted master invoices for a booking')
+  for (const master of currentMasters) {
+    if (!master.booking_id || mastersByBooking.get(master.booking_id) !== 1) continue
+    const scheduled = installments.filter((row) => row.booking_id === master.booking_id && row.invoice_id === master.id && row.status !== 'void' && row.metadata?.payment_bucket !== 'security_deposit')
+      .reduce((sum, row) => sum + Math.max(0, Number(row.amount) || 0), 0)
+    if (money(scheduled) > money(invoiceEventObligation(master))) issues.push('Payment schedule exceeds its event obligation')
+  }
+
+  const metadata = new Map<string, number>()
+  const installmentIds = new Set(installments.map((row) => row.id))
+  for (const payment of payments) {
+    if (payment.status !== 'paid') continue
+    const rows = payment.metadata?.installment_allocations
+    if (!Array.isArray(rows)) continue
+    let totalAllocated = 0
+    for (const value of rows) {
+      if (!value || typeof value !== 'object') { issues.push('Invalid payment allocation metadata'); continue }
+      const row = value as Record<string, unknown>
+      const amount = Number(row.amount)
+      if (typeof row.installment_id !== 'string' || !installmentIds.has(row.installment_id) || !Number.isFinite(amount) || amount <= 0) { issues.push('Invalid payment allocation metadata'); continue }
+      totalAllocated += amount
+      const key = JSON.stringify([payment.id, row.installment_id])
+      const installment = installments.find((item) => item.id === row.installment_id)
+      if (payment.booking_id && installment && payment.booking_id !== installment.booking_id) issues.push('Payment allocation points to a different booking')
+      if (metadata.has(key)) issues.push('Duplicate payment allocation metadata')
+      metadata.set(key, money((metadata.get(key) || 0) + amount))
+    }
+    if (money(totalAllocated) > Number(payment.amount) + 0.005) issues.push('Allocations exceed a payment')
+  }
+  if (input.allocations === null) issues.push('Allocation table unavailable')
+  else {
+    const table = new Map<string, number>()
+    const paymentIds = new Set(payments.filter((row) => row.status === 'paid').map((row) => row.id))
+    for (const row of input.allocations) {
+      const amount = Number(row.amount)
+      if (!paymentIds.has(row.payment_id) || !installmentIds.has(row.installment_id) || !Number.isFinite(amount) || amount <= 0) { issues.push('Invalid allocation table row'); continue }
+      const key = JSON.stringify([row.payment_id, row.installment_id])
+      if (table.has(key)) issues.push('Duplicate allocation table row')
+      table.set(key, money((table.get(key) || 0) + amount))
+    }
+    if ([...new Set([...metadata.keys(), ...table.keys()])].some((key) => (metadata.get(key) || 0) !== (table.get(key) || 0))) issues.push('Payment allocation sources disagree')
+  }
+  if (installments.some((row) => row.status === 'paid' && money([...metadata].filter(([key]) => JSON.parse(key)[1] === row.id).reduce((sum, [, amount]) => sum + amount, 0)) + 0.005 < Number(row.amount))) issues.push('Paid installment lacks a complete recorded payment allocation')
+  for (const row of installments) {
+    if (row.status === 'void') continue
+    const saved = money([...metadata].filter(([key]) => JSON.parse(key)[1] === row.id).reduce((sum, [, amount]) => sum + amount, 0))
+    if (saved > Number(row.amount) + 0.005) issues.push('Allocations exceed an installment')
+    if (installmentPaidAmount(row, payments) > saved + 0.005) issues.push('A legacy installment credit needs reconciliation')
+  }
+  return { invoices, payments, installments, issues: [...new Set(issues)] }
+}
+
+/** Build overview figures from the existing ledger summary only after source checks. */
+export function getLuxorFinanceOverview(input: {
+  invoices: LuxorInvoice[]; bookings: LuxorBooking[]; payments: LuxorPayment[]
+  installments: LuxorPaymentInstallment[]; refunds: LuxorPaymentRefundView[]
+  testInquiryIds: ReadonlySet<string>; testBookingIds: ReadonlySet<string>; testInvoiceIds: ReadonlySet<string>
+  allocations: LuxorFinanceAllocationRow[] | null; now?: Date
+}) {
+  const now = input.now || new Date()
+  const excluded = (id: string | null | undefined, ids: ReadonlySet<string>) => Boolean(id && ids.has(id.toLowerCase()))
+  const bookings = input.bookings.filter((row) => !excluded(row.id, input.testBookingIds))
+  const invoices = input.invoices.filter((row) => !excluded(row.id, input.testInvoiceIds) && !excluded(row.booking_id, input.testBookingIds) && !excluded(row.inquiry_id, input.testInquiryIds))
+  const payments = input.payments.filter((row) => row.metadata?.is_test_record !== true && !excluded(row.booking_id, input.testBookingIds) && !excluded(row.inquiry_id, input.testInquiryIds) && !excluded(row.invoice_id, input.testInvoiceIds))
+  const installments = input.installments.filter((row) => !excluded(row.booking_id, input.testBookingIds) && !excluded(row.inquiry_id, input.testInquiryIds) && !excluded(row.invoice_id, input.testInvoiceIds))
+  const businessPaymentIds = new Set(payments.map((row) => row.id))
+  const testPaymentIds = new Set(input.payments.filter((row) => !businessPaymentIds.has(row.id) && (row.metadata?.is_test_record === true || excluded(row.booking_id, input.testBookingIds) || excluded(row.inquiry_id, input.testInquiryIds) || excluded(row.invoice_id, input.testInvoiceIds))).map((row) => row.id))
+  const businessInstallmentIds = new Set(installments.map((row) => row.id))
+  const testInstallmentIds = new Set(input.installments.filter((row) => !businessInstallmentIds.has(row.id) && (excluded(row.booking_id, input.testBookingIds) || excluded(row.inquiry_id, input.testInquiryIds) || excluded(row.invoice_id, input.testInvoiceIds))).map((row) => row.id))
+  const source = inspectLuxorFinanceOverviewSources({ invoices, payments, installments, allocations: input.allocations && input.allocations.filter((row) => !(testPaymentIds.has(row.payment_id) && !businessInstallmentIds.has(row.installment_id)) && !(testInstallmentIds.has(row.installment_id) && !businessPaymentIds.has(row.payment_id))) })
+  const invoiceById = new Map(source.invoices.map((row) => [row.id, row]))
+  const bookingById = new Map(bookings.map((row) => [row.id, row]))
+  const conflictingPaymentLinks = source.payments.some((payment) => {
+    let invoice = payment.invoice_id ? invoiceById.get(payment.invoice_id) : undefined
+    const linkedBookings = new Set<string>(payment.booking_id ? [payment.booking_id] : [])
+    const visited = new Set<string>()
+    while (invoice && !visited.has(invoice.id)) {
+      visited.add(invoice.id)
+      if (invoice.booking_id) linkedBookings.add(invoice.booking_id)
+      invoice = invoice.parent_invoice_id ? invoiceById.get(invoice.parent_invoice_id) : undefined
+    }
+    return linkedBookings.size > 1
+  })
+  const seenRefundIds = new Set<string>()
+  let duplicateRefund = false
+  const refunds = input.refunds.filter((refund) => {
+    if (refund.metadata?.is_test_record === true || excluded(refund.booking_id, input.testBookingIds) || excluded(refund.inquiry_id, input.testInquiryIds) || excluded(refund.invoice_id, input.testInvoiceIds)) return false
+    if (!refund.id || seenRefundIds.has(refund.id)) { duplicateRefund = true; return false }
+    seenRefundIds.add(refund.id)
+    return true
+  })
+  const summary = getLuxorInvoiceFinancialSummary(source.invoices, source.payments, input.testInquiryIds, input.testBookingIds, source.installments, now, input.testInvoiceIds, refunds, bookings)
+  const actualIssues = source.issues.filter((issue) => issue.includes('identity') || issue.includes('Multiple accepted master'))
+  if (conflictingPaymentLinks) actualIssues.push('Payment and invoice booking links conflict')
+  if (source.payments.some((row) => row.status === 'paid' && row.invoice_id && !invoiceById.has(row.invoice_id))) actualIssues.push('A payment references an unavailable invoice')
+  if (duplicateRefund) actualIssues.push('Duplicate or missing refund identity')
+  if (source.payments.some((row) => row.status === 'paid' && (!Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0))) actualIssues.push('A paid transaction has an invalid amount')
+  if (source.payments.some((row) => {
+    if (row.status !== 'paid') return false
+    const invoice = row.invoice_id ? invoiceById.get(row.invoice_id) : undefined
+    const booking = bookingById.get(row.booking_id || invoice?.booking_id || '')
+    return !booking || booking.contract_status !== 'signed' || !booking.contract_signed_at || invoice?.status === 'draft'
+  })) actualIssues.push('A payment needs a verified signed booking and agreement')
+  if (summary.unallocatedPayments > 0) actualIssues.push('Some payments need classification')
+  if (source.payments.some((row) => row.status === 'refunded')) actualIssues.push('A legacy refund needs reconciliation')
+  for (const refund of refunds) {
+    if (refund.status !== 'succeeded' || String(refund.refund_kind) === 'security_deposit') continue
+    const invoice = invoiceById.get(refund.invoice_id)
+    const accepted = new Set(summary.acceptedInvoices.map((item) => item.id))
+    let current = invoice
+    const visited = new Set<string>()
+    while (current && !accepted.has(current.id) && current.parent_invoice_id && !visited.has(current.id)) { visited.add(current.id); current = invoiceById.get(current.parent_invoice_id) }
+    const booking = bookingById.get(refund.booking_id)
+    if (String(refund.refund_kind) !== 'event' || !getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: refund.completed_at }) || !invoice || invoice.booking_id !== refund.booking_id || !current || !accepted.has(current.id) || !booking || booking.contract_status !== 'signed' || !booking.contract_signed_at || !Number.isFinite(Number(refund.amount)) || Number(refund.amount) <= 0) actualIssues.push('An event refund needs classification or a completion date')
+  }
+  if (summary.eventPaymentRows.some((row) => !getLuxorPaymentCalendarDateKey(row))) actualIssues.push('Some payment dates are missing')
+  const actualByMonth: Record<string, number> = {}
+  const categoryByMonth: Record<string, Record<string, number>> = {}
+  for (const row of summary.eventPaymentRows) {
+    const month = getLuxorPaymentCalendarDateKey(row).slice(0, 7)
+    if (month) {
+      actualByMonth[month] = money((actualByMonth[month] || 0) + row.amount)
+      if (row.amount > 0) {
+        const category = row.category || 'Unclassified'
+        categoryByMonth[month] ||= {}
+        categoryByMonth[month][category] = money((categoryByMonth[month][category] || 0) + row.amount)
+      }
+    }
+  }
+
+  const forecastIssues = [...source.issues, ...actualIssues]
+  const allocationExceptions: Array<{ paymentId: string; inquiryId: string | null; status: 'pending' | 'review' | 'unapplied' | 'inconsistent'; reason: string | null; unappliedAmount: number | null; amountNeedsReview: boolean }> = []
+  for (const payment of source.payments) {
+    if (payment.status !== 'paid') continue
+    const status = payment.metadata?.installment_allocation_status
+    if (status == null || status === '') continue // Older receipts have no allocator marker.
+    const allocationRows = Array.isArray(payment.metadata?.installment_allocations) ? payment.metadata.installment_allocations : []
+    const saved = money(allocationRows.reduce((sum: number, value: unknown) => {
+      if (!value || typeof value !== 'object') return sum
+      const amount = Number((value as Record<string, unknown>).amount)
+      return sum + (Number.isFinite(amount) && amount > 0 ? amount : 0)
+    }, 0))
+    const parseUnapplied = (value: unknown) => {
+      if (value == null || value === '' || (typeof value !== 'number' && typeof value !== 'string') || (typeof value === 'string' && !value.trim())) return null
+      const amount = Number(value)
+      return Number.isFinite(amount) && amount >= 0 && amount <= Number(payment.amount) ? money(amount) : null
+    }
+    const rawUnapplied = payment.metadata?.installment_unapplied_amount
+    const validUnapplied = parseUnapplied(rawUnapplied)
+    const rawReview = payment.metadata?.installment_allocation_review_unapplied_amount
+    const validReview = parseUnapplied(rawReview)
+    const consistentAllocated = status === 'allocated' && validUnapplied === 0 && Math.abs(saved - Number(payment.amount)) < 0.005
+    if (consistentAllocated) continue
+    const exceptionStatus = status === 'pending' || status === 'review' || status === 'unapplied' ? status : 'inconsistent'
+    const canonicalPresent = rawUnapplied != null && rawUnapplied !== ''
+    const reviewAmountSafe = validReview !== null && (!canonicalPresent || (validUnapplied !== null && Math.abs(validReview - validUnapplied) < 0.005))
+    const exceptionAmount = exceptionStatus === 'review' ? (reviewAmountSafe ? validReview : null) : exceptionStatus === 'unapplied' ? validUnapplied : null
+    const amountNeedsReview = exceptionStatus === 'review' && !reviewAmountSafe || exceptionStatus === 'unapplied' && validUnapplied === null
+    allocationExceptions.push({ paymentId: payment.id, inquiryId: payment.inquiry_id || null, status: exceptionStatus, reason: typeof payment.metadata?.installment_allocation_review_reason === 'string' ? payment.metadata.installment_allocation_review_reason : null, unappliedAmount: exceptionAmount, amountNeedsReview })
+  }
+  if (allocationExceptions.length) forecastIssues.push('Payment allocations need review')
+  if (refunds.some((refund) => refund.status === 'pending' || refund.status === 'uncertain' || (refund.status === 'succeeded' && String(refund.refund_kind) !== 'security_deposit'))) forecastIssues.push('Refund effects on the remaining contract need review')
+  const expectedByMonth: Record<string, number> = {}
+  let overdue = 0
+  for (const row of summary.acceptedInvoiceRows) {
+    const relevant = source.installments.filter((item) => item.booking_id === row.invoice.booking_id && item.invoice_id === row.invoice.id && item.status !== 'void' && item.metadata?.payment_bucket !== 'security_deposit')
+    const states = relevant.map((item) => ({ item, state: installmentDisplayState(item, source.payments, now) }))
+    const scheduled = money(states.reduce((sum, item) => sum + item.state.amountDue, 0))
+    const credited = money(states.reduce((sum, item) => sum + item.state.credited, 0))
+    if (Math.abs(scheduled - row.eventObligation) > 0.005 || Math.abs(credited - row.received) > 0.005 || row.received > row.eventObligation + 0.005) { forecastIssues.push('A payment schedule needs reconciliation'); continue }
+    // Forecast only from saved installment credits. Never allocate a receipt
+    // a second time in this read model or infer an allocation for older rows.
+    states.sort((a, b) => (a.item.due_at || '9999').localeCompare(b.item.due_at || '9999') || a.item.installment_order - b.item.installment_order || a.item.id.localeCompare(b.item.id))
+    for (const { item, state } of states) {
+      const remaining = money(state.amountDue - state.credited)
+      if (!remaining) continue
+      const date = getLuxorPaymentCalendarDateKey({ received_date: item.due_at, paid_at: null })
+      if (!date) { forecastIssues.push('A payment schedule is missing a valid due date'); continue }
+      if (date < chicagoCalendarDate(now)) overdue = money(overdue + remaining)
+      else {
+        const month = date.slice(0, 7)
+        expectedByMonth[month] = money((expectedByMonth[month] || 0) + remaining)
+      }
+    }
+  }
+  const securityDepositsHeld = actualIssues.length || refunds.some((row) => row.status === 'pending' || row.status === 'uncertain' || (row.status === 'succeeded' && row.refund_kind === 'security_deposit')) ? null : summary.securityDepositsHeld
+  return { actualByMonth: actualIssues.length ? null : actualByMonth, categoryByMonth: actualIssues.length || source.issues.some((issue) => /allocation/i.test(issue)) || summary.eventPaymentRows.some((row) => row.amount < 0) ? null : categoryByMonth, expectedByMonth: forecastIssues.length ? null : expectedByMonth, overdue: forecastIssues.length ? null : overdue, issues: [...new Set([...actualIssues, ...forecastIssues])], allocationExceptions, securityDepositsHeld, unallocatedPayments: summary.unallocatedPayments }
+}
+
+export function getLuxorCategoryShares(values: Array<{ category: string; amount: number }>) {
+  const total = money(values.reduce((sum, row) => sum + row.amount, 0))
+  return { total, rows: values.map((row) => ({ ...row, percent: total > 0 ? row.amount / total * 100 : 0 })) }
+}
+
+export function getLuxorOverviewPeriod(overview: ReturnType<typeof getLuxorFinanceOverview>, month: string) {
+  const actual = overview.actualByMonth ? overview.actualByMonth[month] || 0 : null
+  const expected = overview.expectedByMonth ? overview.expectedByMonth[month] || 0 : null
+  const projected = actual === null || expected === null ? null : money(actual + expected)
+  return { actual, expected, projected, percent: projected !== null && projected > 0 && actual !== null && actual >= 0 ? Math.round(actual / projected * 100) : null }
+}
+
+export function getLuxorOverviewChart(overview: ReturnType<typeof getLuxorFinanceOverview>, year: number, grouping: 'monthly' | 'quarterly' | 'annual') {
+  const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
+  const size = grouping === 'annual' ? 12 : grouping === 'quarterly' ? 3 : 1
+  return Array.from({ length: 12 / size }, (_, i) => {
+    const keys = months.slice(i * size, (i + 1) * size)
+    return {
+      label: grouping === 'annual' ? String(year) : grouping === 'quarterly' ? `Q${i + 1}` : new Date(Date.UTC(year, i, 1)).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }),
+      actual: overview.actualByMonth ? money(keys.reduce((sum, key) => sum + (overview.actualByMonth?.[key] || 0), 0)) : null,
+      expected: overview.expectedByMonth ? money(keys.reduce((sum, key) => sum + (overview.expectedByMonth?.[key] || 0), 0)) : null,
+    }
+  })
 }

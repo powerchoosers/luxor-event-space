@@ -668,6 +668,10 @@ export type LuxorBill = {
   frequency: string
   provider: string
   amount: number
+  vendor_id?: string | null
+  vendor_link_method?: 'owner' | 'matched' | null
+  bill_category?: 'Rent' | 'Maintenance' | 'Utilities' | 'Supplies' | 'Marketing' | null
+  amount_state?: 'known' | 'unknown' | 'variable' | null
   status: LuxorBillStatus
   due_date: string | null
   source_type: 'manual' | 'email' | 'portal_upload'

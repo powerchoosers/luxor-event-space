@@ -17,6 +17,13 @@ interface BillsDueCardProps {
   initialBills: LuxorBill[]
 }
 
+function displayBillAmount(bill: LuxorBill) {
+  if (bill.amount_state === 'unknown') return 'Unknown'
+  if (bill.amount_state === 'variable') return 'Variable'
+  const amount = Number(bill.amount).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  return bill.amount_state === 'known' ? amount : `${amount} unconfirmed`
+}
+
 function formatDueDate(isoString: string) {
   try {
     const [y, m, d] = isoString.split('-').map(Number)
@@ -49,6 +56,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
 
   const handleTogglePaid = async (bill: LuxorBill) => {
     const isCurrentlyPaid = bill.status === 'paid'
+    if (isCurrentlyPaid) { alert('Paid bills require an audited correction workflow.'); return }
     const newStatus = isCurrentlyPaid ? 'unpaid' : 'paid'
     setUpdatingId(bill.id)
 
@@ -63,18 +71,18 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
     }
 
     try {
-      const res = await fetch('/api/operations', {
-        method: 'PATCH',
+      const res = await fetch(`/api/operations/bills/${bill.id}/review`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'bill',
-          id: bill.id,
-          status: newStatus,
+          action: 'mark_paid',
+          expectedUpdatedAt: bill.updated_at,
         }),
       })
 
       if (!res.ok) {
-        throw new Error('Failed to update bill status')
+        const payload = await res.json().catch(() => ({}))
+        throw new Error(payload.error || 'Failed to update bill status')
       }
 
       const updatedBill = await res.json()
@@ -92,7 +100,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
       } else {
         setJustPaidIds(prev => prev.filter(id => id !== bill.id))
       }
-      alert('Could not update bill status. Please try again.')
+      alert(err instanceof Error ? err.message : 'Could not update bill status. Please try again.')
     } finally {
       setUpdatingId(null)
     }
@@ -138,8 +146,8 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
     // Sort upcoming by soonest first
     upcoming.sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')))
 
-    const oTotal = overdue.reduce((sum, b) => sum + Number(b.amount || 0), 0)
-    const uTotal = upcoming.reduce((sum, b) => sum + Number(b.amount || 0), 0)
+    const oTotal = overdue.filter((b) => b.amount_state === 'known').reduce((sum, b) => sum + Number(b.amount || 0), 0)
+    const uTotal = upcoming.filter((b) => b.amount_state === 'known').reduce((sum, b) => sum + Number(b.amount || 0), 0)
 
     return {
       overdueBills: overdue,
@@ -187,7 +195,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                   Late / Overdue
                 </span>
                 <span className="tabular-nums font-bold">
-                  ${overdueTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${overdueTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} confirmed
                 </span>
               </div>
 
@@ -219,10 +227,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
 
                     <div className="flex items-center gap-2.5 shrink-0">
                       <span className="text-xs font-bold text-rose-600 dark:text-rose-400 tabular-nums">
-                        ${Number(bill.amount).toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {displayBillAmount(bill)}
                       </span>
                       <button
                         type="button"
@@ -254,7 +259,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                   Upcoming Due
                 </span>
                 <span className="tabular-nums font-bold text-[color:var(--portal-muted)]">
-                  ${upcomingTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${upcomingTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} confirmed
                 </span>
               </div>
 
@@ -282,10 +287,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
 
                     <div className="flex items-center gap-2.5 shrink-0">
                       <span className="text-xs font-bold text-[color:var(--portal-text)] tabular-nums">
-                        ${Number(bill.amount).toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {displayBillAmount(bill)}
                       </span>
                       <button
                         type="button"
@@ -355,16 +357,8 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-[color:var(--portal-muted)] tabular-nums text-xs">
-                      ${Number(bill.amount).toFixed(2)}
+                      {displayBillAmount(bill)}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePaid(bill)}
-                      disabled={updatingId === bill.id}
-                      className="text-[10px] font-bold text-[color:var(--portal-muted)] hover:text-rose-500 underline cursor-pointer ml-1"
-                    >
-                      Undo
-                    </button>
                   </div>
                 </div>
               ))}

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
+import { findLuxorSharedMailboxByAddress } from '@/lib/luxorSharedMailboxes'
+import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { downloadLuxorZohoAttachment } from '@/lib/zohoMailServer'
 import { downloadLuxorMailAttachment } from '@/lib/luxorMailboxServer'
 
@@ -22,11 +25,24 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    if (!(await getLuxorPortalSession())) {
+    const session = await getLuxorPortalSession()
+    if (!session) {
       return NextResponse.json({ error: 'Portal login required.' }, { status: 401 })
     }
 
     const { id: messageId } = await params
+    const member = await getLuxorPortalMember(session.email)
+    if (!member || member.status !== 'active' || !memberCan(member, 'emails')) return NextResponse.json({ error: 'Email access required.' }, { status: 403 })
+    if (messageId.startsWith('mail-')) {
+      const id = messageId.slice(5)
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'Invalid message.' }, { status: 400 })
+      const [message] = await supabaseRestStrict<Array<{ to_addresses: string[]; cc_addresses: string[]; from_address: string }>>(`luxor_mail_messages?id=eq.${id}&select=to_addresses,cc_addresses,from_address&limit=1`)
+      if (!message) return NextResponse.json({ error: 'Message not found.' }, { status: 404 })
+      if ([...(message.to_addresses || []), ...(message.cc_addresses || []), message.from_address].filter(Boolean).some((address) => findLuxorSharedMailboxByAddress(address)) && !['owner', 'admin'].includes(member.role)) return NextResponse.json({ error: 'Shared mailbox access required.' }, { status: 403 })
+    } else if (!['owner', 'admin'].includes(member.role)) {
+      // Legacy Zoho attachment references do not identify the owning mailbox.
+      return NextResponse.json({ error: 'This attachment requires mailbox administrator access.' }, { status: 403 })
+    }
     const searchParams = new URL(request.url).searchParams
     const attachmentId = searchParams.get('attachmentId') || undefined
     const attachmentPath = searchParams.get('attachmentPath') || undefined

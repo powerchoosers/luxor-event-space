@@ -19,6 +19,7 @@ import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { syncLuxorPaymentInstallments, usesFirstDepositScheduleAnchor } from '@/lib/luxorPaymentInstallmentsServer'
 import { recordClaimedDeposit, recordClaimedSameDayDeposit, recordUnmatchedDepositReview, updateDepositCheckoutClaim } from '@/lib/luxorDepositClaimsServer'
+import { allocateExistingPayment, drainPendingPaymentAllocations, existingPaymentAllocationPending, pendingExistingPaymentAllocation } from '@/lib/luxorExistingPaymentAllocationServer'
 
 function escapeNoticeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
@@ -83,6 +84,15 @@ function getInitialPaymentBreakdown(invoice: LuxorInvoice) {
     securityDeposit,
     total: Number(invoice.total || initialBookingPayment + securityDeposit),
   }
+}
+
+function verifiedInitialReceiptSplit(invoice: LuxorInvoice, amountCents: number | null) {
+  const lines = Array.isArray(invoice.line_items) ? invoice.line_items : []
+  const security = lines.filter((item) => item.paymentBucket === 'security_deposit' || item.category === 'Security Deposit' || /security\s+deposit/i.test(item.description || ''))
+  if (!lines.length || security.length > 1 || !Number.isInteger(amountCents) || amountCents !== Math.round(Number(invoice.total) * 100)) return {}
+  const held = security.length ? Number(security[0].total) : 0
+  if (!Number.isFinite(held) || held < 0 || Math.abs(Math.round(held * 100) - held * 100) > 1e-7 || held * 100 > Number(amountCents)) return {}
+  return { initial_booking_payment: (Number(amountCents) - Math.round(held * 100)) / 100, refundable_security_deposit: held }
 }
 
 async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event: Stripe.Event, stripe: Stripe) {
@@ -155,11 +165,13 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
       timingVerified: Boolean(evidence), fingerprint: session.metadata?.same_day_fingerprint || '',
       metadata: { payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
         payment_label: session.metadata?.payment_label, payment_kind: kind, currency: session.currency,
+        ...verifiedInitialReceiptSplit(invoice, session.amount_total), ...pendingExistingPaymentAllocation(invoice.invoice_kind),
         same_day_fingerprint: session.metadata?.same_day_fingerprint, successful_event_id: evidence?.eventId || null } })
       : await recordClaimedDeposit({ bookingId: booking.id, invoiceId: invoice.id, claimId,
       amount: Number(session.amount_total) / 100, processor: 'stripe', reference: session.id, paidAt,
       method: 'stripe_checkout', metadata: { payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
-        payment_label: session.metadata?.payment_label, payment_kind: kind, currency: session.currency } })
+        payment_label: session.metadata?.payment_label, payment_kind: kind, currency: session.currency,
+        ...verifiedInitialReceiptSplit(invoice, session.amount_total), ...pendingExistingPaymentAllocation(invoice.invoice_kind) } })
     if (recorded.review) {
       console.error(`Stripe deposit ${session.id} recorded for owner review: ${recorded.reason || 'booking changed'}`)
       return
@@ -186,6 +198,10 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
         dueDate, depositPaid: Number(currentBooking.deposit_required || 0) })
       if (usesFirstDepositScheduleAnchor(currentMaster)) await syncLuxorPaymentInstallments({ booking: currentBooking, invoice: currentMaster })
     }
+    if (existingPaymentAllocationPending(recorded.payment)) {
+      await allocateExistingPayment(recorded.payment, { bookingId: currentBooking.id, invoiceId: invoice.id })
+    }
+    if (recorded.payment.metadata?.installment_allocation_status) await drainPendingPaymentAllocations(currentBooking.id)
     if (currentInquiry?.email) {
       const pdf = await buildLuxorInvoicePdf(paidInvoice, currentInquiry)
       await saveLuxorInvoicePdf({ invoice: paidInvoice, inquiryId: currentInquiry.id, pdf, createdBy: 'Stripe Automation' })
@@ -211,6 +227,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
       eventId: evidence?.eventId || event.id, timingVerified: Boolean(evidence), fingerprint: session.metadata?.same_day_fingerprint || '',
       metadata: { payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
         payment_kind: kind, payment_label: session.metadata?.payment_label, currency: session.currency,
+        ...verifiedInitialReceiptSplit(invoice, session.amount_total), ...pendingExistingPaymentAllocation(invoice.invoice_kind),
         same_day_fingerprint: session.metadata?.same_day_fingerprint, successful_event_id: evidence?.eventId || null } })
     if (guarded.eligibility !== 'eligible') return
     promotedPayment = guarded.payment
@@ -222,7 +239,9 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
     const guarded = await recordLuxorSameDayScheduledPayment({ invoice, booking, amount: Number(session.amount_total || 0) / 100,
       paidAt: evidence?.paidAt || null, processor: 'stripe', reference: session.id, paymentMethod: 'stripe_checkout',
       eventId: evidence?.eventId || event.id, timingVerified: Boolean(evidence),
-      metadata: { payment_kind: kind, payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id, currency: session.currency } })
+      metadata: { payment_kind: kind, payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id, currency: session.currency,
+        ...(invoice.invoice_kind === 'event' ? verifiedInitialReceiptSplit(invoice, session.amount_total) : {}),
+        ...pendingExistingPaymentAllocation(invoice.invoice_kind) } })
     if (guarded.reviewRequired) return
     promotedPayment = guarded.payment
     paidAt = promotedPayment.paid_at || evidence!.paidAt
@@ -287,11 +306,31 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
         offer_expires_at: session.metadata?.offer_expires_at || null,
         stripe_coupon_id: session.metadata?.stripe_coupon_id || null,
         currency: session.currency,
+        ...(['deposit', 'event'].includes(invoice.invoice_kind || '') ? verifiedInitialReceiptSplit(invoice, session.amount_total) : {}),
+        ...(bookingId && invoice.booking_id === bookingId ? pendingExistingPaymentAllocation(invoice.invoice_kind) : {}),
       },
     }),
   })
 
   const paidPayments = await listPaidPaymentsByInvoice(invoiceId)
+
+  if (invoice.invoice_kind === 'final_balance') {
+    // ON CONFLICT DO NOTHING returns no row on a webhook retry. Resolve only
+    // the exact provider receipt, and never process an unmarked historical row.
+    const receipt = payment || paidPayments.find((item) => item.processor === 'stripe' && item.processor_reference === session.id)
+    const needsAllocation = Boolean(receipt && existingPaymentAllocationPending(receipt))
+    if ((process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY === 'true' || needsAllocation)
+      && (!receipt || receipt.processor !== 'stripe' || receipt.processor_reference !== session.id
+      || receipt.booking_id !== bookingId || receipt.invoice_id !== invoice.id || receipt.status !== 'paid'
+      || Number(receipt.amount) !== Number(session.amount_total || 0) / 100)) {
+      throw new Error('The settled Stripe receipt does not match this booking and invoice.')
+    }
+    if (receipt && needsAllocation) {
+      if (!bookingId) throw new Error('The settled Stripe receipt needs booking review.')
+      await allocateExistingPayment(receipt, { bookingId, invoiceId: invoice.id })
+    }
+    if (receipt?.metadata?.installment_allocation_status && bookingId) await drainPendingPaymentAllocations(bookingId)
+  }
 
   const paidTotal = paidPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   const isFullyPaid = paidTotal + 0.005 >= Number(invoice.total || 0)
@@ -466,6 +505,18 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
         }
       }
     }
+  if (invoice.invoice_kind === 'deposit' || invoice.invoice_kind === 'event') {
+    const receipt = payment || paidPayments.find((item) => item.processor === 'stripe' && item.processor_reference === session.id)
+    if (receipt && existingPaymentAllocationPending(receipt)) {
+      if (!bookingId || receipt.booking_id !== bookingId || receipt.invoice_id !== invoice.id
+        || receipt.processor !== 'stripe' || receipt.processor_reference !== session.id
+        || receipt.status !== 'paid' || Number(receipt.amount) !== Number(session.amount_total || 0) / 100) {
+        throw new Error('The settled Stripe receipt does not match this booking and invoice.')
+      }
+      await allocateExistingPayment(receipt, { bookingId, invoiceId: invoice.id })
+    }
+    if (receipt?.metadata?.installment_allocation_status && bookingId) await drainPendingPaymentAllocations(bookingId)
+  }
   if (payment && paymentContact) {
     try {
       await queuePaymentConfirmationText(payment, paymentContact)

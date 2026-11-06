@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getOperationsSession } from '@/lib/luxorOperationsAccess'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getLuxorPortalSession()
+  const session = await getOperationsSession()
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
     const { id } = await context.params
     if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'Invalid bill intake.' }, { status: 400 })

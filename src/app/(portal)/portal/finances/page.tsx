@@ -9,9 +9,9 @@ import {
   DollarSign,
   TrendingUp,
   CreditCard,
-  ArrowDownRight,
   TrendingDown,
   RefreshCw,
+  Menu,
   Eye,
   Plus,
   X
@@ -20,8 +20,7 @@ import {
   PortalPageFrame,
   PortalPageHeader,
   PortalAnimatedTabs,
-  PortalMobileTabPicker,
-  PortalMobileTabTrigger,
+  PortalModal,
   PortalTabTransition,
   PortalStickyTable,
   PortalStickyThead,
@@ -29,16 +28,13 @@ import {
   PortalStatusBadge,
   PortalSelect,
   PortalButton,
-  PortalSkeleton,
-  PortalStaggerGroup,
-  PortalStaggerCard
+  PortalSkeleton
 } from '@/components/portal/PortalUI'
 import { MagicCard } from '@/components/ui/magic-card'
-import { BorderBeam } from '@/components/ui/border-beam'
-import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
-import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
+import FinancialOverview from '@/components/portal/FinancialOverview'
+import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView, LuxorBill } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
-import { formatLuxorPaymentCalendarDate, getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary, getLuxorPaidFinanceExpenses, getLuxorPaymentCalendarDateKey } from '@/lib/luxorFinanceReporting'
+import { formatLuxorPaymentCalendarDate, getLuxorBusinessFinanceRows, getLuxorFinanceOverview, getLuxorPaidExpenseBreakdown, getLuxorPaymentCalendarDateKey, type LuxorFinanceAllocationRow } from '@/lib/luxorFinanceReporting'
 
 type BookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -50,13 +46,25 @@ type FinanceTransaction = { kind: 'payment'; payment: LuxorPayment } | { kind: '
 
 type Tab = 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports'
 
-const FINANCE_TABS: Array<{ id: Tab; label: string; description: string; icon: React.ReactNode; group: string }> = [
-  { id: 'dashboard', label: 'Finances Dashboard', description: 'Revenue pacing, profit metrics, and ledger KPIs', icon: <TrendingUp size={15} />, group: 'Financial Overview' },
-  { id: 'invoices', label: 'Invoices Ledger', description: 'Client billing, draft agreements, and payment requests', icon: <FileText size={15} />, group: 'Billing & Payments' },
-  { id: 'payments', label: 'Payments Log', description: 'Card charges, bank wires, and recorded deposits', icon: <CreditCard size={15} />, group: 'Billing & Payments' },
-  { id: 'expenses', label: 'Expenses Tracking', description: 'Facility costs, operating bills, and vendor payouts', icon: <TrendingDown size={15} />, group: 'Ledgers & Records' },
-  { id: 'reports', label: 'Financial Reports', description: 'Monthly summaries, tax reports, and performance charts', icon: <Eye size={15} />, group: 'Ledgers & Records' },
-]
+function FinanceBrowseViews({ open, close, activeTab, select }: { open: boolean; close: () => void; activeTab: Tab; select: (tab: Tab) => void }) {
+  const buttonClass = 'flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60'
+  const choose = (tab: Tab) => { select(tab); close() }
+  const row = (label: string, tab: Tab) => <button type="button" onClick={() => choose(tab)} aria-current={activeTab === tab ? 'page' : undefined} className={buttonClass}><span>{label}</span>{activeTab === tab && <span className="text-xs text-[color:var(--portal-muted)]">Current view</span>}</button>
+  const heading = (label: string) => <h4 className="px-3 pt-3 text-xs font-semibold text-[color:var(--portal-muted)]">{label}</h4>
+  const later = <p className="px-3 py-2 text-sm text-[color:var(--portal-muted)]">Planned for a later phase</p>
+  return <PortalModal isOpen={open} onClose={close} title="Browse views" description="Choose a working view or see what is planned." maxWidth="max-w-xl" animateClose>
+    <nav aria-label="Financial Center views" className="space-y-1 divide-y divide-[color:var(--portal-border)]">
+      <section>{heading('Financial Overview')}{row('Financial Overview', 'dashboard')}</section>
+      <section>{heading('Revenue & Collections')}{row('Invoices ledger', 'invoices')}{row('Payments log', 'payments')}</section>
+      <section>{heading('Expense Management')}{row('Expense ledger', 'expenses')}</section>
+      <section>{heading('Event Profitability')}{later}</section>
+      <section>{heading('Bills & Vendors')}<Link href="/portal/operations?tab=bills" onClick={close} className={buttonClass}><span>Open Operations bills</span><span className="text-xs text-[color:var(--portal-muted)]">Operations access</span></Link></section>
+      <section>{heading('Budgeting & Forecasting')}{later}</section>
+      <section>{heading('Financial Reports')}{row('Financial Reports', 'reports')}</section>
+      <section>{heading('Accounting')}{later}</section>
+    </nav>
+  </PortalModal>
+}
 
 export default function FinancesPage() {
   const reduceMotion = useReducedMotion()
@@ -66,6 +74,8 @@ export default function FinancesPage() {
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
   const [installments, setInstallments] = useState<LuxorPaymentInstallment[]>([])
+  const [allocations, setAllocations] = useState<LuxorFinanceAllocationRow[] | null>(null)
+  const [bills, setBills] = useState<LuxorBill[] | null>(null)
   const [bookings, setBookings] = useState<BookingWithPayments[]>([])
   const [verifiedTestInquiryIds, setVerifiedTestInquiryIds] = useState<ReadonlySet<string>>(new Set())
   const [verifiedTestBookingIds, setVerifiedTestBookingIds] = useState<ReadonlySet<string>>(new Set())
@@ -108,25 +118,13 @@ type LuxorBookingExpense = {
       setLoading(true)
       setError(null)
       setTestClassificationVerified(false)
-      const [invRes, bookRes, expRes, paymentRes, installmentRes, refundRes] = await Promise.all([
-        fetch('/api/invoices?strictMetrics=1'),
-        fetch('/api/bookings?strictMetrics=1&financeRowsOnly=1'),
-        fetch('/api/expenses?strictMetrics=1'),
-        fetch('/api/payments'),
-        fetch('/api/portal/payment-installments?strictMetrics=1'),
-        fetch('/api/payments/refunds'),
+      const [ledgerRes, sourcesRes] = await Promise.all([
+        fetch('/api/portal/finance-overview-ledgers'),
+        fetch('/api/portal/finance-overview-sources'),
       ])
 
-      if (!invRes.ok || !bookRes.ok || !expRes.ok || !paymentRes.ok || !installmentRes.ok || !refundRes.ok) throw new Error('Failed to load financial records.')
-
-      const [invData, bookData, expData, paymentData, installmentData, refundData] = await Promise.all([
-        invRes.json(),
-        bookRes.json(),
-        expRes.json(),
-        paymentRes.json(),
-        installmentRes.json(),
-        refundRes.json(),
-      ])
+      if (!ledgerRes.ok) throw new Error('Failed to load financial records.')
+      const { invoices: invData, bookings: bookData, expenses: expData, payments: paymentData, installments: installmentData, refunds: refundData } = await ledgerRes.json()
 
       if (!Array.isArray(invData) || !Array.isArray(bookData) || !Array.isArray(expData) || !Array.isArray(paymentData) || !Array.isArray(installmentData) || !Array.isArray(refundData)) throw new Error('Financial records could not be verified.')
       if (generation !== refreshGeneration.current) return
@@ -136,6 +134,10 @@ type LuxorBookingExpense = {
       setBookings(bookData)
       setExpenses(expData)
       setInstallments(installmentData)
+      const sources = sourcesRes.ok ? await sourcesRes.json().catch(() => null) as { allocations?: LuxorFinanceAllocationRow[] | null; bills?: LuxorBill[] | null } | null : null
+      if (generation !== refreshGeneration.current) return
+      setAllocations(Array.isArray(sources?.allocations) ? sources.allocations : null)
+      setBills(Array.isArray(sources?.bills) ? sources.bills : null)
 
       const inquiryIds = [...new Set([...invData, ...bookData, ...paymentData].map((record) => record.inquiry_id).filter((id): id is string => typeof id === 'string' && Boolean(id)))]
       const knownBookingIds = new Set(bookData.map((booking) => booking.id).filter((id): id is string => typeof id === 'string'))
@@ -251,18 +253,11 @@ type LuxorBookingExpense = {
     testBookingIds: verifiedTestBookingIds,
   }), [invoices, bookings, expenses, verifiedTestInquiryIds, verifiedTestBookingIds])
   const { invoices: businessInvoices, expenses: businessExpenses } = businessRows
-  const paidCostRows = useMemo(() => getLuxorPaidFinanceExpenses(businessExpenses), [businessExpenses])
-  const paidBusinessExpenses = useMemo(() => businessExpenses.filter((expense) => expense.status === 'paid'), [businessExpenses])
-  const incurredUnpaidBusinessExpenses = useMemo(() => businessExpenses.filter((expense) => expense.status === 'incurred'), [businessExpenses])
+  const expenseBreakdown = useMemo(() => getLuxorPaidExpenseBreakdown(businessExpenses), [businessExpenses])
   const cancelledExpenseCount = businessExpenses.filter((expense) => expense.status === 'cancelled').length
   const visibleExpenses = businessExpenses.filter((expense) => showCancelledExpenses || expense.status !== 'cancelled')
 
-  const financeSummary = useMemo(() => getLuxorInvoiceFinancialSummary(invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, installments, new Date(), businessRows.testInvoiceIds, refunds, bookings), [invoices, payments, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, installments, refunds, bookings])
-  const netRevenue = financeSummary.eventPaymentsReceived
-  const outstandingAR = financeSummary.outstandingEventReceivable
-  const overdueAR = financeSummary.overdueEventReceivable
-  const totalExpenses = useMemo(() => paidCostRows.reduce((sum, exp) => sum + Number(exp.amount || 0), 0), [paidCostRows])
-  const eventPaymentsAfterCosts = useMemo(() => netRevenue - totalExpenses, [netRevenue, totalExpenses])
+  const overview = useMemo(() => getLuxorFinanceOverview({ invoices, bookings, payments, installments, refunds, testInquiryIds: businessRows.testInquiryIds, testBookingIds: businessRows.testBookingIds, testInvoiceIds: businessRows.testInvoiceIds, allocations }), [invoices, bookings, payments, installments, refunds, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, allocations])
 
   // Payments extraction
   const allPayments = payments.filter((payment) => payment.status === 'paid' || payment.status === 'refunded')
@@ -299,11 +294,7 @@ type LuxorBookingExpense = {
         title="Finances"
         actions={
           <div className="flex items-center gap-2">
-            <PortalMobileTabTrigger
-              tabs={FINANCE_TABS}
-              activeTab={activeTab}
-              onClick={() => setIsViewPickerOpen(true)}
-            />
+            <PortalButton onClick={() => setIsViewPickerOpen(true)}><Menu size={14} /> Browse views</PortalButton>
             <PortalButton onClick={fetchFinanceData}>
               <RefreshCw size={13} /> Refresh Ledger
             </PortalButton>
@@ -317,16 +308,7 @@ type LuxorBookingExpense = {
         </div>
       )}
 
-      {/* Mobile view picker modal */}
-      <PortalMobileTabPicker
-        tabs={FINANCE_TABS}
-        activeTab={activeTab}
-        open={isViewPickerOpen}
-        onOpenChange={setIsViewPickerOpen}
-        onTabChange={(tab) => { setActiveTab(tab as Tab); setSearchTerm('') }}
-        title="Finances views"
-        subtitle="Choose a financial ledger or report."
-      />
+      <FinanceBrowseViews open={isViewPickerOpen} close={() => setIsViewPickerOpen(false)} activeTab={activeTab} select={(tab) => { setActiveTab(tab); setSearchTerm('') }} />
 
       {/* Desktop rectangular sliding tabs */}
       <div className="hidden shrink-0 xl:flex">
@@ -334,7 +316,7 @@ type LuxorBookingExpense = {
           variant="slider"
           ariaLabel="Finances sections"
           tabs={[
-            { id: 'dashboard', label: 'Finances Dashboard', icon: <TrendingUp size={15} /> },
+            { id: 'dashboard', label: 'Financial Overview', icon: <TrendingUp size={15} /> },
             { id: 'invoices', label: 'Invoices Ledger', icon: <FileText size={15} /> },
             { id: 'payments', label: 'Payments Log', icon: <CreditCard size={15} /> },
             { id: 'expenses', label: 'Expenses Tracking', icon: <TrendingDown size={15} /> },
@@ -347,158 +329,21 @@ type LuxorBookingExpense = {
 
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
       {/* DASHBOARD TAB */}
+      {activeTab === 'dashboard' && loading && <div role="status" aria-label="Loading financial overview" className="grid grid-cols-2 gap-4 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <PortalSkeleton key={index} className="h-36 rounded-2xl" />)}</div>}
       {activeTab === 'dashboard' && !loading && !testClassificationVerified && (
         <p role="status" className="p-4 text-sm text-[color:var(--portal-muted)]">Business metrics are unavailable until test records are verified. Refresh the ledger to retry.</p>
       )}
       {activeTab === 'dashboard' && testClassificationVerified && !error && !loading && (
-        <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-          <div className="space-y-6">
-            {financeSummary.refundReconciliationRequired && <p role="status" className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">{financeSummary.refundRecordCount} refund records appear in the ledger; Stripe-confirmed outflow is ${financeSummary.refundRecordAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}. Only confirmed refunds reduce collected cash. Pending or uncertain requests stay out of totals until reconciled, and older refund-status payment rows remain flagged for manual source review.</p>}
-            {/* Top Cards */}
-            <PortalStaggerGroup className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <PortalStaggerCard>
-                <MagicCard className="rounded-2xl p-6 flex flex-col justify-between min-h-[154px] h-full">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event Payments Recorded</p>
-                    <p className="text-3xl font-extrabold text-[color:var(--portal-text)] mt-2 tabular-nums tracking-tight">${netRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-                      <motion.div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
-                        initial={{ width: '0%' }}
-                        whileInView={{ width: `${netRevenue + outstandingAR > 0 ? Math.max(8, Math.min(100, (netRevenue / (netRevenue + outstandingAR)) * 100)) : 100}%` }}
-                        viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-                        transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-                      />
-                    </div>
-                  </div>
-                  <p className="mt-4 text-[10px] text-[color:var(--portal-muted)]">Known paid cash: ${financeSummary.knownPaidCashTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                </MagicCard>
-              </PortalStaggerCard>
-
-              <PortalStaggerCard>
-                <MagicCard className="rounded-2xl p-6 flex flex-col justify-between min-h-[154px] h-full">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Operational Expenses</p>
-                    <p className="text-3xl font-extrabold text-[color:var(--portal-text)] mt-2 tabular-nums tracking-tight">${totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-                      <motion.div
-                        className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-400"
-                        initial={{ width: '0%' }}
-                        whileInView={{ width: `${netRevenue > 0 ? Math.max(6, Math.min(100, (totalExpenses / netRevenue) * 100)) : 20}%` }}
-                        viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-                        transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 mt-4 font-bold tabular-nums">
-                    <ArrowDownRight size={16} /> <span>{paidBusinessExpenses.length} paid</span>
-                  </div>
-                  <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{incurredUnpaidBusinessExpenses.length} unpaid costs; only paid costs reduce cash</p>
-                </MagicCard>
-              </PortalStaggerCard>
-
-              <PortalStaggerCard>
-                <MagicCard className="relative rounded-2xl p-6 flex flex-row items-center justify-between gap-4 min-h-[154px] h-full">
-                  <BorderBeam size={95} duration={10} borderWidth={1.2} />
-                  <div className="min-w-0 flex-1 pr-2 flex flex-col justify-between h-full">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Event Payments After Paid Costs</p>
-                      <p className="text-3xl font-extrabold text-[#a37d2c] dark:text-[#f1d27a] mt-2 tabular-nums tracking-tight">${eventPaymentsAfterCosts.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-[#a37d2c] dark:text-[#caa24c] mt-4 font-bold tabular-nums">
-                        <span>Paid expenses compared with event payments</span>
-                    </div>
-                  </div>
-                  <div className="ml-auto shrink-0">
-                    <AnimatedCircularProgressBar
-                      value={netRevenue > 0 ? Math.max(0, (eventPaymentsAfterCosts / netRevenue) * 100) : 0}
-                      size={58}
-                      strokeWidth={5}
-                      gaugePrimaryColor="#caa24c"
-                      subLabel="Margin"
-                    />
-                  </div>
-                </MagicCard>
-              </PortalStaggerCard>
-            </PortalStaggerGroup>
-
-            {/* Invoicing summary */}
-            <PortalStaggerGroup className="grid grid-cols-1 md:grid-cols-2 gap-6" staggerDelay={0.07}>
-              <PortalStaggerCard>
-                <MagicCard className="rounded-2xl p-6 space-y-4 h-full">
-                  <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Accounts Receivable</h3>
-                  <div className="space-y-3.5">
-                    <div className="space-y-1.5 pb-2.5 border-b border-[color:var(--portal-border)]/60">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-[color:var(--portal-muted)] font-medium">Signed, Confirmed Event Balance Outstanding</span>
-                        <span className="text-[color:var(--portal-text)] font-bold tabular-nums">${outstandingAR.toLocaleString()}</span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
-                        <motion.div
-                          className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]"
-                          initial={{ width: '0%' }}
-                          whileInView={{ width: `${outstandingAR > 0 ? 75 : 6}%` }}
-                          viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-                          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5 pb-2.5 border-b border-[color:var(--portal-border)]/60">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-[color:var(--portal-muted)] font-medium">Overdue Receivables</span>
-                        <span className="text-rose-600 dark:text-rose-400 font-bold tabular-nums">${overdueAR.toLocaleString()}</span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-[color:var(--portal-border)]/50 overflow-hidden">
-                        <motion.div
-                          className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-400"
-                          initial={{ width: '0%' }}
-                          whileInView={{ width: `${outstandingAR > 0 ? Math.max(4, Math.min(100, (overdueAR / outstandingAR) * 100)) : 4}%` }}
-                          viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-                          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-between text-xs pt-0.5">
-                      <span className="text-[color:var(--portal-muted)] font-medium">Refundable Security Deposits Held</span>
-                      <span className="text-[#a37d2c] dark:text-[#caa24c] font-bold tabular-nums">${financeSummary.securityDepositsHeld.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="flex justify-between text-xs pt-0.5">
-                      <span className="text-[color:var(--portal-muted)] font-medium">Unallocated Payments</span>
-                      <span className="text-amber-700 dark:text-amber-300 font-bold tabular-nums">${financeSummary.unallocatedPayments.toLocaleString(undefined, { minimumFractionDigits: 2 })} · {financeSummary.unallocatedPaymentRows.length}</span>
-                    </div>
-                    {financeSummary.refundReconciliationRequired && <div className="flex justify-between text-xs pt-0.5">
-                      <span className="text-rose-700 dark:text-rose-300 font-medium">Refund-status records · reconcile</span>
-                      <span className="text-rose-700 dark:text-rose-300 font-bold tabular-nums">{financeSummary.refundRecordCount} · ${financeSummary.refundRecordAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>}
-                  </div>
-                  {financeSummary.unallocatedPaymentRows.length > 0 && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These paid-status transactions remain included in known paid cash but cannot yet be assigned to event payments or security deposits. Reconcile invoice links and saved allocations.</p>}
-                </MagicCard>
-              </PortalStaggerCard>
-
-              <PortalStaggerCard>
-                <MagicCard className="rounded-2xl p-6 space-y-4 flex flex-col justify-between h-full">
-                  <div>
-                    <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Tax Allocation Preview</h3>
-                    <p className="text-xs text-[color:var(--portal-muted)] mt-2">
-                      Estimated 8.25% of recorded event payments:
-                    </p>
-                    <p className="text-2xl tabular-nums font-extrabold tracking-tight text-[color:var(--portal-text)] mt-2">${(netRevenue * 0.0825).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-                      <motion.div
-                        className="h-full rounded-full bg-gradient-to-r from-[#b8892e] to-[#e2c16b]"
-                        initial={{ width: '0%' }}
-                        whileInView={{ width: '8.25%' }}
-                        viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-                        transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-[color:var(--portal-muted)] font-medium">A rough reference only. It is not a tax calculation or bank reconciliation.</p>
-                </MagicCard>
-              </PortalStaggerCard>
-            </PortalStaggerGroup>
-          </div>
-        </div>
+        <FinancialOverview overview={overview} expenses={expenseBreakdown} bills={bills} openView={setActiveTab} activity={allLedgerTransactions.flatMap((transaction) => {
+          if (transaction.kind === 'payment') {
+            const payment = transaction.payment
+            if (payment.status !== 'paid') return []
+            return [{ id: payment.id, date: getLuxorPaymentCalendarDateKey(payment), description: payment.notes || 'Payment received', category: String(payment.metadata?.payment_kind || 'Payment'), amount: Number(payment.amount || 0), type: 'Payment' }]
+          }
+          const refund = transaction.refund
+          if (refund.status !== 'succeeded') return []
+          return [{ id: refund.id, date: getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: refund.completed_at }), description: 'Refund completed', category: refund.refund_kind === 'security_deposit' ? 'Security deposit' : 'Event', amount: Number(refund.amount || 0), type: 'Refund' }]
+        })} />
       )}
 
         {/* INVOICES TAB */}

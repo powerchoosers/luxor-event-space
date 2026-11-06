@@ -25,6 +25,7 @@ import { sameDayBookingPromotion } from '@/lib/luxorSameDayBooking'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { syncLuxorPaymentInstallments, usesFirstDepositScheduleAnchor } from '@/lib/luxorPaymentInstallmentsServer'
 import { acquireDepositCheckoutClaim, recordClaimedDeposit, recordClaimedSameDayDeposit } from '@/lib/luxorDepositClaimsServer'
+import { allocateExistingPayment, drainPendingPaymentAllocations, existingPaymentAllocationPending, pendingExistingPaymentAllocation } from '@/lib/luxorExistingPaymentAllocationServer'
 
 type ManualPaymentKind = 'deposit' | 'final' | 'security_deposit'
 
@@ -71,6 +72,7 @@ function paymentMetadata(kind: ManualPaymentKind, invoice: LuxorInvoice, preferr
     payment_kind: kind,
     manual_entry: true,
     payment_method_selected: String(preferredMethod || 'manual').toLowerCase(),
+    ...(kind === 'final' || kind === 'deposit' ? pendingExistingPaymentAllocation(invoice.invoice_kind) : {}),
     ...(kind === 'deposit' ? {
       initial_booking_payment: initialBookingPayment,
       refundable_security_deposit: securityDeposit,
@@ -199,6 +201,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString()
     const sameDay = sameDayBookingPromotion(masterInvoice)
     let guardedManualPayment: LuxorPayment | null = null
+    let allocation: Awaited<ReturnType<typeof allocateExistingPayment>> | null = null
     let actualPaidAt = now
     if (amount <= MONEY_EPSILON && existingPayments.length) actualPaidAt = existingPayments.find(payment => payment.paid_at)?.paid_at || now
     if (sameDay?.coverage_amount && kind === 'deposit') {
@@ -249,6 +252,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (amount <= MONEY_EPSILON) {
+      // Retry only the exact receipt marked at creation; never backfill older
+      // unmarked payments when the owner repeats this workflow.
+      const previous = existingPayments.find((entry) => entry.processor === 'manual' && entry.processor_reference === 'manual:' + invoice.id + ':full-balance')
+      if (kind === 'final' && previous && existingPaymentAllocationPending(previous)) {
+        allocation = await allocateExistingPayment(previous, { bookingId: booking.id, invoiceId: invoice.id })
+      }
       const finalBalanceInvoice = kind === 'deposit'
         ? await ensureConfiguredFinalBalanceInvoice(booking, masterInvoice)
         : null
@@ -317,11 +326,19 @@ export async function POST(request: NextRequest) {
           })
         }
       }
+      if (kind === 'deposit' && previous && existingPaymentAllocationPending(previous)) {
+        allocation = await allocateExistingPayment(previous, { bookingId: booking.id, invoiceId: invoice.id })
+      }
+      if (allocation?.status === 'allocated' || allocation?.status === 'unapplied'
+        || ['allocated', 'unapplied'].includes(String(previous?.metadata?.installment_allocation_status || ''))) {
+        await drainPendingPaymentAllocations(booking.id)
+      }
       if (kind === 'deposit' && booking.status !== 'confirmed' && updatedBooking?.status === 'confirmed') {
         await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
           .catch((error) => console.error('Booking was confirmed, but portal notification broadcast failed:', error))
       }
-      return NextResponse.json({ invoice, booking: updatedBooking || booking, alreadyPaid: true })
+      return NextResponse.json({ invoice, booking: updatedBooking || booking, alreadyPaid: true, allocation,
+        reviewRequired: (allocation !== null && allocation.status !== 'allocated') || ['review', 'unapplied'].includes(String(previous?.metadata?.installment_allocation_status || '')) })
     }
 
     // A manual receipt replaces, rather than competes with, an outstanding
@@ -370,6 +387,9 @@ export async function POST(request: NextRequest) {
       }),
     })
     if (!payment) throw new Error('Payment record could not be created.')
+    if (kind === 'final' && existingPaymentAllocationPending(payment)) {
+      allocation = await allocateExistingPayment(payment, { bookingId: booking.id, invoiceId: invoice.id })
+    }
     // The ledger trigger returns the original receipt on a stable-reference
     // retry. Carry that canonical timestamp into invoice and booking updates
     // too, rather than replacing it with this request's new `now` value.
@@ -426,6 +446,10 @@ export async function POST(request: NextRequest) {
     if (kind === 'deposit' && amount > MONEY_EPSILON && updatedBooking && usesFirstDepositScheduleAnchor(masterInvoice)) {
       await syncLuxorPaymentInstallments({ booking: updatedBooking, invoice: masterInvoice })
     }
+    if (kind === 'deposit' && existingPaymentAllocationPending(payment)) {
+      allocation = await allocateExistingPayment(payment, { bookingId: booking.id, invoiceId: invoice.id })
+    }
+    if (allocation?.status === 'allocated' || allocation?.status === 'unapplied') await drainPendingPaymentAllocations(booking.id)
 
     if (kind === 'deposit' && priorBookingStatus !== 'confirmed' && updatedBooking?.status === 'confirmed') {
       await broadcastLuxorPortalNotification('booking-confirmed', { bookingId: updatedBooking.id, inquiryId })
@@ -468,7 +492,8 @@ export async function POST(request: NextRequest) {
       console.error('Manual payment saved, but its text confirmation could not be queued:', automationError)
     }
 
-    return NextResponse.json({ payment, invoice: updatedInvoice, booking: updatedBooking || booking }, { status: 201 })
+    return NextResponse.json({ payment, invoice: updatedInvoice, booking: updatedBooking || booking, allocation,
+      reviewRequired: allocation !== null && allocation.status !== 'allocated' }, { status: allocation && allocation.status !== 'allocated' ? 202 : 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to record manual payment.'
     const agreementFinalizing = /LUXOR_CLAIM_INVALID: Verified signed terms and initial payment invoice are required\./i.test(message)
