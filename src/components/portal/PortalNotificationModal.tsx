@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
+import { AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from 'framer-motion'
 import { AlertCircle, Bell, CalendarCheck2, Check, CheckCircle2, ClipboardList, Eye, FileSignature, Mail, MessageSquare, PhoneMissed, Receipt, RotateCw, Search, X } from 'lucide-react'
 import { NotificationType, PortalNotificationItem, usePortalNotifications } from '@/hooks/usePortalNotifications'
 
@@ -71,6 +71,7 @@ function SwipeableNotificationItem({
   onClear: () => void
 }) {
   const x = useMotionValue(0)
+  const reduceMotion = useReducedMotion()
 
   // As the user swipes right (0 to 140px):
   // 1. Background fill transitions from 0 opacity to rich Luxor gold
@@ -89,13 +90,16 @@ function SwipeableNotificationItem({
         className="pointer-events-none absolute inset-0 flex items-center justify-start pl-5 bg-[#caa24c] dark:bg-[#b08732]"
       >
         <motion.div
-          style={{ opacity: badgeOpacity, scale: badgeScale, x: badgeX }}
-          className="flex items-center gap-2 font-bold text-white tracking-wide text-xs"
+          style={{ opacity: badgeOpacity, scale: badgeScale, x: badgeX, color: '#ffffff' }}
+          className="portal-notification-clear-action flex items-center gap-2 font-bold !text-white tracking-wide text-xs"
         >
-          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 shadow-xs">
-            <Check size={13} className="text-white stroke-[2.5]" />
+          <div
+            className="flex h-5 w-5 items-center justify-center rounded-full bg-white/30 border border-white/90 shadow-xs"
+            style={{ borderColor: '#ffffff', backgroundColor: 'rgba(255,255,255,0.3)' }}
+          >
+            <Check size={13} className="!text-white stroke-[3]" style={{ color: '#ffffff', stroke: '#ffffff' }} />
           </div>
-          <span>Clear</span>
+          <span className="!text-white font-bold" style={{ color: '#ffffff' }}>Clear</span>
         </motion.div>
       </motion.div>
 
@@ -112,9 +116,9 @@ function SwipeableNotificationItem({
             onClear()
           }
         }}
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.18 }}
+        initial={reduceMotion ? { opacity: 0, y: 4 } : { opacity: 0, y: 6, filter: 'blur(4px)' }}
+        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
         className="group relative bg-[color:var(--portal-card)] hover:bg-[color:var(--portal-soft)]/65 active:cursor-grabbing transform-gpu will-change-transform"
       >
         <button type="button" onClick={onOpen} className="flex w-full items-start gap-3 px-4 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45">
@@ -160,6 +164,7 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
   const [category, setCategory] = useState<CategoryType>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const containerRef = useRef<HTMLElement>(null)
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     if (!isOpen) return
@@ -236,10 +241,44 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
             <span className="relative">{option === 'unread' ? `Unread${unreadCount ? ` (${unreadCount})` : ''}` : 'Earlier'}</span>
           </button>)}
         </div>
-        <div className="portal-scrollbar mt-3 flex items-center gap-1 overflow-x-auto pb-3">
-          {categories.map((option) => <button key={option.id} type="button" onClick={() => setCategory(option.id)} className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold ${category === option.id ? 'border-[#caa24c]/40 bg-[#caa24c]/12 text-[#9b7425] dark:text-[#dfbd6d]' : 'border-transparent text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
-            {option.label}{view === 'unread' && categoryCounts[option.id] ? ` ${categoryCounts[option.id]}` : ''}
-          </button>)}
+        <div className="portal-scrollbar mt-3 flex items-center gap-1.5 overflow-x-auto pb-3">
+          {categories.map((option) => {
+            const count = view === 'unread' ? categoryCounts[option.id] : undefined
+            const isSelected = category === option.id
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setCategory(option.id)}
+                className={`portal-inline-action group relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
+                  isSelected
+                    ? 'text-[#9a6e25] dark:text-[#dfbd68]'
+                    : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+                }`}
+              >
+                {isSelected ? (
+                  <motion.span
+                    layoutId="notification-category-active-pill"
+                    className="absolute inset-0 rounded-full bg-[#caa24c]/15 dark:bg-[#caa24c]/20"
+                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 36 }}
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span className="relative z-10">{option.label}</span>
+                {typeof count === 'number' && count > 0 ? (
+                  <span
+                    className={`relative z-10 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold tabular-nums leading-none transition-colors ${
+                      isSelected
+                        ? 'bg-[#caa24c]/25 text-[#7c5417] dark:bg-[#caa24c]/35 dark:text-[#f3d993]'
+                        : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] group-hover:bg-[color:var(--portal-border)] group-hover:text-[color:var(--portal-text)]'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -249,22 +288,32 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
       </div></div> : null}
 
       <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {visibleItems.length ? (
-            visibleItems.map((item) => (
-              <SwipeableNotificationItem
-                key={item.id}
-                item={item}
-                onOpen={() => openItem(item)}
-                onClear={() => onMarkAsRead(item.id)}
-              />
-            ))
-          ) : (
-            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-64 flex-col items-center justify-center px-8 text-center">
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"><Check size={20} /></div>
-              <p className="text-sm font-semibold">{searchQuery ? 'No matches' : view === 'unread' ? 'All caught up' : 'No recent history'}</p>
-              <p className="mt-1 max-w-56 text-[11px] leading-4 text-[color:var(--portal-muted)]">{searchQuery ? 'Try a different name or subject.' : view === 'unread' ? 'Handled notifications move to Earlier.' : 'Read notifications are kept here for 30 days.'}</p>
-            </motion.div>
-          )}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={`${view}-${category}`}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: 4 }}
+            animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)', y: -4 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {visibleItems.length ? (
+              visibleItems.map((item) => (
+                <SwipeableNotificationItem
+                  key={item.id}
+                  item={item}
+                  onOpen={() => openItem(item)}
+                  onClear={() => onMarkAsRead(item.id)}
+                />
+              ))
+            ) : (
+              <div className="flex h-full min-h-64 flex-col items-center justify-center px-8 text-center">
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"><Check size={20} /></div>
+                <p className="text-sm font-semibold">{searchQuery ? 'No matches' : view === 'unread' ? 'All caught up' : 'No recent history'}</p>
+                <p className="mt-1 max-w-56 text-[11px] leading-4 text-[color:var(--portal-muted)]">{searchQuery ? 'Try a different name or subject.' : view === 'unread' ? 'Handled notifications move to Earlier.' : 'Read notifications are kept here for 30 days.'}</p>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       <footer className="flex min-h-12 items-center justify-between border-t border-[color:var(--portal-border)] px-4 py-2.5">

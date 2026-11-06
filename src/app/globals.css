@@ -351,6 +351,12 @@ body[data-portal-theme='light'] .bg-\[\#0c0c0c\]\/85 {
   background-color: var(--portal-soft) !important;
 }
 
+body[data-portal-theme='light'] .portal-notification-clear-action,
+body[data-portal-theme='light'] .portal-notification-clear-action * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 body[data-portal-theme='light'] .text-white:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
 body[data-portal-theme='light'] .text-white\/95:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
 body[data-portal-theme='light'] .text-white\/90:not(.luxor-gold-raised):not(.portal-gold-btn):not([class*="luxor-gold"]),
@@ -485,6 +491,114 @@ body[data-portal-theme] .portal-phone-call-action:disabled {
   background: #8edbc8;
   border-color: #7ccbb7;
 }
+/* Canonical Luxor 3D Raised Green Action Hardware (tactile phone & success action hardware) */
+body[data-portal-theme] .luxor-green-raised,
+body[data-portal-theme='light'] .luxor-green-raised,
+body[data-portal-theme='dark'] .luxor-green-raised,
+body[data-portal-theme] .portal-green-btn,
+body[data-portal-theme='light'] .portal-green-btn,
+body[data-portal-theme='dark'] .portal-green-btn,
+body[data-portal-theme] .portal-call-btn,
+body[data-portal-theme='light'] .portal-call-btn,
+body[data-portal-theme='dark'] .portal-call-btn,
+:is(a, button, [role="button"]).luxor-green-raised,
+:is(a, button, [role="button"]).portal-green-btn,
+:is(a, button, [role="button"]).portal-call-btn {
+  border: 1px solid #047857 !important;
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 1px 3px rgba(4, 120, 87, 0.24) !important;
+  transition: all 0.14s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn),
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn),
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn),
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) *,
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) *,
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) * {
+  color: #ffffff !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg,
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg,
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg,
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg *,
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg *,
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg:not([fill="none"]),
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg:not([fill='none']),
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg:not([fill="none"]) path {
+  fill: #ffffff !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg[fill="none"],
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg[fill='none'],
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg[fill="none"] path,
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg[fill="none"] line,
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn) svg[fill="none"] polyline {
+  stroke: #ffffff !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):hover:not(:disabled),
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):hover:not(:disabled),
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):hover:not(:disabled) {
+  border-color: #059669 !important;
+  background: linear-gradient(180deg, #34d399 0%, #059669 100%) !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    inset 0 -1px 0 rgba(0, 0, 0, 0.26),
+    0 2px 5px rgba(4, 120, 87, 0.28) !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):active:not(:disabled),
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):active:not(:disabled),
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):active:not(:disabled) {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28) !important;
+  transform: translateY(1px) !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):focus-visible,
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):focus-visible,
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):focus-visible {
+  outline: 2px solid #34d399 !important;
+  outline-offset: 2px !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):disabled,
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):disabled,
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):disabled {
+  background: var(--portal-soft) !important;
+  border: 1px solid var(--portal-border) !important;
+  color: var(--portal-muted) !important;
+  box-shadow: none !important;
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):disabled *,
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):disabled *,
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):disabled * {
+  color: var(--portal-muted) !important;
+}
+
+body[data-portal-theme] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):disabled svg,
+body[data-portal-theme='light'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):disabled svg,
+body[data-portal-theme='dark'] :is(.luxor-green-raised, .portal-green-btn, .portal-call-btn):disabled svg {
+  color: var(--portal-muted) !important;
+  stroke: var(--portal-muted) !important;
+}
+
 body[data-portal-theme] .luxor-gold-raised,
 body[data-portal-theme='light'] .luxor-gold-raised,
 body[data-portal-theme='dark'] .luxor-gold-raised,
@@ -1841,31 +1955,6 @@ body[data-portal-theme='light'] [role="status"] button.bg-emerald-500:hover {
   background-color: #047857 !important;
 }
 
-
-/* Phone dialer panel overrides for light mode */
-body[data-portal-theme='light'] .portal-call-btn {
-  background-color: #18130d !important;
-  color: #caa24c !important;
-}
-body[data-portal-theme='light'] .portal-call-btn svg {
-  color: #caa24c !important;
-}
-body[data-portal-theme='light'] .portal-call-btn:hover:not(:disabled) {
-  background-color: #2a2218 !important;
-  color: #f1d27a !important;
-}
-body[data-portal-theme='light'] .portal-call-btn:hover:not(:disabled) svg {
-  color: #f1d27a !important;
-}
-body[data-portal-theme='light'] .portal-call-btn:disabled {
-  background-color: #f4efe7 !important;
-  color: #a99d8e !important;
-  border: 1px solid rgba(124, 91, 36, 0.1) !important;
-  opacity: 0.6 !important;
-}
-body[data-portal-theme='light'] .portal-call-btn:disabled svg {
-  color: #a99d8e !important;
-}
 
 body[data-portal-theme='light'] input::placeholder {
   color: var(--portal-muted) !important;

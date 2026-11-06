@@ -154,7 +154,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
 
   return (
     <div className="flex flex-col h-full justify-between">
-      <div>
+      <div className="flex flex-col flex-1 min-h-0">
         {/* Card Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -177,7 +177,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
         </div>
 
         {/* Card Body */}
-        <div className="space-y-3.5">
+        <div className={`space-y-3.5 ${!hasAnyItems ? 'flex flex-col flex-1 items-center justify-center min-h-0' : ''}`}>
           {/* Overdue Section */}
           {overdueBills.length > 0 && (
             <div className="space-y-2">
@@ -321,7 +321,7 @@ export function BillsDueCard({ initialBills }: BillsDueCardProps) {
 
           {/* All Current Empty State when no overdue AND no upcoming */}
           {!hasAnyItems && (
-            <div className="flex flex-col items-center justify-center py-6 text-center my-auto">
+            <div className="flex flex-col items-center justify-center py-2 text-center my-auto">
               <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2.5">
                 <CheckCircle2 size={20} />
               </div>

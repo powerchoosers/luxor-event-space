@@ -5453,7 +5453,7 @@ export default function LeadDetailPage({
                 ? 'The latest eligible bounced email is ready to review.'
                 : correctEmailResendOptions.length ? 'A saved lead email is available to resend.' : 'Confirm the corrected address before any further sends.'}
             </p>
-            <button type="button" onClick={() => setCorrectEmailResendOpen(true)} className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-lg bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#b68d3b] sm:self-auto">
+            <button type="button" onClick={() => setCorrectEmailResendOpen(true)} className="portal-gold-btn inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-xl px-4 text-[10px] font-black uppercase tracking-[0.12em] text-white cursor-pointer sm:self-auto">
               <Mail size={13} /> Correct email &amp; resend
             </button>
           </div>

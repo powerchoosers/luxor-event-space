@@ -31,6 +31,7 @@ import { PortalHomeActionBar } from "@/components/portal/PortalHomeActionBar";
 import { MagicCard } from "@/components/ui/magic-card";
 import { fetchMarketingAndSalesMetrics, getDateRangeFromPreset } from "@/lib/luxorAnalyticsServer";
 import { luxorTodayKey } from "@/lib/luxorTourMetrics";
+import { listLuxorDailyPriorities } from "@/lib/luxorDailyPrioritiesServer";
 
 function addDateKeyDays(dateKey: string, days: number) {
   const [year, month, day] = dateKey.split('-').map(Number)
@@ -254,7 +255,20 @@ async function PortalOverviewContent() {
     });
   });
 
-  const activePriorities = priorities.sort((a, b) => a.rank - b.rank).filter((item, index, items) => !item.bounce || items.findIndex((candidate) => candidate.bounce) === index).slice(0, 5);
+  const dailyPriorities = await listLuxorDailyPriorities(todayDateStr).catch(() => []);
+  const activePriorities = dailyPriorities.length > 0
+    ? dailyPriorities.map((item) => ({
+        id: item.id,
+        title: item.title,
+        meta: item.meta || (item.is_overdue ? 'Overdue' : 'Due today'),
+        href: item.href,
+        isOverdue: item.is_overdue,
+        completed: item.completed,
+        reasoning: item.reasoning,
+        actionType: item.action_type,
+        taskId: item.target_type === 'task' ? item.target_id || undefined : undefined,
+      }))
+    : priorities.sort((a, b) => a.rank - b.rank).filter((item, index, items) => !item.bounce || items.findIndex((candidate) => candidate.bounce) === index).slice(0, 5);
 
   // --- Rolling Calendar Outlook (Past 3 Days to Future 10 Days) ---
   const calendarDays = [];
@@ -270,7 +284,16 @@ async function PortalOverviewContent() {
     const dayTours = businessLeads.filter(l => l.preferred_tour_date === dayStr && l.tour_attendance_status !== 'cancelled');
     const dayEvents = businessBookings.filter(b => b.event_date === dayStr && ['confirmed', 'tentative', 'completed'].includes(b.status));
     const dayPayments = bills.filter(b => b.due_date === dayStr && b.status !== 'paid');
-    const dayTasks = businessTasks.filter(t => t.due_date === dayStr && t.status === 'pending');
+    const dayTasks = businessTasks
+      .filter(t => t.due_date === dayStr && t.status === 'pending')
+      .map(t => {
+        const contact = t.inquiry_id ? businessLeads.find((lead) => lead.id === t.inquiry_id) : null;
+        return {
+          ...t,
+          client_name: contact?.full_name || null,
+          event_type: contact?.event_type || null,
+        };
+      });
 
     calendarDays.push({
       dayStr,

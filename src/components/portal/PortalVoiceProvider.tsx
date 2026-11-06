@@ -1271,8 +1271,14 @@ function PortalPhonePanel({
               </motion.div>
             )}
           </AnimatePresence>
-          <button type="button" onClick={onDial} disabled={!validDialNumber || phoneState === 'starting'} className="portal-call-btn mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-xs font-black uppercase tracking-wider text-white transition-all hover:bg-emerald-500 hover:shadow-[0_0_24px_rgba(52,211,153,0.18)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-faint)] disabled:shadow-none">
-            <PhoneCall size={16} /> Call from Luxor
+          <button
+            type="button"
+            onClick={onDial}
+            disabled={!validDialNumber || phoneState === 'starting'}
+            className="portal-call-btn portal-green-btn luxor-green-raised mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl text-xs font-black uppercase tracking-wider text-white transition-all active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 disabled:cursor-not-allowed"
+          >
+            <PhoneCall size={16} className="!text-white !stroke-white" style={{ color: '#ffffff', stroke: '#ffffff' }} />
+            <span className="!text-white font-black" style={{ color: '#ffffff' }}>Call from Luxor</span>
           </button>
         </div>
       )}
