@@ -1,14 +1,15 @@
 'use client'
 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, UserPlus, X } from 'lucide-react'
+import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, Mail, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, UserPlus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
+import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { formatPhoneDisplay, normalizePhoneNumber } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
-import { PortalContactAvatar, PortalCloseButton, PortalSkeleton, PortalSkeletonTransition } from './PortalUI'
+import { PortalContactAvatar, PortalCloseButton, PortalSkeleton, PortalSkeletonTransition, PortalTabTransition } from './PortalUI'
 import { PortalSmsConsentBadge, type SmsConsentState } from './PortalSmsConsentBadge'
 import { useToast } from './ToastProvider'
 
@@ -40,7 +41,7 @@ export function LuxorMessenger() {
   const [body, setBody] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
-  const [showThreadOnMobile, setShowThreadOnMobile] = useState(false)
+  const [showThreadOnMobile, setShowThreadOnMobile] = useState(() => Boolean(searchParams?.get('inquiryId')))
   const [newMessageOpen, setNewMessageOpen] = useState(false)
   const [contactQuery, setContactQuery] = useState('')
   const [contactResults, setContactResults] = useState<ContactResult[]>([])
@@ -48,27 +49,12 @@ export function LuxorMessenger() {
   const [draftConversation, setDraftConversation] = useState<Conversation | null>(null)
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [loadedSmsConsent, setLoadedSmsConsent] = useState<{ phone: string; state: SmsConsentState } | null>(null)
+  const [contactLead, setContactLead] = useState<LuxorInquiry | null>(null)
   const [consentRequestSending, setConsentRequestSending] = useState(false)
   const [manualOptInLoading, setManualOptInLoading] = useState(false)
   const [mediaGalleryOpen, setMediaGalleryOpen] = useState(false)
-  const threadEndRef = useRef<HTMLDivElement>(null)
+  const threadScrollRef = useRef<HTMLDivElement>(null)
   const optionsRef = useRef<HTMLDivElement>(null)
-  const listPaneRef = useRef<HTMLElement>(null)
-  const threadPaneRef = useRef<HTMLElement>(null)
-  const mobilePaneMounted = useRef(false)
-
-  // Mobile shows either the list or the thread. Play a simple blur-in on the
-  // pane that just became visible (opening a thread and pressing back).
-  useEffect(() => {
-    if (!mobilePaneMounted.current) { mobilePaneMounted.current = true; return }
-    if (!window.matchMedia('(max-width: 1023px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const pane = showThreadOnMobile ? threadPaneRef.current : listPaneRef.current
-    pane?.animate(
-      [{ opacity: 0.35, filter: 'blur(10px)' }, { opacity: 1, filter: 'blur(0px)' }],
-      { duration: 420, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' },
-    )
-  }, [showThreadOnMobile])
-
   const loadMessages = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
     try {
@@ -120,6 +106,19 @@ export function LuxorMessenger() {
     })
   }, [conversations, filter, deferredQuery])
   const selectedConversation = conversations.find((conversation) => conversation.key === selectedKey || (selectedKey && conversation.inquiryId === selectedKey)) ?? (draftConversation?.key === selectedKey ? draftConversation : null) ?? conversations[0] ?? null
+  const selectedLead = contactLead?.id === selectedConversation?.inquiryId ? contactLead : null
+
+  useEffect(() => {
+    const id = selectedConversation?.inquiryId
+    setContactLead(null)
+    if (!id) return
+    const controller = new AbortController()
+    void fetch(`/api/inquiries?id=${encodeURIComponent(id)}`, { signal: controller.signal, cache: 'no-store' })
+      .then((response) => response.ok ? response.json() as Promise<LuxorInquiry> : null)
+      .then((lead) => { if (!controller.signal.aborted) setContactLead(lead) })
+      .catch((error) => { if (!controller.signal.aborted) console.error('Unable to load contact email', error) })
+    return () => controller.abort()
+  }, [selectedConversation?.inquiryId])
   const smsConsent = loadedSmsConsent && loadedSmsConsent.phone === selectedConversation?.phoneNumber
     ? loadedSmsConsent.state
     : null
@@ -154,13 +153,14 @@ export function LuxorMessenger() {
       return
     }
     const controller = new AbortController()
+    setContactResults([])
+    setSearchingContacts(true)
     const timeoutId = window.setTimeout(async () => {
-      setSearchingContacts(true)
       try {
         const response = await fetch(`/api/twilio/contact-search?q=${encodeURIComponent(contactQuery.trim())}`, { cache: 'no-store', signal: controller.signal })
         const payload = await response.json().catch(() => []) as ContactResult[] | { error?: string }
         if (!response.ok || !Array.isArray(payload)) throw new Error(!Array.isArray(payload) ? payload.error : 'Unable to search contacts.')
-        setContactResults(payload)
+        if (!controller.signal.aborted) setContactResults(payload)
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) notify({ title: 'Contact search failed', description: error instanceof Error ? error.message : 'Unable to search contacts.', variant: 'error' })
       } finally {
@@ -181,7 +181,8 @@ export function LuxorMessenger() {
   }, [selectedConversation?.key, selectedConversation?.unreadCount])
 
   useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ block: 'end' })
+    const scroller = threadScrollRef.current
+    if (scroller) scroller.scrollTop = scroller.scrollHeight
   }, [selectedConversation?.key, selectedConversation?.messages.length])
 
   const selectConversation = (conversation: Conversation) => {
@@ -307,7 +308,7 @@ export function LuxorMessenger() {
 
   return (
     <section className="relative grid min-h-0 h-full min-w-0 flex-1 overflow-hidden rounded-none border-0 bg-[color:var(--portal-card)] lg:grid-cols-[22rem_minmax(0,1fr)] lg:rounded-2xl lg:border lg:border-[color:var(--portal-border)] lg:shadow-xs">
-      <aside ref={listPaneRef} className={`${showThreadOnMobile ? 'hidden lg:flex' : 'flex'} min-h-0 min-w-0 flex-col border-r border-[color:var(--portal-border)]`}>
+      <aside className="flex min-h-0 min-w-0 flex-col border-r border-[color:var(--portal-border)]">
         <div className="border-b border-[color:var(--portal-border)]/70 p-4">
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">Messages</h1>
@@ -332,6 +333,7 @@ export function LuxorMessenger() {
             loading={loading}
             skeleton={<LoadingConversations />}
           >
+            <PortalTabTransition activeKey={filter}>
             {visibleConversations.length ? visibleConversations.map((conversation) => (
               <button key={conversation.key} type="button" onClick={() => selectConversation(conversation)} className={`flex w-full gap-3 border-b border-[color:var(--portal-border)]/70 px-4 py-3.5 text-left transition-colors ${selectedConversation?.key === conversation.key ? 'bg-[#caa24c]/10 shadow-[inset_3px_0_0_#caa24c]' : 'hover:bg-[color:var(--portal-soft)]/70'}`}>
                 <PortalContactAvatar name={conversation.contactName} inquiryId={conversation.inquiryId || undefined} size="md" />
@@ -348,11 +350,12 @@ export function LuxorMessenger() {
                 </span>
               </button>
             )) : <div className="px-6 py-16 text-center"><MessageSquare size={24} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">No conversations found</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Try another search or filter.</p></div>}
+            </PortalTabTransition>
           </PortalSkeletonTransition>
         </div>
       </aside>
 
-      <main ref={threadPaneRef} className={`${showThreadOnMobile ? 'flex' : 'hidden lg:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
+      <main className={`absolute inset-0 z-20 flex min-h-0 min-w-0 flex-1 flex-col bg-[color:var(--portal-card)] lg:static lg:z-auto lg:border-l lg:border-[color:var(--portal-border)] ${showThreadOnMobile ? 'max-lg:translate-x-0 max-lg:visible max-lg:[transition:translate_0.36s_cubic-bezier(0.22,1,0.36,1),visibility_0s]' : 'max-lg:invisible max-lg:translate-x-full max-lg:[transition:translate_0.36s_cubic-bezier(0.22,1,0.36,1),visibility_0s_linear_0.36s]'} motion-reduce:!transition-none`}>
         <PortalSkeletonTransition
           loading={loading}
           skeleton={<LoadingMessagePane />}
@@ -362,7 +365,7 @@ export function LuxorMessenger() {
             key={newMessageOpen ? 'new-message' : selectedConversation ? selectedConversation.key : 'empty'}
             className="luxor-pane-enter-desktop flex min-h-0 min-w-0 flex-1 flex-col"
           >
-            {newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={setContactQuery} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
+            {newMessageOpen ? <NewMessagePane query={contactQuery} results={contactResults} searching={searchingContacts} onQueryChange={(value) => { setContactQuery(value); setContactResults([]); setSearchingContacts(value.trim().length >= 2) }} onSelect={startNewConversation} onClose={() => { setNewMessageOpen(false); setContactQuery(''); setShowThreadOnMobile(false) }} /> : selectedConversation ? (
             <>
               <header className="flex min-h-18 shrink-0 items-center justify-between gap-1 border-b border-[color:var(--portal-border)]/70 px-2 py-3 sm:gap-4 sm:px-5">
                 <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-3">
@@ -375,28 +378,29 @@ export function LuxorMessenger() {
                     <PortalContactAvatar name={selectedConversation.contactName} inquiryId={selectedConversation.inquiryId || undefined} size="md" className="hidden sm:flex" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2">
+                    <div className="flex min-w-0 flex-row flex-wrap items-center gap-x-0.5 gap-y-0.5 sm:gap-x-2">
                       {selectedConversation.inquiryId ? (
                         <Link
                           href={`/portal/leads/${selectedConversation.inquiryId}`}
                           title={selectedConversation.contactName}
-                          className="max-w-full truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a] sm:order-1 sm:text-sm sm:font-bold"
+                          className="order-1 max-w-full truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a] sm:text-sm sm:font-bold"
                         >
                           {selectedConversation.contactName}
                         </Link>
                       ) : (
-                        <p title={selectedConversation.contactName} className="max-w-full truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] sm:order-1 sm:text-sm sm:font-bold">{selectedConversation.contactName}</p>
+                        <p title={selectedConversation.contactName} className="order-1 max-w-full truncate text-[15px] font-semibold leading-5 text-[color:var(--portal-text)] sm:text-sm sm:font-bold">{selectedConversation.contactName}</p>
                       )}
-                      <div className="whitespace-nowrap tabular-nums text-xs leading-4 text-[color:var(--portal-muted)] sm:order-3 sm:basis-full">
+                      <div className="order-3 basis-full whitespace-nowrap tabular-nums text-xs leading-4 text-[color:var(--portal-muted)]">
                         <span className="sm:hidden">{formatPhoneDisplay(selectedConversation.phoneNumber)}</span>
                         <button type="button" aria-label={`Call ${selectedConversation.contactName} at ${formatPhoneDisplay(selectedConversation.phoneNumber)}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="hidden rounded-sm transition-colors hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:inline-block">{formatPhoneDisplay(selectedConversation.phoneNumber)}</button>
                       </div>
-                      <span className="sm:order-2"><PortalSmsConsentBadge phone={selectedConversation.phoneNumber} initialConsent={smsConsent} compact /></span>
+                      <span className="order-2"><PortalSmsConsentBadge phone={selectedConversation.phoneNumber} initialConsent={smsConsent} compact shortUnknownOnMobile shortOptedInOnMobile /></span>
                     </div>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center sm:gap-2">
-                  <button type="button" aria-label={`Call ${selectedConversation.contactName}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-10 w-10 items-center justify-center gap-1.5 rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:h-9 sm:w-auto sm:border sm:border-[color:var(--portal-border)] sm:bg-[color:var(--portal-soft)] sm:px-3 sm:text-xs sm:font-medium sm:text-[color:var(--portal-text)] sm:hover:border-emerald-500/35"><Phone size={15}/> <span className="hidden sm:inline">Call</span></button>
+                  <button type="button" aria-label={`Call ${selectedConversation.contactName}`} title={`Call ${selectedConversation.contactName}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Phone size={17}/></button>
+                  {selectedLead?.email?.trim() ? <button type="button" aria-label={`Email ${selectedConversation.contactName}`} title={`Email ${selectedConversation.contactName}`} onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: selectedLead } }))} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Mail size={17}/></button> : null}
                   <div className="relative" ref={optionsRef}>
                     <button type="button" onClick={() => setOptionsOpen((current) => !current)} className="flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:h-9 sm:w-9" aria-label="Conversation options" aria-expanded={optionsOpen}><MoreVertical size={17}/></button>
                     <AnimatePresence>{optionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl backdrop-blur-xl">
@@ -447,14 +451,13 @@ export function LuxorMessenger() {
                 </div>
               </header>
 
-              <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7">
+              <div ref={threadScrollRef} className="portal-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7">
                 <div className="mx-auto max-w-4xl space-y-3">
                   {selectedConversation.messages.length ? selectedConversation.messages.map((message, index, thread) => {
                     const previous = thread[index - 1]
                     const showDate = !previous || dayKey(previous.created_at) !== dayKey(message.created_at)
                     return <div key={message.id}>{showDate ? <DateDivider value={message.created_at}/> : null}<MessageBubble message={message}/></div>
                   }) : <div className="py-16 text-center"><MessageSquare size={22} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">Start your conversation with {selectedConversation.contactName}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Messages send through Luxor’s approved Twilio sender.</p></div>}
-                  <div ref={threadEndRef}/>
                 </div>
               </div>
             </>
@@ -522,7 +525,9 @@ function MessageBubble({ message }: { message: LuxorMessage }) {
 }
 
 function NewMessagePane({ query, results, searching, onQueryChange, onSelect, onClose }: { query: string; results: ContactResult[]; searching: boolean; onQueryChange: (value: string) => void; onSelect: (contact: ContactResult) => void; onClose: () => void }) {
-  return <motion.div initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-0 flex-1 flex-col">
+  const reduceMotion = useReducedMotion()
+  const searchState = query.trim().length < 2 ? 'idle' : searching ? 'loading' : results.length ? 'results' : 'empty'
+  return <motion.div initial={reduceMotion ? false : { opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-0 flex-1 flex-col">
     <header className="flex min-h-18 items-center gap-3 border-b border-[color:var(--portal-border)]/70 px-4 py-3 sm:px-5">
       <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Close new message"><ArrowLeft size={18}/></button>
       <div><p className="text-sm font-semibold text-[color:var(--portal-text)]">New conversation</p><p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a Luxor contact to start messaging.</p></div>
@@ -536,8 +541,11 @@ function NewMessagePane({ query, results, searching, onQueryChange, onSelect, on
     </div>
     <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
       <div className="mx-auto max-w-3xl">
-        <p className="mb-2 text-xs font-medium text-[color:var(--portal-muted)]">{query.trim().length >= 2 ? 'Matching contacts' : 'Find a contact'}</p>
-        {query.trim().length < 2 ? <div className="py-16 text-center"><Search size={24} className="mx-auto text-[color:var(--portal-muted)]"/><p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">Search Luxor contacts</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Enter at least two letters or digits.</p></div> : searching ? <p className="py-16 text-center text-xs text-[color:var(--portal-muted)]">Searching Luxor contacts…</p> : results.length ? <div className="space-y-1">{results.map((contact) => <button key={contact.id} type="button" onClick={() => onSelect(contact)} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[color:var(--portal-soft)]"><PortalContactAvatar name={contact.fullName} inquiryId={contact.id} size="md"/><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{contact.fullName}</span><span className="mt-0.5 block tabular-nums text-xs text-[color:var(--portal-muted)]">{formatPhoneDisplay(contact.phoneNumber)}{contact.eventType ? ` · ${contact.eventType}` : ''}</span></span><MessageSquare size={15} className="text-[#caa24c]"/></button>)}</div> : <p className="py-16 text-center text-xs text-[color:var(--portal-muted)]">No matching contacts with a mobile number.</p>}
+        <AnimatePresence mode="wait" initial={false}>
+          {searchState !== 'idle' ? <motion.div key={searchState} initial={reduceMotion ? false : { opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.16, ease: [0.22, 1, 0.36, 1] }}>
+            {searchState === 'loading' ? <p role="status" className="px-3 py-3 text-xs text-[color:var(--portal-muted)]">Searching contacts…</p> : searchState === 'results' ? <><p className="mb-2 px-3 text-xs font-medium text-[color:var(--portal-muted)]">Matching contacts</p><div className="space-y-1">{results.map((contact) => <button key={contact.id} type="button" onClick={() => onSelect(contact)} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><PortalContactAvatar name={contact.fullName} inquiryId={contact.id} size="md"/><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[color:var(--portal-text)]">{contact.fullName}</span><span className="mt-0.5 block tabular-nums text-xs text-[color:var(--portal-muted)]">{formatPhoneDisplay(contact.phoneNumber)}{contact.eventType ? ` · ${contact.eventType}` : ''}</span></span><MessageSquare size={15} className="text-[#caa24c]"/></button>)}</div></> : <p className="px-3 py-3 text-xs text-[color:var(--portal-muted)]">No matching contacts with a mobile number.</p>}
+          </motion.div> : query.trim().length === 1 ? <motion.p key="hint" initial={false} exit={{ opacity: 0 }} className="px-3 py-3 text-xs text-[color:var(--portal-muted)]">Enter at least two letters or digits.</motion.p> : null}
+        </AnimatePresence>
       </div>
     </div>
   </motion.div>

@@ -473,6 +473,17 @@ export default function LeadDetailPage({
   const router = useRouter()
   const pathname = usePathname()
   const { notify } = useToast()
+  const [leadReturnPath, setLeadReturnPath] = useState('/portal/leads')
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(sessionStorage.getItem('luxor_lead_return') || 'null') as { detail?: string; from?: string } | null
+      if (stored?.detail === pathname && stored.from?.startsWith('/portal') && !stored.from.startsWith('/portal//')) setLeadReturnPath(stored.from)
+      else setLeadReturnPath('/portal/leads')
+    } catch { setLeadReturnPath('/portal/leads') }
+  }, [pathname])
+  const returnSection = leadReturnPath.split('?')[0].split('/')[2] || ''
+  const returnLabel: Record<string, string> = { '': 'Home', leads: 'Leads & Clients', messages: 'Messages', calls: 'Phone', emails: 'Emails', calendar: 'Calendar', planner: 'Planner', finances: 'Finances', operations: 'Operations', marketing: 'Marketing', reports: 'Reports', settings: 'Settings' }
+  const backLabel = returnLabel[returnSection] || returnSection.replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 
   const [lead, setLead] = useState<LuxorInquiry | null>(null)
   const [expandedOriginalInquiryId, setExpandedOriginalInquiryId] = useState<string | null>(null)
@@ -4312,8 +4323,8 @@ export default function LeadDetailPage({
           >
             Retry Load
           </button>
-          <Link href="/portal/leads" className="inline-flex min-h-11 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
-            <ArrowLeft size={12} /> Back to Leads
+          <Link href={leadReturnPath} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
+            <ArrowLeft size={12} /> Back to {backLabel}
           </Link>
         </div>
       </div>
@@ -5025,8 +5036,8 @@ export default function LeadDetailPage({
 {paymentLoadError ? <div role="alert" className="mb-4 border border-red-500/30 bg-red-500/5 p-4 text-sm text-[color:var(--portal-text)]">{paymentLoadError}</div> : null}
 
       <div className="mb-4 flex shrink-0 items-center justify-between">
-        <Link href="/portal/leads" className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
-          <ArrowLeft size={13} /> Back to Leads & Clients
+        <Link href={leadReturnPath} className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)]">
+          <ArrowLeft size={13} /> Back to {backLabel}
         </Link>
         {isLuxorInquiryArchived(lead) ? (
           <PortalStatusBadge status="Archived" tone="neutral" borderless />
@@ -5530,7 +5541,7 @@ export default function LeadDetailPage({
                     >
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                             <Mail size={18} />
                           </span>
                           <div className="min-w-0">
@@ -5622,7 +5633,7 @@ export default function LeadDetailPage({
                     >
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <ClipboardCheck size={18} />
                           </span>
                           <div className="min-w-0">
@@ -5794,7 +5805,7 @@ export default function LeadDetailPage({
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <Calendar size={18} />
                           </span>
                           <div>
@@ -5816,11 +5827,11 @@ export default function LeadDetailPage({
                         <div className="flex shrink-0 items-center gap-2">
                           {tourDisplayStatus(lead) === 'Confirmed' ? (
                             <>
-                              <button type="button" onClick={() => document.getElementById('lead-tour-details')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/40">View Tour Details</button>
-                              <button type="button" onClick={() => openTourScheduleModal('reschedule')} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-all hover:bg-[#caa24c]/20 dark:text-[#f1d27a]"><Calendar size={13} /> Reschedule Tour</button>
+                              <button type="button" onClick={() => document.getElementById('lead-tour-details')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">View Tour Details</button>
+                              <button type="button" onClick={() => openTourScheduleModal('reschedule')} className="luxor-gold-raised inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white"><Calendar size={13} /> Reschedule Tour</button>
                             </>
                           ) : (
-                            <button type="button" onClick={() => openTourScheduleModal('new_visit')} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-all hover:bg-[#caa24c]/20 dark:text-[#f1d27a]"><Calendar size={13} /> {tourDisplayStatus(lead) === 'Requested' ? 'Set Tour Time' : 'Schedule Tour'}</button>
+                            <button type="button" onClick={() => openTourScheduleModal('new_visit')} className="luxor-gold-raised inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white"><Calendar size={13} /> {tourDisplayStatus(lead) === 'Requested' ? 'Set Tour Time' : 'Schedule Tour'}</button>
                           )}
                         </div>
                       </div>
@@ -5891,7 +5902,7 @@ export default function LeadDetailPage({
                             <span className="mb-3 block rounded-lg bg-emerald-500/10 py-1.5 text-center text-xs font-medium text-emerald-700 dark:text-emerald-300">Tour confirmed</span>
                           ) : null}
                           {!['Completed', 'Cancelled'].includes(tourDisplayStatus(lead)) ? (
-                            <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-md shadow-[#caa24c]/15 transition-colors hover:bg-[#dfbd68] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">{lead.tour_attendance_status === 'no_show' ? 'Correct Outcome to Completed' : 'Mark Complete'}</button>
+                            <button type="button" onClick={() => handleTourAttendanceAction('attended')} className="luxor-gold-raised inline-flex min-h-11 w-full items-center justify-center rounded-xl px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">{lead.tour_attendance_status === 'no_show' ? 'Correct Outcome to Completed' : 'Mark Complete'}</button>
                           ) : null}
                           <div className="mt-2 grid gap-2 sm:grid-cols-2">
                             <button type="button" onClick={() => openTourScheduleModal('reschedule')} className="min-h-10 rounded-lg border border-[color:var(--portal-border)] px-3 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] transition-colors hover:border-[#caa24c]/35 hover:text-[color:var(--portal-text)]">Reschedule</button>
@@ -6070,7 +6081,7 @@ export default function LeadDetailPage({
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <Sliders size={18} />
                           </span>
                           <div>
@@ -6083,7 +6094,7 @@ export default function LeadDetailPage({
                             </p>
                           </div>
                         </div>
-                        <button type="button" onClick={() => setActiveLeadTab('tasks')} className="min-h-11 rounded-xl bg-[#caa24c] px-5 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:bg-[#dfbd68] transition-all cursor-pointer">
+                        <button type="button" onClick={() => setActiveLeadTab('tasks')} className="luxor-gold-raised min-h-11 rounded-xl px-5 text-[10px] font-black uppercase tracking-wider text-white cursor-pointer">
                           Planning Checklist
                         </button>
                       </div>
@@ -6294,7 +6305,7 @@ export default function LeadDetailPage({
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs"><Send size={18} /></span>
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]"><Send size={18} /></span>
                           <div>
                             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Next Move</p>
                             <h4 className="mt-1 text-sm font-black text-[color:var(--portal-text)]">
@@ -6487,7 +6498,7 @@ export default function LeadDetailPage({
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <FileText size={18} />
                           </span>
                           <div>
@@ -6864,7 +6875,7 @@ export default function LeadDetailPage({
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <DollarSign size={18} />
                           </span>
                           <div>
@@ -7036,7 +7047,7 @@ export default function LeadDetailPage({
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <Flame size={18} />
                           </span>
                           <div>
@@ -7164,7 +7175,7 @@ export default function LeadDetailPage({
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start gap-3">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c] shadow-xs">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <CheckCircle size={18} />
                           </span>
                           <div>
@@ -9834,7 +9845,7 @@ function LeadLifecycleRail({
                       }`}
                     >
                       <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full md:h-8 md:w-8 ${
-                        isCurrent || isDone ? 'bg-[#caa24c] text-white' : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
+                        isCurrent || isDone ? 'luxor-gold-raised text-white' : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)]'
                       }`}>
                         {isCurrent || isDone ? <StageIcon size={11} strokeWidth={2.5} className="md:h-3.5 md:w-3.5" /> : <span className="text-[9px] font-bold tabular-nums md:text-[11px]">{index + 1}</span>}
                       </span>
@@ -9882,7 +9893,7 @@ function LeadLifecycleRail({
                   isCurrent
                     ? 'luxor-gold-raised text-white font-bold scale-105'
                     : isDone
-                    ? 'border-[#caa24c] bg-[#caa24c] text-white shadow-md shadow-[#caa24c]/20 font-bold'
+                    ? 'luxor-gold-raised text-white font-bold'
                     : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/45'
                 }`}>
                   {isDone || isCurrent ? (

@@ -1,7 +1,7 @@
 'use client'
 
-import { Loader2, Send, MessageSquare } from 'lucide-react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { CheckCheck, Loader2, Send, MessageSquare } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { useCallback, useEffect, useState } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
@@ -58,8 +58,8 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
     }
   }, [phone])
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
     try {
       const queryParts: string[] = []
       if (phone) queryParts.push(`phone=${encodeURIComponent(phone)}`)
@@ -71,9 +71,9 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
       if (!response.ok) throw new Error(data.error || 'Unable to load messages.')
       setMessages(data)
       for (const message of data as LuxorMessage[]) if (message.direction === 'inbound' && !message.is_read) void fetch('/api/twilio/messages', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: message.id }) })
-    } catch (error) { notify({ title: 'Texts unavailable', description: error instanceof Error ? error.message : 'Unable to load messages.', variant: 'error' }) } finally { setLoading(false) }
+    } catch (error) { if (!quiet) notify({ title: 'Texts unavailable', description: error instanceof Error ? error.message : 'Unable to load messages.', variant: 'error' }) } finally { if (!quiet) setLoading(false) }
   }, [inquiryId, phone, notify])
-  useEffect(() => { void load(); const timer = window.setInterval(() => void load(), 30_000); return () => window.clearInterval(timer) }, [load])
+  useEffect(() => { void load(); const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void load(true) }, 30_000); return () => window.clearInterval(timer) }, [load])
   async function send() {
     if (!phone || !body.trim() || isOptedOut) return
     setSending(true)
@@ -90,7 +90,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
         <div>
           <div className="flex items-center gap-2">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Text conversation</p>
-            <PortalSmsConsentBadge phone={phone} compact />
+            <PortalSmsConsentBadge phone={phone} compact className="!border-0" />
           </div>
           <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">
             {phone ? `${contactName || 'Client'} · ${formatPhoneDisplay(phone)}` : 'Inbound and outbound SMS conversations.'}
@@ -98,7 +98,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
         </div>
         <MessageSquare size={17} className="text-[#caa24c]" />
       </div>
-      <div className="mt-4 max-h-[28rem] space-y-3 overflow-y-auto pr-1 portal-scrollbar">
+      <div className="portal-scrollbar mt-4 max-h-[28rem] overflow-y-auto px-1 py-2 sm:px-3">
         {loading ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4 py-3" aria-label="Loading text conversation">
             {[0, 1, 2, 3].map((index) => (
@@ -109,31 +109,20 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
             ))}
           </motion.div>
         ) : messages.length ? (
-          <AnimatePresence initial={false}>
-            {[...messages].reverse().map((message) => (
-              <motion.div
-                layout
-                initial={{ opacity: 0, y: 36, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
-                key={message.id}
-                className={`max-w-[88%] rounded-2xl px-4 py-3 ${
-                  message.direction === 'outbound'
-                    ? 'ml-auto border border-[#b88d37] bg-gradient-to-b from-[#d4af54] to-[#ba8e35] !text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_1px_2px_rgba(0,0,0,0.12)]'
-                    : 'border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'
-                }`}
-              >
-                <p className={`whitespace-pre-wrap text-sm ${message.direction === 'outbound' ? '!text-white' : ''}`}>{message.body || '(Media message)'}</p>
-                <p
-                  className={`mt-1 text-[8px] font-black uppercase tracking-wider ${
-                    message.direction === 'outbound' ? 'text-white/80' : 'text-[color:var(--portal-muted)]'
-                  }`}
-                >
-                  {message.direction === 'outbound' ? message.status : 'received'} · {new Date(message.created_at).toLocaleString()}
-                </p>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+          <div className="mx-auto max-w-4xl space-y-3">
+            {[...messages].reverse().map((message, index, thread) => {
+              const outbound = message.direction === 'outbound'
+              const showDate = !index || new Date(thread[index - 1].created_at).toDateString() !== new Date(message.created_at).toDateString()
+              return <div key={message.id}>
+                {showDate ? <div className="my-5 flex items-center gap-3"><span className="h-px flex-1 bg-[color:var(--portal-border)]/70"/><span className="text-[11px] font-medium text-[color:var(--portal-muted)]">{new Date(message.created_at).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span><span className="h-px flex-1 bg-[color:var(--portal-border)]/70"/></div> : null}
+                <div className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[88%] sm:max-w-[72%] ${outbound ? 'text-right' : 'text-left'}`}>
+                  <div className={`inline-block whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-left text-sm leading-6 ${outbound ? 'rounded-br-md border border-[#b88d37] bg-gradient-to-b from-[#d4af54] to-[#ba8e35] !text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_1px_2px_rgba(0,0,0,0.12)]' : 'rounded-bl-md border border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)] text-[color:var(--portal-text)]'}`}>{message.body || '(Media message)'}</div>
+                  <p className={`mt-1 flex items-center gap-1 tabular-nums text-[11px] text-[color:var(--portal-muted)] ${outbound ? 'justify-end' : 'justify-start'}`}>{message.owner_email === 'luxor-automation' ? <><span>Automated</span><span>·</span></> : null}{new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}{outbound ? <><span>·</span><span className="capitalize">{message.status}</span>{message.status === 'delivered' || message.status === 'read' ? <CheckCheck size={12} className={message.status === 'read' ? 'text-emerald-500' : 'text-[#caa24c]'} /> : null}</> : null}</p>
+                  {message.error_message ? <p className="mt-1 text-xs text-red-500">{message.error_message}</p> : null}
+                </div></div>
+              </div>
+            })}
+          </div>
         ) : (
           <p className="py-10 text-center text-xs text-[color:var(--portal-muted)]">No texts with this client yet.</p>
         )}
@@ -145,12 +134,12 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
             <p className="mt-0.5 text-[11px] opacity-90">This phone number sent a STOP keyword. Manual and automated SMS sending is disabled per carrier regulations until the client replies START.</p>
           </div>
         )}
-        <div className="flex gap-2">
+        <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-transparent bg-[color:var(--portal-soft)] p-2 focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10">
           <textarea
             value={body}
             onChange={(event) => setBody(event.target.value)}
             disabled={!phone || sending || isOptedOut}
-            rows={3}
+            rows={1}
             placeholder={
               isOptedOut
                 ? 'Texting disabled (Recipient opted out via STOP keyword)'
@@ -158,15 +147,16 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
                 ? `Message ${contactName || phone}`
                 : 'This lead has no mobile number'
             }
-            className="portal-input-transparent min-w-0 flex-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]/40 placeholder:text-[color:var(--portal-faint)] disabled:opacity-50"
+            className="portal-input-transparent max-h-32 min-h-10 min-w-0 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-6 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] disabled:opacity-50"
           />
           <button
             type="button"
             onClick={() => void send()}
             disabled={!phone || !body.trim() || sending || isOptedOut}
-            className="luxor-gold-raised flex w-12 items-center justify-center rounded-xl text-white disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)] disabled:opacity-40 disabled:shadow-none"
+            aria-label="Send text message"
+            className="luxor-gold-raised flex h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"
           >
-            {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            {sending ? <Loader2 size={15} className="animate-spin" /> : <><Send size={14} /><span className="hidden sm:inline">Send</span></>}
           </button>
         </div>
       </div>

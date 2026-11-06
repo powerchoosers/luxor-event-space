@@ -17,6 +17,8 @@ interface PortalSmsConsentBadgeProps {
   showTooltip?: boolean
   className?: string
   pill?: boolean
+  shortUnknownOnMobile?: boolean
+  shortOptedInOnMobile?: boolean
 }
 
 export function PortalSmsConsentBadge({
@@ -25,6 +27,8 @@ export function PortalSmsConsentBadge({
   compact = false,
   className = '',
   pill = false,
+  shortUnknownOnMobile = false,
+  shortOptedInOnMobile = false,
 }: PortalSmsConsentBadgeProps) {
   const [fetchedConsent, setFetchedConsent] = useState<{ phone: string; state: SmsConsentState } | null>(null)
   const consent = initialConsent || (fetchedConsent && fetchedConsent.phone === phone ? fetchedConsent.state : null)
@@ -146,12 +150,13 @@ export function PortalSmsConsentBadge({
     return (
       <span
         title="Client opted in to Luxor SMS updates."
+        aria-label={shortOptedInOnMobile ? 'SMS opted in' : undefined}
         className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-emerald-500/20 bg-emerald-500/10 ${
           compact ? 'px-1.5 py-0.5 text-[10px] font-semibold' : 'px-2 py-0.5 text-[10px] font-black uppercase tracking-wider'
-        } text-emerald-700 dark:text-emerald-400 ${className}`}
+        } text-emerald-700 dark:text-emerald-400 ${shortOptedInOnMobile ? 'max-sm:!gap-0 max-sm:!px-0.5 max-sm:[&>svg]:hidden' : ''} ${className}`}
       >
         <ShieldCheck size={compact ? 10 : 12} className="shrink-0 text-emerald-700 dark:text-emerald-400" />
-        <span>{compact ? 'SMS opted in' : 'SMS Opted In'}</span>
+        {shortOptedInOnMobile ? <><span className="sm:hidden" aria-hidden="true">SMS opted</span><span className="hidden sm:inline" aria-hidden="true">SMS opted in</span></> : <span>{compact ? 'SMS opted in' : 'SMS Opted In'}</span>}
       </span>
     )
   }
@@ -196,12 +201,13 @@ export function PortalSmsConsentBadge({
   return (
     <span
       title="No explicit opt-in or opt-out recorded yet."
+      aria-label={shortUnknownOnMobile ? 'No SMS consent recorded' : undefined}
       className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] ${
         compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[10px]'
       } font-medium text-[color:var(--portal-muted)] ${className}`}
     >
       <HelpCircle size={compact ? 10 : 12} className="shrink-0 opacity-60" />
-      <span>{compact ? 'No SMS consent' : 'No SMS Consent'}</span>
+      {shortUnknownOnMobile ? <><span className="sm:hidden" aria-hidden="true">No SMS</span><span className="hidden sm:inline" aria-hidden="true">No SMS consent</span></> : <span>{compact ? 'No SMS consent' : 'No SMS Consent'}</span>}
     </span>
   )
 }

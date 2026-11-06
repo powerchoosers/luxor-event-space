@@ -257,6 +257,18 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const isLeadDetailPage = pathname.startsWith('/portal/leads/')
   const router = useRouter()
   const searchParams = useSearchParams()
+  const portalRouteRef = useRef({ pathname, search: searchParams?.toString() || '' })
+  useLayoutEffect(() => {
+    const previous = portalRouteRef.current
+    if (pathname !== previous.pathname && pathname.startsWith('/portal/leads/')) {
+      const leadId = pathname.slice('/portal/leads/'.length).split('/')[0]
+      const from = previous.pathname === '/portal/messages' && leadId
+        ? `/portal/messages?inquiryId=${encodeURIComponent(leadId)}`
+        : `${previous.pathname}${previous.search ? `?${previous.search}` : ''}`
+      try { sessionStorage.setItem('luxor_lead_return', JSON.stringify({ detail: pathname, from })) } catch { /* Storage can be unavailable. */ }
+    }
+    portalRouteRef.current = { pathname, search: searchParams?.toString() || '' }
+  }, [pathname, searchParams])
   const viewportDiagnosticsOpen = searchParams?.get('viewport-diagnostics') === '1'
   const isMobileViewport = useSyncExternalStore(
     subscribeToPortalMobileViewport,
@@ -1001,7 +1013,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               className="group/next-action hidden h-11 min-w-0 max-w-[19rem] items-center gap-2 rounded-xl border-0 bg-[color:var(--portal-soft)]/70 px-2.5 transition-[background-color,transform] duration-200 hover:-translate-y-px hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 xl:flex"
               aria-label={`Next best action: ${nextBestAction.title}`}
             >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/10 text-[#caa24c]">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-card)] text-[#caa24c]">
                 <NextBestActionIcon kind={nextBestAction.kind} />
               </span>
               <span className="min-w-0 leading-tight">

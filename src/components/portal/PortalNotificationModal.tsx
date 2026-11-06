@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
-import { AlertCircle, ArrowRight, Bell, CalendarCheck2, Check, CheckCircle2, ClipboardList, Eye, FileSignature, Mail, MessageSquare, PhoneMissed, Receipt, RotateCw, Search, X } from 'lucide-react'
+import { AlertCircle, Bell, CalendarCheck2, Check, CheckCircle2, ClipboardList, Eye, FileSignature, Mail, MessageSquare, PhoneMissed, Receipt, RotateCw, Search, X } from 'lucide-react'
 import { NotificationType, PortalNotificationItem, usePortalNotifications } from '@/hooks/usePortalNotifications'
 
 interface PortalNotificationModalProps {
@@ -114,11 +114,10 @@ function SwipeableNotificationItem({
         }}
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, x: 120, height: 0, transition: { duration: 0.22 } }}
         transition={{ duration: 0.18 }}
-        onClick={onOpen}
-        className="group relative flex cursor-pointer items-start gap-3 bg-[color:var(--portal-card)] px-4 py-3.5 hover:bg-[color:var(--portal-soft)]/65 active:cursor-grabbing transform-gpu will-change-transform"
+        className="group relative bg-[color:var(--portal-card)] hover:bg-[color:var(--portal-soft)]/65 active:cursor-grabbing transform-gpu will-change-transform"
       >
+        <button type="button" onClick={onOpen} className="flex w-full items-start gap-3 px-4 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45">
         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--portal-soft)]">
           {notificationIcon(item.type)}
         </div>
@@ -134,10 +133,8 @@ function SwipeableNotificationItem({
           <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[color:var(--portal-muted)]">
             {item.subtitle}
           </p>
-          <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#9b7425] dark:text-[#dfbd6d]">
-            Open <ArrowRight size={10} />
-          </span>
         </div>
+        </button>
         {!item.isRead ? (
           <button
             type="button"
@@ -252,7 +249,6 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
       </div></div> : null}
 
       <div className="portal-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <AnimatePresence initial={false} mode="popLayout">
           {visibleItems.length ? (
             visibleItems.map((item) => (
               <SwipeableNotificationItem
@@ -269,7 +265,6 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
               <p className="mt-1 max-w-56 text-[11px] leading-4 text-[color:var(--portal-muted)]">{searchQuery ? 'Try a different name or subject.' : view === 'unread' ? 'Handled notifications move to Earlier.' : 'Read notifications are kept here for 30 days.'}</p>
             </motion.div>
           )}
-        </AnimatePresence>
       </div>
 
       <footer className="flex min-h-12 items-center justify-between border-t border-[color:var(--portal-border)] px-4 py-2.5">

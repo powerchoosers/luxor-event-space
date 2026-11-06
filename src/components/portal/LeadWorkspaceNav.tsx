@@ -1,9 +1,8 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
 import { CalendarDays, Check, ChevronDown, ClipboardList, FolderOpen, History, LayoutDashboard, Menu, ReceiptText, UserRound } from 'lucide-react'
-import { PortalModal } from '@/components/portal/PortalUI'
+import { PortalAnimatedTabs, PortalModal } from '@/components/portal/PortalUI'
 
 type LeadWorkspaceNavProps = {
   activeTab: string
@@ -23,15 +22,16 @@ const GROUPS = [
 
 export function LeadWorkspaceNav({ activeTab, onTabChange, counts }: LeadWorkspaceNavProps) {
   const [chooserOpen, setChooserOpen] = useState(false)
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   const layoutId = useId()
-  const reduceMotion = useReducedMotion()
+  const viewsId = `${layoutId}-views`
   const activeGroup = GROUPS.find((group) => group.tabs.some((tab) => tab.id === activeTab)) || GROUPS[0]
   const activeView = activeGroup.tabs.find((tab) => tab.id === activeTab)
-  const transition = reduceMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 420, damping: 34 }
   const countFor = (id: string) => id === 'activity' ? counts.activity : id === 'tasks' ? counts.tasks : id === 'documents' ? counts.documents : undefined
   const chooseGroup = (id: string) => {
     const group = GROUPS.find((item) => item.id === id)
     if (group) onTabChange(group.tabs[0].id)
+    if (id !== activeGroup.id) setExpandedGroup(null)
     setChooserOpen(false)
   }
 
@@ -42,29 +42,19 @@ export function LeadWorkspaceNav({ activeTab, onTabChange, counts }: LeadWorkspa
       <ChevronDown size={16} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
     </button>
 
-    <div className="portal-scrollbar hidden min-w-0 overflow-x-auto md:block">
-      <nav aria-label="Lead workspace views" className="flex min-w-max items-center gap-1 bg-[color:var(--portal-card)] p-1">
-        {GROUPS.map((group) => {
-          const selected = activeGroup.id === group.id
-          const count = countFor(group.id)
-          return <button key={group.id} type="button" aria-pressed={selected} onClick={() => chooseGroup(group.id)} className={`relative isolate inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${selected ? 'text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}>
-            {selected ? <motion.span layoutId={`${layoutId}-group`} className="absolute inset-0 -z-10 rounded-lg bg-[#caa24c]/15" transition={transition} aria-hidden="true" /> : null}
-            {group.label}{typeof count === 'number' ? <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${selected ? 'bg-[#caa24c]/15' : 'bg-[color:var(--portal-soft)]'}`}>{count}</span> : null}
-          </button>
-        })}
-      </nav>
+    <div className="hidden min-w-0 items-center bg-[color:var(--portal-soft)] md:flex">
+      <div className="portal-scrollbar min-w-0 flex-1 overflow-x-auto">
+      <PortalAnimatedTabs<string> ariaLabel="Lead workspace views" tabs={GROUPS.map((group) => ({ id: group.id, label: group.label, count: countFor(group.id) }))} activeTab={activeGroup.id} onTabChange={chooseGroup} className="!rounded-none !border-0 !bg-transparent" buttonClassName="!min-h-10" />
+      </div>
+      {activeGroup.tabs.length > 1 ? <button type="button" aria-expanded={expandedGroup === activeGroup.id} aria-controls={viewsId} onClick={() => setExpandedGroup((current) => current === activeGroup.id ? null : activeGroup.id)} className="mr-2 hidden min-h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 lg:inline-flex">{expandedGroup === activeGroup.id ? 'Hide views' : 'Show views'}<ChevronDown size={14} aria-hidden="true" className={`transition-transform motion-reduce:transition-none ${expandedGroup === activeGroup.id ? 'rotate-180' : ''}`} /></button> : null}
     </div>
 
-    {activeGroup.tabs.length > 1 ? <div className="portal-scrollbar min-w-0 overflow-x-auto border-t border-[color:var(--portal-border)]">
-      <nav aria-label={`${activeGroup.label} views`} className="flex min-w-max items-center gap-1 p-1">
-        {activeGroup.tabs.map((tab) => {
-          const selected = activeTab === tab.id
-          return <button key={tab.id} type="button" aria-pressed={selected} onClick={() => onTabChange(tab.id)} className={`relative isolate inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${selected ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>
-            {selected ? <motion.span layoutId={`${layoutId}-subview`} className="absolute inset-0 -z-10 rounded-lg bg-[color:var(--portal-soft)]" transition={transition} aria-hidden="true" /> : null}
-            {tab.label}{tab.id === 'proposals' ? <span className="rounded-full bg-[color:var(--portal-card)] px-1.5 py-0.5 text-[10px] tabular-nums text-[color:var(--portal-muted)]">{counts.proposals}</span> : null}
-          </button>
-        })}
-      </nav>
+    {activeGroup.tabs.length > 1 ? <div id={viewsId} className={`min-w-0 lg:grid motion-reduce:!transition-none ${expandedGroup === activeGroup.id ? 'lg:visible lg:grid-rows-[1fr] lg:opacity-100 lg:[transition:grid-template-rows_0.28s_cubic-bezier(0.22,1,0.36,1),opacity_0.22s,visibility_0s]' : 'lg:invisible lg:grid-rows-[0fr] lg:opacity-0 lg:[transition:grid-template-rows_0.28s_cubic-bezier(0.22,1,0.36,1),opacity_0.22s,visibility_0s_linear_0.28s]'}`}>
+      <div className="min-w-0 lg:min-h-0 lg:overflow-hidden">
+      <div className="portal-scrollbar min-w-0 overflow-x-auto border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]">
+      <PortalAnimatedTabs<string> ariaLabel={`${activeGroup.label} views`} tabs={activeGroup.tabs.map((tab) => ({ id: tab.id, label: tab.label, count: tab.id === 'proposals' ? counts.proposals : undefined }))} activeTab={activeTab} onTabChange={onTabChange} className="!rounded-none !border-0 !bg-transparent" buttonClassName="!min-h-10" />
+      </div>
+      </div>
     </div> : null}
 
     <PortalModal isOpen={chooserOpen} onClose={() => setChooserOpen(false)} title="Lead workspace" maxWidth="max-w-md">
