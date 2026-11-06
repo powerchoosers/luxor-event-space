@@ -12,6 +12,7 @@ import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { PortalContactAvatar, PortalCloseButton, PortalSkeleton, PortalSkeletonTransition, PortalTabTransition } from './PortalUI'
 import { PortalSmsConsentBadge, type SmsConsentState } from './PortalSmsConsentBadge'
 import { useToast } from './ToastProvider'
+import { ComposerAiActions } from './ComposerAiActions'
 
 type Conversation = {
   key: string
@@ -465,6 +466,7 @@ export function LuxorMessenger() {
           </div>
           {selectedConversation && !newMessageOpen ? (
             <div className="shrink-0 border-t border-[color:var(--portal-border)]/70 bg-[color:var(--portal-card)] p-3 sm:p-4">
+              <ComposerAiActions channel="sms" value={body} setValue={setBody} contextKey={selectedConversation.key} context={JSON.stringify({ name: selectedConversation.contactName, messages: selectedConversation.messages.slice(-20).map(({ direction, body }) => ({ direction, body })) })} disabled={sending || smsConsent?.status === 'opted_out'} />
               <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-transparent bg-[color:var(--portal-soft)] p-2 transition-all focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10">
                 <div className="min-w-0 flex-1 px-2 py-1">
                   <div className="relative">

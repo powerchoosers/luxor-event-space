@@ -7,6 +7,7 @@ import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { useToast } from './ToastProvider'
 import { PortalSmsConsentBadge } from './PortalSmsConsentBadge'
+import { ComposerAiActions } from './ComposerAiActions'
 
 export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?: string; phone?: string | null; contactName?: string | null }) {
   const { notify } = useToast()
@@ -134,6 +135,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
             <p className="mt-0.5 text-[11px] opacity-90">This phone number sent a STOP keyword. Manual and automated SMS sending is disabled per carrier regulations until the client replies START.</p>
           </div>
         )}
+        <ComposerAiActions channel="sms" value={body} setValue={setBody} contextKey={phone || inquiryId || ''} context={JSON.stringify({ name: contactName, messages: messages.slice(0, 20).reverse().map(({ direction, body }) => ({ direction, body })) })} disabled={!phone || sending || isOptedOut} />
         <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-transparent bg-[color:var(--portal-soft)] p-2 focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10">
           <textarea
             value={body}

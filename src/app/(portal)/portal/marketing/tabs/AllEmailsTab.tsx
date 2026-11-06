@@ -46,6 +46,7 @@ import {
   PortalSkeletonTransition,
 } from '@/components/portal/PortalUI'
 import { EmailRichTextEditor } from '@/components/portal/EmailRichTextEditor'
+import { ComposerAiActions } from '@/components/portal/ComposerAiActions'
 import { TextAnimate } from '@/components/ui/text-animate'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import type { LuxorSharedMailbox } from '@/lib/luxorSharedMailboxes'
@@ -363,6 +364,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [replyText, setReplyText] = useState('')
   const [replyInstruction, setReplyInstruction] = useState('')
   const [draftingReply, setDraftingReply] = useState(false)
+  const [polishingReply, setPolishingReply] = useState(false)
+  const replyGenerationInFlight = useRef(false)
+  const replyGenerationSnapshot = useRef({ text: replyText, selectedId })
+  replyGenerationSnapshot.current = { text: replyText, selectedId }
   const [sendingReply, setSendingReply] = useState(false)
   const replyDelivery = useRef<{ fingerprint: string; key: string } | null>(null)
   const [replyStatus, setReplyStatus] = useState<string | null>(null)
@@ -1021,7 +1026,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }, [messageDetail?.threadId, messageDetail?.direction, threadRetryKey])
 
   const draftWithElena = async () => {
-    if (!thread?.threadId) return
+    if (!thread?.threadId || replyGenerationInFlight.current || polishingReply) return
+    const originalText = replyText
+    const originalId = selectedId
+    replyGenerationInFlight.current = true
     setDraftingReply(true)
     setAnimatingDraft(false)
     setAnimatingDraftText('')
@@ -1035,7 +1043,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       const data = await response.json() as { draft?: string; error?: string }
       if (!response.ok || !data.draft) throw new Error(data.error || 'Elena could not draft a reply.')
       const cleanDraft = data.draft.trim()
-      setReplyText(plainTextToEmailHtml(cleanDraft))
+      if (replyGenerationSnapshot.current.text !== originalText || replyGenerationSnapshot.current.selectedId !== originalId) {
+        setReplyStatus('Your draft changed while Elena was working, so it was kept as-is. Please try again.')
+        return
+      }
+      setReplyText((current) => current === originalText && replyGenerationSnapshot.current.selectedId === originalId ? plainTextToEmailHtml(cleanDraft) : current)
       setAnimatingDraftText(cleanDraft)
       setAnimatingDraft(true)
       setReplyStatus('Elena drafted this reply. Review it before sending.')
@@ -1043,6 +1055,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     } catch (error) {
       setReplyStatus(error instanceof Error ? error.message : 'Elena could not draft a reply.')
     } finally {
+      replyGenerationInFlight.current = false
       setDraftingReply(false)
     }
   }
@@ -1557,7 +1570,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                   <button
                     type="button"
                     onClick={() => void draftWithElena()}
-                    disabled={draftingReply || loadingThread}
+                    disabled={draftingReply || polishingReply || loadingThread}
                     aria-label={draftingReply ? 'Elena is drafting' : 'Generate reply with Elena'}
                     title="Generate reply"
                     className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)] disabled:cursor-wait disabled:opacity-50"
@@ -1569,7 +1582,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {!replyPromptOpen ? (
             <button
               type="button"
@@ -1582,6 +1595,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           ) : (
             <span className="text-[11px] font-medium text-[color:var(--portal-muted)]">Instruct Elena</span>
           )}
+          <ComposerAiActions channel="email" value={replyText} setValue={setReplyText} contextKey={selectedId || ''} polishOnly disabled={draftingReply || sendingReply || polishingReply} requestLock={replyGenerationInFlight} onBusyChange={(busy) => { setPolishingReply(busy); if (busy) setReplyStatus(null) }} />
           {replyStatus && (
             <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
               <p role="status" aria-live="polite" className="truncate text-[11px] leading-tight text-[color:var(--portal-muted)]">
@@ -1634,13 +1648,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           <button
             type="button"
             onClick={() => void draftWithElena()}
-            disabled={draftingReply || loadingThread}
+            disabled={draftingReply || polishingReply || loadingThread}
             className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-medium text-[#a8792f] hover:bg-[color:var(--portal-soft)] disabled:opacity-50 dark:text-[#f1d27a]"
           >
             {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <FilePenLine size={13} />}
             Draft with Elena
           </button>
         </div>
+        <ComposerAiActions channel="email" value={replyText} setValue={setReplyText} contextKey={selectedId || ''} polishOnly disabled={draftingReply || sendingReply || polishingReply} requestLock={replyGenerationInFlight} onBusyChange={(busy) => { setPolishingReply(busy); if (busy) setReplyStatus(null) }} />
         {draftingReply ? (
           <div className="flex min-h-[280px] flex-col rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)]">
             <ElenaAiDraftingState />

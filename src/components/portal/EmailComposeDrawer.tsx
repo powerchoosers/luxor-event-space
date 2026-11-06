@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { PortalSelect, PortalCloseButton } from '@/components/portal/PortalUI'
 import { EmailRichTextEditor } from '@/components/portal/EmailRichTextEditor'
+import { ComposerAiActions } from '@/components/portal/ComposerAiActions'
 import { LuxorInquiry, LuxorMarketingTemplate } from '@/lib/luxorInquiryTypes'
 import { EMAIL_TEMPLATES, EmailBlock } from '@/app/(portal)/portal/marketing/emailTemplates'
 import { renderEmailToHtml } from '@/app/(portal)/portal/marketing/EmailBuilder/emailRenderer'
@@ -234,6 +235,8 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
 
   // Composed Body
   const [bodyText, setBodyText] = useState(initialDraft?.bodyText || '')
+  const [composerAiBusy, setComposerAiBusy] = useState(false)
+  const composerAiLock = useRef(false)
   const [templateBlocks, setTemplateBlocks] = useState<EmailBlock[]>(initialDraft?.templateBlocks || [])
 
   useEffect(() => {
@@ -914,6 +917,7 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
             <div className="flex min-h-0 flex-1 flex-col">
               {selectedTemplateId === 'regular' ? (
                 <>
+                  <div className="hidden sm:block"><ComposerAiActions channel="email" value={bodyText} setValue={setBodyText} contextKey={composeContextKey} context={JSON.stringify({ sender: fromName, recipient: lead?.full_name, event: lead?.event_type, date: lead?.target_date, guests: lead?.guest_count, inquiry: lead?.message, subject })} disabled={isSending || composerAiBusy} requestLock={composerAiLock} onBusyChange={setComposerAiBusy} /></div>
                   <div className="relative flex min-h-[11rem] min-w-0 flex-1 flex-col sm:hidden">
                     <EmailRichTextEditor
                       value={bodyText}
@@ -1337,22 +1341,13 @@ export function EmailComposeDrawer({ isOpen, onClose, lead, onSuccess, initialTe
             onInitialCommandApplied={handleFocusCommandApplied}
           />
         </div>
-        {purpose === 'inquiry-response' ? (
+        {selectedTemplateId === 'regular' ? (
           <footer className="flex min-h-14 shrink-0 flex-col items-start justify-center gap-1 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-2">
             {errorMsg ? <p role="alert" aria-live="assertive" className="w-full text-xs leading-4 text-rose-600 dark:text-rose-300">{errorMsg}</p>
               : simulationMsg ? <p role="status" aria-live="polite" className="w-full text-xs leading-4 text-amber-700 dark:text-amber-300">{simulationMsg}</p>
                 : successMsg ? <p role="status" aria-live="polite" className="w-full text-xs leading-4 text-emerald-700 dark:text-emerald-300">{successMsg}</p>
                   : null}
-            <button
-              type="button"
-              onClick={() => {
-                requestClose()
-                window.dispatchEvent(new Event('luxor-open-elena'))
-              }}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-            >
-              <Sparkles size={15} aria-hidden="true" /> Write with Elena
-            </button>
+            <ComposerAiActions channel="email" value={bodyText} setValue={setBodyText} contextKey={composeContextKey} context={JSON.stringify({ sender: fromName, recipient: lead?.full_name, event: lead?.event_type, date: lead?.target_date, guests: lead?.guest_count, inquiry: lead?.message, subject })} disabled={isSending || composerAiBusy} requestLock={composerAiLock} onBusyChange={setComposerAiBusy} />
           </footer>
         ) : null}
       </motion.section>}

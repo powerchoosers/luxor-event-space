@@ -17,6 +17,7 @@ import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { useToast } from './ToastProvider'
 import { PortalSmsConsentBadge } from './PortalSmsConsentBadge'
+import { ComposerAiActions } from './ComposerAiActions'
 
 export interface LuxorDraggableTextModalProps {
   inquiryId?: string
@@ -412,6 +413,7 @@ export function LuxorDraggableTextModal({
 
           {/* Pinned Composer Footer */}
           <footer className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
+            <ComposerAiActions channel="sms" value={body} setValue={setBody} contextKey={phone || inquiryId || ''} context={JSON.stringify({ name: contactName, messages: messages.slice(0, 20).reverse().map(({ direction, body }) => ({ direction, body })) })} disabled={!phone || sending || isOptedOut} />
             <div className="relative flex items-end gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-1.5 focus-within:border-[#caa24c]/50 focus-within:ring-2 focus-within:ring-[#caa24c]/15">
               <textarea
                 ref={textareaRef}
