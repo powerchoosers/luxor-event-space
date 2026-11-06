@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { LuxorTimePicker } from '@/components/LuxorTimePicker'
 import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
 import { LeadPaymentsDashboard } from '@/components/portal/LeadPaymentsDashboard'
+import { LeadBreakdownHistory } from '@/components/portal/LeadBreakdownHistory'
+import { breakdownPricingSignature, type LuxorBreakdown } from '@/lib/luxorBreakdownTypes'
 import { PortalAudioPlayer } from '@/components/portal/PortalAudioPlayer'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
@@ -598,7 +600,8 @@ export default function LeadDetailPage({
   const [submittingInvoice, setSubmittingInvoice] = useState(false)
   const invoiceSubmitBusy = useRef(false)
   const invoiceCreationRequest = useRef<string | null>(null)
-  const breakdownCreationRequest = useRef<string | null>(null)
+  const breakdownCreationRequest = useRef<{ id: string; fingerprint: string } | null>(null)
+  const [breakdownHistoryRevision, setBreakdownHistoryRevision] = useState(0)
   const savedPublicationInvoice = useRef<LuxorInvoice | null>(null)
   const [invoiceSubmissionError, setInvoiceSubmissionError] = useState<string | null>(null)
   const [publicationPending, setPublicationPending] = useState(false)
@@ -3109,25 +3112,46 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleSendProposalBreakdown = async (invoice: LuxorInvoice, recipientEmail: string) => {
-    const response = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/breakdown-email`, {
+  const handleSendProposalBreakdown = async (recipientEmail: string) => {
+    if (!lead || isLuxorTestInquiry(lead)) throw new Error('Breakdown delivery is disabled for isolated Test Leads. Use the preview only.')
+    if (!proposalCalculation) throw new Error('Wait for the current package prices before sending the breakdown.')
+    const selection = buildProposalSelection()
+    const request = {
+      inquiryId: id,
+      leadEventId: proposalLeadEventId,
+      sourceInvoiceId: editingInvoiceId || null,
+      recipientEmail: recipientEmail.trim(),
+      selection,
+      expectedPricing: breakdownPricingSignature(proposalCalculation),
+    }
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(request)))
+    const fingerprint = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('')
+    const storageKey = `luxor-breakdown-request:${id}:${proposalLeadEventId || 'lead'}`
+    if (breakdownCreationRequest.current?.fingerprint !== fingerprint) {
+      let prior: { id?: string; fingerprint?: string } | null = null
+      try { prior = JSON.parse(sessionStorage.getItem(storageKey) || 'null') } catch { /* Storage may be unavailable. */ }
+      breakdownCreationRequest.current = { id: prior?.fingerprint === fingerprint && /^[0-9a-f-]{36}$/i.test(prior.id || '') ? prior!.id! : crypto.randomUUID(), fingerprint }
+      // Retain only the request ID and a hash, never email/pricing contents, so
+      // an interrupted response can be recovered after closing or refreshing.
+      try { sessionStorage.setItem(storageKey, JSON.stringify(breakdownCreationRequest.current)) } catch { /* In-memory retries remain safe. */ }
+      setBreakdownPublished(false)
+    }
+    const response = await fetch('/api/proposal-breakdowns', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipientEmail }),
+      body: JSON.stringify({ ...request, requestId: breakdownCreationRequest.current.id, action: 'send' }),
     })
-    const payload = await response.json().catch(() => ({})) as { invoice?: LuxorInvoice; reviewUrl?: string; alreadyCompleted?: boolean; error?: string }
-    if (!response.ok || !payload.invoice || !payload.reviewUrl) {
-      throw new Error(payload.error || 'The Proposal Breakdown email could not be confirmed. Retry to recover its saved result.')
+    const payload = await response.json().catch(() => ({})) as { breakdown?: LuxorBreakdown; alreadyCompleted?: boolean; error?: string }
+    setBreakdownHistoryRevision((value) => value + 1)
+    if (payload.breakdown) setActiveLeadTab('proposals')
+    if (!response.ok || payload.breakdown?.delivery_state !== 'sent') {
+      throw new Error(payload.error || 'The breakdown send could not be confirmed. Check Breakdown history before sending another copy.')
     }
-    savedPublicationInvoice.current = payload.invoice
-    setInvoices((previous) => [payload.invoice!, ...previous.filter((item) => item.id !== payload.invoice!.id)])
-    setPublicationPending(true)
     setBreakdownPublished(true)
     setInvoiceSubmissionError(null)
-    void fetchAllData(false)
     notify({
-      title: payload.alreadyCompleted ? 'Proposal Breakdown already sent' : 'Proposal Breakdown sent',
-      description: 'The selected package and private Book Now link are saved. Continue to the final step if you also want to email the individual proposal.',
+      title: payload.alreadyCompleted ? 'Breakdown already sent' : 'Breakdown sent',
+      description: 'The exact email and prices are saved in Breakdown history. You can continue editing or create a final proposal separately.',
       variant: 'success',
     })
   }
@@ -3140,8 +3164,11 @@ export default function LeadDetailPage({
     let handoffWindow: Window | null = null
     let planningTimesSavedBeforeProposal = false
     try {
+      if (action === 'breakdown') {
+        await handleSendProposalBreakdown(String(details?.recipientEmail || lead.email || ''))
+        return
+      }
       if (isLuxorTestInquiry(lead)) {
-        if (action === 'breakdown') throw new Error('Proposal Breakdown email delivery is disabled for isolated Test Leads. Use the preview only.')
         if (!activeTestRunId) throw new Error('Start or resume the isolated Test Lead run before saving this proposal.')
         if (action === 'in_person') throw new Error('In-person handoff and signing are blocked for the permanent test lead.')
         if (!invoiceDueDate) throw new Error('Choose when this proposal offer expires before saving it.')
@@ -3172,10 +3199,6 @@ export default function LeadDetailPage({
       }
       if (action === 'in_person') handoffWindow = window.open('about:blank', 'luxor-client-handoff')
       if (savedPublicationInvoice.current) {
-        if (action === 'breakdown') {
-          await handleSendProposalBreakdown(savedPublicationInvoice.current, String(details?.recipientEmail || lead.email || ''))
-          return
-        }
         const publicationInvoice = savedPublicationInvoice.current.proposal_context?.proposal_record_type === 'proposal_breakdown'
           ? await resolveLinkedFinalProposal(savedPublicationInvoice.current)
           : savedPublicationInvoice.current
@@ -3194,25 +3217,12 @@ export default function LeadDetailPage({
         ? new Date(invoiceDueDate + 'T' + (invoiceOfferExpiryTime || DEFAULT_OFFER_EXPIRY_TIME) + ':00').toISOString()
         : null
       const editingInvoice = editingInvoiceId ? invoices.find((invoice) => invoice.id === editingInvoiceId) || null : null
-      const editingInvoiceIsBreakdown = editingInvoice?.proposal_context?.proposal_record_type === 'proposal_breakdown'
-      const createRevision = Boolean(action !== 'breakdown' && editingInvoice && (
+      const createRevision = Boolean(editingInvoice && (
         editingInvoice.price_locked_at
         || editingInvoice.proposal_sent_at
         || editingInvoice.status === 'sent'
       ))
-      const updateExistingDraft = Boolean(editingInvoice && !createRevision && (
-        action !== 'breakdown' || (editingInvoiceIsBreakdown && editingInvoice?.status !== 'sent' && !editingInvoice?.price_locked_at && !editingInvoice?.proposal_sent_at)
-      ))
-      const relatedProposalInvoiceId = editingInvoiceIsBreakdown
-        ? String(editingInvoice?.proposal_context?.related_proposal_invoice_id || '')
-        : editingInvoice?.id || ''
-      const proposalParentInvoice = action === 'breakdown'
-        ? invoices.find((invoice) => invoice.id === relatedProposalInvoiceId
-          && invoice.proposal_context?.proposal_record_type !== 'proposal_breakdown') || null
-        : null
-      if (action === 'breakdown' && !proposalParentInvoice) {
-        throw new Error('Open the final proposal first so this breakdown can be saved under the right proposal history.')
-      }
+      const updateExistingDraft = Boolean(editingInvoice && !createRevision)
       const proposalSelection = buildProposalSelection()
       const syncEventPlanningTimes = Boolean(
         action === 'save'
@@ -3265,11 +3275,8 @@ export default function LeadDetailPage({
         body: JSON.stringify({
           ...(updateExistingDraft && editingInvoiceId
             ? { id: editingInvoiceId }
-            : action === 'breakdown'
-              ? { creation_request_id: breakdownCreationRequest.current ||= crypto.randomUUID() }
-              : { creation_request_id: invoiceCreationRequest.current ||= crypto.randomUUID() }),
+            : { creation_request_id: invoiceCreationRequest.current ||= crypto.randomUUID() }),
           ...(createRevision && editingInvoice ? { supersedes_invoice_id: editingInvoice.id } : {}),
-          ...(action === 'breakdown' && proposalParentInvoice ? { proposal_parent_invoice_id: proposalParentInvoice.id } : {}),
           client_name: lead.full_name,
           event_type: proposalContext?.event_type || currentEventType || 'Event Booking',
           description: invoiceDesc || (editingInvoice ? editingInvoice.description || null : defaultProposalTitle(lead.full_name, currentEventType || 'Event')),
@@ -3278,7 +3285,6 @@ export default function LeadDetailPage({
           due_date: invoiceDueDate || null,
           offer_expires_at: offerExpiresAt,
           proposal_selection: proposalSelection,
-          ...(action === 'breakdown' ? { proposal_record_type: 'proposal_breakdown' } : {}),
           inquiry_id: id,
           lead_event_id: proposalLeadEventId,
           notes: invoiceNotes || null,
@@ -3289,7 +3295,6 @@ export default function LeadDetailPage({
       if (!res.ok) throw new Error(responseBody.error || ('Failed to ' + (updateExistingDraft ? 'update' : 'create') + ' final proposal.'))
       if (!responseBody.id || !responseBody.proposal_context) throw new Error('The save response was interrupted. Retry to recover the same proposal.')
       const invoice = responseBody as LuxorInvoice
-      if (action === 'breakdown' && !updateExistingDraft) breakdownCreationRequest.current = null
       setInvoices((prev) => [invoice, ...prev.filter(item => item.id !== invoice.id)])
       setActiveLeadTab('proposals')
       if (action !== 'save') {
@@ -3297,15 +3302,11 @@ export default function LeadDetailPage({
         setPublicationPending(true)
       }
       // Optional dossier summaries cannot turn a successful save into a duplicate retry.
-      if (action !== 'breakdown' && (selectedLeadEvent?.id || null) === proposalLeadEventId) {
+      if ((selectedLeadEvent?.id || null) === proposalLeadEventId) {
         await (selectedLeadEvent
           ? handleEventMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) })
           : handleMetadataUpdate({ proposalLineItems: invoice.line_items, proposalTaxRate: Number(invoice.tax_rate || 0) }))
           .catch(error => console.error('Proposal saved; dossier summary refresh failed:', error))
-      }
-      if (action === 'breakdown') {
-        await handleSendProposalBreakdown(invoice, String(details?.recipientEmail || lead.email || ''))
-        return
       }
       if (action === 'email') await handleSendFinalProposal(invoice, true)
       if (action === 'in_person') await prepareClientProposalHandoff(invoice, handoffWindow)
@@ -3327,7 +3328,7 @@ export default function LeadDetailPage({
         ? `Event times were saved to Event Details, but the proposal was not saved. ${errorMessage}`
         : errorMessage
       setInvoiceSubmissionError(message)
-      notify({ title: savedPublicationInvoice.current ? 'Proposal saved; delivery incomplete' : 'Final proposal not saved', description: message, variant: 'error' })
+      notify({ title: action === 'breakdown' ? 'Breakdown not confirmed' : savedPublicationInvoice.current ? 'Proposal saved; delivery incomplete' : 'Final proposal not saved', description: message, variant: 'error' })
     } finally {
       invoiceSubmitBusy.current = false
       setSubmittingInvoice(false)
@@ -7914,6 +7915,7 @@ export default function LeadDetailPage({
               </div>
               <button type="button" onClick={() => openProposalBuilder()} className="luxor-gold-raised inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#caa24c] px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md transition hover:bg-[#dfbd68]"><Plus size={14} /> Create New Proposal</button>
             </div>
+            {!isLuxorTestInquiry(lead) ? <LeadBreakdownHistory inquiryId={id} events={leadEvents} refreshKey={breakdownHistoryRevision} /> : null}
             {clientProposals.length === 0 ? (
               isLuxorTestInquiry(lead) ? null : (
               <div className="mt-5 rounded-xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-5 text-xs leading-5 text-[color:var(--portal-muted)]">
@@ -9170,11 +9172,6 @@ export default function LeadDetailPage({
         submissionError={invoiceSubmissionError}
         publicationPending={publicationPending}
         breakdownPublished={breakdownPublished}
-        breakdownRetryAvailable={Boolean(
-          publicationPending
-          && !breakdownPublished
-          && savedPublicationInvoice.current?.proposal_context?.proposal_record_type === 'proposal_breakdown'
-        )}
         onSubmit={(action, details) => void handleCreateInvoice(action, details)}
       />
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { luxorScheduleMinutes } from '@/lib/luxorAvailability'
+import { breakdownVenueAccessLabel, breakdownEventEndLabel } from '@/lib/luxorBreakdownTypes'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -319,7 +320,6 @@ type ProposalBuilderModalProps = {
   submissionError?: string | null
   publicationPending?: boolean
   breakdownPublished?: boolean
-  breakdownRetryAvailable?: boolean
   onSubmit: (action: ProposalSubmitAction, details?: { recipientEmail?: string }) => void
 }
 
@@ -835,7 +835,6 @@ export function ProposalBuilderModal({
   submissionError,
   publicationPending = false,
   breakdownPublished = false,
-  breakdownRetryAvailable = false,
   onSubmit,
 }: ProposalBuilderModalProps) {
   const [stepIndex, setStepIndex] = useState(0)
@@ -1760,9 +1759,9 @@ export function ProposalBuilderModal({
       guestCount: Number(guestCount) || 0,
       // `event_access` is a legacy guest-arrival/end summary. Venue access is
       // the rental window and must come from the distinct rental endpoints.
-      venueAccess: venueAccessRangeLabel,
+      venueAccess: breakdownVenueAccessLabel(rentalStartTime, rentalEndTime),
       guestArrival: guestArrivalTime ? formatCatalogTime(guestArrivalTime) : '',
-      eventEnd: eventEndTime ? `${formatCatalogTime(eventEndTime)}${isCustomRental && Number(eventEndTime.slice(0, 2)) < 6 ? ' (next day)' : ''}` : '',
+      eventEnd: breakdownEventEndLabel(guestArrivalTime, eventEndTime),
       selectedPackageId: packageTierId as LuxorProposalPackageOption['id'],
       packageOptions: calculation.packageOptions,
       packages: calculation.packages,
@@ -1771,7 +1770,7 @@ export function ProposalBuilderModal({
       phoneNumber: breakdownPhone,
       bookingUrl: null,
     })
-  }, [breakdownPhone, calculation, clientName, editableEventType, eventDateValue, eventEndTime, guestArrivalTime, guestCount, isCustomRental, packageTierId, rentalPeriod, selectedCalculatedPackage, selectedTierOption, venueAccessRangeLabel])
+  }, [breakdownPhone, calculation, clientName, editableEventType, eventDateValue, eventEndTime, guestArrivalTime, guestCount, isCustomRental, packageTierId, rentalPeriod, rentalStartTime, rentalEndTime, selectedCalculatedPackage, selectedTierOption])
   const customRentalSnapshot = getWeekdayCustomRentalSnapshot(selectedContext.weekday_custom_rental)
   const customTimeV4Snapshot = getLuxorCustomTimeRentalSnapshotV4(selectedContext.weekday_custom_rental)
   const validThrough = asString(selectedContext.valid_through) || proposalValidThrough(asString(selectedContext.proposal_created_on) || luxorCalendarDate(), selectedPromotion)
@@ -2351,10 +2350,9 @@ export function ProposalBuilderModal({
                     <input type="email" autoComplete="email" value={breakdownRecipient} onChange={(event) => setBreakdownRecipient(event.target.value)} disabled={submitting} className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)] outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12 disabled:opacity-50" />
                   </label>}
                   <button type="button" onClick={() => setBreakdownPreviewOpen((open) => !open)} disabled={!breakdownPreview || submitting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-[color:var(--portal-text)] transition hover:border-[#caa24c]/40 disabled:cursor-not-allowed disabled:opacity-45"><Eye size={14} />{breakdownPreviewOpen ? 'Hide preview' : 'Preview email'}</button>
-                  <button type="button" onClick={() => onSubmit('breakdown', { recipientEmail: breakdownRecipient.trim() })} disabled={submitting || (publicationPending && !breakdownRetryAvailable) || Boolean(testRunId) || Boolean(supersedesInvoiceId) || !breakdownPreview || (!publicationPending && !canSendBreakdown) || hasUnmigratedLegacyDiscount || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(breakdownRecipient.trim())} title={testRunId ? 'Queue this email from the saved proposal review panel after saving the test proposal.' : supersedesInvoiceId ? 'Use the final proposal action for revisions so the prior offer is replaced through the existing revision flow.' : !canSendBreakdown ? breakdownPublicationErrors[0] || 'Complete the required event details and pricing first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45"><Mail size={14} />{testRunId ? 'Queue from saved review' : submitting ? 'Sending…' : breakdownRetryAvailable ? 'Retry Breakdown' : breakdownPublished ? 'Breakdown sent' : 'Send Breakdown'}</button>
+                  <button type="button" onClick={() => onSubmit('breakdown', { recipientEmail: breakdownRecipient.trim() })} disabled={submitting || publicationPending || Boolean(testRunId) || !breakdownPreview || !canSendBreakdown || hasUnmigratedLegacyDiscount || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(breakdownRecipient.trim())} title={testRunId ? 'Queue this email from the saved proposal review panel after saving the test proposal.' : !canSendBreakdown ? breakdownPublicationErrors[0] || 'Complete the required event details and pricing first.' : undefined} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white transition hover:bg-[#a8792f] disabled:cursor-not-allowed disabled:opacity-45"><Mail size={14} />{testRunId ? 'Queue from saved review' : submitting ? 'Sending…' : 'Send Breakdown'}</button>
                 </div>
-                {breakdownPublished ? <p role="status" className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/7 px-3 py-2 text-xs leading-5 text-emerald-900 dark:text-emerald-100">Proposal Breakdown sent and saved. Continue to the final step if you also want to email the individual proposal.</p> : null}
-                {supersedesInvoiceId ? <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/7 px-3 py-2 text-xs leading-5 text-amber-900 dark:text-amber-100">For revised pricing, publish the updated proposal from the final step so the existing offer stays active until the normal revision flow replaces it.</p> : null}
+                {breakdownPublished ? <p role="status" className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/7 px-3 py-2 text-xs leading-5 text-emerald-900 dark:text-emerald-100">The last breakdown is saved in Breakdown history. Further edits will not change it. Send again after changing the estimate to save a new version, or continue to a final proposal separately.</p> : null}
                 {breakdownPreviewOpen && breakdownPreview ? <div className="mt-4 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-white"><iframe title="Proposal Breakdown email preview" srcDoc={breakdownPreview.html} sandbox="" className="h-[680px] w-full border-0 sm:h-[760px]" /></div> : null}
                 {!breakdownPriceReady && pricingStatus === 'ready' ? <p className="mt-3 text-xs text-amber-900 dark:text-amber-100">The package comparison is unavailable until every package has a current calculated price.</p> : null}
               </section>
@@ -2755,13 +2753,10 @@ export function ProposalBuilderModal({
           </motion.div>
           </AnimatePresence>
         </fieldset>
-        {stepIndex === 2 && publicationPending ? <div role={submissionError ? 'alert' : 'status'} className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-[color:var(--portal-text)] sm:px-6">
-          <p>{submissionError || (breakdownPublished ? 'Proposal Breakdown sent and saved. Continue to Step 6 to email the individual proposal if you want that separate message.' : 'This Proposal Breakdown is saved. Retry delivery with the same saved terms.')}</p>
-          {breakdownRetryAvailable && !breakdownPublished ? <button type="button" onClick={() => onSubmit('breakdown', { recipientEmail: breakdownRecipient.trim() })} disabled={submitting} className="mt-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#b98a3e] px-4 text-[10px] font-black uppercase tracking-[0.11em] text-white disabled:cursor-not-allowed disabled:opacity-45"><Mail size={13} />{submitting ? 'Retrying…' : 'Retry Breakdown Email'}</button> : null}
-        </div> : null}
+        {stepIndex === 2 && submissionError ? <div role="alert" className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-[color:var(--portal-text)] sm:px-6">{submissionError}</div> : null}
         {stepIndex === 5 && (submissionError || publishTitle || publicationPending) ? <div role={submissionError ? 'alert' : 'status'} className="shrink-0 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-6 py-3 text-sm text-[color:var(--portal-text)]">
           {submissionError || (!publicationPending && publishTitle)}
-          {publicationPending ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{breakdownPublished ? 'Proposal Breakdown was sent and saved. Send the individual proposal here if you want that separate email too.' : 'This proposal has been saved. Retry delivery using these saved terms, or close the builder to review it in Documents.'}</p> : null}
+          {publicationPending ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">This proposal has been saved. Retry delivery using these saved terms, or close the builder to review it in Documents.</p> : null}
         </div> : null}
 
         <footer data-proposal-builder-footer className="flex shrink-0 flex-col gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">

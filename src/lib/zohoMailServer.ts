@@ -366,6 +366,8 @@ export async function sendLuxorZohoEmail(input: {
   text?: string
   attachments?: Array<{ filename: string; content: Uint8Array; contentType?: string }>
   idempotencyKey?: string
+  /** Disable non-idempotent Zoho retries for separately claimed deliveries. */
+  retryZohoDelivery?: boolean
   /** Provider-neutral metadata used by the Resend adapter; Zoho ignores it. */
   metadata?: Record<string, unknown>
 }) {
@@ -421,7 +423,8 @@ export async function sendLuxorZohoEmail(input: {
 
   let response: Response | null = null
   let resultText = ''
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  const maxAttempts = input.retryZohoDelivery === false ? 1 : 2
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     // Zoho attachment references are temporary. A fresh upload on retry avoids
     // reusing a reference that its mail service may have already consumed.
     const uploadedAttachments = await uploadAttachments()
@@ -449,7 +452,7 @@ export async function sendLuxorZohoEmail(input: {
 
     if (response.status === 401) cachedAccessToken = null
     const retryable = response.status >= 500 && response.status <= 504
-    if (!retryable || attempt === 2) {
+    if (!retryable || attempt === maxAttempts) {
       throw new Error(`Zoho send failed with ${response.status}: ${resultText}`)
     }
 
