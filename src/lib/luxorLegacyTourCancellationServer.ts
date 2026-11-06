@@ -3,7 +3,7 @@ import 'server-only'
 import type { LuxorInquiry } from './luxorInquiryTypes'
 import { cancelQueuedTourEmailJobs } from './luxorEmailJobsServer'
 import { cancelQueuedTourTextJobs } from './luxorTextCampaignsServer'
-import { getLuxorTourSlot, releaseLuxorTourSlot } from './luxorTourSlotsServer'
+import { supabaseRest } from './supabaseRestServer'
 import { cancelLuxorZohoCalendarEvent } from './zohoMailServer'
 import { cancelLuxorCalendarEvent, getLuxorCalendarEvent } from './luxorCalendarServer'
 
@@ -97,12 +97,8 @@ export async function cancelLuxorLegacyTourForInquiry({ inquiry, reason, request
     cancelQueuedTourEmailJobs(inquiry.id),
     cancelQueuedTourTextJobs(inquiry.id),
     shouldReleaseSlot
-      ? getLuxorTourSlot(selectedTourSlotId).then((slot) => {
-          // A lead may have been rescheduled since the public slot was held.
-          // In that case leave the original slot untouched rather than freeing
-          // a time that may no longer represent this tour.
-          if (!slot || slot.slot_date !== inquiry.preferred_tour_date) return null
-          return releaseLuxorTourSlot(selectedTourSlotId)
+      ? supabaseRest<boolean>('rpc/luxor_release_legacy_tour_slot', {
+          method: 'POST', body: JSON.stringify({ p_inquiry_id: inquiry.id, p_slot_id: selectedTourSlotId }),
         })
       : Promise.resolve(null),
   ])
@@ -113,6 +109,9 @@ export async function cancelLuxorLegacyTourForInquiry({ inquiry, reason, request
 
   const slotResult = queuedCancellationResults[2]
   const slotReleased = slotResult.status === 'fulfilled' && Boolean(slotResult.value)
+  if (shouldReleaseSlot && slotResult.status === 'fulfilled' && !slotResult.value) {
+    errors.push('The saved tour reservation needs staff review before its capacity can be released.')
+  }
 
   let calendar: LuxorTourCancellation['calendar'] = { status: 'not_linked' }
   const localCalendar = await getLuxorCalendarEvent(inquiry.id)

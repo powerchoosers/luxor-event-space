@@ -114,7 +114,7 @@ export async function listLuxorTourAvailability(): Promise<LuxorTourAvailability
   }))
 }
 
-export async function listUpcomingLuxorTourSlots(limit = 1000): Promise<LuxorTourSlot[]> {
+export async function listUpcomingLuxorTourSlots(limit = 10000): Promise<LuxorTourSlot[]> {
   const slots = await supabaseRest<LuxorTourSlot[]>(
     `luxor_tour_slots?select=${TOUR_SLOT_SELECT}&slot_date=gte.${todayIsoDate()}&order=slot_date.asc,start_time.asc&limit=${encodeURIComponent(limit)}`,
   )
@@ -180,13 +180,27 @@ export async function createLuxorTourSlot(input: {
       start_time: input.startTime,
       end_time: input.endTime || null,
       status: 'available',
-      capacity: 1,
+      capacity: 2,
       booked_count: 0,
       title: input.title?.trim() || 'Private venue tour',
       notes: input.notes?.trim() || null,
     }),
   })
   return created
+}
+
+async function publishSelectedTourTimes(times: Array<{ slot_date: string; start_time: string }>) {
+  if (!times.length) return
+  const selected = new Set(times.map((time) => `${time.slot_date}/${normalizeTourTime(time.start_time)}`))
+  const slots = await listUpcomingLuxorTourSlots()
+  const ids = slots.filter((slot) => slot.status === 'unavailable' && selected.has(`${slot.slot_date}/${normalizeTourTime(slot.start_time)}`)).map((slot) => slot.id)
+  if (ids.length) await supabaseRest('rpc/luxor_publish_tour_slots', { method: 'POST', body: JSON.stringify({ p_slot_ids: ids }) })
+}
+
+async function unpublishOmittedTourTimes(slots: LuxorTourSlot[], selectedTimes: Array<{ slot_date: string; start_time: string }>) {
+  const selected = new Set(selectedTimes.map((time) => `${time.slot_date}/${normalizeTourTime(time.start_time)}`))
+  const ids = slots.filter((slot) => (slot.status === 'available' || slot.status === 'booked') && !selected.has(`${slot.slot_date}/${normalizeTourTime(slot.start_time)}`)).map((slot) => slot.id)
+  if (ids.length) await supabaseRest('rpc/luxor_unpublish_tour_slots', { method: 'POST', body: JSON.stringify({ p_slot_ids: ids }) })
 }
 
 export async function syncWeeklyTourSlots(
@@ -217,7 +231,7 @@ export async function syncWeeklyTourSlots(
       start_time: time.startTime,
       end_time: time.endTime,
       status: 'available',
-      capacity: 1,
+      capacity: 2,
       booked_count: 0,
       title: 'Private venue tour',
     }))
@@ -229,7 +243,7 @@ export async function syncWeeklyTourSlots(
   if (unbookedToDelete.length) {
     await Promise.all(
       unbookedToDelete.map((slot) =>
-        supabaseRest<null>(`luxor_tour_slots?id=eq.${encodeURIComponent(slot.id)}`, { method: 'DELETE' }),
+        supabaseRest<null>(`luxor_tour_slots?id=eq.${encodeURIComponent(slot.id)}&booked_count=eq.0`, { method: 'DELETE' }),
       ),
     )
   }
@@ -243,6 +257,8 @@ export async function syncWeeklyTourSlots(
     })
   }
 
+  await unpublishOmittedTourTimes(await listUpcomingLuxorTourSlots(), newSlots)
+  await publishSelectedTourTimes(newSlots)
   return listUpcomingLuxorTourSlots()
 }
 
@@ -292,7 +308,7 @@ export async function saveFlexibleTourSchedule(
   if (unbooked.length) {
     await Promise.all(
       unbooked.map((slot) =>
-        supabaseRest<null>(`luxor_tour_slots?id=eq.${encodeURIComponent(slot.id)}`, { method: 'DELETE' }),
+        supabaseRest<null>(`luxor_tour_slots?id=eq.${encodeURIComponent(slot.id)}&booked_count=eq.0`, { method: 'DELETE' }),
       ),
     )
   }
@@ -308,7 +324,7 @@ export async function saveFlexibleTourSchedule(
         start_time: time,
         end_time: times[0]?.endTime || null,
         status: 'available',
-        capacity: 1,
+        capacity: 2,
         booked_count: 0,
         title: 'Private venue tour',
       }
@@ -323,6 +339,8 @@ export async function saveFlexibleTourSchedule(
     })
   }
 
+  await unpublishOmittedTourTimes(await listUpcomingLuxorTourSlots(), rowsToInsert)
+  await publishSelectedTourTimes(rowsToInsert)
   return listUpcomingLuxorTourSlots()
 }
 
@@ -342,7 +360,7 @@ export async function publishLuxorTourDays(dates: string[]) {
       start_time: time.startTime,
       end_time: time.endTime,
       status: 'available',
-      capacity: 1,
+      capacity: 2,
       booked_count: 0,
       title: 'Private venue tour',
     }))
@@ -355,18 +373,7 @@ export async function publishLuxorTourDays(dates: string[]) {
       body: JSON.stringify(rows),
     })
 
-    await Promise.all(
-      cleanDates.map((slotDate) =>
-        supabaseRest<LuxorTourSlot[]>(
-          `luxor_tour_slots?slot_date=eq.${slotDate}&status=eq.unavailable&booked_count=eq.0`,
-          {
-            method: 'PATCH',
-            headers: { Prefer: 'return=minimal' },
-            body: JSON.stringify({ status: 'available', updated_at: new Date().toISOString() }),
-          },
-        ),
-      ),
-    )
+    await publishSelectedTourTimes(rows)
   }
 
   return listUpcomingLuxorTourSlots()
@@ -376,18 +383,9 @@ export async function unpublishLuxorTourDays(dates: string[]) {
   const cleanDates = [...new Set(dates)].filter(isLuxorTourDay).sort()
   if (cleanDates.length !== dates.length) throw new Error('Choose weekdays only.')
 
-  await Promise.all(
-    cleanDates.map((slotDate) =>
-      supabaseRest<LuxorTourSlot[]>(
-        `luxor_tour_slots?slot_date=eq.${slotDate}&status=eq.available&booked_count=eq.0`,
-        {
-          method: 'PATCH',
-          headers: { Prefer: 'return=minimal' },
-          body: JSON.stringify({ status: 'unavailable', updated_at: new Date().toISOString() }),
-        },
-      ),
-    ),
-  )
+  const upcoming = await listUpcomingLuxorTourSlots()
+  const ids = upcoming.filter((slot) => cleanDates.includes(slot.slot_date) && (slot.status === 'available' || slot.status === 'booked')).map((slot) => slot.id)
+  if (ids.length) await supabaseRest('rpc/luxor_unpublish_tour_slots', { method: 'POST', body: JSON.stringify({ p_slot_ids: ids }) })
 
   return listUpcomingLuxorTourSlots()
 }
@@ -412,7 +410,11 @@ export async function deleteLuxorTourSlot(id: string) {
     throw new Error('This time already has a reservation. Mark it unavailable instead of deleting it.')
   }
 
-  await supabaseRest<null>(`luxor_tour_slots?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' })
+  const deleted = await supabaseRest<LuxorTourSlot[]>(`luxor_tour_slots?id=eq.${encodeURIComponent(id)}&booked_count=eq.0`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=representation' },
+  })
+  if (!deleted.length) throw new Error('This time changed or was reserved. Refresh the schedule before removing it.')
   return true
 }
 

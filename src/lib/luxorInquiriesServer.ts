@@ -1,18 +1,19 @@
 import 'server-only'
 
+import { createHash, randomUUID } from 'node:crypto'
+import { getLuxorTourSlot, assertTourSlotCanBeBooked } from './luxorTourSlotsServer'
+import { formatTourSlotTime } from './luxorTourSlots'
+import { normalizedState } from './luxorCalendarServer'
+import { buildLuxorTourPlan } from './luxorTourPlanningServer'
+import { getActiveLuxorPhoneNumber } from './luxorPhoneNumbersServer'
+import { assertEmailHasNoUnresolvedPlaceholders, getTourResponseLinks } from './luxorEmailJobsServer'
+
 import { compactText, getLuxorConsentFormProfile, LuxorInquiry, LuxorInquiryInput, LuxorPipelineStage, LuxorInquiryStatus, isLuxorEventTypeRequiredFlow, normalizeLuxorEventType, parseGuestCount } from './luxorInquiryTypes'
 import { buildTourEmail, createLuxorEmailJob, createPublicToken } from './luxorEmailJobsServer'
 import { supabaseRest } from './supabaseRestServer'
 import { findRecentLuxorInquiryMatch } from './luxorInquiryDuplicateMatch'
 import { compareLuxorScheduledTours, getLuxorInquiryPageRequest, loadLuxorPages } from './luxorTourMetrics'
 import { recordLuxorWebsiteSmsConsent } from './luxorTextAutomationsServer'
-import {
-  applyTourSlotToInquiry,
-  assertTourSlotCanBeBooked,
-  getLuxorTourSlot,
-  releaseLuxorTourSlot,
-  reserveLuxorTourSlot,
-} from './luxorTourSlotsServer'
 
 export type LuxorTaskInquiryContext = Pick<LuxorInquiry, 'id' | 'full_name' | 'event_type' | 'target_date'>
 
@@ -178,27 +179,17 @@ function normalizeRsvpStatus(value: unknown) {
   return value === 'attending' || value === 'not_attending' || value === 'maybe' ? value : null
 }
 
-export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: string) {
+export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: string, options?: { idempotencyKey?: string; replayed?: boolean }) {
   const row = normalizeInquiry(input, userAgent)
   const selectedTourSlotId =
     typeof row.metadata?.selectedTourSlotId === 'string' ? row.metadata.selectedTourSlotId : null
-
-  const selectedTourSlot = selectedTourSlotId ? await getLuxorTourSlot(selectedTourSlotId) : null
-
-  let reservedTourSlot: Awaited<ReturnType<typeof reserveLuxorTourSlot>> | null = null
-
-  if (selectedTourSlotId) {
-    assertTourSlotCanBeBooked(selectedTourSlot)
-    reservedTourSlot = await reserveLuxorTourSlot(selectedTourSlot!)
-    applyTourSlotToInquiry(row, reservedTourSlot)
-  }
 
   const isNewsletter =
     row.flow === 'newsletter_signup' ||
     row.source === 'newsletter' ||
     row.metadata?.marketing_source === 'newsletter' ||
     row.metadata?.submitted_form === 'Newsletter Signup'
-  const hasReservedTourSlot = Boolean(reservedTourSlot)
+  const hasReservedTourSlot = Boolean(selectedTourSlotId)
   const status = row.preferred_tour_date || row.preferred_tour_time
     ? hasReservedTourSlot ? 'tour_confirmed' : 'tour_requested'
     : 'new'
@@ -207,24 +198,56 @@ export async function createLuxorInquiry(input: LuxorInquiryInput, userAgent?: s
     : status === 'tour_requested' || status === 'tour_confirmed' ? 'tour' : 'inquiry'
   const insertPayload = {
     ...row,
-    metadata: reservedTourSlot
-      ? { ...row.metadata, autoScheduleTour: true, tourBookingType: 'confirmed_slot' }
-      : row.metadata,
+    metadata: row.metadata,
     internal_notification_requested: true,
     status,
     pipeline_stage: pipelineStage,
     tour_attendance_status: status === 'tour_requested' || status === 'tour_confirmed' ? 'pending' : null,
   }
   let created: LuxorInquiry | undefined
-  try {
-    ;[created] = await insertLuxorInquiryRow(insertPayload)
-  } catch (error) {
-    if (reservedTourSlot) {
-      await releaseLuxorTourSlot(reservedTourSlot.id).catch((releaseError) => {
-        console.error('Inquiry insert failed and its tour slot could not be released:', releaseError)
-      })
+  if (selectedTourSlotId) {
+    const idempotencyKey = options?.idempotencyKey || randomUUID()
+    const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex')
+    const previous = await supabaseRest<LuxorInquiry | null>('rpc/luxor_find_public_tour_request', {
+      method: 'POST', body: JSON.stringify({ p_request_id: idempotencyKey, p_fingerprint: fingerprint }),
+    })
+    if (previous) {
+      if (options) options.replayed = true
+      return previous
     }
-    throw error
+    const slot = await getLuxorTourSlot(selectedTourSlotId)
+    if (!slot || slot.status !== 'available' || slot.booked_count >= slot.capacity) {
+      // Another request with this key may have committed after the first lookup.
+      const winner = await supabaseRest<LuxorInquiry | null>('rpc/luxor_find_public_tour_request', {
+        method: 'POST', body: JSON.stringify({ p_request_id: idempotencyKey, p_fingerprint: fingerprint }),
+      })
+      if (winner) {
+        if (options) options.replayed = true
+        return winner
+      }
+    }
+    assertTourSlotCanBeBooked(slot)
+    const token = createPublicToken()
+    const links = getTourResponseLinks(token)
+    const contactPhone = await getActiveLuxorPhoneNumber().catch(() => null)
+    const draft = { ...row, preferred_tour_date: slot!.slot_date,
+      preferred_tour_time: formatTourSlotTime(slot!.start_time) } as LuxorInquiry
+    const plan = await buildLuxorTourPlan({ inquiry: draft, date: slot!.slot_date,
+      time: formatTourSlotTime(slot!.start_time), responseToken: token, responseUrl: links.rescheduleUrl,
+      contactPhone, meetingType: 'Private Venue Tour', durationMinutes: 30 })
+    for (const template of Object.values(plan.templates)) assertEmailHasNoUnresolvedPlaceholders(template.subject, template.body)
+    const result = await supabaseRest<{ inquiry: LuxorInquiry; replayed: boolean }>('rpc/luxor_create_scheduled_tour_inquiry', {
+      method: 'POST', body: JSON.stringify({ p_slot_id: selectedTourSlotId, p_payload: insertPayload,
+        p_state: normalizedState({ ...plan.state, status: 'confirmed' }), p_tour: plan.tour, p_templates: plan.templates,
+        p_visit_id: randomUUID(), p_request_id: randomUUID(), p_idempotency_key: idempotencyKey, p_fingerprint: fingerprint }),
+    })
+    created = result.inquiry
+    if (result.replayed) {
+      if (options) options.replayed = true
+      return created
+    }
+  } else {
+    ;[created] = await insertLuxorInquiryRow(insertPayload)
   }
 
   const smsConsent = row.metadata?.smsConsent as { source?: string; scopes?: string[]; disclosureVersion?: string; disclosures?: string[] } | undefined

@@ -1,5 +1,4 @@
 import { after, NextRequest, NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
 import { createLuxorInquiry, findRecentDuplicateLuxorInquiry, listAllLuxorInquiries, listLuxorInquiries, getLuxorInquiry, stageForStatus, updateLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
 import { hasValidLuxorInquiryConsentFlags, isGuestCountOverCapacity, isLuxorEventTypeRequiredFlow, LUXOR_GUEST_CAPACITY_MESSAGE, LUXOR_MAX_GUESTS, LuxorEmailJob, LuxorInquiry, LuxorInquiryInput, LuxorInquiryStatus, normalizeLuxorEventType } from '@/lib/luxorInquiryTypes'
@@ -8,12 +7,8 @@ import { addMarketingMember } from '@/lib/luxorMarketingServer'
 import { queueInquiryTextJobs } from '@/lib/luxorTextCampaignsServer'
 import { countRecentInquiryAttempts, getPublicRequestIp, hashPublicRequestIp, recordLuxorPublicEvent } from '@/lib/luxorPublicEventsServer'
 import { sendLuxorWebPush } from '@/lib/luxorWebPushServer'
-import { assertEmailHasNoUnresolvedPlaceholders, createPublicToken, getTourResponseLinks, listLuxorEmailJobsForInquiry, processLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
-import { saveLuxorTourSchedule } from '@/lib/luxorTourScheduleServer'
-import { buildLuxorTourPlan, zonedTourDateTimeToUtc } from '@/lib/luxorTourPlanningServer'
-import { getActiveLuxorPhoneNumber } from '@/lib/luxorPhoneNumbersServer'
-import { releaseLuxorTourSlot } from '@/lib/luxorTourSlotsServer'
-import { cancelQueuedTourTextJobs } from '@/lib/luxorTextCampaignsServer'
+import { listLuxorEmailJobsForInquiry, processLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'
+import { zonedTourDateTimeToUtc } from '@/lib/luxorTourPlanningServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { isConfiguredTestSubmission, startLuxorTestRun } from '@/lib/luxorTestLeadServer'
 import { isLuxorBookingDateWithinLimit, isPublicEventDateSelectable } from '@/lib/publicEventDate'
@@ -27,45 +22,6 @@ const VALID_INQUIRY_STATUSES: LuxorInquiryStatus[] = [
   'booked',
   'closed_lost',
 ]
-
-async function scheduleTourFromPublicRequest(inquiry: LuxorInquiry) {
-  if (!inquiry.email || !inquiry.preferred_tour_date || !inquiry.preferred_tour_time) {
-    throw new Error('An email address, tour date, and specific tour time are required to send an invite.')
-  }
-  const token = inquiry.tour_response_token || createPublicToken()
-  const links = getTourResponseLinks(token)
-  const contactPhone = await getActiveLuxorPhoneNumber().catch((error) => {
-    console.warn('Tour confirmation could not load the active Luxor phone number:', error)
-    return null
-  })
-  const plan = await buildLuxorTourPlan({ inquiry, date: inquiry.preferred_tour_date,
-    time: inquiry.preferred_tour_time, responseToken: token, responseUrl: links.rescheduleUrl,
-    contactPhone, meetingType: 'Private Venue Tour', durationMinutes: 30 })
-  const { templates } = plan
-  for (const template of Object.values(templates)) assertEmailHasNoUnresolvedPlaceholders(template.subject, template.body)
-
-  const saved = await saveLuxorTourSchedule({
-    inquiry,
-    expectedSequence: -1,
-    state: plan.state,
-    tour: plan.tour,
-    templates,
-    requestedBy: 'Public tour request',
-    visitIntent: 'new_visit',
-    visitId: randomUUID(),
-    requestId: randomUUID(),
-    expectedVisitId: null,
-    expectedVisitVersion: 0,
-  })
-
-  const immediateJobs = (await listLuxorEmailJobsForInquiry(inquiry.id)).filter((job) =>
-    job.status === 'queued' && (job.job_type === 'calendar_invitation' || job.tour_notice === 'confirmation'),
-  )
-  await processLuxorEmailJobs(immediateJobs).catch((error) => {
-    console.error('Tour was scheduled, but immediate calendar delivery will retry through the queue:', error)
-  })
-  return saved
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -215,34 +171,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let inquiry = await createLuxorInquiry(payload, request.headers.get('user-agent') ?? undefined)
-    let tourScheduled = false
-    if (autoScheduleTour && inquiry) {
+    const requestKey = request.headers.get('idempotency-key')?.trim()
+    if (selectedTourSlotId && requestKey && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestKey)) {
+      return NextResponse.json({ error: 'Invalid submission key. Please refresh and try again.' }, { status: 400 })
+    }
+    const bookingOptions: { idempotencyKey?: string; replayed?: boolean } = { idempotencyKey: requestKey }
+    const inquiry = await createLuxorInquiry(payload, request.headers.get('user-agent') ?? undefined, bookingOptions)
+    if (bookingOptions.replayed) return NextResponse.json({ inquiry, tourScheduled: true, replayed: true }, { status: 200 })
+    const tourScheduled = Boolean(autoScheduleTour && inquiry)
+    if (tourScheduled && inquiry) {
       try {
-        const savedTour = await scheduleTourFromPublicRequest(inquiry)
-        inquiry = savedTour.inquiry
-        tourScheduled = true
-      } catch (scheduleError) {
-        const cleanup = await Promise.allSettled([
-          releaseLuxorTourSlot(selectedTourSlotId!),
-          cancelQueuedTourTextJobs(inquiry.id),
-          updateLuxorInquiry(inquiry.id, {
-            status: 'new',
-            pipeline_stage: 'inquiry',
-            tour_attendance_status: null,
-            preferred_tour_date: null,
-            preferred_tour_time: null,
-            tour_confirmed_at: null,
-            metadata: { ...inquiry.metadata, autoScheduleTour: false, tourBookingType: 'booking_failed', selectedTourSlotId: null },
-          }),
-          supabaseRest(`luxor_lead_events?inquiry_id=eq.${encodeURIComponent(inquiry.id)}&status=eq.tour_confirmed&pipeline_stage=eq.tour`, {
-            method: 'PATCH',
-            body: JSON.stringify({ status: 'new', pipeline_stage: 'inquiry', updated_at: new Date().toISOString() }),
-          }),
-        ])
-        const cleanupErrors = cleanup.filter((result) => result.status === 'rejected')
-        if (cleanupErrors.length) console.error('Tour booking failed and some reservation cleanup steps need repair:', cleanupErrors)
-        throw scheduleError
+        const immediateJobs = (await listLuxorEmailJobsForInquiry(inquiry.id)).filter((job) =>
+          job.status === 'queued' && (job.job_type === 'calendar_invitation' || job.tour_notice === 'confirmation'))
+        await processLuxorEmailJobs(immediateJobs)
+      } catch (error) {
+        console.error('Tour saved; calendar delivery will retry through the queue:', error)
       }
     }
 

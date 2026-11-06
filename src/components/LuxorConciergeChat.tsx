@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import type { PublicLuxorTourSlot } from '@/lib/luxorTourSlots'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
+import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEvent } from '@/lib/luxorPublicAttribution'
 import { PortalSelect } from '@/components/portal/PortalUI'
@@ -182,6 +183,7 @@ export function LuxorConciergeChat() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const formStartedAt = useRef(Date.now())
+  const submissionChatRef = useRef<Array<{ role: Message['role']; content: string }> | null>(null)
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -341,6 +343,9 @@ export function LuxorConciergeChat() {
     setSubmittingInquiry(true)
     setSubmissionError(null)
 
+    // Keep the original chat context stable when retrying after a lost response.
+    // The assistant's error message is added to the visible chat after failure.
+    submissionChatRef.current ??= messages.map(({ role, content }) => ({ role, content }))
     const payload: LuxorInquiryInput = {
       fullName: contactDetails.name,
       email: contactDetails.email,
@@ -365,22 +370,19 @@ export function LuxorConciergeChat() {
         selectedTourLabel: tourSelection?.label ?? null,
         autoScheduleTour: Boolean(tourSelection),
         tourBookingType: tourSelection ? 'confirmed_slot' : 'pending_custom_request',
-        chatMessages: messages.map(({ role, content }) => ({ role, content })),
+        chatMessages: submissionChatRef.current,
       },
     }
 
     try {
-      const response = await fetch('/api/inquiries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      const response = await submitLuxorIdempotentForm('concierge-tour', '/api/inquiries', payload)
       const result = (await response.json().catch(() => ({}))) as { error?: string }
 
       if (!response.ok) {
         throw new Error(result.error ?? 'The request could not be submitted.')
       }
 
+      submissionChatRef.current = null
       setSubmitted(true)
       setMessages((current) => [
         ...current,

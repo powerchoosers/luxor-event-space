@@ -152,7 +152,7 @@ export function TourAvailabilityManager({
       const dateMap = new Map<string, string[]>()
       const today = isoDate(new Date())
       for (const slot of loadedSlots) {
-        if (slot.slot_date >= today && slot.status === 'available') {
+        if (slot.slot_date >= today && (slot.status === 'available' || slot.status === 'booked')) {
           const list = dateMap.get(slot.slot_date) || []
           if (!list.includes(slot.start_time)) list.push(slot.start_time)
           dateMap.set(slot.slot_date, list)
@@ -357,7 +357,7 @@ export function TourAvailabilityManager({
     const map = new Map<string, { open: number; booked: number }>()
     for (const slot of slots) {
       const item = map.get(slot.slot_date) || { open: 0, booked: 0 }
-      if (slot.status === 'available' && slot.booked_count === 0) item.open += 1
+      if (slot.status === 'available' && slot.booked_count < slot.capacity) item.open += 1
       if (slot.status === 'booked' || slot.booked_count > 0) item.booked += 1
       map.set(slot.slot_date, item)
     }
@@ -516,6 +516,25 @@ export function TourAvailabilityManager({
           </div>
         </div>
       </section>
+
+      <details className="border-y border-[color:var(--portal-border)] py-3">
+        <summary className="cursor-pointer text-sm font-semibold text-[color:var(--portal-text)]">Upcoming tour capacity</summary>
+        <p className="mt-2 text-xs text-[color:var(--portal-muted)]">Confirmed bookings per time. A full time is unavailable to guests.</p>
+        {slots.filter((slot) => slot.slot_date >= todayStr && slot.slot_date <= cutoffDate).length ? (
+          <div className="mt-3 max-h-80 overflow-y-auto">
+            <ul className="divide-y divide-[color:var(--portal-border)]">
+              {slots.filter((slot) => slot.slot_date >= todayStr && slot.slot_date <= cutoffDate).map((slot) => (
+                <li key={slot.id} className="flex items-center justify-between gap-4 py-2 text-sm text-[color:var(--portal-text)]">
+                  <span>{formatTourSlotDate(slot.slot_date)} · {formatTourSlotTime(slot.start_time)}</span>
+                  <span className="shrink-0 text-xs text-[color:var(--portal-muted)]">
+                    {slot.booked_count}/{slot.capacity} booked · {slot.status === 'booked' || slot.booked_count >= slot.capacity ? 'Full' : slot.status === 'available' ? 'Open' : 'Unavailable'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : <p className="mt-3 text-xs text-[color:var(--portal-muted)]">No upcoming tour times.</p>}
+      </details>
 
       {/* SCHEDULING METHOD SELECTOR (Prompt Req 6) */}
       <div className="space-y-2">
@@ -1185,7 +1204,7 @@ export function TourAvailabilityManager({
               {/* Safeguard & Synchronized Notice */}
               <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4 text-[11px] text-[color:var(--portal-muted)]">
                 <p>
-                  ✓ <strong>Direct Connection:</strong> When a client selects a time and confirms their tour, that slot is instantly reserved and disappears from this list so nobody else can double-book it.
+                  ✓ <strong>Direct Connection:</strong> Each time can hold two separate tours. It remains available after the first booking and closes when both places are booked.
                 </p>
                 <p className="mt-1">
                   ✓ <strong>Notice Rule:</strong> Tour times less than 24 hours away are automatically hidden to ensure adequate preparation time.
