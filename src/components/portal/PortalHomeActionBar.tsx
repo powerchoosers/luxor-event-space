@@ -1,11 +1,15 @@
 'use client'
 
-import { motion, useReducedMotion, useSpring, useTransform } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion, useSpring, useTransform } from 'framer-motion'
 import {
   ChevronDown,
   Plus,
   Workflow,
   MessageCircleMore,
+  Phone,
+  Zap,
+  X,
+  GripVertical,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -57,7 +61,7 @@ export function PortalHomeActionBar() {
   if (!mounted || typeof document === 'undefined') return null
 
   return createPortal(
-    <motion.div
+    <><motion.div
       className="pointer-events-none fixed inset-x-0 bottom-[var(--portal-mobile-nav-height)] z-50 h-[52px] overflow-hidden sm:hidden"
       initial={reduceMotion ? false : { y: 24, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
@@ -156,7 +160,62 @@ export function PortalHomeActionBar() {
         onCreated={() => router.push('/portal/leads')}
         pagePath="/portal"
       />
-    </motion.div>,
+    </motion.div><DesktopQuickActions /></>,
     document.body
   )
+}
+
+function DesktopQuickActions() {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [inquiryOpen, setInquiryOpen] = useState(false)
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('luxor-home-actions-position') || 'null')
+      return stored && Number.isFinite(stored.x) && Number.isFinite(stored.y) ? { x: stored.x, y: stored.y } : null
+    } catch { return null }
+  })
+  const [grabbed, setGrabbed] = useState(false)
+  const [trackpadGrab, setTrackpadGrab] = useState(false)
+  const grabTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dragging = useRef(false)
+  const toggle = useRef<HTMLButtonElement>(null)
+  const panelId = useId()
+  const reduceMotion = useReducedMotion()
+  const close = () => { setOpen(false); toggle.current?.focus() }
+  const action = 'flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-2 focus-visible:outline-[#caa24c]'
+
+  useEffect(() => {
+    return () => { if (grabTimer.current) clearTimeout(grabTimer.current) }
+  }, [])
+  const move = (x: number, y: number) => {
+    const next = { x: Math.max(0, Math.min(window.innerWidth - 56, x - 28)), y: Math.max(56, Math.min(window.innerHeight - 56, y - 24)) }
+    setPosition(next)
+    try { localStorage.setItem('luxor-home-actions-position', JSON.stringify(next)) } catch { /* Position still works for this session. */ }
+  }
+  useEffect(() => {
+    if (!trackpadGrab) return
+    const onMove = (event: PointerEvent) => move(event.clientX, event.clientY)
+    const onDrop = () => { setTrackpadGrab(false); setGrabbed(false) }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerdown', onDrop, { once: true })
+    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerdown', onDrop) }
+  }, [trackpadGrab])
+
+  return <div className="fixed z-40 hidden xl:block" style={position ? { left: `min(${position.x}px, calc(100vw - 56px))`, top: `min(${position.y}px, calc(100vh - 56px))` } : { right: 0, top: '75%' }} onKeyDown={(event) => { if (event.key === 'Escape' && open) { event.preventDefault(); close() } }}>
+    <motion.div animate={{ scale: grabbed && !reduceMotion ? 1.08 : 1 }} className="flex h-12 items-center rounded-l-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md">
+      <button ref={toggle} type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)} className="flex h-12 w-10 items-center justify-center text-[#a8792f] focus-visible:outline-2 focus-visible:outline-[#caa24c]" aria-label={open ? 'Close quick actions' : 'Open quick actions'}><Zap size={17} /></button>
+      <button type="button" aria-label="Move quick actions tab" title="Hold and drag, or double-click to move" className={`flex h-12 w-5 touch-none items-center justify-center text-[color:var(--portal-muted)] ${grabbed ? 'cursor-grabbing' : 'cursor-grab'}`} onDoubleClick={() => { setTrackpadGrab(true); setGrabbed(true) }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); const x = event.clientX, y = event.clientY; grabTimer.current = setTimeout(() => { dragging.current = true; setGrabbed(true); move(x, y) }, 300) }} onPointerMove={(event) => { if (dragging.current) move(event.clientX, event.clientY) }} onPointerUp={() => { if (grabTimer.current) clearTimeout(grabTimer.current); dragging.current = false; if (!trackpadGrab) setGrabbed(false) }} onPointerCancel={() => { if (grabTimer.current) clearTimeout(grabTimer.current); dragging.current = false; setGrabbed(false) }}><GripVertical size={15} /></button>
+    </motion.div>
+    <AnimatePresence>
+      {open ? <motion.div id={panelId} role="region" aria-label="Quick actions" initial={reduceMotion ? { opacity: 0 } : { x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={reduceMotion ? { opacity: 0 } : { x: 20, opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.23, 1, 0.32, 1] }} className="fixed right-4 top-1/2 w-60 -translate-y-1/2 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 shadow-xl">
+        <div className="mb-2 flex items-center justify-between px-3"><h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Quick actions</h2><button type="button" onClick={close} aria-label="Close quick actions" className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]"><X size={16} /></button></div>
+        <button type="button" className={action} onClick={() => { setOpen(false); setInquiryOpen(true) }}><Plus size={17} className="text-[#a8792f]" /> New inquiry</button>
+        <Link className={action} href="/portal/leads?view=followups"><Phone size={17} className="text-[#a8792f]" /> Follow Ups</Link>
+        <Link className={action} href="/portal/marketing?tab=automations"><Workflow size={17} className="text-[#a8792f]" /> Flow</Link>
+        <button type="button" className={action} onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent('luxor-open-elena')) }}><MessageCircleMore size={17} className="text-[#a8792f]" /> Elena</button>
+      </motion.div> : null}
+    </AnimatePresence>
+    <NewLeadDrawer isOpen={inquiryOpen} onClose={() => setInquiryOpen(false)} onCreated={() => router.push('/portal/leads')} pagePath="/portal" />
+  </div>
 }

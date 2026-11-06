@@ -651,7 +651,7 @@ export function PortalFilterBar({
   searchValue: string
   onSearchChange: (value: string) => void
   searchPlaceholder?: string
-  resultLabel?: string
+  resultLabel?: React.ReactNode
   activeFilters?: PortalActiveFilter[]
   onClearFilters?: () => void
   children?: React.ReactNode
@@ -728,9 +728,9 @@ export function PortalFilterBar({
         </div>
 
         {resultLabel ? (
-          <span className="shrink-0 px-1 tabular-nums text-xs font-medium text-[color:var(--portal-muted)]">
+          <div className="shrink-0 px-1 tabular-nums text-xs font-medium text-[color:var(--portal-muted)]">
             {resultLabel}
-          </span>
+          </div>
         ) : null}
       </div>
 

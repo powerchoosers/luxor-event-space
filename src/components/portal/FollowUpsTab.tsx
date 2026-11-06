@@ -8,7 +8,7 @@ import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'
 import { buildFollowUpTaskPatch, getLuxorFollowUpTaskChannel, isLuxorFollowUpTask } from '@/lib/luxorFollowUpTaskPolicy'
-import { PortalButton, PortalDatePicker, PortalFilterBar, type PortalActiveFilter, PortalModal, PortalPagination, PortalSelect, PortalSkeletonTransition, PortalTableCard, PortalTourCardSkeleton, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
+import { PortalButton, PortalDatePicker, PortalFilterBar, type PortalActiveFilter, PortalModal, PortalPagination, PortalSelect, PortalSkeleton, PortalSkeletonTransition, PortalTableCard, PortalTourCardSkeleton, PortalStatusBadge, type PortalStatusTone } from '@/components/portal/PortalUI'
 import { LuxorCrmRecordCard } from '@/components/portal/LuxorCrmRecordCard'
 import { FollowUpLeadPicker } from '@/components/portal/FollowUpLeadPicker'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
@@ -818,7 +818,7 @@ export default function FollowUpsTab({ leads, onLeadsRefresh }: { leads: LuxorIn
             searchValue={query}
             onSearchChange={(value) => { setQuery(value); setCurrentPage(1) }}
             searchPlaceholder="Search leads or follow-ups"
-            resultLabel={loading ? 'Loading…' : `${visibleRows.length.toLocaleString()} ${visibleRows.length === 1 ? 'follow-up' : 'follow-ups'}`}
+            resultLabel={<div role="status"><span className="sr-only">{loading ? 'Loading follow-ups' : ''}</span><PortalSkeletonTransition loading={loading} overlap animateInitialSkeleton skeleton={<PortalSkeleton className="h-3 w-20 rounded" />}><span>{visibleRows.length.toLocaleString()} {visibleRows.length === 1 ? 'follow-up' : 'follow-ups'}</span></PortalSkeletonTransition></div>}
             activeFilters={activeFilters}
             onClearFilters={() => { setFilter('all'); setCurrentPage(1) }}
             actions={

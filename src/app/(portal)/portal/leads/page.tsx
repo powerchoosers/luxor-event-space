@@ -208,7 +208,8 @@ export default function LeadsPage() {
   // Restore the saved view before the route's first client paint.
   useLayoutEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedTab = localStorage.getItem('luxor_leads_active_tab')
+      const requestedTab = new URLSearchParams(window.location.search).get('view')
+      const savedTab = requestedTab === 'followups' ? requestedTab : localStorage.getItem('luxor_leads_active_tab')
       const savedPage = localStorage.getItem('luxor_leads_current_page')
       const savedLeadSort = localStorage.getItem('luxor_leads_table_sort')
       const savedClientSort = localStorage.getItem('luxor_clients_table_sort')

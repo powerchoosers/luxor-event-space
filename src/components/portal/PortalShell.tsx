@@ -1616,7 +1616,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                 }`}
                 aria-current={active ? 'page' : undefined}
               >
-                {active ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-0 rounded-xl bg-[#caa24c]/10" /> : null}
+                {active ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-x-1 inset-y-0 mx-auto max-w-[72px] rounded-xl bg-[#caa24c]/10" /> : null}
                 <span className="relative z-10">{item.icon}</span>
                 <span className="relative z-10">{item.label}</span>
               </Link>
@@ -1633,7 +1633,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             aria-label="More portal sections"
             aria-expanded={mobileMoreOpen}
           >
-            {!accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams)) ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-0 rounded-xl bg-[#caa24c]/10" /> : null}
+            {!accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams)) ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-x-1 inset-y-0 mx-auto max-w-[72px] rounded-xl bg-[#caa24c]/10" /> : null}
             <span className="relative z-10"><MoreHorizontal size={20} /></span>
             <span className="relative z-10">More</span>
           </button>
