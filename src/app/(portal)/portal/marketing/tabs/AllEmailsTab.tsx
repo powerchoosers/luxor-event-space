@@ -325,6 +325,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const appliedInitialMessageId = useRef<string | null>(null)
   const replyComposerRef = useRef<HTMLDivElement | null>(null)
   const [mobileReplyAnchor, setMobileReplyAnchor] = useState<HTMLDivElement | null>(null)
+  const mobileReplyPortalRef = useRef<HTMLDivElement | null>(null)
+  const mobileReplyTriggerRef = useRef<HTMLButtonElement | null>(null)
   const threadScrollRef = useRef<HTMLDivElement | null>(null)
   const readerMenuRef = useRef<HTMLDivElement | null>(null)
   const mailboxListRef = useRef<HTMLDivElement | null>(null)
@@ -384,12 +386,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   >(null)
 
   const syncReplyBounds = useCallback(() => {
-    if (!mobileReplyAnchor) return
-    const bounds = mobileReplyAnchor.getBoundingClientRect()
-    if (!bounds.width || !bounds.height) return
+    const bounds = mobileReplyAnchor?.getBoundingClientRect()
     const visualViewport = window.visualViewport
-    const nextBounds = { top: bounds.top, left: bounds.left, width: bounds.width, height: bounds.height }
-    setMobileReplyBounds((current) => current && current.top === nextBounds.top && current.left === nextBounds.left && current.width === nextBounds.width && current.height === nextBounds.height ? current : nextBounds)
+    if (bounds?.width && bounds.height) {
+      const nextBounds = { top: bounds.top, left: bounds.left, width: bounds.width, height: bounds.height }
+      setMobileReplyBounds((current) => current && current.top === nextBounds.top && current.left === nextBounds.left && current.width === nextBounds.width && current.height === nextBounds.height ? current : nextBounds)
+    }
     const nextViewport = {
       top: visualViewport?.offsetTop || 0,
       left: visualViewport?.offsetLeft || 0,
@@ -415,6 +417,55 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       observer.disconnect()
     }
   }, [isMobileReader, mobileReplyAnchor, syncReplyBounds])
+
+  const mobileReplyFocusOpen = Boolean(isMobileReader && compactReaderOpen && replyOpen && messageDetail && messageDetail.category !== 'Website Inquiry' && messageDetail.direction !== 'campaign')
+
+  useEffect(() => {
+    if (!mobileReplyFocusOpen) return
+    // The writer is a body-level focus surface, not a card inside the reader.
+    // Keep the thread and navigation mounted for a lossless return, but hide
+    // and disable them while the keyboard changes the visual viewport.
+    const background = Array.from(document.querySelectorAll<HTMLElement>('main.portal-main, .portal-mobile-nav, body.portal-shell > aside'))
+    const previousBackground = background.map((element) => ({ element, inert: element.inert, visibility: element.style.visibility }))
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    background.forEach((element) => {
+      element.inert = true
+      element.style.visibility = 'hidden'
+    })
+    const handleReplyKeys = (event: KeyboardEvent) => {
+      const panel = mobileReplyPortalRef.current
+      if (!panel) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        panel.querySelector<HTMLButtonElement>('[aria-label="Close reply and keep draft"]')?.click()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const controls = Array.from(panel.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])'))
+        .filter((element) => element.getClientRects().length > 0)
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      if (!first || !last) return
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault()
+        last.focus({ preventScroll: true })
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault()
+        first.focus({ preventScroll: true })
+      }
+    }
+    document.addEventListener('keydown', handleReplyKeys)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      previousBackground.forEach(({ element, inert, visibility }) => {
+        element.inert = inert
+        element.style.visibility = visibility
+      })
+      document.removeEventListener('keydown', handleReplyKeys)
+      mobileReplyTriggerRef.current?.focus({ preventScroll: true })
+    }
+  }, [mobileReplyFocusOpen])
 
   useEffect(() => {
     if (!replyDraftStorageKey) {
@@ -1421,7 +1472,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         <PortalCloseButton onClick={collapseReplyComposer} disabled={sendingReply} aria-label="Close reply and keep draft" />
         <div className="min-w-0 flex-1 px-1 text-center">
           <p className="truncate text-xs font-semibold text-[color:var(--portal-text)]">
-            Reply to {currentInquiry ? <Link href={`/portal/leads/${currentInquiry.id}`} className="font-normal text-[color:var(--portal-muted)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{replyRecipientDisplayName}</Link> : <span className="font-normal text-[color:var(--portal-muted)]">{replyRecipientDisplayName}</span>}
+            Reply to <span className="font-normal text-[color:var(--portal-muted)]" title={replyRecipientEmail}>{replyRecipientDisplayName}</span>
           </p>
         </div>
         <button
@@ -1464,11 +1515,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             ariaLabel="Write your reply"
             autoFocus
             hideToolbar
-            compact
+            focusMode
+            readOnly={sendingReply}
           />
         )}
       </div>
-      <div className="shrink-0 border-t border-[color:var(--portal-border)]/60 bg-[color:var(--portal-card)] px-3 py-2 sm:px-4">
+      <div className="max-h-[45%] shrink-0 overflow-y-auto overscroll-contain border-t border-[color:var(--portal-border)]/60 bg-[color:var(--portal-card)] px-3 py-2 sm:px-4">
         <AnimatePresence initial={false}>
           {replyPromptOpen && (
             <motion.div
@@ -1487,7 +1539,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                   onChange={(event) => setReplyInstruction(event.target.value)}
                   placeholder="Ask Elena to draft a reply…"
                   rows={2}
-                  className="portal-input-transparent min-h-16 max-h-32 w-full resize-none border-0 bg-transparent pr-10 text-[15px] sm:text-sm leading-6 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
+                  className="portal-input-transparent min-h-16 max-h-32 w-full resize-none border-0 bg-transparent pr-10 text-base leading-6 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
                 />
                 <button
                   type="button"
@@ -2433,50 +2485,25 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       <motion.div
         key="mobile-reply-container"
         id="mobile-reply-container"
-        role={replyOpen ? 'region' : undefined}
-        aria-label={replyOpen ? 'Write email reply' : undefined}
+        inert={replyOpen}
         initial={reduceMotion ? { opacity: 0 } : { x: '100%' }}
-        animate={(() => {
-          const keyboardOpen = replyViewport.height < window.innerHeight - 120
-          const openBottom = keyboardOpen
-            ? replyViewport.top + replyViewport.height
-            : mobileReplyBounds.top + mobileReplyBounds.height
-          const availableHeight = replyViewport.height || window.innerHeight
-          const targetHeight = replyPromptOpen
-            ? (keyboardOpen ? Math.min(360, availableHeight - 8) : Math.min(420, Math.max(340, Math.round(availableHeight * 0.58))))
-            : (keyboardOpen ? Math.min(260, availableHeight - 8) : Math.min(340, Math.max(260, Math.round(availableHeight * 0.44))))
-
-          return {
-            top: replyOpen ? Math.max(replyViewport.top + 8, openBottom - targetHeight) : mobileReplyBounds.top,
-            left: mobileReplyBounds.left,
-            width: mobileReplyBounds.width,
-            height: replyOpen ? Math.max(140, Math.min(targetHeight, openBottom - (replyViewport.top + 8))) : mobileReplyBounds.height,
-            borderRadius: 24,
-            x: 0,
-            opacity: 1,
-          }
-        })()}
+        animate={{ ...mobileReplyBounds, borderRadius: 24, x: 0, opacity: 1 }}
         exit={reduceMotion ? { opacity: 0 } : { x: '100%' }}
         transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32, x: { duration: 0.36, ease: [0.22, 1, 0.36, 1] } }}
         onAnimationComplete={() => {
           if (!replyOpen) syncReplyBounds()
         }}
         className="fixed flex min-h-0 flex-col overflow-hidden border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-lg"
-        style={{ zIndex: 65 }}
+        style={{ zIndex: 65, visibility: replyOpen ? 'hidden' : undefined }}
       >
-        <AnimatePresence initial={false} mode="popLayout">
-          {replyOpen ? (
-            <motion.div key="mobile-reply-writer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.12 }} className="flex min-h-0 flex-1 flex-col">
-              {renderReplyComposerContent(true)}
-            </motion.div>
-          ) : (
-            <motion.button
+            <button
+              ref={mobileReplyTriggerRef}
               key="mobile-reply-trigger"
               type="button"
-              onClick={() => setReplyOpen(true)}
+              onClick={() => { syncReplyBounds(); setReplyOpen(true) }}
               aria-label={hasUnsentReply ? `Continue draft to ${replyRecipientDisplayName}` : `Reply to ${replyRecipientDisplayName}`}
-              aria-controls="mobile-reply-container"
-              aria-expanded={false}
+              aria-controls="mobile-reply-focus"
+              aria-expanded={replyOpen}
               className="flex min-h-11 w-full shrink-0 items-center gap-3 px-3 text-left text-sm text-[color:var(--portal-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
             >
               <Reply size={17} className={`shrink-0 ${hasUnsentReply ? 'text-[#caa24c]' : ''}`} />
@@ -2489,10 +2516,39 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 <span className="min-w-0 flex-1 truncate">Reply to {replyRecipientDisplayName}…</span>
               )}
               <Send size={17} className="shrink-0 text-[#caa24c]" />
-            </motion.button>
-          )}
-        </AnimatePresence>
+            </button>
       </motion.div>
+      ) : null}
+      {mobileReplyFocusOpen ? (
+        <motion.div
+          key="mobile-reply-focus"
+          className="fixed inset-0 z-[130] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.12 }}
+        >
+          <div
+            ref={mobileReplyPortalRef}
+            id="mobile-reply-focus"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Reply to ${replyRecipientDisplayName}`}
+            className="fixed flex min-h-0 min-w-0 flex-col overflow-hidden bg-[color:var(--portal-bg)]"
+            style={{
+              // Follow the visible screen directly, without tweening keyboard
+              // resizes or inheriting the collapsed reply pill's dimensions.
+              top: replyViewport.top,
+              left: replyViewport.left,
+              width: replyViewport.width || '100%',
+              height: replyViewport.height || '100dvh',
+              paddingTop: 'env(safe-area-inset-top)',
+              paddingBottom: replyViewport.height < window.innerHeight - 120 ? 0 : 'env(safe-area-inset-bottom)',
+            }}
+          >
+            {renderReplyComposerContent(true)}
+          </div>
+        </motion.div>
       ) : null}
       </AnimatePresence>,
       document.body,
