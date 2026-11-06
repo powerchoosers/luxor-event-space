@@ -5845,14 +5845,14 @@ export default function LeadDetailPage({
                           <div className="mb-4 flex items-center justify-between border-b border-[color:var(--portal-border)] pb-3">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Tour Details</p>
                           </div>
-                          <div className="space-y-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Tour Date</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'Not scheduled'}</span>
+                          <div className="space-y-3 text-sm leading-5">
+                            <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-4">
+                              <span className="shrink-0 text-[color:var(--portal-muted)]">Tour date</span>
+                              <span className="min-w-0 font-medium text-[color:var(--portal-text)]">{lead.preferred_tour_date ? formatDisplayDate(lead.preferred_tour_date) : 'Not scheduled'}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Tour Time</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{lead.preferred_tour_time || '3:00 PM'}</span>
+                            <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-4">
+                              <span className="shrink-0 text-[color:var(--portal-muted)]">Tour time</span>
+                              <span className="min-w-0 font-medium text-[color:var(--portal-text)]">{lead.preferred_tour_time || '3:00 PM'}</span>
                             </div>
                             {emailResendCandidate ? (
                               <div className="rounded-lg border border-[#caa24c]/25 bg-[#caa24c]/[0.07] p-3">
@@ -5883,17 +5883,17 @@ export default function LeadDetailPage({
                                 </button>
                               </div>
                             ) : null}
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Assigned To</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">{Array.isArray(lead.metadata?.tour_assignees) && lead.metadata.tour_assignees.length ? lead.metadata.tour_assignees.join(', ') : String(lead.metadata?.tour_coordinator || 'Not assigned')}</span>
+                            <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-4">
+                              <span className="shrink-0 text-[color:var(--portal-muted)]">Assigned to</span>
+                              <span className="min-w-0 font-medium text-[color:var(--portal-text)]">{Array.isArray(lead.metadata?.tour_assignees) && lead.metadata.tour_assignees.length ? lead.metadata.tour_assignees.join(', ') : String(lead.metadata?.tour_coordinator || 'Not assigned')}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Location</span>
-                              <span className="font-bold text-[color:var(--portal-text)]">Luxor at Las Palmas Events</span>
+                            <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-4">
+                              <span className="shrink-0 text-[color:var(--portal-muted)]">Location</span>
+                              <span className="min-w-0 font-medium text-[color:var(--portal-text)]">Luxor at Las Palmas Events</span>
                             </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)]">Status</span>
-                              <PortalStatusBadge status={tourDisplayStatus(lead)} borderless />
+                            <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-4">
+                              <span className="shrink-0 text-[color:var(--portal-muted)]">Status</span>
+                              <div><PortalStatusBadge status={tourDisplayStatus(lead)} borderless /></div>
                             </div>
                           </div>
                         </div>
