@@ -168,6 +168,7 @@ export function PortalHomeActionBar() {
 function DesktopQuickActions() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [tabHidden, setTabHidden] = useState(false)
   const [inquiryOpen, setInquiryOpen] = useState(false)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(() => {
     try {
@@ -181,9 +182,10 @@ function DesktopQuickActions() {
   const dragging = useRef(false)
   const toggle = useRef<HTMLButtonElement>(null)
   const drawerClose = useRef<HTMLButtonElement>(null)
+  const keyboardInteraction = useRef(false)
   const panelId = useId()
   const reduceMotion = useReducedMotion()
-  const close = () => { setOpen(false); requestAnimationFrame(() => toggle.current?.focus()) }
+  const close = () => { setOpen(false) }
   const action = 'flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-2 focus-visible:outline-[#caa24c]'
 
   useEffect(() => {
@@ -206,12 +208,12 @@ function DesktopQuickActions() {
     return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerdown', onDrop) }
   }, [trackpadGrab])
 
-  return <div className="fixed right-0 z-40 hidden sm:block" style={{ top: position ? `max(56px, min(${position.y}px, calc(100vh - 64px)))` : '75%' }} onKeyDown={(event) => { if (event.key === 'Escape' && open) { event.preventDefault(); close() } }}>
-    <motion.div animate={{ scale: grabbed && !reduceMotion ? 1.08 : 1, x: open && !reduceMotion ? 20 : 0, opacity: open ? 0 : 1 }} transition={{ duration: reduceMotion ? 0 : 0.24 }} inert={open} aria-hidden={open} className="flex h-12 items-center rounded-l-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md">
-      <button ref={toggle} type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)} className="flex h-12 w-8 !min-w-0 items-center justify-center text-[#a8792f] focus-visible:outline-2 focus-visible:outline-[#caa24c]" aria-label={open ? 'Close quick actions' : 'Open quick actions'}><Zap size={17} /></button>
-      <button type="button" aria-label="Move quick actions tab" title="Hold and drag, or double-click to move" className={`flex h-12 w-4 !min-w-0 touch-none items-center justify-center text-[color:var(--portal-muted)] ${grabbed ? 'cursor-grabbing' : 'cursor-grab'}`} onDoubleClick={() => { setTrackpadGrab(true); setGrabbed(true) }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); const x = event.clientX, y = event.clientY; grabTimer.current = setTimeout(() => { dragging.current = true; setGrabbed(true); move(x, y) }, 300) }} onPointerMove={(event) => { if (dragging.current) move(event.clientX, event.clientY) }} onPointerUp={() => { if (grabTimer.current) clearTimeout(grabTimer.current); dragging.current = false; if (!trackpadGrab) setGrabbed(false) }} onPointerCancel={() => { if (grabTimer.current) clearTimeout(grabTimer.current); dragging.current = false; setGrabbed(false) }}><GripVertical size={15} /></button>
+  return <div className="fixed right-0 z-40 hidden sm:block" style={{ top: position ? `max(56px, min(${position.y}px, calc(100vh - 64px)))` : '75%' }} onPointerDown={() => { keyboardInteraction.current = false }} onKeyDown={(event) => { keyboardInteraction.current = true; if (event.key === 'Escape' && open) { event.preventDefault(); close() } }}>
+    <motion.div animate={{ scale: grabbed && !reduceMotion ? 1.08 : 1, opacity: tabHidden ? 0 : 1 }} transition={{ duration: reduceMotion ? 0 : 0.15 }} inert={tabHidden} aria-hidden={tabHidden} className="group flex h-12 items-center rounded-l-xl border border-r-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md">
+      <button ref={toggle} type="button" aria-expanded={open} aria-controls={panelId} onClick={() => { setTabHidden(true); setOpen(true) }} className="flex h-12 w-12 !min-w-0 items-center justify-center text-[#a8792f] focus-visible:outline-2 focus-visible:outline-[#caa24c]" aria-label="Open quick actions"><Zap size={17} /></button>
+      <button type="button" aria-label="Move quick actions tab" title="Hold and drag, or double-click to move" className={`group/handle flex h-12 w-0 !min-w-0 touch-none items-center justify-center overflow-hidden text-[color:var(--portal-muted)] transition-[width,opacity] duration-200 group-hover:w-8 focus-visible:w-8 ${grabbed ? 'w-8 cursor-grabbing opacity-100' : 'cursor-grab opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}`} onDoubleClick={() => { setTrackpadGrab(true); setGrabbed(true) }} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); const x = event.clientX, y = event.clientY; grabTimer.current = setTimeout(() => { dragging.current = true; setGrabbed(true); move(x, y) }, 300) }} onPointerMove={(event) => { if (dragging.current) move(event.clientX, event.clientY) }} onPointerUp={() => { if (grabTimer.current) clearTimeout(grabTimer.current); dragging.current = false; if (!trackpadGrab) setGrabbed(false) }} onPointerCancel={() => { if (grabTimer.current) clearTimeout(grabTimer.current); dragging.current = false; setGrabbed(false) }}><GripVertical size={15} className="shrink-0 transition-transform duration-200 group-hover/handle:scale-110" /></button>
     </motion.div>
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={() => { setTabHidden(false); if (keyboardInteraction.current) requestAnimationFrame(() => toggle.current?.focus()) }}>
       {open ? <motion.div id={panelId} role="region" aria-label="Quick actions" initial={reduceMotion ? { opacity: 0 } : { x: 40, opacity: 0, scale: 0.95 }} animate={{ x: 0, opacity: 1, scale: 1 }} exit={reduceMotion ? { opacity: 0 } : { x: 40, opacity: 0, scale: 0.95 }} transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.23, 1, 0.32, 1] }} style={{ top: `clamp(8px, calc(${position ? `${position.y}px` : '75vh'} - 110px), calc(100dvh - 270px))`, transformOrigin: 'right center' }} className="fixed right-0 w-60 rounded-l-2xl border border-r-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 shadow-xl">
         <div className="mb-2 flex items-center justify-between px-3"><h2 className="text-sm font-semibold text-[color:var(--portal-text)]">Quick actions</h2><button ref={drawerClose} type="button" onClick={close} aria-label="Close quick actions" className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)]"><X size={16} /></button></div>
         <button type="button" className={action} onClick={() => { setOpen(false); setInquiryOpen(true) }}><Plus size={17} className="text-[#a8792f]" /> New inquiry</button>
