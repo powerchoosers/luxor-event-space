@@ -220,7 +220,7 @@ const mobilePrimaryNavItems = [
   { href: '/portal/calendar', icon: <Calendar size={19} />, label: 'Calendar' },
 ]
 const mobileEmailNavItem = { href: '/portal/emails', icon: <Mail size={19} />, label: 'Emails' }
-const mobileMessagesNavItem = { href: '/portal/messages', icon: <MessageSquare size={19} />, label: 'Messages' }
+const mobileMessagesNavItem = { href: '/portal/messages', icon: <MessageSquare size={19} />, label: 'Text' }
 
 const PORTAL_MOBILE_MEDIA_QUERY = '(max-width: 767px)'
 
