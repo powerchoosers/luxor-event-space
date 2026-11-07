@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalModal } from './PortalUI'
 import type { CalendarReviewItem } from '@/lib/luxorCalendarReviewServer'
 

@@ -32,7 +32,7 @@ import {
   CalendarCheck2,
   Archive,
   Workflow,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { ArrowsDownUp, CaretDown as PhosphorCaretDown, CaretUp as PhosphorCaretUp } from '@phosphor-icons/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'

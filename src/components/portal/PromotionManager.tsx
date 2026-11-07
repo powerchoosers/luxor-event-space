@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Edit3, Plus, RefreshCw, Tag } from 'lucide-react'
+import { Edit3, Plus, RefreshCw, Tag } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalModal, PortalSelect, PortalSkeleton, PortalTableCard } from '@/components/portal/PortalUI'
 import { PromotionTermsFields, type PromotionTermsDraft } from './PromotionTermsFields'
 import { luxorCalendarDate } from '@/lib/luxorProposalTerms'

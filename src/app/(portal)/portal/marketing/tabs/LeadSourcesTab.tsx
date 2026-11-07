@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUpRight, MapPin, TrendingUp, Users } from 'lucide-react'
+import { ArrowUpRight, MapPin, TrendingUp, Users } from '@/lib/icons/phosphor-compat'
 import { PortalStickyTable, PortalStickyThead, PortalTableCard } from '@/components/portal/PortalUI'
 import { isLuxorNonRevenueTestInquiry, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 

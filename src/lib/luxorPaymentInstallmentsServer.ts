@@ -6,6 +6,13 @@ import { calculateLuxorPaymentSchedule, paymentPlanFromSchedule } from './luxorP
 import { luxorCalendarDate } from './luxorProposalTerms'
 
 const FIRST_DEPOSIT_SCHEDULE_POLICY = 'first_deposit_paid_at_v1'
+const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !CALENDAR_DATE.test(value)) return false
+  const date = new Date(`${value}T12:00:00.000Z`)
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
 
 function planFrom(invoice: LuxorInvoice) {
   const context = (invoice.proposal_context || {}) as Record<string, unknown>
@@ -85,6 +92,8 @@ export async function syncLuxorPaymentInstallments(input: { booking: LuxorBookin
   for (const row of schedule.rows) {
     const current = existing.find((item) => item.installment_order === row.installment_order && item.status !== 'void')
     if (current?.status === 'paid' || current?.status === 'partial') { rows.push(current); continue }
+    const override = current?.metadata?.manual_due_date_override
+    const dueDate = isCalendarDate(override) && override <= schedule.final_payment_due_date ? override : row.due_at
     const payload = {
       booking_id: input.booking.id,
       invoice_id: input.invoice.id,
@@ -92,7 +101,7 @@ export async function syncLuxorPaymentInstallments(input: { booking: LuxorBookin
       label: row.label,
       installment_order: row.installment_order,
       amount: row.amount,
-      due_at: `${row.due_at}T12:00:00.000Z`,
+      due_at: `${dueDate}T12:00:00.000Z`,
       status: firstDepositSchedule && row.installment_order === 1 ? 'paid' : 'scheduled',
       ...(firstDepositSchedule && row.installment_order === 1 && anchorTimestamp ? { paid_at: anchorTimestamp } : {}),
       metadata: {
@@ -100,6 +109,8 @@ export async function syncLuxorPaymentInstallments(input: { booking: LuxorBookin
         allocation: row.allocation,
         schedule_version: firstDepositSchedule ? 2 : 1,
         ...(firstDepositSchedule ? { schedule_anchor_policy: FIRST_DEPOSIT_SCHEDULE_POLICY, schedule_anchor_date: bookingDate } : {}),
+        ...(isCalendarDate(override) && override <= schedule.final_payment_due_date ? { manual_due_date_override: override } : {}),
+        ...(Array.isArray(current?.metadata?.due_date_change_history) ? { due_date_change_history: current.metadata.due_date_change_history } : {}),
       },
       updated_at: new Date().toISOString(),
     }

@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, MoreHorizontal, X } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, MoreHorizontal, X } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import React from 'react'
 import { PortalAnimatedTabs, PortalModal, PortalSkeleton, PortalSkeletonTransition } from './PortalUI'

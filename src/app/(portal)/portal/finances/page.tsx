@@ -3,24 +3,11 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
-import {
-  FileText,
-  Search,
-  DollarSign,
-  TrendingUp,
-  CreditCard,
-  TrendingDown,
-  RefreshCw,
-  Menu,
-  Eye,
-  Plus,
-  X
-} from 'lucide-react'
+import { ArrowClockwise, CreditCard, CurrencyDollar, Eye, FileText, List, MagnifyingGlass, Plus, TrendDown, TrendUp, X } from '@phosphor-icons/react'
 import {
   PortalPageFrame,
   PortalPageHeader,
   PortalAnimatedTabs,
-  PortalModal,
   PortalTabTransition,
   PortalStickyTable,
   PortalStickyThead,
@@ -32,6 +19,7 @@ import {
 } from '@/components/portal/PortalUI'
 import { MagicCard } from '@/components/ui/magic-card'
 import FinancialOverview from '@/components/portal/FinancialOverview'
+import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView, LuxorBill } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
 import { formatLuxorPaymentCalendarDate, getLuxorBusinessFinanceRows, getLuxorFinanceOverview, getLuxorPaidExpenseBreakdown, getLuxorPaymentCalendarDateKey, type LuxorFinanceAllocationRow } from '@/lib/luxorFinanceReporting'
@@ -44,27 +32,19 @@ type BookingWithPayments = LuxorBooking & {
 
 type FinanceTransaction = { kind: 'payment'; payment: LuxorPayment } | { kind: 'refund'; refund: LuxorPaymentRefundView }
 
-type Tab = 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports'
-
-function FinanceBrowseViews({ open, close, activeTab, select }: { open: boolean; close: () => void; activeTab: Tab; select: (tab: Tab) => void }) {
-  const buttonClass = 'flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60'
-  const choose = (tab: Tab) => { select(tab); close() }
-  const row = (label: string, tab: Tab) => <button type="button" onClick={() => choose(tab)} aria-current={activeTab === tab ? 'page' : undefined} className={buttonClass}><span>{label}</span>{activeTab === tab && <span className="text-xs text-[color:var(--portal-muted)]">Current view</span>}</button>
-  const heading = (label: string) => <h4 className="px-3 pt-3 text-xs font-semibold text-[color:var(--portal-muted)]">{label}</h4>
-  const later = <p className="px-3 py-2 text-sm text-[color:var(--portal-muted)]">Planned for a later phase</p>
-  return <PortalModal isOpen={open} onClose={close} title="Browse views" description="Choose a working view or see what is planned." maxWidth="max-w-xl" animateClose>
-    <nav aria-label="Financial Center views" className="space-y-1 divide-y divide-[color:var(--portal-border)]">
-      <section>{heading('Financial Overview')}{row('Financial Overview', 'dashboard')}</section>
-      <section>{heading('Revenue & Collections')}{row('Invoices ledger', 'invoices')}{row('Payments log', 'payments')}</section>
-      <section>{heading('Expense Management')}{row('Expense ledger', 'expenses')}</section>
-      <section>{heading('Event Profitability')}{later}</section>
-      <section>{heading('Bills & Vendors')}<Link href="/portal/operations?tab=bills" onClick={close} className={buttonClass}><span>Open Operations bills</span><span className="text-xs text-[color:var(--portal-muted)]">Operations access</span></Link></section>
-      <section>{heading('Budgeting & Forecasting')}{later}</section>
-      <section>{heading('Financial Reports')}{row('Financial Reports', 'reports')}</section>
-      <section>{heading('Accounting')}{later}</section>
-    </nav>
-  </PortalModal>
+function refundKindDisplay(kind: LuxorPaymentRefundView['refund_kind']) {
+  switch (kind) {
+    case 'security_deposit':
+      return { transactionTitle: 'Refundable security deposit', activityCategory: 'Security deposit refund', needsReview: false }
+    case 'event_revenue':
+      return { transactionTitle: 'Event revenue refund', activityCategory: 'Event revenue refund', needsReview: false }
+    case 'unclassified':
+    default:
+      return { transactionTitle: 'Unclassified refund', activityCategory: 'Unclassified refund · needs review', needsReview: true }
+  }
 }
+
+type Tab = 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports'
 
 export default function FinancesPage() {
   const reduceMotion = useReducedMotion()
@@ -184,6 +164,25 @@ type LuxorBookingExpense = {
     fetchFinanceData()
   }, [])
 
+  useEffect(() => {
+    const syncViewFromUrl = () => {
+      const view = new URLSearchParams(window.location.search).get('view')
+      if (view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'reports') setActiveTab(view)
+    }
+    syncViewFromUrl()
+    window.addEventListener('popstate', syncViewFromUrl)
+    return () => window.removeEventListener('popstate', syncViewFromUrl)
+  }, [])
+
+  const selectLegacyView = (tab: Tab) => {
+    setActiveTab(tab)
+    setSearchTerm('')
+    const url = new URL(window.location.href)
+    if (tab === 'dashboard') url.searchParams.delete('view')
+    else url.searchParams.set('view', tab)
+    window.history.pushState({}, '', url)
+  }
+
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!expenseAmount || !expenseDesc) return
@@ -252,7 +251,7 @@ type LuxorBookingExpense = {
     testInquiryIds: verifiedTestInquiryIds,
     testBookingIds: verifiedTestBookingIds,
   }), [invoices, bookings, expenses, verifiedTestInquiryIds, verifiedTestBookingIds])
-  const { invoices: businessInvoices, expenses: businessExpenses } = businessRows
+  const { expenses: businessExpenses } = businessRows
   const expenseBreakdown = useMemo(() => getLuxorPaidExpenseBreakdown(businessExpenses), [businessExpenses])
   const cancelledExpenseCount = businessExpenses.filter((expense) => expense.status === 'cancelled').length
   const visibleExpenses = businessExpenses.filter((expense) => showCancelledExpenses || expense.status !== 'cancelled')
@@ -266,9 +265,9 @@ type LuxorBookingExpense = {
     .filter((payment) => !(payment.inquiry_id && businessRows.testInquiryIds.has(payment.inquiry_id.toLowerCase())))
     .filter((payment) => !(payment.invoice_id && businessRows.testInvoiceIds.has(payment.invoice_id.toLowerCase())))
   const visibleRefunds = refunds.filter((refund) => refund.metadata?.is_test_record !== true)
-    .filter((refund) => !businessRows.testBookingIds.has(refund.booking_id.toLowerCase()))
-    .filter((refund) => !businessRows.testInquiryIds.has(refund.inquiry_id?.toLowerCase() || ''))
-    .filter((refund) => !businessRows.testInvoiceIds.has(refund.invoice_id.toLowerCase()))
+    .filter((refund) => !(refund.booking_id && businessRows.testBookingIds.has(refund.booking_id.toLowerCase())))
+    .filter((refund) => !(refund.inquiry_id && businessRows.testInquiryIds.has(refund.inquiry_id.toLowerCase())))
+    .filter((refund) => !(refund.invoice_id && businessRows.testInvoiceIds.has(refund.invoice_id.toLowerCase())))
   const allLedgerTransactions: FinanceTransaction[] = [
     ...allPayments.map((payment) => ({ kind: 'payment' as const, payment })),
     ...visibleRefunds.map((refund) => ({ kind: 'refund' as const, refund })),
@@ -290,13 +289,13 @@ type LuxorBookingExpense = {
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6">
       <PortalPageHeader
-        icon={<DollarSign size={18} />}
+        icon={<CurrencyDollar size={18} weight="regular" />}
         title="Finances"
         actions={
           <div className="flex items-center gap-2">
-            <PortalButton onClick={() => setIsViewPickerOpen(true)}><Menu size={14} /> Browse views</PortalButton>
+            <PortalButton onClick={() => setIsViewPickerOpen(true)}><List size={16} weight="regular" /> Browse views</PortalButton>
             <PortalButton onClick={fetchFinanceData}>
-              <RefreshCw size={13} /> Refresh Ledger
+              <ArrowClockwise size={15} weight="regular" /> Refresh Ledger
             </PortalButton>
           </div>
         }
@@ -308,7 +307,12 @@ type LuxorBookingExpense = {
         </div>
       )}
 
-      <FinanceBrowseViews open={isViewPickerOpen} close={() => setIsViewPickerOpen(false)} activeTab={activeTab} select={(tab) => { setActiveTab(tab); setSearchTerm('') }} />
+      <FinanceBrowseViews
+        open={isViewPickerOpen}
+        close={() => setIsViewPickerOpen(false)}
+        currentView={(activeTab === 'dashboard' ? 'overview' : activeTab) as FinanceBrowseView}
+        onLegacySelect={selectLegacyView}
+      />
 
       {/* Desktop rectangular sliding tabs */}
       <div className="hidden shrink-0 xl:flex">
@@ -316,11 +320,11 @@ type LuxorBookingExpense = {
           variant="slider"
           ariaLabel="Finances sections"
           tabs={[
-            { id: 'dashboard', label: 'Financial Overview', icon: <TrendingUp size={15} /> },
-            { id: 'invoices', label: 'Invoices Ledger', icon: <FileText size={15} /> },
-            { id: 'payments', label: 'Payments Log', icon: <CreditCard size={15} /> },
-            { id: 'expenses', label: 'Expenses Tracking', icon: <TrendingDown size={15} /> },
-            { id: 'reports', label: 'Financial Reports', icon: <Eye size={15} /> },
+            { id: 'dashboard', label: 'Financial Overview', icon: <TrendUp size={16} weight="regular" /> },
+            { id: 'invoices', label: 'Invoices Ledger', icon: <FileText size={16} weight="regular" /> },
+            { id: 'payments', label: 'Payments Log', icon: <CreditCard size={16} weight="regular" /> },
+            { id: 'expenses', label: 'Expenses Tracking', icon: <TrendDown size={16} weight="regular" /> },
+            { id: 'reports', label: 'Financial Reports', icon: <Eye size={16} weight="regular" /> },
           ]}
           activeTab={activeTab}
           onTabChange={(tab) => { setActiveTab(tab as Tab); setSearchTerm('') }}
@@ -342,7 +346,8 @@ type LuxorBookingExpense = {
           }
           const refund = transaction.refund
           if (refund.status !== 'succeeded') return []
-          return [{ id: refund.id, date: getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: refund.completed_at }), description: 'Refund completed', category: refund.refund_kind === 'security_deposit' ? 'Security deposit' : 'Event', amount: Number(refund.amount || 0), type: 'Refund' }]
+          const display = refundKindDisplay(refund.refund_kind)
+          return [{ id: refund.id, date: getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: refund.completed_at }), description: display.needsReview ? 'Unclassified refund · needs review' : 'Refund completed', category: display.activityCategory, amount: Number(refund.amount || 0), type: 'Refund' }]
         })} />
       )}
 
@@ -352,7 +357,7 @@ type LuxorBookingExpense = {
             controls={
               <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
                 <div className="relative w-full md:w-96 group">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
+                  <MagnifyingGlass size={16} weight="regular" className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
                   <input
                     type="text"
                     value={searchTerm}
@@ -472,11 +477,15 @@ type LuxorBookingExpense = {
                       const status = isRefund ? transaction.refund.status : transaction.payment.status
                       const amount = isRefund ? Number(transaction.refund.amount || 0) : Number(transaction.payment.amount || 0)
                       const at = isRefund ? transaction.refund.completed_at || transaction.refund.requested_at : getLuxorPaymentCalendarDateKey({ received_date: transaction.payment.received_date, paid_at: transaction.payment.paid_at || transaction.payment.created_at })
-                      const label = isRefund ? (status === 'succeeded' ? 'Refund completed' : `Refund ${status}`) : status === 'refunded' ? 'Legacy refund needs review' : 'Payment recorded'
+                      const refundDisplay = isRefund ? refundKindDisplay(transaction.refund.refund_kind) : null
+                      const refundStatus = status === 'succeeded' ? 'Refund completed' : `Refund ${status}`
+                      const label = isRefund
+                        ? `${refundDisplay?.needsReview ? 'Needs review · ' : ''}${refundStatus}`
+                        : status === 'refunded' ? 'Legacy refund needs review' : 'Payment recorded'
                       return <tr key={`${transaction.kind}-${id || idx}`} className="hover:bg-[color:var(--portal-soft)]/50 transition-colors">
                         <td className="px-8 py-5 tabular-nums font-bold text-xs text-[color:var(--portal-muted)]">#{id?.slice(0, 10) || `TX-00${idx}`}</td>
                         <td className="px-6 py-5">
-                          <p className="text-xs font-bold text-[color:var(--portal-text)] leading-none">{isRefund ? 'Refundable security deposit' : transaction.payment.notes || 'Event Booking Retainer'}</p>
+                          <p className="text-xs font-bold text-[color:var(--portal-text)] leading-none">{refundDisplay?.transactionTitle || (transaction.kind === 'payment' ? transaction.payment.notes || 'Event Booking Retainer' : 'Refund')}</p>
                           <p className={`text-[9px] font-bold uppercase tracking-widest mt-1 ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-[#caa24c]'}`}>{label}</p>
                         </td>
                         <td className="px-6 py-5 text-xs text-[color:var(--portal-muted)] font-medium">{isRefund ? 'Stripe' : transaction.payment.payment_method || 'Bank Transfer'}</td>
@@ -503,7 +512,7 @@ type LuxorBookingExpense = {
                   onClick={() => { setExpenseActionError(null); setIsAddingExpense(!isAddingExpense) }}
                   className="luxor-gold-raised inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold !text-white"
                 >
-                  {isAddingExpense ? <X size={14} /> : <Plus size={14} />} {isAddingExpense ? 'Close form' : 'Log expense'}
+                  {isAddingExpense ? <X size={16} weight="regular" /> : <Plus size={16} weight="regular" />} {isAddingExpense ? 'Close form' : 'Log expense'}
                 </button>
               </div>
             </div>

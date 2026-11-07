@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Check, ExternalLink, LoaderCircle, Search, Workflow, X } from 'lucide-react'
+import { Check, ExternalLink, LoaderCircle, Search, Workflow, X } from '@/lib/icons/phosphor-compat'
 import { PortalModal, PortalButton } from '@/components/portal/PortalUI'
 import { PREBUILT_WORKFLOWS } from '@/lib/luxorPrebuiltWorkflows'
 import type { CustomWorkflowDefinition, CustomWorkflowStatus } from '@/lib/luxorCustomWorkflowDefinition'

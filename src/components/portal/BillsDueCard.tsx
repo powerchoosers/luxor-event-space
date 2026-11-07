@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   Loader2,
   ChevronRight,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import type { LuxorBill } from '@/lib/luxorInquiryTypes'
 
 interface BillsDueCardProps {

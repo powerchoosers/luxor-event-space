@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check } from '@/lib/icons/phosphor-compat'
 
 export function AcceptProposalButton({ token, continueToSigning = false, alreadyAccepted = false }: { token: string; continueToSigning?: boolean; alreadyAccepted?: boolean }) {
   const [state, setState] = useState<'idle' | 'working' | 'error'>('idle')

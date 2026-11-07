@@ -11,7 +11,7 @@ import {
   Trash2,
   Users,
   X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalDatePicker, PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import {

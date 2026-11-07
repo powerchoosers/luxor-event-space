@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Calendar, Mail, MapPin, Phone } from 'lucide-react'
+import { Calendar, Mail, MapPin, Phone } from '@/lib/icons/phosphor-compat'
 import { LuxorContactForm } from '@/components/LuxorContactForm'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 

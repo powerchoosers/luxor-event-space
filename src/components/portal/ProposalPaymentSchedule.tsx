@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CalendarDays, Check, CircleDollarSign, CreditCard, Info, ReceiptText, ShieldCheck } from 'lucide-react'
+import { CalendarDays, Check, CircleDollarSign, CreditCard, Info, ReceiptText, ShieldCheck } from '@/lib/icons/phosphor-compat'
 import { PortalCalculationSkeleton, PortalSelect, PortalSkeleton } from '@/components/portal/PortalUI'
 import { calculateLuxorPaymentSchedule, type LuxorPaymentCadence } from '@/lib/luxorPaymentSchedule'
 import type { LuxorPaymentInstallment, LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'

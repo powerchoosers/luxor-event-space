@@ -12,7 +12,7 @@ import {
   Loader2,
   Maximize2,
   Sparkles,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'

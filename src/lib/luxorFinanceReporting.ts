@@ -302,14 +302,15 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     if (refund.status === 'pending' || refund.status === 'uncertain') refundReconciliationRequired = true
     if (refund.status !== 'succeeded') continue
     const amount = Number(refund.amount || 0)
-    if (!Number.isFinite(amount) || amount <= 0) continue
+    if (!Number.isFinite(amount) || amount <= 0) { refundReconciliationRequired = true; continue }
     refundRecordAmount = money(refundRecordAmount + amount)
     knownPaidCashTotal = money(knownPaidCashTotal - amount)
-    if (refund.refund_kind === 'security_deposit') securityDepositsHeld = money(Math.max(0, securityDepositsHeld - amount))
-    else {
+    const refundKind = String(refund.refund_kind)
+    if (refundKind === 'security_deposit') securityDepositsHeld = money(Math.max(0, securityDepositsHeld - amount))
+    else if (refundKind === 'event_revenue') {
       eventPaymentsReceived = money(eventPaymentsReceived - amount)
       eventPaymentRows.push({ id: refund.id, category: null, amount: -money(amount), paid_at: refund.completed_at, received_date: null })
-    }
+    } else refundReconciliationRequired = true
   }
 
   return {
@@ -395,6 +396,35 @@ export function getLuxorPaidExpenseBreakdown(expenses: Array<LuxorFinanceExpense
 
 export type LuxorFinanceAllocationRow = { payment_id: string; installment_id: string; amount: number }
 
+export type LuxorFinanceOverviewInput = {
+  invoices: LuxorInvoice[]
+  bookings: LuxorBooking[]
+  payments: LuxorPayment[]
+  installments: LuxorPaymentInstallment[]
+  refunds: LuxorPaymentRefundView[]
+  testInquiryIds: ReadonlySet<string>
+  testBookingIds: ReadonlySet<string>
+  testInvoiceIds: ReadonlySet<string>
+  allocations: LuxorFinanceAllocationRow[] | null
+  now?: Date
+}
+
+export type LuxorFinanceScheduleRow = {
+  installment: LuxorPaymentInstallment
+  bookingId: string
+  invoiceId: string
+  amountDue: number
+  credited: number
+  remaining: number
+  dueDate: string | null
+  status: string
+  isPaid: boolean
+  isPartial: boolean
+  isOverdue: boolean
+  overdueDays: number
+  scheduleReconciled: boolean
+}
+
 /**
  * Check inputs before using the existing finance helpers for an overview.
  * The allocation table and payment metadata are two representations of the
@@ -423,6 +453,14 @@ export function inspectLuxorFinanceOverviewSources(input: {
   const invoices = unique(input.invoices, 'invoice')
   const payments = unique(input.payments, 'payment')
   const installments = unique(input.installments, 'installment')
+  const providerReferences = new Set<string>()
+  for (const payment of payments) {
+    if (!payment.processor || !payment.processor_reference) continue
+    const key = JSON.stringify([payment.processor, payment.processor_reference])
+    if (providerReferences.has(key)) issues.push('Duplicate payment provider reference')
+    providerReferences.add(key)
+  }
+  if (installments.some((row) => !Number.isFinite(Number(row.amount)) || Number(row.amount) < 0)) issues.push('Invalid payment schedule amount')
   const superseded = new Set(invoices.filter((invoice) => invoice.proposal_accepted_at && invoice.status !== 'draft' && invoice.status !== 'cancelled' && invoice.offer_status !== 'withdrawn').map((invoice) => invoice.supersedes_invoice_id).filter(Boolean))
   const mastersByBooking = new Map<string, number>()
   const currentMasters: LuxorInvoice[] = []
@@ -434,9 +472,11 @@ export function inspectLuxorFinanceOverviewSources(input: {
   if ([...mastersByBooking.values()].some((count) => count > 1)) issues.push('Multiple accepted master invoices for a booking')
   for (const master of currentMasters) {
     if (!master.booking_id || mastersByBooking.get(master.booking_id) !== 1) continue
+    const obligation = invoiceEventObligation(master)
+    if (!Number.isFinite(obligation) || obligation < 0) issues.push('Invalid accepted contract amount')
     const scheduled = installments.filter((row) => row.booking_id === master.booking_id && row.invoice_id === master.id && row.status !== 'void' && row.metadata?.payment_bucket !== 'security_deposit')
       .reduce((sum, row) => sum + Math.max(0, Number(row.amount) || 0), 0)
-    if (money(scheduled) > money(invoiceEventObligation(master))) issues.push('Payment schedule exceeds its event obligation')
+    if (money(scheduled) > money(obligation)) issues.push('Payment schedule exceeds its event obligation')
   }
 
   const metadata = new Map<string, number>()
@@ -484,12 +524,7 @@ export function inspectLuxorFinanceOverviewSources(input: {
 }
 
 /** Build overview figures from the existing ledger summary only after source checks. */
-export function getLuxorFinanceOverview(input: {
-  invoices: LuxorInvoice[]; bookings: LuxorBooking[]; payments: LuxorPayment[]
-  installments: LuxorPaymentInstallment[]; refunds: LuxorPaymentRefundView[]
-  testInquiryIds: ReadonlySet<string>; testBookingIds: ReadonlySet<string>; testInvoiceIds: ReadonlySet<string>
-  allocations: LuxorFinanceAllocationRow[] | null; now?: Date
-}) {
+export function getLuxorFinanceOverview(input: LuxorFinanceOverviewInput) {
   const now = input.now || new Date()
   const excluded = (id: string | null | undefined, ids: ReadonlySet<string>) => Boolean(id && ids.has(id.toLowerCase()))
   const bookings = input.bookings.filter((row) => !excluded(row.id, input.testBookingIds))
@@ -523,7 +558,7 @@ export function getLuxorFinanceOverview(input: {
     return true
   })
   const summary = getLuxorInvoiceFinancialSummary(source.invoices, source.payments, input.testInquiryIds, input.testBookingIds, source.installments, now, input.testInvoiceIds, refunds, bookings)
-  const actualIssues = source.issues.filter((issue) => issue.includes('identity') || issue.includes('Multiple accepted master'))
+  const actualIssues = source.issues.filter((issue) => issue.includes('identity') || issue.includes('Multiple accepted master') || issue.includes('Duplicate payment provider reference') || issue.includes('Invalid accepted contract amount'))
   if (conflictingPaymentLinks) actualIssues.push('Payment and invoice booking links conflict')
   if (source.payments.some((row) => row.status === 'paid' && row.invoice_id && !invoiceById.has(row.invoice_id))) actualIssues.push('A payment references an unavailable invoice')
   if (duplicateRefund) actualIssues.push('Duplicate or missing refund identity')
@@ -537,14 +572,16 @@ export function getLuxorFinanceOverview(input: {
   if (summary.unallocatedPayments > 0) actualIssues.push('Some payments need classification')
   if (source.payments.some((row) => row.status === 'refunded')) actualIssues.push('A legacy refund needs reconciliation')
   for (const refund of refunds) {
-    if (refund.status !== 'succeeded' || String(refund.refund_kind) === 'security_deposit') continue
-    const invoice = invoiceById.get(refund.invoice_id)
+    const refundKind = String(refund.refund_kind)
+    if (refund.status !== 'succeeded' || refundKind === 'security_deposit') continue
+    const invoice = refund.invoice_id ? invoiceById.get(refund.invoice_id) : undefined
     const accepted = new Set(summary.acceptedInvoices.map((item) => item.id))
     let current = invoice
     const visited = new Set<string>()
     while (current && !accepted.has(current.id) && current.parent_invoice_id && !visited.has(current.id)) { visited.add(current.id); current = invoiceById.get(current.parent_invoice_id) }
-    const booking = bookingById.get(refund.booking_id)
-    if (String(refund.refund_kind) !== 'event' || !getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: refund.completed_at }) || !invoice || invoice.booking_id !== refund.booking_id || !current || !accepted.has(current.id) || !booking || booking.contract_status !== 'signed' || !booking.contract_signed_at || !Number.isFinite(Number(refund.amount)) || Number(refund.amount) <= 0) actualIssues.push('An event refund needs classification or a completion date')
+    const booking = refund.booking_id ? bookingById.get(refund.booking_id) : undefined
+    const isEventRevenueRefund = refundKind === 'event_revenue'
+    if (!isEventRevenueRefund || !getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: refund.completed_at }) || !invoice || invoice.booking_id !== refund.booking_id || !current || !accepted.has(current.id) || !booking || booking.contract_status !== 'signed' || !booking.contract_signed_at || !Number.isFinite(Number(refund.amount)) || Number(refund.amount) <= 0) actualIssues.push('An event refund needs classification or a completion date')
   }
   if (summary.eventPaymentRows.some((row) => !getLuxorPaymentCalendarDateKey(row))) actualIssues.push('Some payment dates are missing')
   const actualByMonth: Record<string, number> = {}
@@ -594,20 +631,39 @@ export function getLuxorFinanceOverview(input: {
   if (allocationExceptions.length) forecastIssues.push('Payment allocations need review')
   if (refunds.some((refund) => refund.status === 'pending' || refund.status === 'uncertain' || (refund.status === 'succeeded' && String(refund.refund_kind) !== 'security_deposit'))) forecastIssues.push('Refund effects on the remaining contract need review')
   const expectedByMonth: Record<string, number> = {}
+  const scheduleRows: LuxorFinanceScheduleRow[] = []
   let overdue = 0
   for (const row of summary.acceptedInvoiceRows) {
     const relevant = source.installments.filter((item) => item.booking_id === row.invoice.booking_id && item.invoice_id === row.invoice.id && item.status !== 'void' && item.metadata?.payment_bucket !== 'security_deposit')
     const states = relevant.map((item) => ({ item, state: installmentDisplayState(item, source.payments, now) }))
     const scheduled = money(states.reduce((sum, item) => sum + item.state.amountDue, 0))
     const credited = money(states.reduce((sum, item) => sum + item.state.credited, 0))
-    if (Math.abs(scheduled - row.eventObligation) > 0.005 || Math.abs(credited - row.received) > 0.005 || row.received > row.eventObligation + 0.005) { forecastIssues.push('A payment schedule needs reconciliation'); continue }
+    const scheduleReconciled = Math.abs(scheduled - row.eventObligation) <= 0.005
+      && Math.abs(credited - row.received) <= 0.005
+      && row.received <= row.eventObligation + 0.005
+    if (!scheduleReconciled) forecastIssues.push('A payment schedule needs reconciliation')
     // Forecast only from saved installment credits. Never allocate a receipt
     // a second time in this read model or infer an allocation for older rows.
     states.sort((a, b) => (a.item.due_at || '9999').localeCompare(b.item.due_at || '9999') || a.item.installment_order - b.item.installment_order || a.item.id.localeCompare(b.item.id))
     for (const { item, state } of states) {
       const remaining = money(state.amountDue - state.credited)
-      if (!remaining) continue
       const date = getLuxorPaymentCalendarDateKey({ received_date: item.due_at, paid_at: null })
+      scheduleRows.push({
+        installment: item,
+        bookingId: row.invoice.booking_id || item.booking_id,
+        invoiceId: row.invoice.id,
+        amountDue: state.amountDue,
+        credited: state.credited,
+        remaining,
+        dueDate: date || null,
+        status: state.status,
+        isPaid: state.isPaid,
+        isPartial: state.isPartial,
+        isOverdue: state.isOverdue,
+        overdueDays: state.overdueDays,
+        scheduleReconciled,
+      })
+      if (!remaining) continue
       if (!date) { forecastIssues.push('A payment schedule is missing a valid due date'); continue }
       if (date < chicagoCalendarDate(now)) overdue = money(overdue + remaining)
       else {
@@ -617,7 +673,27 @@ export function getLuxorFinanceOverview(input: {
     }
   }
   const securityDepositsHeld = actualIssues.length || refunds.some((row) => row.status === 'pending' || row.status === 'uncertain' || (row.status === 'succeeded' && row.refund_kind === 'security_deposit')) ? null : summary.securityDepositsHeld
-  return { actualByMonth: actualIssues.length ? null : actualByMonth, categoryByMonth: actualIssues.length || source.issues.some((issue) => /allocation/i.test(issue)) || summary.eventPaymentRows.some((row) => row.amount < 0) ? null : categoryByMonth, expectedByMonth: forecastIssues.length ? null : expectedByMonth, overdue: forecastIssues.length ? null : overdue, issues: [...new Set([...actualIssues, ...forecastIssues])], allocationExceptions, securityDepositsHeld, unallocatedPayments: summary.unallocatedPayments }
+  return {
+    actualByMonth: actualIssues.length ? null : actualByMonth,
+    categoryByMonth: actualIssues.length || source.issues.some((issue) => /allocation/i.test(issue)) || summary.eventPaymentRows.some((row) => row.amount < 0) ? null : categoryByMonth,
+    expectedByMonth: forecastIssues.length ? null : expectedByMonth,
+    overdue: forecastIssues.length ? null : overdue,
+    issues: [...new Set([...actualIssues, ...forecastIssues])],
+    allocationExceptions,
+    securityDepositsHeld,
+    unallocatedPayments: summary.unallocatedPayments,
+    reportingRows: {
+      bookings,
+      invoices: source.invoices,
+      payments: source.payments,
+      installments: source.installments,
+      refunds,
+      acceptedInvoiceRows: summary.acceptedInvoiceRows,
+      eventPaymentRows: summary.eventPaymentRows,
+      unallocatedPaymentRows: summary.unallocatedPaymentRows,
+      scheduleRows,
+    },
+  }
 }
 
 export function getLuxorCategoryShares(values: Array<{ category: string; amount: number }>) {

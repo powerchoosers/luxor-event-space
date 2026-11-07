@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Clock3, ChevronDown } from 'lucide-react'
+import { Clock3, ChevronDown } from '@/lib/icons/phosphor-compat'
 
 type TimeColumn<T extends string | number> = { name: string; options: T[]; selected: T; set: (value: T) => void; format: (value: T) => string }
 type CustomTriggerProps = { open: boolean; show: () => void }

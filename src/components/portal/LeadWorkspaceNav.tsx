@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { CalendarDays, Check, ChevronDown, ClipboardList, FolderOpen, History, LayoutDashboard, Menu, ReceiptText, UserRound } from 'lucide-react'
+import { CalendarDays, Check, ChevronDown, ClipboardList, FolderOpen, History, LayoutDashboard, Menu, ReceiptText, UserRound } from '@/lib/icons/phosphor-compat'
 import { PortalAnimatedTabs, PortalModal } from '@/components/portal/PortalUI'
 
 type LeadWorkspaceNavProps = {

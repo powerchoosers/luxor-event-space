@@ -25,7 +25,7 @@ import {
   ArrowUpRight,
   Loader2,
   X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'

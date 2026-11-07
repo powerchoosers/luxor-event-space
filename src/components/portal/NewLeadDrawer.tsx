@@ -3,7 +3,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Plus, Loader2 } from 'lucide-react'
+import { Plus, Loader2 } from '@/lib/icons/phosphor-compat'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { PortalCloseButton, PortalDatePicker } from '@/components/portal/PortalUI'
 import { formatLocalDateKey } from '@/lib/publicEventDate'

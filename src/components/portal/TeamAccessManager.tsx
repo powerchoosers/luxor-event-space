@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Check, KeyRound, LogOut, Plus, Send, X } from 'lucide-react'
+import { Check, KeyRound, LogOut, Plus, Send, X } from '@/lib/icons/phosphor-compat'
 import { useToast } from '@/components/portal/ToastProvider'
 
 const GROUPS = [

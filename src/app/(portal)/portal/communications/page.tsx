@@ -8,7 +8,7 @@ import {
   ExternalLink,
   Mail,
   Send
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import { isLuxorInquiryArchived, LuxorInquiry, LuxorInquiryStatus, LuxorNote } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'

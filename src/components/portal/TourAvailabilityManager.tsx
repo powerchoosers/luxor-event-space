@@ -17,7 +17,7 @@ import {
   Bell,
   Sparkles,
   Calendar,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import {

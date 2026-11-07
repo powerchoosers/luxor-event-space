@@ -31,7 +31,7 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import Image from 'next/image'

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { AlignCenter, AlignLeft, AlignRight, Bold, Image as ImageIcon, Italic, Link, List, Underline } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, Bold, Image as ImageIcon, Italic, Link, List, Underline } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence } from 'framer-motion'
 import { BrandAssetPicker } from './BrandAssetPicker'
 

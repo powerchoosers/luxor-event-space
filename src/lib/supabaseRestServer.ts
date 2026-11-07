@@ -8,6 +8,13 @@ type SupabaseError = {
   hint?: string
 }
 
+export class SupabaseRestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message)
+    this.name = 'SupabaseRestError'
+  }
+}
+
 function getSupabaseConfig() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -49,7 +56,7 @@ async function supabaseRestRequest<T>(path: string, init: RequestInit, strict: b
       return [] as T
     }
 
-    throw new Error(payload.message ?? payload.error ?? `Supabase request failed with ${response.status}`)
+    throw new SupabaseRestError(payload.message ?? payload.error ?? `Supabase request failed with ${response.status}`, response.status, payload.code)
   }
 
   const text = await response.text()

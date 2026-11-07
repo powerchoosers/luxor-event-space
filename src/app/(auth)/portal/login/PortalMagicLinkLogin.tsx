@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
-import { Mail, LoaderCircle } from 'lucide-react'
+import { Mail, LoaderCircle } from '@/lib/icons/phosphor-compat'
 
 export function PortalMagicLinkLogin() {
   const [email, setEmail] = useState('')

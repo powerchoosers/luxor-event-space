@@ -12,7 +12,7 @@ import {
   Search,
   Trash2,
   X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import type { LuxorInvoiceLineItem } from '@/lib/luxorInquiryTypes'
 import { PortalCalculationSkeleton, PortalSelect, PortalSkeleton } from '@/components/portal/PortalUI'
 

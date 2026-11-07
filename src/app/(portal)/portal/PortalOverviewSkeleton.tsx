@@ -1,5 +1,5 @@
 import React from 'react'
-import { Calendar, ListTodo, Clock } from 'lucide-react'
+import { Calendar, ListTodo, Clock } from '@/lib/icons/phosphor-compat'
 import { PortalSkeleton } from '@/components/portal/PortalUI'
 
 export function PortalOverviewSkeleton() {

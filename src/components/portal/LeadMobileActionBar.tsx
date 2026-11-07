@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, useReducedMotion, useSpring, useTransform } from 'framer-motion'
-import { ChevronDown, Mail, MessageSquare, Phone } from 'lucide-react'
+import { ChevronDown, Mail, MessageSquare, Phone } from '@/lib/icons/phosphor-compat'
 import { useEffect, useId, useRef, useState } from 'react'
 
 const ACTION_BAR_SPRING = { stiffness: 460, damping: 43, mass: 1 }

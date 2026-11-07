@@ -1,6 +1,6 @@
 'use client'
 
-import { BellOff, BellRing, Check, Loader2, Smartphone } from 'lucide-react'
+import { BellOff, BellRing, Check, Loader2, Smartphone } from '@/lib/icons/phosphor-compat'
 import { useCallback, useEffect, useState } from 'react'
 import { useToast } from '@/components/portal/ToastProvider'
 

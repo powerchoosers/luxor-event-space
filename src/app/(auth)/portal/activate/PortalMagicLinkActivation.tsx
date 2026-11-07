@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
-import { LoaderCircle, LockKeyhole } from 'lucide-react'
+import { LoaderCircle, LockKeyhole } from '@/lib/icons/phosphor-compat'
 
 export function PortalMagicLinkActivation() {
   const [details, setDetails] = useState<{ email: string; displayName: string; purpose: string } | null>(null)

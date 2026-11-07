@@ -431,7 +431,7 @@ export type LuxorPaymentInstallment = {
   amount: number
   due_at: string | null
   status: 'scheduled' | 'sent' | 'partial' | 'paid' | 'void'
-  payment_method: 'card' | 'cash' | 'check' | 'ACH' | 'Zelle' | null
+  payment_method: 'card' | 'cash' | 'check' | 'ACH' | 'Zelle' | 'Bank Transfer' | 'Other' | null
   reference: string | null
   paid_at: string | null
   metadata: Record<string, unknown>
@@ -830,10 +830,10 @@ export type LuxorPaymentRefund = {
   created_at: string
   updated_at: string
   source_payment_id: string
-  booking_id: string
-  invoice_id: string
+  booking_id: string | null
+  invoice_id: string | null
   inquiry_id: string | null
-  refund_kind: 'security_deposit'
+  refund_kind: 'security_deposit' | 'event_revenue' | 'unclassified'
   amount: number
   currency: 'usd'
   status: 'pending' | 'succeeded' | 'failed' | 'uncertain'
@@ -851,7 +851,7 @@ export type LuxorPaymentRefund = {
 }
 
 export type LuxorPaymentRefundView = Pick<LuxorPaymentRefund,
-  'id' | 'booking_id' | 'invoice_id' | 'inquiry_id' | 'refund_kind' | 'amount' | 'currency' | 'status' | 'requested_at' | 'completed_at' | 'metadata'
+  'id' | 'source_payment_id' | 'booking_id' | 'invoice_id' | 'inquiry_id' | 'refund_kind' | 'amount' | 'currency' | 'status' | 'processor' | 'processor_payment_intent_id' | 'processor_refund_id' | 'requested_at' | 'completed_at' | 'livemode' | 'metadata'
 >
 
 export type LuxorBookingExpenseStatus = 'planned' | 'incurred' | 'paid' | 'cancelled'

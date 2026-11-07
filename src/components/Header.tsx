@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, Menu, X } from 'lucide-react'
+import { CalendarDays, Menu, X } from '@/lib/icons/phosphor-compat'
 import { LuxorAxisLockup, LuxorWordmark } from '@/components/LuxorWordmark'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'

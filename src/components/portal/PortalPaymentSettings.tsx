@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Loader2, QrCode, WalletCards } from 'lucide-react'
+import { Check, Loader2, QrCode, WalletCards } from '@/lib/icons/phosphor-compat'
 import { useCallback, useEffect, useState } from 'react'
 import { useToast } from './ToastProvider'
 

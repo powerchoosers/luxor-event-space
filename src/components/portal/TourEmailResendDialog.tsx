@@ -1,6 +1,6 @@
 'use client'
 
-import { Send } from 'lucide-react'
+import { Send } from '@/lib/icons/phosphor-compat'
 import { PortalCloseButton, PortalModal } from '@/components/portal/PortalUI'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 

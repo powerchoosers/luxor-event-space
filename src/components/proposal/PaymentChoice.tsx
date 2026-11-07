@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CreditCard } from 'lucide-react'
+import { CreditCard } from '@/lib/icons/phosphor-compat'
 
 type Method = 'card' | 'cash' | 'zelle' | 'check'
 type Amount = 'deposit' | 'full'

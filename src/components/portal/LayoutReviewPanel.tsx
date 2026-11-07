@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, ClipboardCheck, Copy, ExternalLink, Link2, Loader2, Mail, MessageSquareText, RefreshCw, ShieldCheck, XCircle } from 'lucide-react'
+import { CheckCircle2, ClipboardCheck, Copy, ExternalLink, Link2, Loader2, Mail, MessageSquareText, RefreshCw, ShieldCheck, XCircle } from '@/lib/icons/phosphor-compat'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import type { EventLayoutDocument } from '@/components/portal/EventLayoutDesigner'

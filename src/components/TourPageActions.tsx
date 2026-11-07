@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { MapPin, MessageSquare, Phone } from 'lucide-react'
+import { MapPin, MessageSquare, Phone } from '@/lib/icons/phosphor-compat'
 
 type Locale = 'en' | 'es'
 

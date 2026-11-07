@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import React, { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { AlertCircle, ChevronLeft, ChevronRight, Eye, Grid2X2, List, Loader2, MoreHorizontal, Search, Send, Trash2, X } from 'lucide-react'
+import { AlertCircle, ChevronLeft, ChevronRight, Eye, Grid2X2, List, Loader2, MoreHorizontal, Search, Send, Trash2, X } from '@/lib/icons/phosphor-compat'
 import { PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
 import type { Campaign } from '../page'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'

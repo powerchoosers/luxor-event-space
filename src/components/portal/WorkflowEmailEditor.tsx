@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowDown, ArrowUp, Check, Copy, Eye, LayoutTemplate, Monitor, Plus, Redo2, Settings2, Smartphone, Trash2, Undo2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, Eye, LayoutTemplate, Monitor, Plus, Redo2, Settings2, Smartphone, Trash2, Undo2 } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalCloseButton, PortalModal, PortalSelect } from './PortalUI'
 import { WorkflowVariableChipsBar } from './WorkflowVariableChipsBar'
 import { EmailRichTextEditor, type EmailRichTextEditorHandle } from './EmailRichTextEditor'

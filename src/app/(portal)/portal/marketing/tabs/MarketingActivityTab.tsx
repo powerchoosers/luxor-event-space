@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { ArrowUpRight, Mail } from 'lucide-react'
+import { ArrowUpRight, Mail } from '@/lib/icons/phosphor-compat'
 import type { MarketingOverviewData } from '@/lib/luxorMarketingOverview'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, Mail, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, Sparkles, UserPlus, X } from 'lucide-react'
+import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, Mail, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, Sparkles, UserPlus, X } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useDeferredValue } from 'react'

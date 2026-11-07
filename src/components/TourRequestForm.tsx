@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Check, ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon, Clock, MapPin } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon, Clock, MapPin } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLuxorTourSlots } from '@/hooks/useLuxorTourSlots'
 import { formatTourSlotDate, formatTourSlotTime } from '@/lib/luxorTourSlots'

@@ -23,7 +23,7 @@ import {
   BrainCircuit,
   User,
   X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 
 type Message = {
   id: string

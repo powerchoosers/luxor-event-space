@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Laptop, Loader2, MapPin, MessageSquare, Phone, RefreshCw, Save, Search, ShieldCheck, Smartphone } from 'lucide-react'
+import { Check, Laptop, Loader2, MapPin, MessageSquare, Phone, RefreshCw, Save, Search, ShieldCheck, Smartphone } from '@/lib/icons/phosphor-compat'
 import { useCallback, useEffect, useState } from 'react'
 import { formatUsDialInput, toUsE164 } from '@/lib/luxorPhoneClient'
 import { useToast } from './ToastProvider'

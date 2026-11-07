@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Archive, Loader2, Pause, Play, RefreshCw } from 'lucide-react'
+import { Archive, Loader2, Pause, Play, RefreshCw } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalCheckbox, PortalModal } from '@/components/portal/PortalUI'
 import type { LuxorMailReleaseReview } from '@/lib/luxorMailReleaseServer'
 

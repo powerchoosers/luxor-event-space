@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, ExternalLink, RefreshCw, Save } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ExternalLink, RefreshCw, Save } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalSkeleton } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 import { catalogNumber, catalogValue, setCatalogValue, type PricingCatalog } from '@/lib/luxorPricingCatalog'

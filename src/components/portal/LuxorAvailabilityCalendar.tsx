@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons/phosphor-compat'
 import { PortalSelect } from './PortalUI'
 import { luxorAvailabilityStatusLabel, type LuxorAvailabilityCalendar, type LuxorAvailabilityDay } from '@/lib/luxorAvailability'
 import { luxorTodayKey } from '@/lib/luxorTourMetrics'

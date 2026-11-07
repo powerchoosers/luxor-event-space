@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Plus } from 'lucide-react'
+import { Plus } from '@/lib/icons/phosphor-compat'
 import { DYNAMIC_VARIABLE_CHIPS } from '@/lib/luxorCustomWorkflowDefinition'
 
 export interface WorkflowVariableChipsBarProps {

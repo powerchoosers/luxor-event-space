@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Search } from 'lucide-react'
+import { Search } from '@/lib/icons/phosphor-compat'
 import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads } from '@/lib/luxorRecentLeads'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 

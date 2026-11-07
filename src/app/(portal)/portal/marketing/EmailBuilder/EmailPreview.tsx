@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock, Check, Link2 } from 'lucide-react'
+import { X, Send, Loader2, CheckCircle, AlertCircle, Copy, Download, CalendarClock, Check, Link2 } from '@/lib/icons/phosphor-compat'
 import type { EmailBlock, LuxorEmailTheme } from '../emailTemplates'
 import { renderThemedEmailToHtml } from './emailRenderer'
 import { PortalDatePicker, PortalSelect, PortalModal, PortalAnimatedTabs, PortalTabTransition, PortalCloseButton } from '@/components/portal/PortalUI'

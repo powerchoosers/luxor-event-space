@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { ShieldCheck, ShieldAlert, HelpCircle } from 'lucide-react'
+import { ShieldCheck, ShieldAlert, HelpCircle } from '@/lib/icons/phosphor-compat'
 
 export type SmsConsentState = {
   status: 'opted_in' | 'opted_out' | 'unknown'

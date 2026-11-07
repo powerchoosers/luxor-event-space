@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from '@/lib/icons/phosphor-compat'
 
 type QueueStatusData = {
   status: 'healthy' | 'warning'

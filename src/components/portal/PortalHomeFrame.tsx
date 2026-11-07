@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Activity } from 'lucide-react'
+import { Activity } from '@/lib/icons/phosphor-compat'
 import { PortalPageFrame, PortalPageHeader, PortalSkeleton } from './PortalUI'
 
 const DateSlot = createContext<{ mobile: HTMLElement | null; desktop: HTMLElement | null; setMobile: (node: HTMLDivElement | null) => void; setDesktop: (node: HTMLDivElement | null) => void }>({ mobile: null, desktop: null, setMobile: () => {}, setDesktop: () => {} })

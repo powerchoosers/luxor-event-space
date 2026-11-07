@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays } from 'lucide-react'
+import { CalendarDays } from '@/lib/icons/phosphor-compat'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 
 export function PublicMobileActions() {

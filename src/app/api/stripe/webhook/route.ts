@@ -44,28 +44,66 @@ function formatMoney(value: number | null | undefined) {
   return Number(value || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
-async function reconcileStripeRefund(refund: Stripe.Refund, eventLivemode: boolean) {
+async function reconcileStripeRefund(refund: Stripe.Refund, event: Stripe.Event, stripe: Stripe) {
   const requestId = refund.metadata?.luxor_refund_request_id
-  if (!requestId) return
-  const [savedRequest] = await supabaseRestStrict<LuxorPaymentRefund[]>(
-    `luxor_payment_refunds?select=*&id=eq.${encodeURIComponent(requestId)}&limit=1`,
-  )
-  if (!savedRequest) throw new Error('Stripe refund references a Luxor refund request that is not available.')
-  const paymentIntentId = typeof refund.payment_intent === 'string' ? refund.payment_intent : refund.payment_intent?.id
-  if (paymentIntentId !== savedRequest.processor_payment_intent_id || eventLivemode !== savedRequest.livemode ||
-    refund.amount !== Math.round(Number(savedRequest.amount) * 100) || refund.currency !== 'usd') {
-    throw new Error('Stripe refund does not match its saved Luxor request.')
+  if (requestId) {
+    const [savedRequest] = await supabaseRestStrict<LuxorPaymentRefund[]>(
+      `luxor_payment_refunds?select=*&id=eq.${encodeURIComponent(requestId)}&limit=1`,
+    )
+    if (!savedRequest) throw new Error('Stripe refund references a Luxor refund request that is not available.')
+    const paymentIntentId = typeof refund.payment_intent === 'string' ? refund.payment_intent : refund.payment_intent?.id
+    if (paymentIntentId !== savedRequest.processor_payment_intent_id || event.livemode !== savedRequest.livemode ||
+      refund.amount !== Math.round(Number(savedRequest.amount) * 100) || refund.currency !== 'usd') {
+      throw new Error('Stripe refund does not match its saved Luxor request.')
+    }
+    const status = refund.status === 'succeeded' ? 'succeeded'
+      : refund.status === 'failed' || refund.status === 'canceled' ? 'failed' : 'pending'
+    await supabaseRestStrict<LuxorPaymentRefund>('rpc/luxor_record_payment_refund_event', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_refund_id: savedRequest.id,
+        p_status: status,
+        p_processor_refund_id: refund.id,
+        p_failure_code: refund.failure_reason || null,
+        p_livemode: event.livemode,
+        p_event_id: event.id,
+        p_event_created_at: new Date(event.created * 1000).toISOString(),
+      }),
+    })
+    return
+  }
+
+  const expandedCharge = typeof refund.charge === 'string'
+    ? await stripe.charges.retrieve(refund.charge)
+    : refund.charge
+  const paymentIntentId = typeof refund.payment_intent === 'string'
+    ? refund.payment_intent
+    : refund.payment_intent?.id || (typeof expandedCharge?.payment_intent === 'string'
+      ? expandedCharge.payment_intent
+      : expandedCharge?.payment_intent?.id)
+  if (!paymentIntentId || refund.currency !== 'usd' || !Number.isInteger(refund.amount) || refund.amount <= 0) {
+    throw new Error('Stripe refund does not identify a valid USD source payment.')
+  }
+  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
+  if (paymentIntent.livemode !== event.livemode || paymentIntent.currency !== 'usd' ||
+    paymentIntent.status !== 'succeeded' || paymentIntent.amount_received < refund.amount) {
+    throw new Error('Stripe refund does not match a successful source payment in this environment.')
   }
   const status = refund.status === 'succeeded' ? 'succeeded'
     : refund.status === 'failed' || refund.status === 'canceled' ? 'failed' : 'pending'
-  await supabaseRestStrict<LuxorPaymentRefund>('rpc/luxor_record_payment_refund_result', {
+  await supabaseRestStrict<LuxorPaymentRefund>('rpc/luxor_record_external_stripe_refund', {
     method: 'POST',
     body: JSON.stringify({
-      p_refund_id: savedRequest.id,
+      p_stripe_refund_id: refund.id,
+      p_payment_intent_id: paymentIntentId,
+      p_amount: refund.amount / 100,
+      p_currency: refund.currency,
       p_status: status,
-      p_processor_refund_id: refund.id,
+      p_livemode: event.livemode,
+      p_event_id: event.id,
+      p_refund_created_at: new Date(refund.created * 1000).toISOString(),
+      p_event_created_at: new Date(event.created * 1000).toISOString(),
       p_failure_code: refund.failure_reason || null,
-      p_livemode: eventLivemode,
     }),
   })
 }
@@ -543,7 +581,7 @@ export async function POST(request: NextRequest) {
   try {
     const stripe = new Stripe(secretKey)
     if (event.type === 'refund.created' || event.type === 'refund.updated' || event.type === 'refund.failed') {
-      await reconcileStripeRefund(event.data.object as Stripe.Refund, event.livemode)
+      await reconcileStripeRefund(event.data.object as Stripe.Refund, event, stripe)
     } else if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
       await recordPaidCheckoutSession(event.data.object, event, stripe)
     } else if (event.type === 'payment_intent.succeeded' && event.data.object.metadata?.workflow === 'luxor_same_day_booking') {

@@ -4,7 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, Mail, MapPin } from 'lucide-react'
+import { CalendarDays, Mail, MapPin } from '@/lib/icons/phosphor-compat'
 import { LuxorAxisLockup } from '@/components/LuxorWordmark'
 import { PublicPhoneLink } from '@/components/PublicPhoneLink'
 

@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { createPortal } from 'react-dom'
-import { ArrowDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ArrowDown, ChevronLeft, ChevronRight, X } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, animate, motion, type PanInfo, useMotionValue } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 

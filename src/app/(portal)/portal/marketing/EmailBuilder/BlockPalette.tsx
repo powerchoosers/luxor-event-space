@@ -18,7 +18,7 @@ import {
   Share2,
   Space,
   Type,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 
 type PaletteTab = 'blocks' | 'sections' | 'templates'
 

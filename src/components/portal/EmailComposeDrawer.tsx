@@ -18,7 +18,7 @@ import {
   Check,
   CheckCircle,
   Loader2
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalSelect, PortalCloseButton } from '@/components/portal/PortalUI'
 import { EmailRichTextEditor } from '@/components/portal/EmailRichTextEditor'
 import { ComposerAiActions } from '@/components/portal/ComposerAiActions'

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BadgeDollarSign, Bell, Bot, Building, Clock, Cpu, Image, Lock, Search, Tag, X } from 'lucide-react'
+import { BadgeDollarSign, Bell, Bot, Building, Clock, Cpu, Image, Lock, Search, Tag, X } from '@/lib/icons/phosphor-compat'
 
 type SettingsTab =
   | 'business'

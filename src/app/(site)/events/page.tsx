@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, Check } from 'lucide-react'
+import { ArrowRight, Check } from '@/lib/icons/phosphor-compat'
 import { Reveal } from '@/components/Reveal'
 import { StaggerCards, StaggerCard } from '@/components/StaggerCards'
 

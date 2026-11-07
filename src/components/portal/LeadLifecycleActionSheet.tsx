@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Archive, CalendarX2, Loader2, MoreHorizontal } from 'lucide-react'
+import { Archive, CalendarX2, Loader2, MoreHorizontal } from '@/lib/icons/phosphor-compat'
 import { isLuxorInquiryArchived, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { PortalButton, PortalModal } from '@/components/portal/PortalUI'
 

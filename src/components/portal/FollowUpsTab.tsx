@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { CalendarClock, Check, ChevronRight, Clock3, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Phone, Plus, UserRound, X } from 'lucide-react'
+import { CalendarClock, Check, ChevronRight, Clock3, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Pause, Phone, Plus, UserRound, X } from '@/lib/icons/phosphor-compat'
 import type { LuxorInquiry, LuxorTask } from '@/lib/luxorInquiryTypes'
 import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
 import { getCompletedTourLeads, getLuxorPostTourFollowUpStatus } from '@/lib/luxorTourMetrics'

@@ -2,7 +2,7 @@
 
 import React, { useRef } from 'react'
 import { motion, useInView, AnimatePresence } from 'framer-motion'
-import { ArrowUpRight, CalendarClock, MailPlus, Users, Workflow } from 'lucide-react'
+import { ArrowUpRight, CalendarClock, MailPlus, Users, Workflow } from '@/lib/icons/phosphor-compat'
 import { PortalSelect, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
 import { NumberTicker } from '@/components/ui/number-ticker'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'

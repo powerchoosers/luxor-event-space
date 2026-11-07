@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowDown, ArrowRight } from 'lucide-react'
+import { ArrowDown, ArrowRight } from '@/lib/icons/phosphor-compat'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'

@@ -10,7 +10,7 @@ import {
   Check,
   Loader2,
   CalendarCheck
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalSelect, PortalDatePicker } from '@/components/portal/PortalUI'
 import { LuxorInquiry, LuxorInquiryStatus } from '@/lib/luxorInquiryTypes'
 import { useToast } from '@/components/portal/ToastProvider'

@@ -15,7 +15,7 @@ import {
   AlertCircle,
   Calendar,
   Users
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalSelect } from './PortalUI'
 
 // --- 1. Lead Update Container ---

@@ -10,7 +10,7 @@ import {
   Zap,
   X,
   GripVertical,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'

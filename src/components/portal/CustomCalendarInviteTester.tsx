@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { CalendarPlus, CheckCircle2, Download, Loader2, Mail, Send, ShieldCheck } from 'lucide-react'
+import { CalendarPlus, CheckCircle2, Download, Loader2, Mail, Send, ShieldCheck } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 

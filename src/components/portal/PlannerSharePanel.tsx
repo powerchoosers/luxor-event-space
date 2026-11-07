@@ -2,7 +2,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, Loader2, Share2, XCircle } from 'lucide-react'
+import { Check, Loader2, Share2, XCircle } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
 
 type Row = Record<string, any> & { id: string }

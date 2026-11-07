@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowRight, CheckCircle2, Loader2, Mail, ShieldCheck } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Loader2, Mail, ShieldCheck } from '@/lib/icons/phosphor-compat'
 import { useEffect, useState } from 'react'
 
 const steps = [

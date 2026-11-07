@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Loader2, MessageSquareText, RotateCcw, Send, ShieldCheck, ThumbsUp } from 'lucide-react'
+import { CheckCircle2, Loader2, MessageSquareText, RotateCcw, Send, ShieldCheck, ThumbsUp } from '@/lib/icons/phosphor-compat'
 import type { LayoutItem } from '@/components/portal/EventLayoutDesigner'
 import type { PublicLayoutReview } from '@/lib/luxorLayoutReviewTypes'
 

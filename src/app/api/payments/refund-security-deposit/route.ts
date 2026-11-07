@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getLuxorBooking } from '@/lib/luxorBookingsServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { createNote } from '@/lib/luxorNotesServer'
@@ -49,6 +50,10 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getLuxorPortalSession()
     if (!session) return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    const member = await getLuxorPortalMember(session.email)
+    if (!member || member.status !== 'active' || !memberCan(member, 'finances')) {
+      return NextResponse.json({ error: 'Active finance access is required to issue a refund.' }, { status: 403 })
+    }
 
     const body = await request.json().catch(() => ({})) as { bookingId?: string }
     if (!body.bookingId) return NextResponse.json({ error: 'bookingId is required.' }, { status: 400 })

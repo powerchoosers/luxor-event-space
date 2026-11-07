@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { ArrowUpRight, LayoutTemplate, Plus } from 'lucide-react'
+import { ArrowUpRight, LayoutTemplate, Plus } from '@/lib/icons/phosphor-compat'
 import { PortalButton } from '@/components/portal/PortalUI'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'
 import { EMAIL_TEMPLATES, type EmailTemplate } from '../emailTemplates'

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from '@/lib/icons/phosphor-compat'
 import { addCalendarMonthsDateKey, formatLocalDateKey, getDateKeyInTimeZone } from '@/lib/publicEventDate'
 
 function parseDateKey(value: string) {

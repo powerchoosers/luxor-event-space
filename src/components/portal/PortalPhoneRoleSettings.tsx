@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Loader2, Phone, ShieldCheck } from 'lucide-react'
+import { Check, Loader2, Phone, ShieldCheck } from '@/lib/icons/phosphor-compat'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PortalSelect } from './PortalUI'
 import { useToast } from './ToastProvider'

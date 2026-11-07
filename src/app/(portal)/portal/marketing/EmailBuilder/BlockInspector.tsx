@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Check, Info } from 'lucide-react'
+import { Check, Info } from '@/lib/icons/phosphor-compat'
 import type { EmailBlock, HeroBlock, TextBlock, ImageTextBlock, ButtonBlock, DividerBlock, SpacerBlock, FooterBlock } from '../emailTemplates'
 import { PortalSelect } from '@/components/portal/PortalUI'
 

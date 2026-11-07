@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Mail, Send } from 'lucide-react'
+import { Mail, Send } from '@/lib/icons/phosphor-compat'
 import { PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import type { CorrectEmailResendOption } from '@/lib/luxorLeadEmailResend'
 

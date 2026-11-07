@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { CalendarClock, Mail, Send, Users } from 'lucide-react'
+import { CalendarClock, Mail, Send, Users } from '@/lib/icons/phosphor-compat'
 import {
   PortalCalendar,
   type PortalCalendarItem,

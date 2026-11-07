@@ -1,6 +1,6 @@
 'use client'
 
-import { Phone } from 'lucide-react'
+import { Phone } from '@/lib/icons/phosphor-compat'
 import { useEffect, useState } from 'react'
 
 export function PublicPhoneLink({ compact = false, showIcon = true, className = '', label = 'Call Luxor', loadingLabel = 'Loading phone…' }: { compact?: boolean; showIcon?: boolean; className?: string; label?: string; loadingLabel?: string }) {

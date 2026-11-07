@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Minus, Plus, RotateCcw } from 'lucide-react'
+import { Minus, Plus, RotateCcw } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { PortalCloseButton } from '@/components/portal/PortalUI'
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Download, Eye, FileText, LoaderCircle, Mail, RefreshCw, ShieldCheck } from 'lucide-react'
+import { Download, Eye, FileText, LoaderCircle, Mail, RefreshCw, ShieldCheck } from '@/lib/icons/phosphor-compat'
 import type { LuxorInvoice } from '@/lib/luxorInquiryTypes'
 import { PortalCloseButton, PortalModal } from '@/components/portal/PortalUI'
 import { PortalPdfViewer } from '@/components/portal/PortalPdfViewer'

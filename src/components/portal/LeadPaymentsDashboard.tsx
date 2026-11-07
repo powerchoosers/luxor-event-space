@@ -18,7 +18,7 @@ import {
   Layers3,
   ReceiptText,
   CalendarDays as CalendarEdit,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import type { LuxorBooking, LuxorEmailJob, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment, LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
 import { getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
 import { eventCreditForPayment as paymentMoneyForEvent, getInvoiceCollectionDisplayState, installmentDisplayState, installmentPaidAmount, isBookingPaymentMilestone, isCalendarDateDueInChicago, isLuxorBookingReceivableEligible, paymentDisplayReceivedDate } from '@/lib/luxorPaymentDashboardModel'

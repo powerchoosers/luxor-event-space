@@ -2,7 +2,7 @@
 
 import { FormEvent, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, CheckCircle2 } from 'lucide-react'
+import { ArrowRight, CheckCircle2 } from '@/lib/icons/phosphor-compat'
 import { getLuxorPublicAttribution, getLuxorPublicSessionId } from '@/lib/luxorPublicAttribution'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { LUXOR_NEWSLETTER_EMAIL_DISCLOSURE, LUXOR_NEWSLETTER_EMAIL_DISCLOSURE_ES } from '@/lib/luxorInquiryTypes'

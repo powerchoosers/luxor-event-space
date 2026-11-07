@@ -6,7 +6,7 @@ import {
   ArrowDown, ArrowUp, BookOpen, Check, ChevronRight, Database, FileUp,
   GitBranch, History, Loader2, MessageCircle, Pencil, Plus, RefreshCw, Save, Search, Send,
   ShieldCheck, SlidersHorizontal, Trash2, Unplug, X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalAnimatedTabs, PortalButton, PortalSelect, PortalTabTransition } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 

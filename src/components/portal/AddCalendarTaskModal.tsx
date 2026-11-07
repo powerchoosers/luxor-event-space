@@ -1,7 +1,7 @@
 'use client'
 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Search, X } from 'lucide-react'
+import { Search, X } from '@/lib/icons/phosphor-compat'
 import { useId, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { PortalButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import { isLuxorInquiryArchived, type LuxorInquiry } from '@/lib/luxorInquiryTypes'

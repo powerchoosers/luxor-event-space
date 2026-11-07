@@ -16,7 +16,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Copy, GripVertical, Trash2, ChevronUp, ChevronDown, Plus } from 'lucide-react'
+import { Copy, GripVertical, Trash2, ChevronUp, ChevronDown, Plus } from '@/lib/icons/phosphor-compat'
 import { decodeLuxorEmailTextEntities, normalizeLuxorReplyHtml } from '@/lib/luxorConversationalEmailServer'
 import { getLuxorEmailHeroOverlay, getLuxorEmailReadableText, LUXOR_EMAIL_HERO_COLORS } from './emailRenderer'
 import type {

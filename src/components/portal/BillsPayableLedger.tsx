@@ -8,7 +8,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AlertCircle, ArrowUpRight, Check, CheckCircle2, ChevronRight, CircleDollarSign,
   Building2, Clock3, FileCheck2, FileText, Inbox, Mail, Plus, Search, ShieldCheck, X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
 import type { LuxorBill, LuxorBillIntake, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { isLuxorBillCategory } from '@/lib/luxorBillCategories'

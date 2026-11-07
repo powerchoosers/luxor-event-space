@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { Maximize2, Pause, Play, Volume2, VolumeX } from '@/lib/icons/phosphor-compat'
 
 type NativeFullscreenVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void }
 

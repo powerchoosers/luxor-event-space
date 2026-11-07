@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
-import { ArrowRight, LoaderCircle } from 'lucide-react'
+import { ArrowRight, LoaderCircle } from '@/lib/icons/phosphor-compat'
 
 export function PortalPasswordLogin() {
   const [email, setEmail] = useState('a.patterson@luxoratlaspalmas.com')

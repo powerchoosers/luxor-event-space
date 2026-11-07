@@ -2,7 +2,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Image as ImageIcon, Loader2, LockKeyhole, Send } from 'lucide-react'
+import { Check, Image as ImageIcon, Loader2, LockKeyhole, Send } from '@/lib/icons/phosphor-compat'
 import { EventLayout3D } from '@/components/portal/EventLayout3D'
 import { normalizePlannerEventLayout } from '@/lib/luxorPlannerLayout'
 

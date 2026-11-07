@@ -10,7 +10,7 @@ import {
   RotateCw,
   Volume2,
   VolumeX,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 
 export type PortalAudioPlayerVariant = 'full' | 'compact' | 'inline' | 'voicemail-card'
 

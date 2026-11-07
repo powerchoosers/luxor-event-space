@@ -36,7 +36,7 @@ import {
   Menu,
   LogOut,
   BadgeDollarSign
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import {
   PortalPageFrame,
   PortalPageHeader,

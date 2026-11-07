@@ -1,7 +1,7 @@
 'use client'
 
 import { AnimatePresence, motion } from 'framer-motion'
-import { Plus } from 'lucide-react'
+import { Plus } from '@/lib/icons/phosphor-compat'
 import { useId, useState } from 'react'
 
 type FaqItem = {

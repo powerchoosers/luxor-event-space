@@ -10,7 +10,7 @@ import {
   Loader2,
   ChevronRight,
   Workflow,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { EmailBuilderShell } from '../EmailBuilder/EmailBuilderShell'
 import { EMAIL_TEMPLATES, type EmailBlock, type EmailTemplate } from '../emailTemplates'
 import { useToast } from '@/components/portal/ToastProvider'

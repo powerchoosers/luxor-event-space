@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useRef, useState, type KeyboardEvent } from 'react'
-import { X } from 'lucide-react'
+import { X } from '@/lib/icons/phosphor-compat'
 import { filterLuxorEventTypes, LUXOR_EVENT_TYPE_MAX_LENGTH } from '@/lib/luxorInquiryTypes'
 
 type LuxorEventTypeComboboxProps = {

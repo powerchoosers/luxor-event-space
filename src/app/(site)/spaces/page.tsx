@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, Camera, DoorOpen, Music, Utensils } from 'lucide-react'
+import { ArrowRight, Camera, DoorOpen, Music, Utensils } from '@/lib/icons/phosphor-compat'
 import { Reveal } from '@/components/Reveal'
 import { StaggerCards, StaggerCard } from '@/components/StaggerCards'
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { FlaskConical, History, RotateCcw, Settings2, X } from 'lucide-react'
+import { FlaskConical, History, RotateCcw, Settings2, X } from '@/lib/icons/phosphor-compat'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 
 type Payload = {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import { Sparkles, Loader2, X } from 'lucide-react'
+import { Sparkles, Loader2, X } from '@/lib/icons/phosphor-compat'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type Props = {

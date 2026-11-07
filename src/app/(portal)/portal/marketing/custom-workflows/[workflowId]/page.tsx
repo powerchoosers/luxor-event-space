@@ -26,7 +26,7 @@ import {
   Workflow,
   X,
   Zap,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalPageFrame, PortalSelect, PortalButton, PortalAnimatedTabs, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
 import {
   addCustomWorkflowStep,

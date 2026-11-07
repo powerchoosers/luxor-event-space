@@ -1,4 +1,4 @@
-import { LockKeyhole, ShieldCheck } from 'lucide-react'
+import { LockKeyhole, ShieldCheck } from '@/lib/icons/phosphor-compat'
 import Image from 'next/image'
 import Link from 'next/link'
 import { PortalPasswordLogin } from './PortalPasswordLogin'

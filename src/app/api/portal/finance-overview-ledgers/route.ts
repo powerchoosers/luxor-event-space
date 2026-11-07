@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (!member || member.status !== 'active' || !memberCan(member, 'finances')) return NextResponse.json({ error: 'Finance access required.' }, { status: 403 })
   const makeRequest = (path: string) => new NextRequest(new URL(path, request.url), { headers: request.headers })
   try {
-    const results = await Promise.all([
+    const [invoiceResponse, bookingResponse, expenseResponse, paymentResponse, installmentResponse, refundResponse] = await Promise.all([
       invoices(makeRequest('/api/invoices?strictMetrics=1')),
       bookings(makeRequest('/api/bookings?strictMetrics=1&financeRowsOnly=1')),
       expenses(makeRequest('/api/expenses?strictMetrics=1')),
@@ -23,8 +23,11 @@ export async function GET(request: NextRequest) {
       installments(makeRequest('/api/portal/payment-installments?strictMetrics=1')),
       refunds(makeRequest('/api/payments/refunds')),
     ])
-    if (results.some((response) => !response.ok)) throw new Error('Financial records could not be loaded.')
-    const rows = await Promise.all(results.map((response) => response.json()))
+    if (![invoiceResponse, bookingResponse, expenseResponse, paymentResponse, installmentResponse, refundResponse].every((response) => response.ok)) throw new Error('Financial records could not be loaded.')
+    const [invoiceRows, bookingRows, expenseRows, paymentRows, installmentRows, refundRows] = await Promise.all([
+      invoiceResponse.json(), bookingResponse.json(), expenseResponse.json(), paymentResponse.json(), installmentResponse.json(), refundResponse.json(),
+    ])
+    const rows = [invoiceRows, bookingRows, expenseRows, paymentRows, installmentRows, refundRows]
     if (!rows.every(Array.isArray)) throw new Error('Financial records could not be verified.')
     return NextResponse.json({ invoices: rows[0], bookings: rows[1], expenses: rows[2], payments: rows[3], installments: rows[4], refunds: rows[5] }, { headers: { 'Cache-Control': 'no-store' } })
   } catch {

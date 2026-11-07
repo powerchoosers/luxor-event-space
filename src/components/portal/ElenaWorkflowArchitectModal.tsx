@@ -12,7 +12,7 @@ import {
   Workflow,
   X,
   Zap,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalModal, PortalButton } from '@/components/portal/PortalUI'
 import type { CustomWorkflowDefinition } from '@/lib/luxorCustomWorkflowDefinition'
 

@@ -1,6 +1,7 @@
 import { isLuxorBookingDepositPaused } from '@/lib/luxorDepositMaintenanceServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { getLuxorBooking, updateLuxorBooking } from '@/lib/luxorBookingsServer'
 import {
   ensureLuxorDepositInvoice,
@@ -151,6 +152,10 @@ export async function POST(request: NextRequest) {
     const session = await getLuxorPortalSession()
     if (!session) {
       return NextResponse.json({ error: 'Zoho portal login required.' }, { status: 401 })
+    }
+    const member = await getLuxorPortalMember(session.email)
+    if (!member || member.status !== 'active' || !memberCan(member, 'finances')) {
+      return NextResponse.json({ error: 'Active finance access is required to record payments.' }, { status: 403 })
     }
 
     const body = await request.json().catch(() => ({})) as {

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from '@/lib/icons/phosphor-compat'
 
 const DAY_MINUTES = 24 * 60
 const TRACK_WIDTH = 1140

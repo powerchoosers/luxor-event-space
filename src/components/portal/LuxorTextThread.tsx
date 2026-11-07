@@ -1,6 +1,6 @@
 'use client'
 
-import { CheckCheck, Loader2, Send, MessageSquare, Sparkles } from 'lucide-react'
+import { CheckCheck, Loader2, Send, MessageSquare, Sparkles } from '@/lib/icons/phosphor-compat'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'

@@ -13,7 +13,7 @@ import {
   PhoneIncoming,
   PhoneOff,
   X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'

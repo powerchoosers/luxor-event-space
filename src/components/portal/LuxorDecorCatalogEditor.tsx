@@ -1,6 +1,6 @@
 'use client'
 
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
 import { LUXOR_DECOR_CATEGORIES, type LuxorDecorCatalogItem, type LuxorDecorPricingUnit } from '@/lib/luxorDecorCatalogV2'
 

@@ -3,7 +3,7 @@
 import React from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
-import { Check, ChevronDown, LoaderCircle, Save, Workflow } from 'lucide-react'
+import { Check, ChevronDown, LoaderCircle, Save, Workflow } from '@/lib/icons/phosphor-compat'
 import {
   CUSTOM_WORKFLOW_TRIGGER_LABELS,
   type CustomWorkflowDefinition,

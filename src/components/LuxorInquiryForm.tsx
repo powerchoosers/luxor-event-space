@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, CalendarDays, Check, Loader2, Mail, Phone } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CalendarDays, Check, Loader2, Mail, Phone } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'

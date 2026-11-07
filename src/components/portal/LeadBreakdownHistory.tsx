@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Eye, RefreshCw } from 'lucide-react'
+import { Eye, RefreshCw } from '@/lib/icons/phosphor-compat'
 import { PortalModal } from './PortalUI'
 import type { LuxorBreakdown, LuxorBreakdownSummary } from '@/lib/luxorBreakdownTypes'
 import type { LuxorLeadEvent } from '@/lib/luxorInquiryTypes'

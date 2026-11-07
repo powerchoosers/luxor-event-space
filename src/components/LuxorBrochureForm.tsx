@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useId, useRef, useState } from 'react'
-import { Check, ChevronDown, Download, FileText, Loader2, Mail, Megaphone } from 'lucide-react'
+import { Check, ChevronDown, Download, FileText, Loader2, Mail, Megaphone } from '@/lib/icons/phosphor-compat'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PublicEventDatePicker } from '@/components/PublicEventDatePicker'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'

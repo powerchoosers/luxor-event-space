@@ -23,7 +23,7 @@ import {
   ReceiptText,
   ShieldCheck,
   Users,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import type { LuxorInvoiceLineItem, LuxorPromotion, LuxorProposalContext, LuxorProposalPaymentPlan } from '@/lib/luxorInquiryTypes'
 import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 import { PortalCloseButton, PortalModal, PortalSelect } from '@/components/portal/PortalUI'

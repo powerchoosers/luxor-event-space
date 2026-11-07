@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { BarChart3, Calendar, Download, RefreshCw, TrendingUp } from 'lucide-react'
+import { BarChart3, Calendar, Download, RefreshCw, TrendingUp } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
 import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'

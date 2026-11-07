@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Info, X } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, motion } from 'framer-motion'
 
 type ToastVariant = 'info' | 'success' | 'warning' | 'error'

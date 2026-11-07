@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { CalendarClock, ChevronDown, ChevronRight, Clock3, Compass, Mail, MessageSquare, Phone, Search, SlidersHorizontal, Workflow, Zap, ArrowRight } from 'lucide-react'
+import { CalendarClock, ChevronDown, ChevronRight, Clock3, Compass, Mail, MessageSquare, Phone, Search, SlidersHorizontal, Workflow, Zap, ArrowRight } from '@/lib/icons/phosphor-compat'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { PREBUILT_WORKFLOWS, type PrebuiltWorkflow } from '@/lib/luxorPrebuiltWorkflows'

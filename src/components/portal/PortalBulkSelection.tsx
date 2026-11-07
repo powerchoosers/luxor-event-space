@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Loader2, Minus, X } from 'lucide-react'
+import { Check, Loader2, Minus, X } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 
 export type PortalBulkAction = {

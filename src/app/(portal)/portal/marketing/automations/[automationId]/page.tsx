@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, CalendarClock, Clock3, Mail, MessageSquareText, Phone, RefreshCw, Save, Workflow } from 'lucide-react'
+import { ArrowLeft, CalendarClock, Clock3, Mail, MessageSquareText, Phone, RefreshCw, Save, Workflow } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalModal, PortalPageFrame } from '@/components/portal/PortalUI'
 import type { AutomationLibraryEntry, AutomationLibraryTotals, AutomationStatus } from '@/lib/luxorAutomationsLibrary'
 

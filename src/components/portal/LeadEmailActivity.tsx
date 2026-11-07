@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Download, Loader2, Mail, Reply, Send } from 'lucide-react'
+import { Download, Loader2, Mail, Reply, Send } from '@/lib/icons/phosphor-compat'
 import type { EmailMessageItem } from '@/app/(portal)/portal/marketing/tabs/AllEmailsTab'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import { decodeHtmlEntities } from '@/lib/luxorTextUtils'

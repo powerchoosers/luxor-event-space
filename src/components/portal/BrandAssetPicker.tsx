@@ -11,7 +11,7 @@ import {
   Plus,
   Trash2,
   Copy
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { useToast } from './ToastProvider'
 import { PortalModal, PortalSelect, PortalCloseButton } from '@/components/portal/PortalUI'
 import { BrandAssetLightbox } from '@/components/portal/BrandAssetLightbox'

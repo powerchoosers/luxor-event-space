@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowRight, Check, Mail } from 'lucide-react'
+import { ArrowRight, Check, Mail } from '@/lib/icons/phosphor-compat'
 
 export default function PaymentSuccessPage() {
   return (

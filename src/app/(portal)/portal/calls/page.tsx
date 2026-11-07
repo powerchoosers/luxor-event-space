@@ -30,7 +30,7 @@ import {
   User,
   Voicemail,
   X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'

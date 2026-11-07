@@ -1,6 +1,6 @@
 'use client'
 
-import { LoaderCircle } from 'lucide-react'
+import { LoaderCircle } from '@/lib/icons/phosphor-compat'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { LUXOR_CONTRACT_PAGE_SIZE, type LuxorContractSignaturePlacement } from '@/lib/luxorSignaturePlacement'
 

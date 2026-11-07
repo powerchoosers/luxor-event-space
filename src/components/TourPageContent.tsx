@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Calendar, Globe } from 'lucide-react'
+import { Calendar, Globe } from '@/lib/icons/phosphor-compat'
 import { TourGallery } from '@/components/TourGallery'
 import { TourPageActions } from '@/components/TourPageActions'
 import { TourRequestForm } from '@/components/TourRequestForm'

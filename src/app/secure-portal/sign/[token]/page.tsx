@@ -19,7 +19,7 @@ import {
   QrCode,
   RotateCcw,
   Type,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import type { LuxorSignatureRequest } from '@/lib/luxorInquiryTypes'
 import type { LuxorSavedPaymentSchedule } from '@/lib/luxorSavedPaymentSchedule'
 import { SavedPaymentSchedule } from '@/components/proposal/SavedPaymentSchedule'

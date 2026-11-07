@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Activity, ArrowUpRight, FlaskConical, Mail, Send, FileText, Wrench } from 'lucide-react'
+import { Activity, ArrowUpRight, FlaskConical, Mail, Send, FileText, Wrench } from '@/lib/icons/phosphor-compat'
 import { EmailQueueHealthWidget } from '@/components/portal/EmailQueueHealthWidget'
 import { PortalAnimatedTabs, PortalPageFrame, PortalPageHeader, PortalTabTransition } from '@/components/portal/PortalUI'
 import { EMAIL_TEMPLATES } from '@/app/(portal)/portal/marketing/emailTemplates'

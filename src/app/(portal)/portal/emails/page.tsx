@@ -1,7 +1,7 @@
 'use client'
 
 import React, { Suspense, useEffect, useMemo, useState } from 'react'
-import { Mail, Plus } from 'lucide-react'
+import { Mail, Plus } from '@/lib/icons/phosphor-compat'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AllEmailsTab } from '../marketing/tabs/AllEmailsTab'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'

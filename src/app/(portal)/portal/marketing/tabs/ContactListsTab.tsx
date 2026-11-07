@@ -12,7 +12,7 @@ import {
   ListMinus,
   ArrowLeft,
   ChevronRight,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import {
   PortalTableCard,
   PortalStickyTable,

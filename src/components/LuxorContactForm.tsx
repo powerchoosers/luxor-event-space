@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
-import { Check, Loader2, Send } from 'lucide-react'
+import { Check, Loader2, Send } from '@/lib/icons/phosphor-compat'
 import { motion, AnimatePresence } from 'framer-motion'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { focusPublicConfirmation } from '@/lib/focusPublicConfirmation'

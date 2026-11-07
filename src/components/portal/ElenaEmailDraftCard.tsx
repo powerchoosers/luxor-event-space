@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Send, Eye, Check, Loader2, RefreshCw, AlertCircle } from 'lucide-react'
+import { Send, Eye, Check, Loader2, RefreshCw, AlertCircle } from '@/lib/icons/phosphor-compat'
 import { createPortal } from 'react-dom'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 import { stripTrackingPixels } from '@/lib/luxorTextUtils'

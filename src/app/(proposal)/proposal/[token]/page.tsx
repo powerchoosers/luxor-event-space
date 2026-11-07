@@ -1,4 +1,4 @@
-import { Check, FileCheck2, FileText, ShieldCheck } from 'lucide-react'
+import { Check, FileCheck2, FileText, ShieldCheck } from '@/lib/icons/phosphor-compat'
 import { notFound, redirect } from 'next/navigation'
 import { getInvoiceByPublicToken, markLuxorProposalViewed } from '@/lib/luxorInvoicesServer'
 import { cancelQueuedLuxorEmailJobs } from '@/lib/luxorEmailJobsServer'

@@ -24,7 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import {
   PortalPageFrame,
   PortalPageHeader,

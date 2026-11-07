@@ -10,7 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import {
   AlertCircle, ArrowRight, CalendarDays, Check, ChevronDown, ChevronRight, Clock3, FileText, FolderOpen,
   LayoutGrid, ListTodo, Loader2, Menu, Plus, Search, Trash2, Users, Video, Palette, Pencil, X,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import {
   PortalButton, PortalDatePicker, PortalEmptyState, PortalModal, PortalPageFrame, PortalPageHeader,
   PortalAnimatedTabs, PortalSelect, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition,

@@ -8,7 +8,7 @@ import {
   Minimize2, Move, Palette, PanelTop, RectangleHorizontal,
   Redo2, RotateCw, Ruler, Save, SlidersHorizontal, Sofa,
   Sparkles, Trash2, Undo2, User, Users, X, ZoomIn, ZoomOut,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { EventLayout3D } from './EventLayout3D'
 
 export type LayoutItemKind =

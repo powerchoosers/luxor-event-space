@@ -2,7 +2,7 @@
 
 import { FormEvent, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Check, Loader2, MessageCircle } from 'lucide-react'
+import { Check, Loader2, MessageCircle } from '@/lib/icons/phosphor-compat'
 import { formatStandardPhoneInput } from '@/lib/luxorPhoneClient'
 import type { LuxorInquiryInput } from '@/lib/luxorInquiryTypes'
 import { LUXOR_SMS_SIGNUP_CUSTOMER_CARE_DISCLOSURE, LUXOR_SMS_SIGNUP_MARKETING_DISCLOSURE } from '@/lib/luxorInquiryTypes'

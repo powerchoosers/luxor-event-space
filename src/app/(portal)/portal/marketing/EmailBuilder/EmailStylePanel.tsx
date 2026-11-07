@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { ChevronDown, ChevronRight, Moon, Palette, Sun } from 'lucide-react'
+import { ChevronDown, ChevronRight, Moon, Palette, Sun } from '@/lib/icons/phosphor-compat'
 import type { LuxorEmailTheme, LuxorEmailThemeMode } from '../emailTemplates'
 import { LUXOR_EMAIL_THEME_PRESETS } from '@/lib/luxorEmailDesignSystem'
 import { PortalSelect } from '@/components/portal/PortalUI'

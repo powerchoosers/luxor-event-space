@@ -17,7 +17,7 @@ import {
   ArrowDown,
   AlertTriangle,
   BookOpen,
-} from 'lucide-react'
+} from '@/lib/icons/phosphor-compat'
 import { PortalHomeDateControl } from './PortalHomeFrame'
 import { PortalSelect } from '@/components/portal/PortalUI'
 import { BorderBeam } from '@/components/ui/border-beam'

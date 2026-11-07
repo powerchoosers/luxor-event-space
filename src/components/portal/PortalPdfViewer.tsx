@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { LoaderCircle } from 'lucide-react'
+import { LoaderCircle } from '@/lib/icons/phosphor-compat'
 
 export type PortalPdfViewerProps = {
   url: string

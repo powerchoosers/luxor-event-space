@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { AlertCircle, ArrowLeft, CheckCircle2, LoaderCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle, CircleNotch, WarningCircle } from '@phosphor-icons/react'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
 
 type Result = {
@@ -45,12 +45,12 @@ export default function LegacyPackageReconciliationClient() {
   return (
     <PortalPageFrame>
       <PortalPageHeader
-        icon={<CheckCircle2 size={20} />}
+        icon={<CheckCircle size={20} weight="regular" />}
         title="Approved invoice reconciliation"
         description="Owner-only correction for the accepted Luxor package record."
         actions={(
           <Link href="/portal/finances" className="inline-flex items-center gap-2 rounded-xl border border-[var(--portal-border)] px-3 py-2 text-sm text-[var(--portal-text)] transition hover:bg-[var(--portal-surface-elevated)]">
-            <ArrowLeft size={14} /> Back to finances
+            <ArrowLeft size={16} weight="regular" /> Back to finances
           </Link>
         )}
       />
@@ -90,7 +90,7 @@ export default function LegacyPackageReconciliationClient() {
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <PortalButton variant="primary" onClick={() => void reconcile()} disabled={saving || confirmation !== 'RECONCILE' || !bookingId.trim()}>
-            {saving ? <LoaderCircle size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            {saving ? <CircleNotch size={16} weight="regular" className="animate-spin" /> : <CheckCircle size={16} weight="regular" />}
             {saving ? 'Reconciling…' : 'Apply approved reconciliation'}
           </PortalButton>
           <p className="text-xs leading-5 opacity-60">The action is idempotent and writes an actor-attributed before/after audit. No customer message is sent.</p>
@@ -98,13 +98,13 @@ export default function LegacyPackageReconciliationClient() {
 
         {result?.error && (
           <div role="alert" className="mt-5 flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-200">
-            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <WarningCircle size={17} weight="regular" className="mt-0.5 shrink-0" />
             <span>{result.error}</span>
           </div>
         )}
         {result?.success && (
           <div role="status" className="mt-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-200">
-            <p className="flex items-center gap-2 font-semibold"><CheckCircle2 size={16} /> Reconciliation saved and verified.</p>
+            <p className="flex items-center gap-2 font-semibold"><CheckCircle size={16} weight="regular" /> Reconciliation saved and verified.</p>
             <p className="mt-2">Audit record: <code className="font-mono">{result.auditId}</code></p>
             <p className="mt-1">{result.queuedReminderCount} reminders are queued; {result.sentReminderCount} were sent.</p>
           </div>

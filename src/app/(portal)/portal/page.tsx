@@ -14,7 +14,7 @@ import {
   UserPlus,
   Activity,
   Eye,
-} from "lucide-react";
+} from "@/lib/icons/phosphor-compat";
 import Link from "next/link";
 import Image from "next/image";
 import { listLuxorBookings, listAllPayments } from "@/lib/luxorBookingsServer";

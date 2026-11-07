@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, LoaderCircle, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LoaderCircle, RotateCcw, ZoomIn, ZoomOut } from '@/lib/icons/phosphor-compat'
 import { Document, Page, pdfjs } from 'react-pdf'
 import type { PortalPdfViewerProps } from './PortalPdfViewer'
 

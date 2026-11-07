@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarDays, CheckCircle2, Download, FileText, Mail, ReceiptText, RotateCcw, Send, WalletCards } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Download, FileText, Mail, ReceiptText, RotateCcw, Send, WalletCards } from '@/lib/icons/phosphor-compat'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
 
 type Section = 'proposals' | 'documents' | 'contract' | 'payments' | 'planning'
