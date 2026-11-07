@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, CheckCheck, Images, Info, Loader2, Mail, MessageSquare, MoreVertical, Phone, Plus, Search, Send, ShieldCheck, Sparkles, UserPlus, X } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useDeferredValue } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
@@ -31,6 +31,7 @@ type MessageFilter = 'all' | 'unread'
 
 export function LuxorMessenger() {
   const reduceMotion = useReducedMotion()
+  const router = useRouter()
   const { notify } = useToast()
   const searchParams = useSearchParams()
   const [messages, setMessages] = useState<LuxorMessage[]>([])
@@ -449,7 +450,24 @@ export function LuxorMessenger() {
       <aside className="flex min-h-0 min-w-0 flex-col border-r border-[color:var(--portal-border)]">
         <div className="border-b border-[color:var(--portal-border)]/70 p-4">
           <div className="flex items-center justify-between gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">Messages</h1>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined' && window.history.length > 1) {
+                    router.back()
+                  } else {
+                    router.push('/portal')
+                  }
+                }}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                aria-label="Go back"
+                title="Go back"
+              >
+                <ArrowLeft size={16} />
+              </button>
+              <h1 className="text-2xl font-bold tracking-tight text-[color:var(--portal-text)]">Messages</h1>
+            </div>
             <div className="flex items-center gap-1.5">
               <button type="button" onClick={() => { setNewMessageOpen(true); setShowThreadOnMobile(true); setContactQuery(''); setContactResults([]) }} className="luxor-gold-raised inline-flex h-8.5 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white"><Plus size={14}/> New</button>
             </div>
@@ -536,11 +554,11 @@ export function LuxorMessenger() {
                     </div>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center sm:gap-2">
-                  <button type="button" aria-label={`Call ${selectedConversation.contactName}`} title={`Call ${selectedConversation.contactName}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Phone size={17}/></button>
-                  {selectedLead?.email?.trim() ? <button type="button" aria-label={`Email ${selectedConversation.contactName}`} title={`Email ${selectedConversation.contactName}`} onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: selectedLead } }))} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Mail size={17}/></button> : null}
+                <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
+                  <button type="button" aria-label={`Call ${selectedConversation.contactName}`} title={`Call ${selectedConversation.contactName}`} onClick={() => startLuxorBrowserCall({ phoneNumber: selectedConversation.phoneNumber, contactName: selectedConversation.contactName, inquiryId: selectedConversation.inquiryId })} className="inline-flex h-8.5 w-8.5 sm:h-9 sm:w-9 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Phone size={17}/></button>
+                  {selectedLead?.email?.trim() ? <button type="button" aria-label={`Email ${selectedConversation.contactName}`} title={`Email ${selectedConversation.contactName}`} onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: selectedLead } }))} className="inline-flex h-8.5 w-8.5 sm:h-9 sm:w-9 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"><Mail size={17}/></button> : null}
                   <div className="relative" ref={optionsRef}>
-                    <button type="button" onClick={() => setOptionsOpen((current) => !current)} className="flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 sm:h-9 sm:w-9" aria-label="Conversation options" aria-expanded={optionsOpen}><MoreVertical size={17}/></button>
+                    <button type="button" onClick={() => setOptionsOpen((current) => !current)} className="flex h-8.5 w-8.5 sm:h-9 sm:w-9 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40" aria-label="Conversation options" aria-expanded={optionsOpen}><MoreVertical size={17}/></button>
                     <AnimatePresence>{optionsOpen ? <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute right-0 top-11 z-30 w-56 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1.5 shadow-xl backdrop-blur-xl">
                       <button type="button" onClick={() => { setOptionsOpen(false); setMediaGalleryOpen(true) }} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Images size={14}/> Media gallery <span className="ml-auto tabular-nums text-[color:var(--portal-muted)]">{sharedMedia.length}</span></button>
                       {selectedConversation.inquiryId ? <Link href={`/portal/leads/${selectedConversation.inquiryId}`} onClick={() => setOptionsOpen(false)} className="flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"><Info size={14}/> Contact details</Link> : null}

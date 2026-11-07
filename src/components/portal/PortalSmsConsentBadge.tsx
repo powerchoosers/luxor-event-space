@@ -153,7 +153,7 @@ export function PortalSmsConsentBadge({
         aria-label={shortOptedInOnMobile ? 'SMS opted in' : undefined}
         className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-emerald-500/10 ${
           compact ? 'px-1.5 py-0.5 text-[10px] font-semibold' : 'px-2 py-0.5 text-[10px] font-black uppercase tracking-wider'
-        } text-emerald-700 dark:text-emerald-400 ${shortOptedInOnMobile ? 'max-sm:!gap-0 max-sm:!px-0.5 max-sm:[&>svg]:hidden' : ''} ${className}`}
+        } text-emerald-700 dark:text-emerald-400 ${shortOptedInOnMobile ? 'max-sm:!gap-0 max-sm:!px-2 max-sm:[&>svg]:hidden' : ''} ${className}`}
       >
         <ShieldCheck size={compact ? 10 : 12} className="shrink-0 text-emerald-700 dark:text-emerald-400" />
         {shortOptedInOnMobile ? <><span className="sm:hidden" aria-hidden="true">SMS opted</span><span className="hidden sm:inline" aria-hidden="true">SMS opted in</span></> : <span>{compact ? 'SMS opted in' : 'SMS Opted In'}</span>}
