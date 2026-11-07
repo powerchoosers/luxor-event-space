@@ -38,7 +38,7 @@ export function MarketingActivityTab() {
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Campaign tracking</p>
           <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 id="marketing-activity-heading" className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Recent activity</h2>
+              <h2 id="marketing-activity-heading" className="text-lg font-bold text-[color:var(--portal-text)]">Recent activity</h2>
               <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Open, click, and unsubscribe events associated with non-test campaign email jobs.</p>
             </div>
             {data ? <p className="text-[10px] font-semibold text-[color:var(--portal-muted)]">{data.trackedActivityCount.toLocaleString()} tracked events · {formatDate(data.period.startDate)}–{formatDate(data.period.endDate)} · Chicago time</p> : null}

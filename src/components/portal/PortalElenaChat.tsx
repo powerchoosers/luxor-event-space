@@ -38,7 +38,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion'
-import { PortalCloseButton, PortalContactAvatar, PortalDatePicker, PortalSelect } from './PortalUI'
+import { PortalCloseButton, PortalContactAvatar, PortalDatePicker, PortalSelect, PortalConstellationLoader } from './PortalUI'
 import { ElenaLiveVoiceClient, type ElenaVoiceState } from '@/lib/elenaLiveVoiceClient'
 import { ElenaSilkOrb } from './ElenaSilkOrb'
 import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
@@ -253,7 +253,7 @@ function ToolActivityDisclosure({ steps, active = false, failed = false }: { ste
                     transition={{ duration: reduceMotion ? 0 : 0.22, delay: reduceMotion ? 0 : Math.min(index, 5) * 0.035, ease: [0.22, 1, 0.36, 1] }}
                   >
                     <span className={hasFailed ? 'is-failed' : current ? 'is-current' : 'is-complete'} aria-hidden="true">
-                      {hasFailed ? <Info size={13} /> : current ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                      {hasFailed ? <Info size={13} /> : current ? <PortalConstellationLoader size={14} /> : <Check size={13} />}
                     </span>
                     <span>{step}</span>
                   </motion.li>
@@ -2064,7 +2064,7 @@ function ElenaNewContactCard({ payload, onSuccess }: { payload: NewContactCardPa
           </Link>
         ) : (
           <button type="button" onClick={handleCreate} disabled={isSaving || !canSave} className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-[#caa24c] px-3 text-[10px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)]">
-            {isSaving ? <Loader2 size={12} className="animate-spin" /> : <UserRoundCheck size={12} />} {isSaving ? 'Adding contact…' : 'Add contact'}
+            {isSaving ? <PortalConstellationLoader size={14} tone="white" /> : <UserRoundCheck size={12} />} {isSaving ? 'Adding contact…' : 'Add contact'}
           </button>
         )}
       </div>
@@ -2187,7 +2187,7 @@ function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPa
         {error ? <p className="rounded-lg bg-rose-500/10 px-2.5 py-2 text-[10px] leading-4 text-rose-700 dark:text-rose-200">{error}</p> : null}
 
         <button type="button" onClick={handleSend} disabled={isSending || missingItems.length > 0} className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-[#caa24c] px-3 text-[10px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)]">
-          {isSending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} {isSending ? 'Sending invite…' : 'Send invite'}
+          {isSending ? <PortalConstellationLoader size={14} tone="white" /> : <Send size={12} />} {isSending ? 'Sending invite…' : 'Send invite'}
         </button>
       </div>
     </div>

@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowClockwise, CreditCard, List } from '@phosphor-icons/react'
+import { ArrowClockwise, CreditCard } from '@phosphor-icons/react'
+import { ChevronDown, Menu } from '@/lib/icons/phosphor-compat'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
 
@@ -34,22 +35,71 @@ export function RevenueCollectionsShell({
   children: React.ReactNode
 }) {
   const [browseOpen, setBrowseOpen] = useState(false)
+  const currentTitle = REVENUE_COLLECTION_VIEWS[view].title
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col">
+    <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-4 max-md:pt-4">
       <PortalPageHeader
         icon={<CreditCard size={18} weight="regular" />}
-        title="Revenue & Collections"
-        description="Manage incoming revenue, payment schedules, and client collections."
+        title={currentTitle}
+        description={REVENUE_COLLECTION_VIEWS[view].description}
+        mobileActionsInline
         actions={(
-          <div className="flex items-center gap-2">
-            {onRefresh ? <PortalButton onClick={onRefresh} disabled={refreshing} aria-label="Refresh revenue and collections"><ArrowClockwise size={16} weight="regular" className={refreshing ? 'animate-spin' : ''} /> Refresh</PortalButton> : null}
-            <PortalButton onClick={() => setBrowseOpen(true)} aria-haspopup="dialog"><List size={16} weight="regular" /> Browse views</PortalButton>
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={() => setBrowseOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={browseOpen}
+              aria-label={`Browse views. Currently viewing ${currentTitle}`}
+              className="hidden md:inline-flex min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+            >
+              <Menu size={16} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[8px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)] leading-none">Browse views</span>
+                <span className="mt-0.5 block truncate text-xs font-bold leading-tight max-w-[130px] lg:max-w-[170px]">
+                  {currentTitle}
+                </span>
+              </span>
+              <ChevronDown size={15} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
+            </button>
+            {onRefresh ? (
+              <PortalButton onClick={onRefresh} disabled={refreshing} aria-label="Refresh revenue and collections">
+                <ArrowClockwise size={15} weight="regular" className={refreshing ? 'animate-spin' : ''} /> Refresh Ledger
+              </PortalButton>
+            ) : null}
           </div>
         )}
       />
+
+      {/* Mobile-only condensed view picker button */}
+      <div className="md:hidden">
+        <button
+          type="button"
+          onClick={() => setBrowseOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={browseOpen}
+          className="flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45"
+        >
+          <Menu size={18} className="text-[#a8792f] shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse views</span>
+            <span className="mt-0.5 block truncate text-sm font-bold">
+              {currentTitle}
+            </span>
+          </span>
+          <ChevronDown size={17} className="text-[color:var(--portal-muted)] shrink-0" aria-hidden="true" />
+        </button>
+      </div>
+
       <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView={view} />
       <nav aria-label="Revenue and collections views" className="hidden overflow-x-auto border-b border-[color:var(--portal-border)] px-4 lg:block lg:px-6">
         <div className="flex min-w-max items-stretch gap-1">
+          <Link
+            href="/portal/finances"
+            className="relative inline-flex min-h-11 items-center px-3.5 text-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/55"
+          >
+            Financial Overview
+          </Link>
           {revenueCollectionLinks.map((item) => {
             const active = item.view === view
             const label = REVENUE_COLLECTION_VIEWS[item.view].title
@@ -57,7 +107,7 @@ export function RevenueCollectionsShell({
               key={item.view}
               href={item.href}
               aria-current={active ? 'page' : undefined}
-              className={`relative inline-flex min-h-12 items-center px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/55 ${active ? 'text-[color:var(--portal-text)] after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-[#a8792f] dark:after:bg-[#e6c77f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
+              className={`relative inline-flex min-h-11 items-center px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/55 ${active ? 'text-[color:var(--portal-text)] after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-[#a8792f] dark:after:bg-[#e6c77f]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
             >{label}</Link>
           })}
         </div>

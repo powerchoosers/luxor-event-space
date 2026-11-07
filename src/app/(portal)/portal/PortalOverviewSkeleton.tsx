@@ -1,5 +1,5 @@
 import React from 'react'
-import { Calendar, ListTodo, Clock } from '@/lib/icons/phosphor-compat'
+import { Calendar, ChevronLeft, ChevronRight, ListTodo, Clock } from '@/lib/icons/phosphor-compat'
 import { PortalSkeleton } from '@/components/portal/PortalUI'
 
 export function PortalOverviewSkeleton() {
@@ -32,22 +32,92 @@ export function PortalOverviewSkeleton() {
           </div>
 
           {/* This Week Calendar Skeleton */}
-          <div className="portal-card-surface flex flex-col justify-between p-6 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
-            <div>
-              <div className="flex items-center gap-2.5 mb-6">
-                <Calendar className="h-5 w-5 text-[#caa24c] opacity-60" strokeWidth={1.5} />
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)]">THIS WEEK</h3>
-              </div>
-              <div className="grid grid-cols-7 gap-1.5 pt-2">
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <div key={i} className="flex flex-col items-center gap-2 p-2 rounded-xl border border-[color:var(--portal-border)]/40 bg-[color:var(--portal-soft)]/20">
-                    <PortalSkeleton className="h-2.5 w-6 rounded opacity-60" />
-                    <PortalSkeleton className="h-4 w-4 rounded-full" />
+          <div className="portal-card-surface relative flex flex-col justify-between overflow-hidden p-6 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+            <div className="flex flex-col flex-1 min-h-0">
+              <div className="flex items-center justify-between mb-3 shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Calendar className="h-5 w-5 text-[#caa24c] opacity-60 shrink-0" strokeWidth={1.5} />
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--portal-text)] truncate">CALENDAR OUTLOOK</h3>
+                </div>
+                <div className="flex shrink-0 items-center gap-1 sm:gap-1.5" aria-hidden="true">
+                  <div className="flex h-8 w-8 sm:h-8.5 sm:w-8.5 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] opacity-60">
+                    <ChevronLeft size={15} strokeWidth={2.25} />
                   </div>
-                ))}
+                  <div className="flex h-8 w-8 sm:h-8.5 sm:w-8.5 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-[color:var(--portal-muted)] opacity-60">
+                    <ChevronRight size={15} strokeWidth={2.25} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 overflow-hidden pb-2.5 pt-1 px-1 shrink-0">
+                {Array.from({ length: 8 }).map((_, i) => {
+                  const isTodayPlaceholder = i === 1
+                  return (
+                    <div
+                      key={i}
+                      className={`flex flex-col justify-between w-24 h-28 shrink-0 p-2 rounded-xl border ${
+                        isTodayPlaceholder
+                          ? 'bg-[#fcf8f2] dark:bg-[#caa24c]/10 border-[#caa24c]/60'
+                          : 'bg-white/40 dark:bg-black/10 border-[color:var(--portal-border)]/40'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <PortalSkeleton className="h-2.5 w-7 rounded opacity-60" />
+                          {isTodayPlaceholder && (
+                            <PortalSkeleton className="h-3 w-9 rounded-full opacity-70" />
+                          )}
+                        </div>
+                        <PortalSkeleton className="mt-1.5 h-4 w-6 rounded" />
+                        <PortalSkeleton className="mt-1 h-2 w-8 rounded opacity-50" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <PortalSkeleton className="h-1.5 w-1.5 rounded-full shrink-0" />
+                          <PortalSkeleton className="h-2 w-12 rounded opacity-60" />
+                        </div>
+                        {i % 2 === 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <PortalSkeleton className="h-1.5 w-1.5 rounded-full shrink-0 opacity-60" />
+                            <PortalSkeleton className="h-2 w-10 rounded opacity-45" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Desktop & iPad Inline Agenda Panel Skeleton */}
+              <div className="hidden md:flex flex-col h-[175px] min-h-[175px] max-h-[175px] mt-2 pt-2.5 border-t border-[color:var(--portal-border)]/40 overflow-hidden shrink-0">
+                <div className="flex items-center justify-between mb-2 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <PortalSkeleton className="h-3.5 w-24 rounded" />
+                    <PortalSkeleton className="h-3.5 w-10 rounded-full opacity-60" />
+                  </div>
+                  <PortalSkeleton className="h-3 w-12 rounded opacity-60" />
+                </div>
+                <div className="flex-1 h-[140px] max-h-[140px] overflow-hidden pr-1 space-y-1.5">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg bg-[color:var(--portal-soft)]/60 border border-[color:var(--portal-border)]/30"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <PortalSkeleton className="h-1.5 w-1.5 rounded-full shrink-0" />
+                        <div className="space-y-1 flex-1">
+                          <PortalSkeleton className="h-3 w-3/5 rounded" />
+                          <PortalSkeleton className="h-2.5 w-2/5 rounded opacity-60" />
+                        </div>
+                      </div>
+                      <PortalSkeleton className="h-2.5 w-14 rounded opacity-70 shrink-0" />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-[color:var(--portal-border)]/50">
+
+            <div className="mt-3 pt-3 border-t border-[color:var(--portal-border)]/50 shrink-0">
               <PortalSkeleton className="h-3.5 w-28 mx-auto rounded opacity-60" />
             </div>
           </div>

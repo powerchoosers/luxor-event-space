@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import { Sparkles, Loader2, X } from '@/lib/icons/phosphor-compat'
+import { Loader2, Sparkles, X } from '@/lib/icons/phosphor-compat'
+import { PortalConstellationLoader } from '@/components/portal/PortalConstellationLoader'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type Props = {

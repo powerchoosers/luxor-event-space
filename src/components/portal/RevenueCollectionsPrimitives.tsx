@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { Icon } from '@phosphor-icons/react'
+import { PortalSkeleton } from '@/components/portal/PortalUI'
 
 const muted = 'text-sm leading-relaxed text-[color:var(--portal-muted)]'
 const card = 'min-w-0 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-sm sm:p-5'
@@ -17,39 +18,40 @@ export function FinancialMetricCard({
   detail,
   icon: Icon,
   href,
+  loading = false,
 }: {
   label: string
   value: number | null
   detail: string
   icon: Icon
   href?: string
+  loading?: boolean
 }) {
   const content = <>
     <div className="flex items-center justify-between gap-3">
       <h2 className={muted}>{label}</h2>
       <Icon aria-hidden="true" size={18} weight="regular" className="shrink-0 text-[#a8792f] dark:text-[#e6c77f]" />
     </div>
-    <p className="mt-3 break-words text-2xl font-semibold tracking-tight text-[color:var(--portal-text)] tabular-nums sm:text-3xl">{formatFinanceCurrency(value)}</p>
+    <div className="mt-3 min-h-[32px] flex items-center">
+      {loading ? (
+        <PortalSkeleton className="h-8 w-28 rounded-md my-0.5" />
+      ) : (
+        <p className="break-words text-2xl font-semibold tracking-tight text-[color:var(--portal-text)] tabular-nums sm:text-3xl">{formatFinanceCurrency(value)}</p>
+      )}
+    </div>
     <p className="mt-2 text-xs leading-relaxed text-[color:var(--portal-muted)]">{detail}</p>
-    {href ? <span className="mt-3 inline-flex min-h-9 items-center text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f]">View records <span aria-hidden="true" className="ml-1">→</span></span> : null}
+    {href && !loading ? <span className="mt-3 inline-flex min-h-9 items-center text-xs font-semibold text-[#9a712e] dark:text-[#e6c77f]">View records <span aria-hidden="true" className="ml-1">→</span></span> : null}
   </>
-  return href
+  return href && !loading
     ? <Link href={href} className={`${card} block transition-colors hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50`}>{content}</Link>
     : <section className={card}>{content}</section>
 }
 
 export function FinanceReviewNotice({ issues }: { issues: string[] }) {
   if (!issues.length) return null
-  const summary = issues.some((issue) => issue.includes('Allocation table unavailable') || issue.includes('allocation sources disagree'))
-    ? 'Payment allocation records need review. Dependent collection and balance figures stay unavailable until they match.'
-    : issues.some((issue) => issue.includes('refund'))
-      ? 'A refund affects a booking balance that needs review before it can be confirmed.'
-      : issues.some((issue) => issue.includes('schedule'))
-        ? 'A saved payment schedule needs review against its signed agreement.'
-        : 'Some saved finance records need review before the affected figures can be confirmed.'
   return <section role="status" aria-label="Figures needing review" className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-[color:var(--portal-text)]">
-    <h2 className="font-semibold">Some figures need review</h2>
-    <p className="mt-1 text-[color:var(--portal-muted)]">{summary}</p>
+    <h2 className="font-semibold">Records requiring verification</h2>
+    <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{issues.join(' · ')}</p>
   </section>
 }
 

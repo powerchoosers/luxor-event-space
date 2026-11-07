@@ -987,7 +987,7 @@ function OperationsPageContent() {
                         <PortalBulkRowSelector checked={bulkSelection.isSelected(v.id)} index={idx + 1} onChange={() => bulkSelection.toggle(v.id)} label={v.name} />
                         <div>
                         <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{v.vendor_type}</span>
-                        <h4 className="text-sm font-serif text-white mt-1">{v.name}</h4>
+                        <h4 className="text-sm font-bold text-white mt-1">{v.name}</h4>
                         </div>
                       </div>
                       <span className="text-[10px] text-[color:var(--portal-muted)]">{v.rating?.trim() || 'Unrated'}</span>

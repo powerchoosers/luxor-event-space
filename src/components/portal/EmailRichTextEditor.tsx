@@ -22,6 +22,7 @@ interface EmailRichTextEditorProps {
   onInitialCommandApplied?: () => void
   className?: string
   basicFormatting?: boolean
+  toolbarExtra?: React.ReactNode
 }
 
 export interface EmailRichTextEditorHandle {
@@ -47,6 +48,7 @@ export const EmailRichTextEditor = React.forwardRef<EmailRichTextEditorHandle, E
   onInitialCommandApplied,
   className = '',
   basicFormatting = false,
+  toolbarExtra,
 }, ref) {
   const editorRef = useRef<HTMLDivElement>(null)
   const savedSelectionRef = useRef<Range | null>(null)
@@ -192,6 +194,7 @@ export const EmailRichTextEditor = React.forwardRef<EmailRichTextEditorHandle, E
         >
           <ImageIcon size={15} />
         </button>}
+        {toolbarExtra && <div className='ml-auto flex items-center'>{toolbarExtra}</div>}
       </div>}
       <div className={`relative flex min-h-0 flex-1 flex-col ${focusMode || compact ? 'bg-[color:var(--portal-bg)]' : ''}`}>
         <div

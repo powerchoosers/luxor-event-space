@@ -1287,6 +1287,8 @@ export async function processLuxorEmailJobs(
           ? { status: 'sent', sent_at: new Date().toISOString(), last_error: null }
           : { status: 'cancelled', last_error: job.metadata.notificationKind === 'staff_reminder'
             ? 'Reminder skipped because its source changed or is no longer active.'
+            : job.metadata.notificationKind === 'high_priority_task'
+            ? 'Task alert skipped because task is no longer high priority or is completed.'
             : 'Tour or attendee is no longer eligible for this calendar revision.' })
         results.push({ id: job.id, status: delivery.status })
         continue

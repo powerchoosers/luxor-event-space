@@ -1,25 +1,141 @@
 'use client'
 
+import React, { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
-import { PortalModal } from '@/components/portal/PortalUI'
+import { AnimatePresence, motion } from 'framer-motion'
+import {
+  CalendarBlank,
+  CalendarDots,
+  CreditCard,
+  CurrencyCircleDollar,
+  Eye,
+  FileText,
+  Receipt,
+  TrendDown,
+  TrendUp,
+  Wallet,
+} from '@phosphor-icons/react'
+import { ChevronRight, X } from '@/lib/icons/phosphor-compat'
 
-export type FinanceBrowseView = 'overview' | 'invoices' | 'payments' | 'expenses' | 'reports' | 'revenue' | 'schedules' | 'monthly' | 'receivables' | 'history'
+export type FinanceBrowseView =
+  | 'overview'
+  | 'invoices'
+  | 'payments'
+  | 'expenses'
+  | 'reports'
+  | 'revenue'
+  | 'schedules'
+  | 'monthly'
+  | 'receivables'
+  | 'history'
 
-const links: Array<{ id: FinanceBrowseView; label: string; href: string; group: string }> = [
-  { id: 'overview', label: 'Financial Overview', href: '/portal/finances', group: 'Financial Overview' },
-  { id: 'revenue', label: 'Revenue Dashboard', href: '/portal/finances/revenue', group: 'Revenue & Collections' },
-  { id: 'schedules', label: 'Payment Schedules', href: '/portal/finances/schedules', group: 'Revenue & Collections' },
-  { id: 'monthly', label: 'Monthly Collections', href: '/portal/finances/monthly', group: 'Revenue & Collections' },
-  { id: 'receivables', label: 'Accounts Receivable', href: '/portal/finances/receivables', group: 'Revenue & Collections' },
-  { id: 'history', label: 'Payment History', href: '/portal/finances/history', group: 'Revenue & Collections' },
-  { id: 'invoices', label: 'Invoices Ledger', href: '/portal/finances?view=invoices', group: 'Existing ledgers' },
-  { id: 'payments', label: 'Payments Log', href: '/portal/finances?view=payments', group: 'Existing ledgers' },
-  { id: 'expenses', label: 'Expense Ledger', href: '/portal/finances?view=expenses', group: 'Existing ledgers' },
-  { id: 'reports', label: 'Financial Reports', href: '/portal/finances?view=reports', group: 'Existing ledgers' },
+type BrowseItem = {
+  id: FinanceBrowseView
+  label: string
+  description: string
+  href: string
+  group: string
+  icon: React.ReactNode
+}
+
+const links: BrowseItem[] = [
+  {
+    id: 'overview',
+    label: 'Financial Overview',
+    description: 'Revenue, expenses, active client payment plans, and obligations',
+    href: '/portal/finances',
+    group: 'Overview',
+    icon: <TrendUp size={16} weight="regular" />,
+  },
+  {
+    id: 'schedules',
+    label: 'Payment Schedules',
+    description: 'Client installment plans, due dates, and manual payment logging',
+    href: '/portal/finances/schedules',
+    group: 'Revenue & Collections',
+    icon: <CalendarBlank size={16} weight="regular" />,
+  },
+  {
+    id: 'receivables',
+    label: 'Accounts Receivable',
+    description: 'Confirmed booking balances and remaining client obligations',
+    href: '/portal/finances/receivables',
+    group: 'Revenue & Collections',
+    icon: <Wallet size={16} weight="regular" />,
+  },
+  {
+    id: 'revenue',
+    label: 'Revenue Dashboard',
+    description: 'Collected payments, expected revenue, and period performance',
+    href: '/portal/finances/revenue',
+    group: 'Revenue & Collections',
+    icon: <CurrencyCircleDollar size={16} weight="regular" />,
+  },
+  {
+    id: 'monthly',
+    label: 'Monthly Collections',
+    description: 'Rolling 12-month collected and expected schedule breakdown',
+    href: '/portal/finances/monthly',
+    group: 'Revenue & Collections',
+    icon: <CalendarDots size={16} weight="regular" />,
+  },
+  {
+    id: 'history',
+    label: 'Payment History',
+    description: 'Recorded incoming payments, refunds, and processor references',
+    href: '/portal/finances/history',
+    group: 'Revenue & Collections',
+    icon: <CreditCard size={16} weight="regular" />,
+  },
+  {
+    id: 'invoices',
+    label: 'Invoices Ledger',
+    description: 'Proposals, booking deposits, and final balance invoices',
+    href: '/portal/finances?view=invoices',
+    group: 'Ledgers & Reports',
+    icon: <FileText size={16} weight="regular" />,
+  },
+  {
+    id: 'payments',
+    label: 'Payments Log',
+    description: 'All recorded transactions and manual payment entries',
+    href: '/portal/finances?view=payments',
+    group: 'Ledgers & Reports',
+    icon: <Receipt size={16} weight="regular" />,
+  },
+  {
+    id: 'expenses',
+    label: 'Expenses Tracking',
+    description: 'Operational and event-linked venue expenses',
+    href: '/portal/finances?view=expenses',
+    group: 'Ledgers & Reports',
+    icon: <TrendDown size={16} weight="regular" />,
+  },
+  {
+    id: 'reports',
+    label: 'Financial Reports',
+    description: 'Revenue summaries, collection status, and ledger breakdowns',
+    href: '/portal/finances?view=reports',
+    group: 'Ledgers & Reports',
+    icon: <Eye size={16} weight="regular" />,
+  },
 ]
 
-const groups = ['Financial Overview', 'Revenue & Collections', 'Existing ledgers']
-const linkClass = 'flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm font-medium text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/60'
+const groups = ['Overview', 'Revenue & Collections', 'Ledgers & Reports']
+
+export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
+  overview: 'Financial Overview',
+  revenue: 'Revenue Dashboard',
+  schedules: 'Payment Schedules',
+  monthly: 'Monthly Collections',
+  receivables: 'Accounts Receivable',
+  history: 'Payment History',
+  invoices: 'Invoices Ledger',
+  payments: 'Payments Log',
+  expenses: 'Expenses Tracking',
+  reports: 'Financial Reports',
+}
 
 export function FinanceBrowseViews({
   open,
@@ -30,26 +146,165 @@ export function FinanceBrowseViews({
   open: boolean
   close: () => void
   currentView: FinanceBrowseView
-  onLegacySelect?: (view: Extract<FinanceBrowseView, 'invoices' | 'payments' | 'expenses' | 'reports'>) => void
+  onLegacySelect?: (view: 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports') => void
 }) {
-  return (
-    <PortalModal isOpen={open} onClose={close} title="Browse views" description="Choose a Financial Center view." maxWidth="max-w-xl" animateClose>
-      <nav aria-label="Financial Center views" className="space-y-1 divide-y divide-[color:var(--portal-border)]">
-        {groups.map((group) => (
-          <section key={group} className="py-1">
-            <h3 className="px-3 pt-3 text-xs font-semibold text-[color:var(--portal-muted)]">{group}</h3>
-            {links.filter((item) => item.group === group).map((item) => {
-              const isCurrent = item.id === currentView
-              if (onLegacySelect && ['invoices', 'payments', 'expenses', 'reports'].includes(item.id)) {
-                return <button key={item.id} type="button" aria-current={isCurrent ? 'page' : undefined} onClick={() => { onLegacySelect(item.id as 'invoices' | 'payments' | 'expenses' | 'reports'); close() }} className={linkClass}><span>{item.label}</span>{isCurrent && <span className="text-xs text-[color:var(--portal-muted)]">Current view</span>}</button>
-              }
-              return <Link key={item.id} href={item.href} onClick={close} aria-current={isCurrent ? 'page' : undefined} className={linkClass}><span>{item.label}</span>{isCurrent && <span className="text-xs text-[color:var(--portal-muted)]">Current view</span>}</Link>
-            })}
-          </section>
-        ))}
-        <section className="py-1"><h3 className="px-3 pt-3 text-xs font-semibold text-[color:var(--portal-muted)]">Bills &amp; Vendors</h3><Link href="/portal/operations?tab=bills" onClick={close} className={linkClass}><span>Open Operations bills</span><span className="text-xs text-[color:var(--portal-muted)]">Operations access</span></Link></section>
-        <section className="py-1"><h3 className="px-3 pt-3 text-xs font-semibold text-[color:var(--portal-muted)]">Other sections</h3><p className="px-3 py-2 text-sm text-[color:var(--portal-muted)]">Event Profitability, Budgeting, and Accounting are planned for later phases.</p></section>
-      </nav>
-    </PortalModal>
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, close])
+
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <AnimatePresence initial={false}>
+      {open ? (
+        <motion.div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          onMouseDown={close}
+        >
+          <motion.section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="finance-browse-views-title"
+            className="flex max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-2xl"
+            initial={{ opacity: 0, y: 56, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.985 }}
+            transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-5 py-4 backdrop-blur-xl">
+              <div>
+                <h2 id="finance-browse-views-title" className="text-base font-bold text-[color:var(--portal-text)]">
+                  Browse views
+                </h2>
+                <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a Financial Center workspace view.</p>
+              </div>
+              <button
+                type="button"
+                onClick={close}
+                aria-label="Close views menu"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
+              <nav aria-label="Financial Center views" className="space-y-4">
+                {groups.map((group) => (
+                  <section key={group}>
+                    <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">
+                      {group}
+                    </h3>
+                    <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
+                      {links
+                        .filter((item) => item.group === group)
+                        .map((item) => {
+                          const isCurrent = item.id === currentView
+                          const itemClass = `flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${
+                            isCurrent
+                              ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]'
+                              : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'
+                          }`
+                          const content = (
+                            <>
+                              <span className="shrink-0">{item.icon}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-2 text-sm font-bold">
+                                  <span>{item.label}</span>
+                                  {isCurrent ? (
+                                    <span className="rounded-full bg-[#caa24c]/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#9a6d26] dark:text-[#f1d27a]">
+                                      Current
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">
+                                  {item.description}
+                                </span>
+                              </span>
+                              <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                            </>
+                          )
+
+                          if (
+                            onLegacySelect &&
+                            (item.id === 'overview' ||
+                              item.id === 'invoices' ||
+                              item.id === 'payments' ||
+                              item.id === 'expenses' ||
+                              item.id === 'reports')
+                          ) {
+                            const legacyTab = item.id === 'overview' ? 'dashboard' : item.id
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                aria-current={isCurrent ? 'page' : undefined}
+                                onClick={() => {
+                                  onLegacySelect(legacyTab)
+                                  close()
+                                }}
+                                className={itemClass}
+                              >
+                                {content}
+                              </button>
+                            )
+                          }
+
+                          return (
+                            <Link
+                              key={item.id}
+                              href={item.href}
+                              onClick={close}
+                              aria-current={isCurrent ? 'page' : undefined}
+                              className={itemClass}
+                            >
+                              {content}
+                            </Link>
+                          )
+                        })}
+                    </div>
+                  </section>
+                ))}
+
+                <section>
+                  <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">
+                    Bills &amp; Vendors
+                  </h3>
+                  <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
+                    <Link
+                      href="/portal/operations?tab=bills"
+                      onClick={close}
+                      className="flex w-full items-center gap-3 px-3.5 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45"
+                    >
+                      <span className="shrink-0">
+                        <FileText size={16} weight="regular" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-bold">Operations Bills</span>
+                        <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">
+                          Recurring utility bills, vendor invoices, and due dates in Operations
+                        </span>
+                      </span>
+                      <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                    </Link>
+                  </div>
+                </section>
+              </nav>
+            </div>
+          </motion.section>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
+    document.body,
   )
 }

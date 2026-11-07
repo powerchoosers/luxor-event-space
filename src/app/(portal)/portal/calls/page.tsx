@@ -546,10 +546,10 @@ export default function CallsPage() {
                   <button
                     type="button"
                     onClick={() => setSearch('')}
-                    className="rounded-full p-0.5 text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
                     aria-label="Clear search"
                   >
-                    <X size={13} />
+                    <X size={12} />
                   </button>
                 )}
               </div>
@@ -615,7 +615,7 @@ export default function CallsPage() {
                     <span>{keypadMatchedContact.name}</span>
                     {keypadMatchedContact.inquiryId && (
                       <Link
-                        href={`/portal/leads/${keypadMatchedContact.inquiryId}`}
+                        href={`/portal/leads/${keypadMatchedContact.inquiryId}?from=/portal/calls`}
                         className="underline hover:opacity-80"
                       >
                         View Lead
@@ -982,7 +982,7 @@ export default function CallsPage() {
                   {getNamedContact(selectedCall.contact_name) ? (
                     selectedCall.inquiry_id ? (
                       <Link
-                        href={`/portal/leads/${selectedCall.inquiry_id}`}
+                        href={`/portal/leads/${selectedCall.inquiry_id}?from=/portal/calls`}
                         className="shrink-0 no-underline"
                         aria-label={`Open ${getNamedContact(selectedCall.contact_name)} lead profile`}
                       >
@@ -1008,7 +1008,7 @@ export default function CallsPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       {selectedCall.inquiry_id ? (
                         <Link
-                          href={`/portal/leads/${selectedCall.inquiry_id}`}
+                          href={`/portal/leads/${selectedCall.inquiry_id}?from=/portal/calls`}
                           className="text-xl sm:text-2xl font-semibold tracking-tight text-[color:var(--portal-text)] truncate no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
                         >
                           {getNamedContact(selectedCall.contact_name) || formatPhoneDisplay(targetPhoneNumber)}
@@ -1085,7 +1085,7 @@ export default function CallsPage() {
 
                   {selectedCall.inquiry_id ? (
                     <Link
-                      href={`/portal/leads/${selectedCall.inquiry_id}`}
+                      href={`/portal/leads/${selectedCall.inquiry_id}?from=/portal/calls`}
                       className="flex flex-col items-center justify-center gap-1.5 rounded-xl bg-[color:var(--portal-soft)] py-3 px-2 text-xs font-medium text-[color:var(--portal-text)] transition-transform active:scale-97 hover:bg-[#caa24c]/12 hover:text-[#a8792f] dark:hover:text-[#f1d27a]"
                     >
                       <User size={17} className="text-[#caa24c]" />
@@ -1425,7 +1425,7 @@ function StartingPhoneCall({ target }: { target: ReturnType<typeof usePortalVoic
       <div className="flex w-full items-center justify-between gap-2 text-left text-xs font-medium text-[color:var(--portal-muted)]"><p role="status" aria-live="polite"><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-[#caa24c]" />Preparing call</p><button type="button" onClick={minimizeCall} aria-label="Collapse call view" className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 md:hidden"><ChevronDown size={19} /></button></div>
       <div className="flex w-full flex-1 flex-col items-center justify-center py-6">
         <CallAvatar name={name || number || 'Call'} connecting />
-        <p className="mt-5 font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)]">{name || number || 'Starting call'}</p>
+        <p className="mt-5 text-2xl sm:text-3xl font-bold tracking-tight leading-tight text-[color:var(--portal-text)]">{name || number || 'Starting call'}</p>
         {name && number && <p className="mt-1 text-sm tabular-nums text-[color:var(--portal-muted)]">{number}</p>}
         <p className="mt-3 text-sm text-[color:var(--portal-muted)]">Connecting your call…</p>
       </div>
@@ -1468,8 +1468,8 @@ function LivePhoneCall({ call }: { call: NonNullable<ReturnType<typeof usePortal
       <div className="flex w-full flex-1 flex-col items-center justify-center py-6">
         <CallAvatar name={call.contactName} />
         {call.inquiryId && canViewLeadDetails ? (
-          <Link href={`/portal/leads/${call.inquiryId}`} className="mt-5 font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{call.contactName}</Link>
-        ) : <p className="mt-5 font-serif text-3xl font-semibold leading-tight text-[color:var(--portal-text)]">{call.contactName}</p>}
+          <Link href={`/portal/leads/${call.inquiryId}?from=/portal/calls`} className="mt-5 text-2xl sm:text-3xl font-bold tracking-tight leading-tight text-[color:var(--portal-text)] hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{call.contactName}</Link>
+        ) : <p className="mt-5 text-2xl sm:text-3xl font-bold tracking-tight leading-tight text-[color:var(--portal-text)]">{call.contactName}</p>}
         <p className="mt-1 text-sm tabular-nums text-[color:var(--portal-muted)]">{formatPhoneDisplay(call.phoneNumber)}</p>
         {!isBrowserCall && <p className="mt-3 max-w-64 text-sm leading-5 text-[color:var(--portal-muted)]">{call.bridgeStatusUnavailable ? 'Unable to refresh call status. Check your phone.' : call.bridgeStage === 'calling_phone' ? `Answer ${call.ringToNumber ? formatPhoneDisplay(call.ringToNumber) : 'your phone'} to connect this call.` : call.phase === 'active' ? 'Continue this call on your phone.' : call.phase === 'ringing' ? 'Waiting for the client to answer.' : 'Connecting the client now.'}</p>}
         {incomingRinging && <p className="mt-3 text-sm text-[color:var(--portal-muted)]">Use the incoming call prompt to answer or decline.</p>}
@@ -1534,7 +1534,7 @@ function CallLeadDetails({ inquiryId }: { inquiryId: string }) {
     return () => controller.abort()
   }, [inquiryId, retry])
 
-  if (error) return <div className="px-1 py-3 text-xs text-[color:var(--portal-muted)]"><span role="status">{error}</span> <button type="button" onClick={() => { setError(''); setRetry(current => current + 1) }} className="font-semibold text-[#a8792f] underline dark:text-[#f1d27a]">Try again</button> <Link className="ml-2 font-semibold text-[#a8792f] underline dark:text-[#f1d27a]" href={`/portal/leads/${encodeURIComponent(inquiryId)}`}>Open lead</Link></div>
+  if (error) return <div className="px-1 py-3 text-xs text-[color:var(--portal-muted)]"><span role="status">{error}</span> <button type="button" onClick={() => { setError(''); setRetry(current => current + 1) }} className="font-semibold text-[#a8792f] underline dark:text-[#f1d27a]">Try again</button> <Link className="ml-2 font-semibold text-[#a8792f] underline dark:text-[#f1d27a]" href={`/portal/leads/${encodeURIComponent(inquiryId)}?from=/portal/calls`}>Open lead</Link></div>
   if (!lead) return <p className="px-1 py-4 text-xs text-[color:var(--portal-muted)]" role="status">Loading lead details…</p>
 
   const rows = [
@@ -1553,7 +1553,7 @@ function CallLeadDetails({ inquiryId }: { inquiryId: string }) {
       <div className="mt-4 flex flex-wrap gap-2">
         {canText && lead.phone && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-open-text', { detail: { inquiryId: lead.id, phone: lead.phone, contactName: lead.fullName } }))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"><MessageSquare size={14} /> Text</button>}
         {canEmail && lead.email && <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead: { id: lead.id, full_name: lead.fullName, email: lead.email, event_type: lead.eventType } } }))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"><Mail size={14} /> Email</button>}
-        <Link href={`/portal/leads/${encodeURIComponent(lead.id)}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#f1d27a]">Open lead <ChevronRight size={14} /></Link>
+        <Link href={`/portal/leads/${encodeURIComponent(lead.id)}?from=/portal/calls`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#f1d27a]">Open lead <ChevronRight size={14} /></Link>
       </div>
     </div>
   )

@@ -584,7 +584,7 @@ export default function CustomWorkflowEditorPage() {
                 readOnly={!editable}
                 onChange={(e) => setNameDraft(e.target.value)}
                 placeholder="Workflow name"
-                className="min-w-0 truncate font-serif text-lg font-semibold text-[color:var(--portal-text)] bg-transparent outline-none focus:ring-1 focus:ring-[#caa24c]/50 rounded px-1 -mx-1"
+                className="min-w-0 truncate text-base font-bold text-[color:var(--portal-text)] bg-transparent outline-none focus:ring-1 focus:ring-[#caa24c]/50 rounded px-1 -mx-1"
               />
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
@@ -694,7 +694,7 @@ export default function CustomWorkflowEditorPage() {
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">
                     Workflow Trigger
                   </span>
-                  <h3 className="font-serif text-base font-semibold text-[color:var(--portal-text)]">
+                  <h3 className="text-base font-bold text-[color:var(--portal-text)]">
                     {CUSTOM_WORKFLOW_TRIGGER_LABELS[definitionDraft.trigger]?.label || 'Trigger Event'}
                   </h3>
                 </div>
@@ -775,7 +775,7 @@ export default function CustomWorkflowEditorPage() {
 
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-serif text-sm font-semibold text-[color:var(--portal-text)] truncate">
+                            <span className="text-sm font-bold text-[color:var(--portal-text)] truncate">
                               {step.name}
                             </span>
                             <span className="rounded bg-[color:var(--portal-soft)] px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-[color:var(--portal-muted)]">
@@ -918,10 +918,10 @@ export default function CustomWorkflowEditorPage() {
             <button
               type="button"
               onClick={() => setMobileInspectorOpen(false)}
-              className="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]"
+              className="lg:hidden inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
               aria-label="Close configuration panel"
             >
-              <X size={18} />
+              <X size={15} />
             </button>
           </div>
 
@@ -950,7 +950,7 @@ export default function CustomWorkflowEditorPage() {
                     <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-xs">
                       <Phone size={15} /> Arianna Call Task Card
                     </div>
-                    <h4 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">
+                    <h4 className="text-base font-bold text-[color:var(--portal-text)]">
                       {selectedStep.name}
                     </h4>
                     <div className="space-y-1.5 text-xs text-[color:var(--portal-muted)]">

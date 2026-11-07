@@ -269,7 +269,20 @@ export function LuxorMessenger() {
           draft: body,
           instruction: '',
           context: JSON.stringify({
-            name: selectedConversation.contactName,
+            name:
+              selectedConversation.contactName !== formatPhoneDisplay(selectedConversation.phoneNumber) &&
+              selectedConversation.contactName !== 'Unknown contact'
+                ? selectedConversation.contactName
+                : null,
+            isSavedContact: Boolean(selectedConversation.inquiryId),
+            lead: selectedLead
+              ? {
+                  eventType: selectedLead.event_type,
+                  guestCount: selectedLead.guest_count,
+                  targetDate: selectedLead.target_date,
+                  stage: selectedLead.pipeline_stage,
+                }
+              : null,
             messages: selectedConversation.messages.toSorted((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-20).map(({ direction, body: msgBody, created_at }) => ({ direction, body: msgBody, date: created_at })),
           }),
         }),
@@ -278,6 +291,7 @@ export function LuxorMessenger() {
       if (!response.ok || !data.draft?.trim()) throw new Error(data.error || 'Elena could not draft a response.')
       const cleanDraft = data.draft.trim()
       if (selectedConversation.key !== convKey) return
+      setBody(cleanDraft)
       setAnimatingDraftText(cleanDraft)
       setAnimatingDraft(true)
     } catch (error) {
@@ -308,7 +322,11 @@ export function LuxorMessenger() {
           draft: currentBody,
           instruction: '',
           context: JSON.stringify({
-            name: selectedConversation.contactName,
+            name:
+              selectedConversation.contactName !== formatPhoneDisplay(selectedConversation.phoneNumber) &&
+              selectedConversation.contactName !== 'Unknown contact'
+                ? selectedConversation.contactName
+                : null,
             messages: selectedConversation.messages.slice(-20).map(({ direction, body: msgBody }) => ({ direction, body: msgBody })),
           }),
         }),
@@ -317,6 +335,7 @@ export function LuxorMessenger() {
       if (!response.ok || !data.draft?.trim()) throw new Error(data.error || 'Elena could not polish your draft.')
       const cleanDraft = data.draft.trim()
       if (selectedConversation.key !== convKey) return
+      setBody(cleanDraft)
       setAnimatingDraftText(cleanDraft)
       setAnimatingDraft(true)
       setAiStatus('Polished')

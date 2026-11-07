@@ -1027,6 +1027,17 @@ export function PortalCloseButton({
 
 const ModalDepthContext = React.createContext(0)
 const PORTAL_MODAL_COMPACT_QUERY = '(max-width: 1023px)'
+const PORTAL_MODAL_MOBILE_QUERY = '(max-width: 767px)'
+
+function subscribeToPortalModalMobileLayout(callback: () => void) {
+  const mediaQuery = window.matchMedia(PORTAL_MODAL_MOBILE_QUERY)
+  mediaQuery.addEventListener('change', callback)
+  return () => mediaQuery.removeEventListener('change', callback)
+}
+
+function getPortalModalMobileLayoutSnapshot() {
+  return window.matchMedia(PORTAL_MODAL_MOBILE_QUERY).matches
+}
 
 function subscribeToPortalModalCompactLayout(callback: () => void) {
   const mediaQuery = window.matchMedia(PORTAL_MODAL_COMPACT_QUERY)
@@ -1050,6 +1061,7 @@ export function PortalModal({
   zIndex,
   className = '',
   fullScreenOnCompact = false,
+  fullScreenOnMobile = false,
   animateClose = false,
 }: {
   isOpen: boolean
@@ -1063,6 +1075,7 @@ export function PortalModal({
   zIndex?: number
   className?: string
   fullScreenOnCompact?: boolean
+  fullScreenOnMobile?: boolean
   animateClose?: boolean
 }) {
   const depth = React.useContext(ModalDepthContext)
@@ -1074,11 +1087,18 @@ export function PortalModal({
   const onCloseRef = React.useRef(onClose)
   const titleId = React.useId()
   const reduceMotion = useReducedMotion()
-  const isCompactFullScreen = React.useSyncExternalStore(
+  const isCompactMatch = React.useSyncExternalStore(
     subscribeToPortalModalCompactLayout,
     getPortalModalCompactLayoutSnapshot,
     () => false,
-  ) && fullScreenOnCompact
+  )
+  const isMobileMatch = React.useSyncExternalStore(
+    subscribeToPortalModalMobileLayout,
+    getPortalModalMobileLayoutSnapshot,
+    () => false,
+  )
+
+  const isCompactFullScreen = (fullScreenOnCompact && isCompactMatch) || (fullScreenOnMobile && isMobileMatch)
 
   const dialogInitial = isCompactFullScreen
     ? reduceMotion ? { opacity: 0 } : { x: '100%' }
@@ -1180,7 +1200,7 @@ export function PortalModal({
           aria-hidden={!isOpen}
           inert={!isOpen}
           style={{ zIndex: computedZIndex }}
-          className={`fixed inset-0 flex items-center justify-center p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4 ${fullScreenOnCompact ? 'max-lg:!p-0' : ''}`}
+          className={`fixed inset-0 flex items-center justify-center p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4 ${fullScreenOnCompact ? 'max-lg:!p-0' : ''} ${fullScreenOnMobile ? 'max-md:!p-0' : ''}`}
         >
           <motion.div
             initial={{ opacity: 0 }}
@@ -1201,11 +1221,11 @@ export function PortalModal({
             animate={isOpen ? dialogAnimate : dialogExit}
             exit={dialogExit}
             transition={{ duration: reduceMotion ? 0 : isCompactFullScreen ? 0.36 : 0.26, ease: [0.23, 1, 0.32, 1] }}
-            className={`relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full ${maxWidth} ${className} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''}`}
+            className={`relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full ${maxWidth} ${className} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''} ${fullScreenOnMobile ? 'max-md:!h-dvh max-md:!max-h-dvh max-md:!rounded-none max-md:!border-0 max-md:!shadow-none' : ''}`}
           >
             <ModalDepthContext.Provider value={depth + 1}>
               {title ? (
-                <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
+                <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''} ${fullScreenOnMobile ? 'max-md:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
                   <div className="min-w-0">
                     <h3 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">{title}</h3>
                     {description ? <p className="mt-0.5 max-w-xl text-xs leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
@@ -1215,7 +1235,7 @@ export function PortalModal({
               ) : null}
               {title || footer ? (
                 <>
-                  <div data-portal-modal-scroller className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6 ${fullScreenOnCompact ? 'max-lg:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''}`}>
+                  <div data-portal-modal-scroller className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 portal-scrollbar sm:p-6 ${fullScreenOnCompact ? 'max-lg:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''} ${fullScreenOnMobile ? 'max-md:!pb-[calc(1rem+env(safe-area-inset-bottom))]' : ''}`}>
                     {children}
                   </div>
                   {footer ? (
@@ -2019,8 +2039,8 @@ export function PortalCardSkeleton({ count = 4 }: { count?: number }) {
  * animation here lets lists, cards, and calculated-price surfaces feel like
  * one product in both portal themes.
  */
-export function PortalSkeleton({ className = '' }: { className?: string }) {
-  return <span aria-hidden="true" className={`block luxor-skeleton ${className}`.trim()} />
+export function PortalSkeleton({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
+  return <span aria-hidden="true" style={style} className={`block luxor-skeleton ${className}`.trim()} />
 }
 
 /**
@@ -2094,3 +2114,5 @@ export function PortalProgressBar({
     </div>
   )
 }
+
+export { PortalConstellationLoader } from './PortalConstellationLoader'

@@ -876,7 +876,7 @@ function MarketingPageContent() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Create a campaign</p>
-              <h2 className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">{campaignModalView === 'templates' ? 'Choose a Luxor template.' : 'Choose how you want to start.'}</h2>
+              <h2 className="mt-1 text-xl sm:text-2xl font-bold text-[color:var(--portal-text)]">{campaignModalView === 'templates' ? 'Choose a Luxor template.' : 'Choose how you want to start.'}</h2>
               <p className="mt-2 max-w-lg text-sm leading-5 text-[color:var(--portal-muted)]">{campaignModalView === 'templates' ? 'Preview the available starting points, then open one in the editor.' : 'Pick a Luxor starting point, open a blank message, or have Elena prepare a first draft. You’ll edit and review everything before sending.'}</p>
             </div>
             <PortalCloseButton onClick={() => setCampaignModalOpen(false)} aria-label="Close campaign start dialog" />
@@ -1147,9 +1147,9 @@ function MarketingMobileViewPicker({
                     type="button"
                     onClick={() => onOpenChange(false)}
                     aria-label="Close views menu"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                   >
-                    <X size={18} />
+                    <X size={15} />
                   </button>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">

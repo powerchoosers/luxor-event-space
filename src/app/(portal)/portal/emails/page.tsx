@@ -58,7 +58,7 @@ function EmailsPageContent() {
           icon={<Mail size={18} />}
           title="Emails"
           mobileActionsInline
-          hideBackButton={readerOpen}
+          hideBackButton
           titleClassName="whitespace-nowrap text-[1.875rem] sm:text-3xl"
           actions={
             <div className="flex items-center gap-2">

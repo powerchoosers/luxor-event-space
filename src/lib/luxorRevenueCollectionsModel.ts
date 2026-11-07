@@ -29,6 +29,7 @@ export type LuxorRevenueScheduleRow = {
   installmentId: string
   bookingId: string
   invoiceId: string
+  inquiryId?: string | null
   clientName: string
   eventType: string | null
   eventDate: string | null
@@ -44,6 +45,7 @@ export type LuxorRevenueScheduleRow = {
   paymentMethod: string | null
   reference: string | null
   reviewRequired: boolean
+  reviewReason?: string | null
 }
 
 export type LuxorRevenueReceivableRow = {
@@ -61,6 +63,7 @@ export type LuxorRevenueReceivableRow = {
   nextPaymentAmount: number | null
   completionPercentage: number | null
   status: LuxorRevenueRecordStatus
+  reviewReason?: string | null
   schedule: LuxorRevenueScheduleRow[]
 }
 
@@ -299,10 +302,14 @@ function savedScheduleRows(input: ReturnType<typeof getLuxorFinanceOverview>, to
     const booking = bookingById.get(row.bookingId)
     const invoice = invoiceById.get(row.invoiceId)
     const verified = financialStateVerified && row.scheduleReconciled
+    const reviewReason = !verified
+      ? row.reviewReason || input.issues[0] || 'This installment schedule requires reconciliation.'
+      : null
     return {
       installmentId: row.installment.id,
       bookingId: row.bookingId,
       invoiceId: row.invoiceId,
+      inquiryId: booking?.inquiry_id || invoice?.inquiry_id || row.installment.inquiry_id || null,
       clientName: booking?.client_name || invoice?.client_name || 'Client unavailable',
       eventType: booking?.event_type || invoice?.event_type || null,
       eventDate: booking?.event_date ? getLuxorPaymentCalendarDateKey({ received_date: booking.event_date, paid_at: null }) || null : null,
@@ -310,13 +317,14 @@ function savedScheduleRows(input: ReturnType<typeof getLuxorFinanceOverview>, to
       label: row.installment.label,
       order: row.installment.installment_order,
       dueDate: row.dueDate,
-      amountDue: verified ? row.amountDue : null,
-      credited: verified ? row.credited : null,
-      remaining: verified ? row.remaining : null,
+      amountDue: Number.isFinite(row.amountDue) ? row.amountDue : null,
+      credited: Number.isFinite(row.credited) ? row.credited : null,
+      remaining: Number.isFinite(row.remaining) ? row.remaining : null,
       status: scheduleStatus({ paid: row.isPaid, partial: row.isPartial, overdue: row.isOverdue, dueDate: row.dueDate, today, verified }),
       paymentMethod: row.installment.payment_method,
       reference: row.installment.reference,
       reviewRequired: !verified,
+      reviewReason,
     }
   })
 }
@@ -498,6 +506,11 @@ export function getLuxorRevenueCollectionsModel(
           : schedule.some((item) => item.status === 'due_today' && (item.remaining || 0) > 0) ? 'due_today'
             : row.received > 0 ? 'partially_paid'
               : 'upcoming'
+    const reviewReason = !verified
+      ? refundReview
+        ? 'An event refund or unclassified refund requires balance reconciliation.'
+        : schedule.find((item) => item.reviewReason)?.reviewReason || overview.issues[0] || 'This booking balance requires reconciliation.'
+      : null
     return {
       bookingId,
       invoiceId: row.invoice.id,
@@ -505,13 +518,14 @@ export function getLuxorRevenueCollectionsModel(
       clientName: booking?.client_name || row.invoice.client_name || 'Client unavailable',
       eventType: booking?.event_type || row.invoice.event_type || null,
       eventDate: booking?.event_date ? getLuxorPaymentCalendarDateKey({ received_date: booking.event_date, paid_at: null }) || null : null,
-      bookingTotal: baseOutstandingAvailable ? row.eventObligation : null,
-      paid: rowBalanceAvailable ? row.received : null,
-      remainingBalance: rowBalanceAvailable ? row.outstanding : null,
-      nextPaymentDue: forecastSourcesAvailable ? next?.dueDate || null : null,
-      nextPaymentAmount: forecastSourcesAvailable ? next?.remaining ?? null : null,
-      completionPercentage: rowBalanceAvailable && !refundReview && row.eventObligation > 0 ? Math.round(Math.min(100, Math.max(0, row.received / row.eventObligation * 100)) * 100) / 100 : rowBalanceAvailable && !refundReview && row.eventObligation === 0 ? 100 : null,
+      bookingTotal: Number.isFinite(row.eventObligation) ? row.eventObligation : null,
+      paid: Number.isFinite(row.received) ? row.received : null,
+      remainingBalance: Number.isFinite(row.outstanding) ? row.outstanding : null,
+      nextPaymentDue: next?.dueDate || null,
+      nextPaymentAmount: next?.remaining ?? null,
+      completionPercentage: !refundReview && row.eventObligation > 0 ? Math.round(Math.min(100, Math.max(0, row.received / row.eventObligation * 100)) * 100) / 100 : !refundReview && row.eventObligation === 0 ? 100 : null,
       status,
+      reviewReason,
       schedule,
     }
   })

@@ -25,6 +25,9 @@ import {
   ArrowUpRight,
   Loader2,
   X,
+  Sun,
+  Moon,
+  HelpCircle,
 } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -38,11 +41,12 @@ import type { LuxorPortalSession } from '@/lib/luxorPortalAuth'
 import type { PortalPermission, PortalRole } from '@/lib/luxorPortalAccess'
 import Image from 'next/image'
 import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
-import { PortalCloseButton, PortalContactAvatar } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalContactAvatar, PortalConstellationLoader } from '@/components/portal/PortalUI'
 import { PortalViewportDiagnostics } from '@/components/portal/PortalViewportDiagnostics'
 import { MobileActiveCallStrip, PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
 import type { EmailComposeDraft } from '@/components/portal/EmailComposeDrawer'
+import type { Tab as SettingsTabType } from '@/components/portal/PortalSettingsManager'
 import { getRecentLeads, getRecentLeadsServerSnapshot, subscribeRecentLeads, saveRecentLead, clearRecentLeads, type RecentLeadItem } from '@/lib/luxorRecentLeads'
 
 type PortalUserProfile = {
@@ -168,6 +172,11 @@ const NewLeadDrawer = dynamic(
   { ssr: false }
 )
 
+const PortalSettingsModal = dynamic(
+  () => import('@/components/portal/PortalSettingsModal').then((mod) => mod.PortalSettingsModal),
+  { ssr: false }
+)
+
 const LuxorDraggableTextModal = dynamic(
   () => import('@/components/portal/LuxorDraggableTextModal').then((mod) => mod.LuxorDraggableTextModal),
   { ssr: false }
@@ -252,7 +261,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const canAccess = useCallback((permission: PortalPermission) => role === 'owner' || permissions.includes(permission), [permissions, role])
   const accessibleMobilePrimaryNavItems = [
     ...mobilePrimaryNavItems,
-    ...(canAccess('emails') ? [mobileEmailNavItem] : canAccess('messages') ? [mobileMessagesNavItem] : []),
+    ...(canAccess('messages') ? [mobileMessagesNavItem] : []),
+    ...(canAccess('emails') ? [mobileEmailNavItem] : []),
   ]
   const isLeadDetailPage = pathname.startsWith('/portal/leads/')
   const router = useRouter()
@@ -303,6 +313,8 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [accountHovered, setAccountHovered] = useState(false)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [settingsModalInitialTab, setSettingsModalInitialTab] = useState<SettingsTabType>('business')
   const [pendingNavigationHref, setPendingNavigationHref] = useState<string | null>(null)
   const [userProfile, setUserProfile] = useState<PortalUserProfile>(initialProfile)
   const reduceMotion = useReducedMotion()
@@ -907,18 +919,6 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           />
 
           <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
-            {canAccess('settings') ? (
-              <SidebarLink
-                href="/portal/settings"
-                icon={<Settings size={18} />}
-                label="System Settings"
-                active={isActivePath(pathname, '/portal/settings', searchParams)}
-                collapsed={sidebarIsCollapsed}
-                pending={pendingNavigationHref ? isActivePath(pendingNavigationHref, '/portal/settings', searchParams) : false}
-                hasPendingTarget={Boolean(pendingNavigationHref)}
-                onNavigate={handleSidebarNavigate}
-              />
-            ) : null}
             <div className="relative">
               <AnimatePresence initial={false}>
                 {accountMenuOpen ? (
@@ -929,28 +929,109 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.98 }}
                     transition={{ duration: reduceMotion ? 0.01 : 0.2, ease: [0.23, 1, 0.32, 1] }}
-                    className={`portal-account-menu absolute bottom-full z-20 mb-2 origin-bottom rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/88 p-2 shadow-2xl backdrop-blur-xl ${sidebarIsCollapsed ? 'left-0 w-56' : 'inset-x-0'}`}
+                    className={`portal-account-menu absolute bottom-full z-30 mb-2 origin-bottom rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 p-1.5 shadow-2xl backdrop-blur-2xl ${sidebarIsCollapsed ? 'left-0 w-64' : 'inset-x-0 w-64'}`}
                   >
-                    <div className="border-b border-[color:var(--portal-border)] px-3 py-2">
-                      <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</p>
-                      <p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{userProfile.email}</p>
+                    {/* Header: Avatar, Name, Email, Role badge */}
+                    <div className="flex items-center gap-3 rounded-xl border-b border-[color:var(--portal-border)]/60 bg-[color:var(--portal-soft)]/50 p-2.5">
+                      <div className="relative">
+                        <div
+                          className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#caa24c]/30 bg-gradient-to-br from-[#f1d27a] via-[#caa24c] to-[#9b6d24] bg-cover bg-center font-serif text-xs font-bold text-[#18130d] ring-1 ring-[#caa24c]/20 shadow-xs"
+                          style={userProfile.avatarUrl ? { backgroundImage: `url(${userProfile.avatarUrl})` } : undefined}
+                        >
+                          {userProfile.avatarUrl ? null : userInitials}
+                        </div>
+                        <span className="absolute -bottom-1 -right-1 rounded-md border border-emerald-500/30 bg-emerald-500/15 px-1 py-0.2 text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 backdrop-blur-xs">
+                          {role === 'owner' ? 'Owner' : role === 'agent' ? 'Agent' : 'Staff'}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold text-[color:var(--portal-text)]">{userProfile.displayName}</p>
+                        <p className="truncate text-[10px] text-[color:var(--portal-muted)]">{userProfile.email}</p>
+                      </div>
                     </div>
-                    <form action="/api/auth/logout" method="post" className="mt-1">
+
+                    {/* Menu items */}
+                    <div className="mt-1 space-y-0.5">
+                      {canAccess('settings') ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAccountMenuOpen(false)
+                            if (window.innerWidth >= 1024) {
+                              setSettingsModalInitialTab('business')
+                              setIsSettingsModalOpen(true)
+                            } else {
+                              router.push('/portal/settings')
+                            }
+                          }}
+                          className="group flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium text-[color:var(--portal-text)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[#9e7627] dark:hover:text-[#f1d27a] cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <Settings size={15} className="text-[color:var(--portal-muted)] group-hover:text-[#caa24c] transition-colors" />
+                            <span>All settings</span>
+                          </span>
+                          <kbd className="hidden sm:inline-flex items-center rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-1.5 py-0.5 text-[9px] font-semibold text-[color:var(--portal-muted)]">
+                            Ctrl+,
+                          </kbd>
+                        </button>
+                      ) : null}
+
+                      {/* Appearance theme toggle */}
                       <button
-                        type="submit"
-                        className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[color:var(--portal-muted)] transition-all hover:bg-red-500/10 hover:text-red-400"
+                        type="button"
+                        onClick={() => {
+                          const nextTheme: PortalTheme = portalTheme === 'dark' ? 'light' : 'dark'
+                          window.localStorage.setItem('luxor-portal-theme', nextTheme)
+                          window.dispatchEvent(new Event('luxor-portal-theme'))
+                          persistPortalThemeCookie(nextTheme)
+                        }}
+                        className="group flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium text-[color:var(--portal-text)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[#9e7627] dark:hover:text-[#f1d27a] cursor-pointer"
                       >
-                        <LogOut size={17} className="transition-transform group-hover:translate-x-0.5" />
-                        Log Out
+                        <span className="flex items-center gap-2.5">
+                          {portalTheme === 'dark' ? (
+                            <Moon size={15} className="text-[color:var(--portal-muted)] group-hover:text-[#caa24c] transition-colors" />
+                          ) : (
+                            <Sun size={15} className="text-[color:var(--portal-muted)] group-hover:text-[#caa24c] transition-colors" />
+                          )}
+                          <span>Appearance</span>
+                        </span>
+                        <span className="flex items-center gap-1 text-[11px] text-[color:var(--portal-muted)]">
+                          <span className="capitalize">{portalTheme}</span>
+                        </span>
                       </button>
-                    </form>
+
+                      {/* Help & About */}
+                      <a
+                        href="mailto:support@luxoratlaspalmas.com"
+                        className="group flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium text-[color:var(--portal-text)] transition-all hover:bg-[color:var(--portal-soft)] hover:text-[#9e7627] dark:hover:text-[#f1d27a]"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <HelpCircle size={15} className="text-[color:var(--portal-muted)] group-hover:text-[#caa24c] transition-colors" />
+                          <span>Help &amp; About</span>
+                        </span>
+                        <ArrowUpRight size={13} className="text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)] transition-colors" />
+                      </a>
+                    </div>
+
+                    {/* Divider & Logout */}
+                    <div className="mt-1 border-t border-[color:var(--portal-border)]/60 pt-1">
+                      <form action="/api/auth/logout" method="post">
+                        <button
+                          type="submit"
+                          className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-[color:var(--portal-muted)] transition-all hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400 cursor-pointer"
+                        >
+                          <LogOut size={15} className="transition-transform group-hover:translate-x-0.5" />
+                          <span>Sign out</span>
+                        </button>
+                      </form>
+                    </div>
                   </motion.div>
                 ) : null}
               </AnimatePresence>
               <button
                 type="button"
-                onClick={() => {
-                  if (sidebarIsCollapsed) toggleSidebar()
+                onClick={(e) => {
+                  e.stopPropagation()
                   setAccountMenuOpen((current) => !current)
                 }}
                 onMouseEnter={() => setAccountHovered(true)}
@@ -1236,7 +1317,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           </div>
 
           <div className="flex items-center justify-self-end">
-            {/* Mobile Header Actions (Search | Phone | Notifications) */}
+            {/* Mobile Header Actions (Search | Phone | Notifications | Text Messages) */}
             <div className="flex h-9 items-center sm:hidden gap-1">
               {/* 1. Mobile Search Toggle */}
               <button
@@ -1272,7 +1353,25 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               {/* Vertical divider */}
               <PortalHeaderDivider />
 
-              {/* 3. Bell Notifications */}
+              {/* 3. Text messages (if space permits on larger mobile/tablets) */}
+              {canAccess('messages') && (
+                <>
+                  <Link
+                    href="/portal/messages?tab=sms"
+                    prefetch
+                    className="portal-header-action hidden min-[420px]:flex relative h-9 w-9 !min-w-0 !min-h-0 shrink-0 items-center justify-center rounded-full transition-all active:scale-95 cursor-pointer text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] active:bg-[#caa24c]/10"
+                    aria-label="Text messages"
+                    title="Text messages"
+                  >
+                    <MessageSquare size={18} />
+                  </Link>
+                  <span className="hidden min-[420px]:inline-flex">
+                    <PortalHeaderDivider />
+                  </span>
+                </>
+              )}
+
+              {/* 4. Bell Notifications */}
               <div className="relative flex items-center justify-center">
                 <button
                   ref={(el) => {
@@ -1598,7 +1697,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
         <nav
           onWheelCapture={handOffWheelToPage}
-          className={`portal-mobile-nav fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t px-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] backdrop-blur-2xl lg:hidden ${
+          className={`portal-mobile-nav fixed inset-x-0 bottom-0 z-[60] grid ${accessibleMobilePrimaryNavItems.length >= 5 ? 'grid-cols-6' : 'grid-cols-5'} border-t px-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] backdrop-blur-2xl lg:hidden ${
             portalTheme === 'light'
               ? 'border-[color:var(--portal-border)] bg-[#fffdf9]/85'
               : 'border-[#caa24c]/15 bg-[#080706]/85'
@@ -1611,12 +1710,15 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               <Link
                 key={item.href}
                 href={item.href}
-                className={`relative isolate flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
-                  active ? 'text-[#caa24c]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
+                className={`group relative isolate flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
+                  active ? 'text-[#caa24c]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                 }`}
                 aria-current={active ? 'page' : undefined}
               >
-                {active ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-x-1 inset-y-0 mx-auto max-w-[72px] rounded-xl bg-[#caa24c]/10" /> : null}
+                {!active && (
+                  <span className="absolute inset-x-1 inset-y-0 mx-auto max-w-[56px] sm:max-w-[64px] rounded-xl bg-[color:var(--portal-soft)]/80 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none" />
+                )}
+                {active ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-x-1 inset-y-0 mx-auto max-w-[56px] sm:max-w-[64px] rounded-xl bg-[#caa24c]/10" /> : null}
                 <span className="relative z-10">{item.icon}</span>
                 <span className="relative z-10">{item.label}</span>
               </Link>
@@ -1625,15 +1727,18 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           <button
             type="button"
             onClick={() => setMobileMoreOpen(true)}
-            className={`relative isolate flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
+            className={`group relative isolate flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
               !accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams))
                 ? 'text-[#caa24c]'
-                : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'
+                : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
             }`}
             aria-label="More portal sections"
             aria-expanded={mobileMoreOpen}
           >
-            {!accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams)) ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-x-1 inset-y-0 mx-auto max-w-[72px] rounded-xl bg-[#caa24c]/10" /> : null}
+            {accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams)) && (
+              <span className="absolute inset-x-1 inset-y-0 mx-auto max-w-[56px] sm:max-w-[64px] rounded-xl bg-[color:var(--portal-soft)]/80 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none" />
+            )}
+            {!accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams)) ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-x-1 inset-y-0 mx-auto max-w-[56px] sm:max-w-[64px] rounded-xl bg-[#caa24c]/10" /> : null}
             <span className="relative z-10"><MoreHorizontal size={20} /></span>
             <span className="relative z-10">More</span>
           </button>
@@ -1800,6 +1905,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
         )}
       </AnimatePresence>
       {viewportDiagnosticsOpen ? <PortalViewportDiagnostics buildId={buildId} onClose={closeViewportDiagnostics} /> : null}
+      {isDesktopViewport ? (
+        <PortalSettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          initialTab={settingsModalInitialTab}
+          portalRole={role}
+        />
+      ) : null}
       </PortalVoiceProvider>
     </body>
   )
@@ -1886,7 +1999,7 @@ function SidebarLink({
       >
         {label}
       </span>
-      {pending && !active && !collapsed ? <Loader2 size={13} className="relative z-10 ml-auto shrink-0 animate-spin text-[#9e7627] dark:text-[#caa24c]" aria-hidden="true" /> : null}
+      {pending && !active && !collapsed ? <PortalConstellationLoader size={16} className="relative z-10 ml-auto shrink-0" /> : null}
     </Link>
   )
 }

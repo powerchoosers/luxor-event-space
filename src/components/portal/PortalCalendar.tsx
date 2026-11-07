@@ -1,6 +1,7 @@
 'use client'
 
-import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, MoreHorizontal, X } from '@/lib/icons/phosphor-compat'
+import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Mail, MoreHorizontal, Phone, X } from '@/lib/icons/phosphor-compat'
+import { WorkflowBadge } from './WorkflowBadge'
 import Link from 'next/link'
 import React from 'react'
 import { PortalAnimatedTabs, PortalModal, PortalSkeleton, PortalSkeletonTransition } from './PortalUI'
@@ -16,6 +17,11 @@ export type PortalCalendarItem = {
   subtitle?: string
   tone?: 'gold' | 'blue' | 'green' | 'rose' | 'zinc' | 'warning'
   warningLabel?: string
+  workflowName?: string | null
+  workflowType?: string | null
+  onCall?: () => void
+  onEmail?: () => void
+  onLogOutcome?: () => void
   href?: string
   openLabel?: string
   taskContext?: {
@@ -458,13 +464,38 @@ export function PortalCalendar({
             <div className="flex min-w-0 gap-3 rounded-xl bg-[color:var(--portal-soft)]/60 p-4">
               <span aria-hidden="true" className={`w-1 shrink-0 self-stretch rounded-full ${scheduleToneClass(selectedItem.tone)}`} />
               <div className="min-w-0 flex-1">
-              <TaskContext item={selectedItem} />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <TaskContext item={selectedItem} />
+                {selectedItem.workflowName ? (
+                  <WorkflowBadge workflowName={selectedItem.workflowName} workflowType={selectedItem.workflowType} size="md" />
+                ) : null}
+              </div>
               {selectedItem.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{selectedItem.warningLabel}</span> : null}
               {selectedItem.subtitle ? <p className="text-sm text-[color:var(--portal-muted)]">{selectedItem.subtitle}</p> : null}
               {!selectedItem.subtitle && !selectedItem.taskContext && !selectedItem.warningLabel ? <p className="text-sm text-[color:var(--portal-muted)]">{selectedItem.date ? formatDayHeading(selectedItem.date) : 'Details'}</p> : null}
               </div>
             </div>
-            {selectedItem.taskContext?.leadHref ? <a href={selectedItem.taskContext.leadHref} className="inline-flex items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Open linked lead</a> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedItem.taskContext?.leadHref ? <a href={selectedItem.taskContext.leadHref} className="inline-flex items-center justify-center rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Open linked lead</a> : null}
+              {selectedItem.onCall ? (
+                <button
+                  type="button"
+                  onClick={() => { selectedItem.onCall?.(); setSelectedItem(null) }}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-xs font-semibold text-[#8c6529] hover:bg-[#caa24c]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:text-[#f1d27a]"
+                >
+                  <Phone size={13} /> Call
+                </button>
+              ) : null}
+              {selectedItem.onEmail ? (
+                <button
+                  type="button"
+                  onClick={() => { selectedItem.onEmail?.(); setSelectedItem(null) }}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-xs font-semibold text-[#8c6529] hover:bg-[#caa24c]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:text-[#f1d27a]"
+                >
+                  <Mail size={13} /> Email
+                </button>
+              ) : null}
+            </div>
             {selectedItem.href ? (
               <a
                 href={selectedItem.href}
@@ -475,21 +506,35 @@ export function PortalCalendar({
             ) : null}
             {selectedItem.content ? <div>{selectedItem.content}</div> : null}
             {dismissError?.id === selectedItem.id ? <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{dismissError.message}</p> : null}
-            {selectedItem.onDismiss ? (
-              <div className="flex justify-end border-t border-[color:var(--portal-border)] pt-3">
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[color:var(--portal-border)] pt-3">
+              {selectedItem.onLogOutcome ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const log = selectedItem.onLogOutcome
+                    setSelectedItem(null)
+                    log?.()
+                  }}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#caa24c] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#b8913d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer"
+                >
+                  <Check size={15} />
+                  Log Call Outcome
+                </button>
+              ) : null}
+              {selectedItem.onDismiss ? (
                 <button
                   type="button"
                   disabled={Boolean(dismissPendingId)}
                   onClick={() => void dismissItem(selectedItem)}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-xs font-bold text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-xs font-bold text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:cursor-wait disabled:opacity-60 cursor-pointer"
                 >
                   <span className="flex h-6 w-6 items-center justify-center rounded-full border border-current" aria-hidden="true">
                     <DismissIcon complete={dismissedId === selectedItem.id} />
                   </span>
                   {dismissPendingId === selectedItem.id ? 'Saving…' : dismissedId === selectedItem.id ? 'Done' : selectedItem.dismissLabel || 'Dismiss task'}
                 </button>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         ) : null}
       </PortalModal>
@@ -541,10 +586,11 @@ function ScheduleView({
                       <span className="min-w-0 flex-1">
                         <span className="block break-words text-sm font-bold text-[color:var(--portal-text)]">{item.title}</span>
                         <TaskContext item={item} compact />
+                        {item.workflowName ? <div className="mt-1"><WorkflowBadge workflowName={item.workflowName} workflowType={item.workflowType} /></div> : null}
                         {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
                         {item.subtitle ? <span className="mt-1 block break-words text-xs text-[color:var(--portal-muted)]">{item.subtitle}</span> : null}
                       </span>
-                      <span className="hidden shrink-0 text-xs font-medium text-[color:var(--portal-muted)] sm:inline">{item.openLabel || 'Open'}</span>
+                      
                     </button>
                     {item.onDismiss ? (
                       <div className="flex shrink-0 flex-col items-center">
@@ -683,9 +729,7 @@ function renderDayDetails(items: PortalCalendarItem[], onSelectItem: (item: Port
               {item.warningLabel ? <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200"><AlertTriangle size={11} aria-hidden="true" />{item.warningLabel}</span> : null}
               {item.subtitle ? <p className="mt-1 text-sm text-[color:var(--portal-muted)]">{item.subtitle}</p> : null}
             </div>
-            <span className="hidden shrink-0 text-xs font-medium text-[color:var(--portal-muted)] sm:inline">
-              {item.openLabel || 'Open'}
-            </span>
+            
           </div>
         </button>
       ))}

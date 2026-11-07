@@ -769,6 +769,8 @@ export type LuxorTask = {
   call_outcome?: 'reached' | 'no_answer' | 'voicemail_left' | null
   automation_enrollment_id?: string | null
   automation_step_key?: string | null
+  workflow_name?: string | null
+  workflow_type?: 'system' | 'custom' | 'post_tour' | 'manual' | 'meeting' | null
 }
 
 export type LuxorBookingStatus = 'draft' | 'tentative' | 'confirmed' | 'completed' | 'cancelled'

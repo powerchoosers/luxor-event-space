@@ -367,6 +367,13 @@ const TextAnimateBase = ({
       break
   }
 
+  const animatedSegmentCount = Math.max(
+    1,
+    by === "word"
+      ? segments.filter((segment) => Boolean(segment) && !/^\s+$/.test(segment)).length
+      : segments.filter(Boolean).length
+  )
+
   const finalVariants = variants
     ? {
         container: {
@@ -376,13 +383,13 @@ const TextAnimateBase = ({
             transition: {
               opacity: { duration: 0.01, delay },
               delayChildren: delay,
-              staggerChildren: duration / segments.length,
+              staggerChildren: duration / animatedSegmentCount,
             },
           },
           exit: {
             opacity: 0,
             transition: {
-              staggerChildren: duration / segments.length,
+              staggerChildren: duration / animatedSegmentCount,
               staggerDirection: -1,
             },
           },
@@ -397,13 +404,13 @@ const TextAnimateBase = ({
               ...defaultItemAnimationVariants[animation].container.show,
               transition: {
                 delayChildren: delay,
-                staggerChildren: duration / segments.length,
+                staggerChildren: duration / animatedSegmentCount,
               },
             },
             exit: {
               ...defaultItemAnimationVariants[animation].container.exit,
               transition: {
-                staggerChildren: duration / segments.length,
+                staggerChildren: duration / animatedSegmentCount,
                 staggerDirection: -1,
               },
             },
@@ -427,21 +434,38 @@ const TextAnimateBase = ({
         {...props}
       >
         {accessible && <span className="sr-only">{children}</span>}
-        {segments.map((segment, i) => (
-          <motion.span
-            key={`${by}-${segment}-${i}`}
-            variants={finalVariants.item}
-            custom={i * staggerTimings[by]}
-            className={cn(
-              by === "line" ? "block" : "inline-block whitespace-pre",
-              by === "character" && "",
-              segmentClassName
-            )}
-            aria-hidden={accessible ? true : undefined}
-          >
-            {segment}
-          </motion.span>
-        ))}
+        {segments.map((segment, i) => {
+          if (!segment) return null
+          if (by === "word" && /^\s+$/.test(segment)) {
+            const parts = segment.split(/(\r\n|\r|\n)/)
+            return (
+              <span key={`ws-${i}`} aria-hidden={accessible ? true : undefined}>
+                {parts.map((part, partIdx) =>
+                  part === "\n" || part === "\r\n" || part === "\r" ? (
+                    <br key={`br-${i}-${partIdx}`} />
+                  ) : (
+                    part
+                  )
+                )}
+              </span>
+            )
+          }
+          return (
+            <motion.span
+              key={`${by}-${segment}-${i}`}
+              variants={finalVariants.item}
+              custom={i * staggerTimings[by]}
+              className={cn(
+                by === "line" ? "block" : by === "word" ? "inline-block" : "inline-block whitespace-pre",
+                by === "character" && "",
+                segmentClassName
+              )}
+              aria-hidden={accessible ? true : undefined}
+            >
+              {segment}
+            </motion.span>
+          )
+        })}
       </MotionComponent>
     </AnimatePresence>
   )

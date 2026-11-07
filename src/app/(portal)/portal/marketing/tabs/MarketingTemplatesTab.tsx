@@ -70,7 +70,7 @@ export function MarketingTemplatesTab({ onOpenTemplate, onOpenBuilder }: Marketi
       <section className="flex flex-col gap-3 border-b border-[color:var(--portal-border)] pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Email templates</p>
-          <h2 className="mt-1 font-serif text-xl font-semibold text-[color:var(--portal-text)]">Starting points for a Luxor campaign.</h2>
+          <h2 className="mt-1 text-lg font-bold text-[color:var(--portal-text)]">Starting points for a Luxor campaign.</h2>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Choose a starter or saved layout to open it in the existing Email Builder. Opening a template does not send it.</p>
         </div>
         <PortalButton variant="secondary" onClick={onOpenBuilder}><Plus size={13} /> Open blank builder</PortalButton>
@@ -105,7 +105,7 @@ export function MarketingTemplatesTab({ onOpenTemplate, onOpenBuilder }: Marketi
 }
 
 function TemplateSection({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) {
-  return <section aria-label={title} className="space-y-3"><div><h3 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">{title}</h3><p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">{detail}</p></div>{children}</section>
+  return <section aria-label={title} className="space-y-3"><div><h3 className="text-base font-bold text-[color:var(--portal-text)]">{title}</h3><p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">{detail}</p></div>{children}</section>
 }
 
 function TemplateCard({ template, label, onClick }: { template: EmailTemplate; label: string; onClick: () => void }) {

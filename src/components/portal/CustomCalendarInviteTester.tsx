@@ -1,8 +1,8 @@
 'use client'
 
 import React from 'react'
-import { CalendarPlus, CheckCircle2, Download, Loader2, Mail, Send, ShieldCheck } from '@/lib/icons/phosphor-compat'
-import { PortalButton, PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { CalendarPlus, CheckCircle2, Download, Mail, Send, ShieldCheck } from '@/lib/icons/phosphor-compat'
+import { PortalButton, PortalDatePicker, PortalSelect, PortalConstellationLoader } from '@/components/portal/PortalUI'
 import { useToast } from '@/components/portal/ToastProvider'
 
 const LOCATION = 'Luxor at Las Palmas Events, 803 Castroville Rd #402, San Antonio, TX 78237'
@@ -162,7 +162,7 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
               ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
               : 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
         }`}>
-          {config === null ? <Loader2 size={12} className="animate-spin" /> : providerReady ? <CheckCircle2 size={12} /> : <Mail size={12} />}
+          {config === null ? <PortalConstellationLoader size={12} /> : providerReady ? <CheckCircle2 size={12} /> : <Mail size={12} />}
           {config === null ? 'Checking configuration' : providerReady ? `${providerLabel} configured` : `${providerLabel} unavailable`}
         </div>
       </div>
@@ -218,11 +218,11 @@ export function CustomCalendarInviteTester({ defaultRecipientEmail = '' }: { def
 
           <div className="flex flex-col gap-2.5 sm:flex-row">
             <PortalButton type="button" variant="primary" disabled={!providerReady || busyAction !== null || !effectiveAttendeeEmail.trim()} onClick={() => void requestInvite('send')} className="w-full sm:w-auto">
-              {busyAction === 'send' ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+              {busyAction === 'send' ? <PortalConstellationLoader size={13} tone="white" /> : <Send size={13} />}
               {busyAction === 'send' ? 'Sending test' : 'Send test invite'}
             </PortalButton>
             <PortalButton type="button" disabled={busyAction !== null || !effectiveAttendeeEmail.trim()} onClick={() => void requestInvite('download')} className="w-full sm:w-auto">
-              {busyAction === 'download' ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              {busyAction === 'download' ? <PortalConstellationLoader size={13} /> : <Download size={13} />}
               {busyAction === 'download' ? 'Building file' : 'Download .ics'}
             </PortalButton>
           </div>

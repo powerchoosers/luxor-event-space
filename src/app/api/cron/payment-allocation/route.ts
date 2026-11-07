@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   const expected = process.env.LUXOR_EMAIL_CRON_SECRET || ''
   if (!expected || supplied !== expected) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
   if (request.nextUrl.searchParams.get('health') === '1') return NextResponse.json({ success: true, authenticated: true, processed: 0 })
-  if (process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY !== 'true') return NextResponse.json({ success: true, processed: 0, skipped: 'disabled' })
+  if (process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY === 'false') return NextResponse.json({ success: true, processed: 0, skipped: 'disabled' })
   try {
     const result = await processPendingPaymentAllocations()
     return NextResponse.json({ success: result.failed === 0, ...result }, { status: result.failed ? 503 : 200 })

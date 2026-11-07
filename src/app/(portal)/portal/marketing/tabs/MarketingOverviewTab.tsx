@@ -110,7 +110,7 @@ export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: Marketin
         <section aria-labelledby="inquiries-chart-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 id="inquiries-chart-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Inquiries over time</h2>
+              <h2 id="inquiries-chart-title" className="text-base font-bold text-[color:var(--portal-text)]">Inquiries over time</h2>
               <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">{periodLabel} · non-test inquiries, grouped by local creation date.</p>
             </div>
             <span className="text-[10px] font-semibold text-[color:var(--portal-muted)]">{data ? `${data.inquiryCount.toLocaleString()} total` : ' '}</span>
@@ -122,7 +122,7 @@ export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: Marketin
 
         <section aria-labelledby="sources-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
           <div>
-            <h2 id="sources-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Inquiry sources</h2>
+            <h2 id="sources-title" className="text-base font-bold text-[color:var(--portal-text)]">Inquiry sources</h2>
             <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Recorded source values in the same date range.</p>
           </div>
           {loading ? <SourceSkeleton /> : error || !data ? <InlineUnavailable label="Source totals are unavailable until data loads." /> : data.sourceBreakdown.length === 0 ? (
@@ -138,7 +138,7 @@ export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: Marketin
         <section aria-labelledby="upcoming-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 id="upcoming-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Upcoming campaigns</h2>
+              <h2 id="upcoming-title" className="text-base font-bold text-[color:var(--portal-text)]">Upcoming campaigns</h2>
               <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Future sends currently marked Scheduled.</p>
             </div>
             <button type="button" onClick={() => onTabChange('email-campaigns')} className="min-h-9 shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">View all</button>
@@ -165,7 +165,7 @@ export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: Marketin
         <section aria-labelledby="recent-activity-title" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 id="recent-activity-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Recent campaign activity</h2>
+              <h2 id="recent-activity-title" className="text-base font-bold text-[color:var(--portal-text)]">Recent campaign activity</h2>
               <p className="mt-1 text-[11px] leading-5 text-[color:var(--portal-muted)]">Tracked events in {periodLabel}.</p>
             </div>
             <button type="button" onClick={() => onTabChange('activity')} className="min-h-9 shrink-0 text-[10px] font-black uppercase tracking-[0.12em] text-[#a8792f] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">View activity</button>
@@ -192,7 +192,7 @@ export function MarketingOverviewTab({ onTabChange, onCreateCampaign }: Marketin
       <section aria-labelledby="quick-actions-title" className="border-t border-[color:var(--portal-border)] pt-5">
         <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 id="quick-actions-title" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Quick actions</h2>
+            <h2 id="quick-actions-title" className="text-base font-bold text-[color:var(--portal-text)]">Quick actions</h2>
             <p className="mt-1 text-[11px] text-[color:var(--portal-muted)]">Open the tools available today.</p>
           </div>
           <p className="text-[10px] text-[color:var(--portal-muted)]">Automation editing arrives in a later phase.</p>

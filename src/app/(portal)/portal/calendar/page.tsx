@@ -7,7 +7,11 @@ import { PortalCalendar, PortalCalendarDayStatus, PortalCalendarItem, PortalCale
 import { LuxorAvailabilityCalendar } from '@/components/portal/LuxorAvailabilityCalendar'
 import { TourAvailabilityManager } from '@/components/portal/TourAvailabilityManager'
 import { AddCalendarTaskModal } from '@/components/portal/AddCalendarTaskModal'
-import { StaffReminders } from '@/components/portal/StaffReminders'
+import { AddFollowUpModal } from '@/components/portal/AddFollowUpModal'
+import { LogCallOutcomeModal, type MinimalLead } from '@/components/portal/LogCallOutcomeModal'
+import { WorkflowBadge } from '@/components/portal/WorkflowBadge'
+import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
+import { CalendarClock } from '@/lib/icons/phosphor-compat'
 import { PortalAnimatedTabs, PortalButton, PortalModal, PortalPageFrame, PortalPageHeader, PortalSkeleton, PortalSkeletonTransition, PortalStatusBadge, PortalTabTransition, PortalStaggerGroup, PortalStaggerCard, type PortalStatusTone } from '@/components/portal/PortalUI'
 import type { LuxorBooking, LuxorInquiry, LuxorTask, LuxorTourAttendanceStatus } from '@/lib/luxorInquiryTypes'
 import type { LuxorTourSlot } from '@/lib/luxorTourSlots'
@@ -101,20 +105,9 @@ export default function CalendarPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [addTaskOpen, setAddTaskOpen] = useState(false)
-  const [remindersOpen, setRemindersOpen] = useState(false)
-  const [reminderCount, setReminderCount] = useState<number | null>(null)
+  const [addFollowUpOpen, setAddFollowUpOpen] = useState(false)
+  const [outcomeDraft, setOutcomeDraft] = useState<{ lead: MinimalLead; task: LuxorTask } | null>(null)
   const { notify } = useToast()
-
-  const loadReminderCount = useCallback(async () => {
-    try {
-      const response = await fetch('/api/portal/staff-reminders', { cache: 'no-store' })
-      if (!response.ok) throw new Error('Reminders unavailable')
-      const result = await response.json() as { pendingCount: number }
-      setReminderCount(result.pendingCount)
-    } catch { setReminderCount(null) }
-  }, [])
-
-  useEffect(() => { void loadReminderCount() }, [loadReminderCount])
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
@@ -207,17 +200,17 @@ export default function CalendarPage() {
     }
   }
 
-  const dismissTask = useCallback(async (taskId: string, complete = false) => {
-    const status = complete ? 'completed' : 'cancelled'
+  const dismissTask = useCallback(async (taskId: string, nextCompleted = true) => {
+    const status = nextCompleted ? 'completed' : 'pending'
+    const completedAt = nextCompleted ? new Date().toISOString() : null
     const response = await fetch('/api/tasks', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: taskId, status, ...(complete ? { completed_at: new Date().toISOString() } : {}) }),
+      body: JSON.stringify({ id: taskId, status, completed_at: completedAt }),
     })
     const payload = await response.json() as { status?: string; error?: string }
-    if (!response.ok) throw new Error(payload.error || 'Task could not be dismissed.')
+    if (!response.ok) throw new Error(payload.error || 'Task could not be updated.')
     if (payload.status !== status) throw new Error('The task update could not be confirmed. Refresh and try again.')
-
   }, [])
 
   const queueTourEmail = async (tour: LuxorInquiry, jobType: string) => {
@@ -287,7 +280,7 @@ export default function CalendarPage() {
         subtitle: `${tour.preferred_tour_time || 'Flexible time'} • ${tour.event_type || 'Event'}${tour.guest_count ? ` • ${tour.guest_count} guests` : ''}`,
         tone: getCalendarTourTone(section),
         warningLabel: section === 'needs_outcome' ? 'Needs Outcome' : undefined,
-        href: `/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}`,
+        href: `/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}&from=/portal/calendar`,
         openLabel: 'Open tour',
         content: (
           <TourControls
@@ -315,41 +308,67 @@ export default function CalendarPage() {
     return statuses
   }, [data.slots])
 
-  const taskItems = useMemo<PortalCalendarItem[]>(() => {
-    return data.tasks
-      .filter((task) => task.status === 'pending' && task.due_date)
-      .map((task) => ({
-        id: `task-${task.id}`,
-        date: task.due_date!,
-        title: task.title,
-        subtitle: buildTaskSubtitle(task),
-        tone: task.priority === 'urgent' ? 'rose' : task.priority === 'high' ? 'gold' : 'blue',
-        href: buildTaskHref(task),
-        openLabel: buildTaskOpenLabel(task),
-        taskContext: {
-          leadName: task.inquiry_context?.full_name?.trim() || null,
-          eventType: task.inquiry_context?.event_type?.trim() || null,
-          eventDate: task.inquiry_context?.target_date || null,
-          leadHref: task.inquiry_context?.id ? `/portal/leads/${task.inquiry_context.id}?tab=overview` : undefined,
-          linked: Boolean(task.inquiry_context),
-          unavailable: task.inquiry_context_status === 'unavailable',
-        },
-        content: <TaskSummary task={task} />,
-        dismissLabel: task.task_type ? 'Complete task' : 'Dismiss task',
-        onDismiss: () => dismissTask(task.id, Boolean(task.task_type)),
-        onDismissed: () => {
-          setData((current) => ({ ...current, tasks: current.tasks.filter((currentTask) => currentTask.id !== task.id) }))
-          notify({ title: task.task_type ? 'Task completed' : 'Task dismissed', description: 'It remains in task history.', variant: 'success' })
-        },
-      } satisfies PortalCalendarItem))
-  }, [data.tasks, dismissTask, notify])
+  const toCalendarTaskItem = useCallback((task: CalendarTask): PortalCalendarItem => {
+    const isCompleted = task.status === 'completed'
+    return {
+      id: `task-${task.id}`,
+      date: task.due_date!,
+      title: task.title,
+      subtitle: buildTaskSubtitle(task),
+      tone: task.priority === 'urgent' ? 'rose' : task.priority === 'high' ? 'gold' : 'blue',
+      href: buildTaskHref(task),
+      openLabel: buildTaskOpenLabel(task),
+      taskContext: {
+        leadName: task.inquiry_context?.full_name?.trim() || null,
+        eventType: task.inquiry_context?.event_type?.trim() || null,
+        eventDate: task.inquiry_context?.target_date || null,
+        leadHref: task.inquiry_context?.id ? `/portal/leads/${task.inquiry_context.id}?tab=overview&from=/portal/calendar` : undefined,
+        linked: Boolean(task.inquiry_context),
+        unavailable: task.inquiry_context_status === 'unavailable',
+      },
+      content: <TaskSummary task={task} />,
+      dismissLabel: isCompleted ? 'Completed' : 'Complete task',
+      onDismiss: () => dismissTask(task.id, !isCompleted),
+      onDismissed: () => {
+        const nextCompleted = !isCompleted
+        const nextCompletedAt = nextCompleted ? new Date().toISOString() : null
+        setData((current) => ({
+          ...current,
+          tasks: current.tasks.map((currentTask) =>
+            currentTask.id === task.id
+              ? { ...currentTask, status: nextCompleted ? 'completed' : 'pending', completed_at: nextCompletedAt }
+              : currentTask,
+          ),
+        }))
+        notify({
+          title: nextCompleted ? 'Task completed' : 'Task reopened',
+          description: nextCompleted ? 'Marked complete on your calendar.' : 'Task returned to pending.',
+          variant: 'success',
+        })
+      },
+    }
+  }, [dismissTask, notify])
 
-  const upcomingTaskItems = useMemo(() => view === 'schedule'
-    ? taskItems.filter((item) => isLuxorDateInUpcomingSchedule(item.date, scheduleToday))
-    : taskItems, [scheduleToday, taskItems, view])
-  const overdueTaskItems = useMemo(() => view === 'schedule'
-    ? taskItems.filter((item) => !isLuxorDateInUpcomingSchedule(item.date, scheduleToday))
-    : [], [scheduleToday, taskItems, view])
+  const upcomingTaskItems = useMemo(() => {
+    const validTasks = data.tasks.filter((task) => Boolean(task.due_date) && (task.status === 'pending' || task.status === 'completed'))
+    if (view !== 'schedule') {
+      return validTasks.map(toCalendarTaskItem)
+    }
+    return validTasks
+      .filter((task) => {
+        if (!isLuxorDateInUpcomingSchedule(task.due_date!, scheduleToday)) return false
+        if (task.status === 'pending') return true
+        return task.status === 'completed' && Boolean(task.completed_at && luxorDateKey(task.completed_at) === scheduleToday)
+      })
+      .map(toCalendarTaskItem)
+  }, [data.tasks, scheduleToday, toCalendarTaskItem, view])
+
+  const overdueTaskItems = useMemo(() => {
+    if (view !== 'schedule') return []
+    return data.tasks
+      .filter((task) => Boolean(task.due_date) && task.status === 'pending' && !isLuxorDateInUpcomingSchedule(task.due_date!, scheduleToday))
+      .map(toCalendarTaskItem)
+  }, [data.tasks, scheduleToday, toCalendarTaskItem, view])
 
   const eventItems = useMemo<PortalCalendarItem[]>(() => {
     const todayKey = scheduleToday
@@ -362,7 +381,7 @@ export default function CalendarPage() {
         title: booking.client_name,
         subtitle: `${booking.event_type || 'Event'}${booking.guest_count ? ` • ${booking.guest_count} guests` : ''}`,
         tone: getCalendarBookingTone(booking.status, booking.event_date, todayKey),
-        href: booking.inquiry_id ? `/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking` : undefined,
+        href: booking.inquiry_id ? `/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking&from=/portal/calendar` : undefined,
         openLabel: 'Open booking',
         content: (
           <EventControls
@@ -405,11 +424,11 @@ export default function CalendarPage() {
     <PortalPageFrame className="h-full min-h-0 overflow-hidden">
       <PortalPageHeader
         icon={<CalendarIcon size={18} />}
-        title="Tours & Booked Events"
+        title="Calendar"
         titleClassName="text-lg sm:text-2xl"
         mobileActionsInline
         actions={
-          <div className="flex flex-wrap gap-2"><PortalButton type="button" variant="secondary" size="sm" onClick={() => setRemindersOpen(true)}>Reminders{reminderCount ? ` (${reminderCount})` : ''}</PortalButton><PortalButton type="button" variant="primary" size="sm" onClick={() => setAddTaskOpen(true)}><Plus size={15} aria-hidden="true" /> Add Task</PortalButton></div>
+          <PortalButton type="button" variant="primary" size="sm" onClick={() => setAddTaskOpen(true)}><Plus size={15} aria-hidden="true" /> Add Task</PortalButton>
         }
       />
 
@@ -456,7 +475,7 @@ export default function CalendarPage() {
               {view === 'month' ? (
                 <section className="portal-card-surface portal-surface min-h-0 flex-1 overflow-y-auto">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] p-4">
-            <div><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Booked events</p><h2 className="mt-1 font-serif text-2xl font-bold text-[color:var(--portal-text)]">Event availability</h2></div>
+            <div><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Booked events</p><h2 className="mt-1 text-xl sm:text-2xl font-bold text-[color:var(--portal-text)]">Event availability</h2></div>
             <PortalAnimatedTabs ariaLabel="Booked events calendar view" tabs={[{ id: 'month', label: 'Month' }, { id: 'week', label: 'Week' }, { id: 'day', label: 'Day' }, { id: 'schedule', label: 'Schedule' }] as const} activeTab={view} onTabChange={setView} className="!w-auto max-w-full overflow-x-auto" buttonClassName="!px-3" />
           </div>
 
@@ -467,7 +486,7 @@ export default function CalendarPage() {
             <LuxorAvailabilityCalendar availability={data.availability} availabilityReady={!loading && !error} selectedDate={selectedEventDate} onSelectDate={setSelectedEventDate} pendingCounts={!error ? data.pendingProposalCounts : {}} embedded compact />
 
             <section aria-labelledby="selected-event-date-heading" className="min-w-0 border-t border-[color:var(--portal-border)] p-4 sm:p-5 lg:border-t-0">
-              <h2 id="selected-event-date-heading" className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">{calendarDateLabel(selectedEventDate)}</h2>
+              <h2 id="selected-event-date-heading" className="text-lg font-bold text-[color:var(--portal-text)]">{calendarDateLabel(selectedEventDate)}</h2>
               <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Bookings and holds affect availability. Proposals are shown separately.</p>
 
               <div className="mt-5 space-y-3">
@@ -476,11 +495,11 @@ export default function CalendarPage() {
                   <article key={booking.id} className="min-w-0 border-b border-[color:var(--portal-border)] pb-4 last:border-b-0">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
-                        {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}`} className="block truncate text-sm font-semibold text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{booking.client_name || booking.event_type || 'Confirmed event'}</Link> : <h4 className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{booking.client_name || booking.event_type || 'Confirmed event'}</h4>}
+                        {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}?from=/portal/calendar`} className="block truncate text-sm font-semibold text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{booking.client_name || booking.event_type || 'Confirmed event'}</Link> : <h4 className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{booking.client_name || booking.event_type || 'Confirmed event'}</h4>}
                         <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{booking.event_type || 'Event'}{booking.guest_count ? ` · ${booking.guest_count} guests` : ''}</p>
                         {booking.start_time || booking.end_time ? <p className="mt-1 text-xs text-[color:var(--portal-muted)]">{timeLabel(booking.start_time) || 'Time TBD'}{booking.end_time ? ` – ${timeLabel(booking.end_time)}` : ''}</p> : null}
                       </div>
-                      {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking`} className="shrink-0 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]">Open booking <ExternalLink size={12} className="ml-1 inline" /></Link> : null}
+                      {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking&from=/portal/calendar`} className="shrink-0 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]">Open booking <ExternalLink size={12} className="ml-1 inline" /></Link> : null}
                     </div>
                     <div className="mt-3 border-t border-[color:var(--portal-border)] pt-3">
                       <EventControls booking={booking} busyId={busyId} onSendContract={sendContract} onContractAction={updateContractRequest} />
@@ -522,7 +541,23 @@ export default function CalendarPage() {
         )}
       </PortalTabTransition>
       <AddCalendarTaskModal isOpen={addTaskOpen} onClose={() => setAddTaskOpen(false)} onCreated={async () => { notify({ title: 'Task added', variant: 'success' }); await loadData() }} />
-      <StaffReminders open={remindersOpen} onClose={() => { setRemindersOpen(false); void loadReminderCount() }} tasks={data.tasks} />
+      <AddFollowUpModal
+        isOpen={addFollowUpOpen}
+        onClose={() => setAddFollowUpOpen(false)}
+        onCreated={async () => {
+          notify({ title: 'Follow-up task added', variant: 'success' })
+          await loadData()
+        }}
+      />
+      <LogCallOutcomeModal
+        isOpen={Boolean(outcomeDraft)}
+        onClose={() => setOutcomeDraft(null)}
+        lead={outcomeDraft?.lead ?? null}
+        task={outcomeDraft?.task}
+        onSaved={async () => {
+          await loadData()
+        }}
+      />
       <PortalModal
         isOpen={scheduleOpen}
         onClose={() => setScheduleOpen(false)}
@@ -576,7 +611,7 @@ function TourControls({
       </div>
       <div className="flex items-center justify-between">
         <PortalStatusBadge status={presentation.label} tone={presentation.tone} warning={presentation.label === 'Needs Outcome'} />
-        <Link href={`/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
+        <Link href={`/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}&from=/portal/calendar`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
           Open <ExternalLink size={10} className="inline" />
         </Link>
       </div>
@@ -617,7 +652,7 @@ function EventControls({
         ) : null}
       </div>
       {booking.inquiry_id ? (
-        <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
+        <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking&from=/portal/calendar`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
           Client record <ExternalLink size={10} className="inline" />
         </Link>
       ) : null}
@@ -689,6 +724,7 @@ function buildTaskHref(task: LuxorTask) {
     tab: 'tasks',
     section: 'lead-tasks',
     highlightTask: task.id,
+    from: '/portal/calendar',
   })
 
   const routing = task.task_type ? { tab: 'tasks' as const, section: 'lead-tasks', stage: undefined, planningTab: undefined } : getTaskRouting(task)
@@ -715,9 +751,14 @@ function getTaskRouting(task: LuxorTask): {
   stage?: string
   planningTab?: string
 } {
+  const title = task.title.toLowerCase()
+  if (task.call_outcome !== undefined || /^phone call\b|^call\b/i.test(title)) {
+    return { tab: 'tasks', section: 'lead-tasks' }
+  }
+
   const text = `${task.title} ${task.description || ''}`.toLowerCase()
 
-  if (/\btour\b|\bwalkthrough\b|\bvisit\b/.test(text)) {
+  if (/\b(tour|walkthrough)\b/.test(title) || (/\b(tour|walkthrough)\b/.test(text) && !/call|email|sms|text/.test(title))) {
     return { tab: 'overview', stage: 'tour' }
   }
 

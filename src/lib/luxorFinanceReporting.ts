@@ -375,23 +375,55 @@ export function getLuxorPaidFinanceExpenses<TExpense extends LuxorFinanceExpense
  * evidence of when money was paid. Do not use this result for a date range.
  * Call with the already test-filtered business expense rows.
  */
-export function getLuxorPaidExpenseBreakdown(expenses: Array<LuxorFinanceExpense & { id: string; amount: number; category: string | null }>) {
+export function getLuxorPaidExpenseBreakdown(expenses: Array<LuxorFinanceExpense & { id: string; amount: number; category: string | null; incurred_on?: string | null; updated_at?: string | null; created_at?: string | null }>) {
   const paid = getLuxorPaidFinanceExpenses(expenses)
   const ids = new Set<string>()
   const categories = new Map<string, number>()
+  const byMonth: Record<string, number> = {}
+  const monthCategoryMap = new Map<string, Map<string, number>>()
   for (const expense of paid) {
     const id = expense.id?.trim()
     const amount = Number(expense.amount)
     if (!id || ids.has(id) || expense.amount == null || String(expense.amount).trim() === '' || !Number.isFinite(amount) || amount < 0) {
-      return { available: false as const, reason: 'Paid expense records need reconciliation.', total: null, categories: [] }
+      return {
+        available: false as const,
+        reason: 'Paid expense records need reconciliation.',
+        total: null,
+        categories: [],
+        byMonth: {} as Record<string, number>,
+        categoriesByMonth: {} as Record<string, Array<{ category: string; amount: number }>>,
+      }
     }
     ids.add(id)
     const category = expense.category?.trim() || 'Uncategorized'
     categories.set(category, money((categories.get(category) || 0) + amount))
+    const dateKey = getLuxorPaymentCalendarDateKey({
+      received_date: expense.incurred_on || null,
+      paid_at: expense.updated_at || expense.created_at || null,
+    })
+    const month = dateKey.slice(0, 7)
+    if (month) {
+      byMonth[month] = money((byMonth[month] || 0) + amount)
+      const catMap = monthCategoryMap.get(month) || new Map<string, number>()
+      catMap.set(category, money((catMap.get(category) || 0) + amount))
+      monthCategoryMap.set(month, catMap)
+    }
   }
   const rows = [...categories].map(([category, amount]) => ({ category, amount }))
     .sort((a, b) => b.amount - a.amount || a.category.localeCompare(b.category))
-  return { available: true as const, reason: null, total: money(rows.reduce((sum, row) => sum + row.amount, 0)), categories: rows }
+  const categoriesByMonth: Record<string, Array<{ category: string; amount: number }>> = {}
+  for (const [month, catMap] of monthCategoryMap.entries()) {
+    categoriesByMonth[month] = [...catMap].map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount || a.category.localeCompare(b.category))
+  }
+  return {
+    available: true as const,
+    reason: null,
+    total: money(rows.reduce((sum, row) => sum + row.amount, 0)),
+    categories: rows,
+    byMonth,
+    categoriesByMonth,
+  }
 }
 
 export type LuxorFinanceAllocationRow = { payment_id: string; installment_id: string; amount: number }
@@ -423,6 +455,7 @@ export type LuxorFinanceScheduleRow = {
   isOverdue: boolean
   overdueDays: number
   scheduleReconciled: boolean
+  reviewReason?: string | null
 }
 
 /**
@@ -510,6 +543,21 @@ export function inspectLuxorFinanceOverviewSources(input: {
       const key = JSON.stringify([row.payment_id, row.installment_id])
       if (table.has(key)) issues.push('Duplicate allocation table row')
       table.set(key, money((table.get(key) || 0) + amount))
+    }
+    // Recognize deposit-anchored Booking Payment (installment 1) when a single matching deposit receipt exists on the booking
+    for (const row of installments) {
+      if (row.status === 'paid' && row.installment_order === 1 && row.label.trim().toLowerCase() === 'booking payment') {
+        const hasMeta = [...metadata.keys()].some((k) => JSON.parse(k)[1] === row.id)
+        const hasTable = [...table.keys()].some((k) => JSON.parse(k)[1] === row.id)
+        if (!hasMeta && !hasTable) {
+          const matchingDeposits = payments.filter((p) => p.status === 'paid' && p.booking_id === row.booking_id && !Array.isArray(p.metadata?.installment_allocations) && Math.abs(Number(p.amount) - Number(row.amount)) <= 0.005)
+          if (matchingDeposits.length === 1) {
+            const key = JSON.stringify([matchingDeposits[0].id, row.id])
+            metadata.set(key, money(Number(row.amount)))
+            table.set(key, money(Number(row.amount)))
+          }
+        }
+      }
     }
     if ([...new Set([...metadata.keys(), ...table.keys()])].some((key) => (metadata.get(key) || 0) !== (table.get(key) || 0))) issues.push('Payment allocation sources disagree')
   }
@@ -641,6 +689,13 @@ export function getLuxorFinanceOverview(input: LuxorFinanceOverviewInput) {
     const scheduleReconciled = Math.abs(scheduled - row.eventObligation) <= 0.005
       && Math.abs(credited - row.received) <= 0.005
       && row.received <= row.eventObligation + 0.005
+    const scheduleDiscrepancyReason = Math.abs(scheduled - row.eventObligation) > 0.005
+      ? `Scheduled installments ($${scheduled.toFixed(2)}) do not match the signed contract obligation ($${row.eventObligation.toFixed(2)}).`
+      : Math.abs(credited - row.received) > 0.005
+        ? `Credited schedule amount ($${credited.toFixed(2)}) does not match recorded booking payments ($${row.received.toFixed(2)}).`
+        : row.received > row.eventObligation + 0.005
+          ? `Recorded payments ($${row.received.toFixed(2)}) exceed the contract obligation ($${row.eventObligation.toFixed(2)}).`
+          : null
     if (!scheduleReconciled) forecastIssues.push('A payment schedule needs reconciliation')
     // Forecast only from saved installment credits. Never allocate a receipt
     // a second time in this read model or infer an allocation for older rows.
@@ -662,6 +717,7 @@ export function getLuxorFinanceOverview(input: LuxorFinanceOverviewInput) {
         isOverdue: state.isOverdue,
         overdueDays: state.overdueDays,
         scheduleReconciled,
+        reviewReason: !date ? 'Installment is missing a valid due date.' : scheduleDiscrepancyReason,
       })
       if (!remaining) continue
       if (!date) { forecastIssues.push('A payment schedule is missing a valid due date'); continue }
@@ -705,7 +761,10 @@ export function getLuxorOverviewPeriod(overview: ReturnType<typeof getLuxorFinan
   const actual = overview.actualByMonth ? overview.actualByMonth[month] || 0 : null
   const expected = overview.expectedByMonth ? overview.expectedByMonth[month] || 0 : null
   const projected = actual === null || expected === null ? null : money(actual + expected)
-  return { actual, expected, projected, percent: projected !== null && projected > 0 && actual !== null && actual >= 0 ? Math.round(actual / projected * 100) : null }
+  const percent = projected !== null && actual !== null && actual >= 0
+    ? projected > 0 ? Math.round(actual / projected * 100) : 0
+    : null
+  return { actual, expected, projected, percent }
 }
 
 export function getLuxorOverviewChart(overview: ReturnType<typeof getLuxorFinanceOverview>, year: number, grouping: 'monthly' | 'quarterly' | 'annual') {

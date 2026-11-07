@@ -243,7 +243,7 @@ export function AutomationsLibraryTab() {
                 5 Default Templates
               </span>
             </div>
-            <h2 id="prebuilt-workflows-heading" className="mt-1 font-serif text-lg font-semibold text-[color:var(--portal-text)]">
+            <h2 id="prebuilt-workflows-heading" className="mt-1 text-base sm:text-lg font-bold text-[color:var(--portal-text)]">
               Pre-built Workflows <span className="ml-1 inline-block align-middle text-[color:var(--portal-muted)]">{prebuiltOpen ? '−' : '+'}</span>
             </h2>
             <p className="mt-0.5 text-xs text-[color:var(--portal-muted)] max-w-2xl">
@@ -269,7 +269,7 @@ export function AutomationsLibraryTab() {
                     Template
                   </span>
                 </div>
-                <h3 className="font-serif text-sm font-semibold text-[color:var(--portal-text)]">
+                <h3 className="text-sm font-bold text-[color:var(--portal-text)]">
                   {pb.name}
                 </h3>
                 <p className="text-xs leading-5 text-[color:var(--portal-muted)]">
@@ -320,7 +320,7 @@ export function AutomationsLibraryTab() {
       <section aria-labelledby="custom-workflows-heading" className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 id="custom-workflows-heading" className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Custom workflows</h2>
+            <h2 id="custom-workflows-heading" className="text-base sm:text-lg font-bold text-[color:var(--portal-text)]">Custom workflows</h2>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Versioned workflows stay separate from the brochure sequence and calendar-managed tour notices. {customExecutionEnabled ? 'Runtime dispatch is enabled for workflows an authorized operator activates.' : 'Custom message dispatch is off; no custom workflow messages will be sent.'} {customExecutionEnabled && !customActivationEnabled ? 'Activation is currently disabled.' : ''}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -395,7 +395,7 @@ export function AutomationsLibraryTab() {
             <div className="flex items-start gap-3">
               <Workflow size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-[#a8792f]" />
               <div>
-                <h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">No saved automations yet.</h2>
+                <h2 className="text-base sm:text-lg font-bold text-[color:var(--portal-text)]">No saved automations yet.</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--portal-muted)]">Only saved workflow definitions appear in these totals. The tour notices below are managed by the existing calendar system.</p>
               </div>
             </div>
@@ -417,7 +417,7 @@ export function AutomationsLibraryTab() {
         </>
       ) : visibleEntries.length === 0 ? (
         <section className="rounded-2xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-5 py-8 text-center">
-          <h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">No automations match those filters.</h2>
+          <h2 className="text-base sm:text-lg font-bold text-[color:var(--portal-text)]">No automations match those filters.</h2>
           <p className="mt-2 text-sm text-[color:var(--portal-muted)]">Try a different name or status.</p>
         </section>
       ) : (
@@ -442,7 +442,7 @@ function SummaryMetric({ label, value, detail }: { label: string; value: number 
   return (
     <div className="min-h-24 border-r border-[color:var(--portal-border)] p-3 last:border-r-0 sm:p-4">
       <p className="text-[10px] font-black uppercase tracking-[0.15em] text-[color:var(--portal-muted)]">{label}</p>
-      <p className="mt-2 font-serif text-2xl font-semibold tabular-nums text-[color:var(--portal-text)]">{value === null ? '—' : value.toLocaleString()}</p>
+      <p className="mt-2 text-2xl font-bold tabular-nums text-[color:var(--portal-text)]">{value === null ? '—' : value.toLocaleString()}</p>
       <p className="mt-1 text-[10px] leading-4 text-[color:var(--portal-muted)]">{detail}</p>
     </div>
   )
@@ -463,7 +463,7 @@ function AutomationEntryCard({ entry, expanded, onToggle, onSetEnabled, saving }
           <span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#caa24c]/10 text-[#8c6424] dark:text-[#f1d27a]">{icon}</span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="break-words font-serif text-base font-semibold text-[color:var(--portal-text)] sm:text-lg">{entry.name}</h2>
+              <h2 className="break-words text-base font-bold text-[color:var(--portal-text)] sm:text-lg">{entry.name}</h2>
               <StatusBadge
                 status={productionSettingIsOn ? 'active' : entry.status}
                 label={productionSettingIsOn ? 'Live in prod' : undefined}

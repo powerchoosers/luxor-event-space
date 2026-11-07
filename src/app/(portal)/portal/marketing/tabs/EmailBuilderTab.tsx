@@ -267,7 +267,7 @@ export function EmailBuilderTab({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Create a campaign</p>
-                  <h2 id="email-start-title" className="mt-1 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Choose how you want to start.</h2>
+                  <h2 id="email-start-title" className="mt-1 text-xl sm:text-2xl font-bold text-[color:var(--portal-text)]">Choose how you want to start.</h2>
                   <p className="mt-2 max-w-lg text-sm leading-5 text-[color:var(--portal-muted)]">Pick a Luxor starting point, open a blank message, or have Elena prepare a first draft. You’ll edit and review everything before sending.</p>
                 </div>
                 <PortalCloseButton type="button" aria-label="Close start dialog" onClick={() => setShowStartModal(false)} />
@@ -450,7 +450,7 @@ export function EmailBuilderTab({
               <div className="min-w-0 overflow-y-auto portal-scrollbar rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 lg:col-span-3">
                 <div className="max-w-3xl">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#a8792f]">Campaign workspace</p>
-                  <h3 className="mt-2 font-serif text-2xl font-semibold text-[color:var(--portal-text)]">Build one clear message.</h3>
+                  <h3 className="mt-2 text-xl sm:text-2xl font-bold text-[color:var(--portal-text)]">Build one clear message.</h3>
                   <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--portal-muted)]">Start from a Luxor template or a blank canvas, shape the content, then choose the audience and send date inside the editor.</p>
                   <div className="mt-8 grid gap-4 sm:grid-cols-3">
                     {[

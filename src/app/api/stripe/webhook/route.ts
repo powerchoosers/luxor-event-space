@@ -357,7 +357,7 @@ async function recordPaidCheckoutSession(session: Stripe.Checkout.Session, event
     // the exact provider receipt, and never process an unmarked historical row.
     const receipt = payment || paidPayments.find((item) => item.processor === 'stripe' && item.processor_reference === session.id)
     const needsAllocation = Boolean(receipt && existingPaymentAllocationPending(receipt))
-    if ((process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY === 'true' || needsAllocation)
+    if ((process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY !== 'false' || needsAllocation)
       && (!receipt || receipt.processor !== 'stripe' || receipt.processor_reference !== session.id
       || receipt.booking_id !== bookingId || receipt.invoice_id !== invoice.id || receipt.status !== 'paid'
       || Number(receipt.amount) !== Number(session.amount_total || 0) / 100)) {

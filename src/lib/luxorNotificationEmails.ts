@@ -1,10 +1,12 @@
 import 'server-only'
 
-import { LuxorEmailJob, LuxorInquiry } from './luxorInquiryTypes'
+import crypto from 'crypto'
+import { LuxorEmailJob, LuxorInquiry, LuxorTask } from './luxorInquiryTypes'
 import { sendLuxorZohoEmail } from './zohoMailServer'
 import { sendLuxorResendEmail } from './luxorResendMailServer'
 import { luxorMailAddress, luxorMailProvider } from './luxorMailConfig'
 import { supabaseRest, supabaseRestStrict } from './supabaseRestServer'
+import { getAllowedZohoPortalEmails } from './luxorPortalAuth'
 
 type InquirySnapshot = Pick<LuxorInquiry, 'id' | 'full_name' | 'email' | 'phone' | 'event_type' | 'guest_count' | 'budget'
   | 'target_date' | 'message' | 'source' | 'flow' | 'preferred_tour_date' | 'preferred_tour_time' | 'metadata'>
@@ -240,6 +242,262 @@ function buildBrandedNotificationHtml(inquiry: InquirySnapshot, aiSummary: strin
 </html>`
 }
 
+function formatTaskDueDate(dueDate?: string | null): string {
+  if (!dueDate) return 'Not scheduled'
+  try {
+    const [year, month, day] = dueDate.split('-').map(Number)
+    const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago',
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(date)
+  } catch {
+    return dueDate
+  }
+}
+
+function formatTaskDueTime(dueAt?: string | null): string | null {
+  if (!dueAt) return null
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(new Date(dueAt))
+  } catch {
+    return null
+  }
+}
+
+const TASK_TYPE_LABELS: Record<string, string> = {
+  todo: 'To-do',
+  call: 'Phone Call',
+  email: 'Email Follow-up',
+  meeting: 'Meeting',
+  other: 'Task',
+}
+
+/**
+ * Builds branded Luxor HTML email for high-priority / urgent task alerts.
+ */
+export function buildHighPriorityTaskEmailHtml(task: LuxorTask, lead?: LuxorInquiry | null): string {
+  const isUrgent = task.priority === 'urgent'
+  const calendarUrl = absoluteUrl('/portal/calendar')
+  const leadUrl = lead ? absoluteUrl(`/portal/leads/${lead.id}`) : null
+  const formattedDueDate = formatTaskDueDate(task.due_date)
+  const formattedDueTime = formatTaskDueTime(task.due_at)
+  const taskTypeDisplay = TASK_TYPE_LABELS[task.task_type || ''] || 'To-do'
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
+  <title>${isUrgent ? 'Urgent' : 'High Priority'} Task Alert - Luxor</title>
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    body, table, td, p, a, h1 { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    @media (prefers-color-scheme: dark) {
+      body, .luxor-bg { background-color: #050505 !important; color: #f7efe3 !important; }
+      .luxor-card { background-color: #0a0807 !important; border-color: rgba(202,162,76,0.22) !important; }
+      .luxor-header { background-color: #080605 !important; }
+      .luxor-hero { background-color: #120d0a !important; }
+      .luxor-box { background-color: #0b0a08 !important; }
+      .luxor-title { color: #f7efe3 !important; }
+      .luxor-gold { color: #caa24c !important; }
+      .luxor-muted { color: #d7c29a !important; }
+    }
+    [data-ogsc] .luxor-bg { background-color: #050505 !important; }
+    [data-ogsc] .luxor-card { background-color: #0a0807 !important; }
+    [data-ogsc] .luxor-title { color: #f7efe3 !important; }
+    [data-ogsc] .luxor-gold { color: #caa24c !important; }
+  </style>
+</head>
+<body class="luxor-bg" style="margin:0;padding:0;background-color:#050505;font-family:'Helvetica Neue',Arial,sans-serif;color:#f7efe3;color-scheme:light dark;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050505" class="luxor-bg" style="background-color:#050505;">
+    <tr>
+      <td align="center" style="padding:28px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="luxor-card" style="width:100%;max-width:600px;table-layout:fixed;overflow-wrap:anywhere;background-color:#0a0807;border:1px solid rgba(202,162,76,0.22);border-radius:4px;overflow:hidden;">
+          <tr>
+            <td style="height:3px;background:linear-gradient(90deg,#9b6d24,#f1d27a,#caa24c,#9b6d24);font-size:1px;line-height:1px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td class="luxor-header" style="padding:24px 32px 16px;text-align:center;background-color:#080605;border-bottom:1px solid rgba(202,162,76,0.14);">
+              <p class="luxor-gold" style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:600;letter-spacing:0.18em;color:#caa24c;text-transform:uppercase;">Luxor</p>
+              <p style="margin:4px 0 0;font-size:8px;letter-spacing:0.42em;color:rgba(202,162,76,0.62);text-transform:uppercase;">Internal Notification</p>
+            </td>
+          </tr>
+          <tr>
+            <td class="luxor-hero" style="padding:32px 32px 20px;background-color:#120d0a;background:linear-gradient(180deg,#120d0a,#050505);">
+              <p style="margin:0 0 10px;font-size:10px;font-weight:700;letter-spacing:0.34em;text-transform:uppercase;color:${isUrgent ? '#ef4444' : '#caa24c'};">
+                ${isUrgent ? '🔴 Urgent Priority Alert' : '⚠️ High Priority Alert'}
+              </p>
+              <h1 class="luxor-title" style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:26px;font-weight:500;line-height:1.2;color:#f7efe3;">
+                ${escapeHtml(task.title)}
+              </h1>
+              
+              <table role="presentation" width="100%" cellpadding="8" cellspacing="0" border="0" class="luxor-box" style="margin-top:20px;background-color:#0b0a08;border:1px solid rgba(202,162,76,0.12);border-radius:4px;font-size:13px;">
+                <tr>
+                  <td width="32%" class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Priority</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">
+                    <span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;background-color:${isUrgent ? 'rgba(239,68,68,0.18)' : 'rgba(217,119,6,0.18)'};color:${isUrgent ? '#f87171' : '#f59e0b'};border:1px solid ${isUrgent ? 'rgba(239,68,68,0.35)' : 'rgba(217,119,6,0.35)'};">
+                      ${task.priority.toUpperCase()}
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Due Date</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">
+                    ${formattedDueDate}${formattedDueTime ? ` at ${formattedDueTime} (Central)` : ''}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Task Type</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">
+                    ${taskTypeDisplay}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Assigned To</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">
+                    ${escapeHtml(task.assigned_to || 'Arianna Patterson')}
+                  </td>
+                </tr>
+                ${lead ? `
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Linked Lead</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);font-weight:600;">
+                    ${escapeHtml(lead.full_name)}
+                  </td>
+                </tr>
+                ${lead.event_type ? `
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Event Type</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">
+                    ${escapeHtml(lead.event_type)}${lead.target_date ? ` &bull; Date: ${escapeHtml(lead.target_date)}` : ''}
+                  </td>
+                </tr>
+                ` : ''}
+                ${lead.phone ? `
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Phone</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">
+                    <a href="tel:${escapeHtml(lead.phone)}" style="color:#caa24c;text-decoration:none;">${escapeHtml(lead.phone)}</a>
+                  </td>
+                </tr>
+                ` : ''}
+                ${lead.email ? `
+                <tr>
+                  <td class="luxor-gold" style="color:#caa24c;font-weight:bold;border-bottom:1px solid rgba(202,162,76,0.06);">Email</td>
+                  <td class="luxor-muted" style="color:#d7c29a;border-bottom:1px solid rgba(202,162,76,0.06);">
+                    <a href="mailto:${escapeHtml(lead.email)}" style="color:#caa24c;text-decoration:none;">${escapeHtml(lead.email)}</a>
+                  </td>
+                </tr>
+                ` : ''}
+                ` : ''}
+              </table>
+            </td>
+          </tr>
+
+          ${task.description ? `
+          <tr>
+            <td style="padding:0 32px 20px;">
+              <div class="luxor-box" style="padding:20px;background-color:#0b0a08;border-left:3px solid #caa24c;border-radius:0 4px 4px 0;">
+                <p class="luxor-gold" style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#caa24c;">Task Notes / Context</p>
+                <p style="margin:0;font-size:13px;line-height:1.7;color:rgba(215,194,154,0.85);white-space:pre-wrap;">${escapeHtml(task.description)}</p>
+              </div>
+            </td>
+          </tr>
+          ` : ''}
+
+          <tr>
+            <td align="center" style="padding:20px 32px 40px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding:0 8px;">
+                    <a href="${calendarUrl}" target="_blank" style="display:inline-block;background-color:#caa24c;color:#050505;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 28px;border-radius:3px;border:1px solid rgba(241,210,122,0.5);">Open Calendar & Tasks</a>
+                  </td>
+                  ${leadUrl ? `
+                  <td style="padding:0 8px;">
+                    <a href="${leadUrl}" target="_blank" style="display:inline-block;background-color:transparent;color:#caa24c;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;text-decoration:none;padding:14px 28px;border-radius:3px;border:1px solid rgba(202,162,76,0.35);">View Lead Dossier</a>
+                  </td>
+                  ` : ''}
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="luxor-header" style="background-color:#080605;padding:24px;text-align:center;border-top:1px solid rgba(202,162,76,0.14);font-size:11px;color:rgba(215,194,154,0.4);">
+              Luxor Event Space Owner Portal &bull; Internal Notification Alerts
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
+/**
+ * Queues a high-priority task email alert into luxor_email_jobs with deduplication.
+ */
+export async function queueHighPriorityTaskAlert(
+  task: LuxorTask,
+  lead?: LuxorInquiry | null,
+  recipientOverride?: string
+): Promise<LuxorEmailJob | null> {
+  if (!task || !['high', 'urgent'].includes(task.priority)) return null
+
+  const allowedEmails = getAllowedZohoPortalEmails()
+  const candidateEmail = (recipientOverride || task.assigned_to || '').trim().toLowerCase()
+  const recipient = candidateEmail && allowedEmails.includes(candidateEmail)
+    ? candidateEmail
+    : 'a.patterson@luxoratlaspalmas.com'
+
+  const isUrgent = task.priority === 'urgent'
+  const subject = `${isUrgent ? '🔴 URGENT TASK' : '⚠️ HIGH PRIORITY TASK'}: ${task.title}${lead?.full_name ? ` (${lead.full_name})` : ''}`
+  const body = buildHighPriorityTaskEmailHtml(task, lead)
+
+  const hash = crypto
+    .createHash('sha256')
+    .update(`luxor-high-priority-task/v1/${task.id}/${task.priority}/${recipient}`)
+    .digest('hex')
+  const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`
+
+  const rows = await supabaseRestStrict<LuxorEmailJob[]>('luxor_email_jobs?on_conflict=id&select=*', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=ignore-duplicates,return=representation' },
+    body: JSON.stringify({
+      id,
+      job_type: 'inquiry_notification',
+      status: 'queued',
+      inquiry_id: task.inquiry_id || null,
+      recipient_email: recipient,
+      subject,
+      body,
+      scheduled_for: new Date().toISOString(),
+      metadata: {
+        notificationKind: 'high_priority_task',
+        notificationRendered: true,
+        notificationProvider: luxorMailProvider(),
+        taskId: task.id,
+        taskPriority: task.priority,
+        leadId: lead?.id || null,
+      },
+    }),
+  })
+
+  return rows[0] || null
+}
+
 /** Build once before delivery so a retry uses the exact same provider payload. */
 export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promise<{ status: 'sent' | 'skipped' }> {
   if (job.job_type !== 'inquiry_notification' || job.status !== 'sending') throw new Error('Internal alert must be claimed before delivery.')
@@ -295,6 +553,13 @@ export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promi
       return { status: 'skipped' }
     }
   }
+  if (cancellationKind === 'high_priority_task') {
+    const taskId = job.metadata.taskId
+    if (typeof taskId === 'string') {
+      const [task] = await supabaseRestStrict<Array<{ status: string; priority: string }>>(`luxor_tasks?select=status,priority&id=eq.${encodeURIComponent(taskId)}&limit=1`)
+      if (!task || task.status !== 'pending' || !['high', 'urgent'].includes(task.priority)) return { status: 'skipped' }
+    }
+  }
   let frozen = job
   if (job.metadata.notificationRendered !== true) {
     const snapshot = job.metadata.inquirySnapshot as InquirySnapshot | undefined
@@ -321,7 +586,7 @@ export async function deliverLuxorInquiryNotification(job: LuxorEmailJob): Promi
   const send = provider === 'resend' ? sendLuxorResendEmail : sendLuxorZohoEmail
   await send({
     to: frozen.recipient_email, subject: frozen.subject, content: frozen.body,
-    from: 'booking@luxoratlaspalmas.com', fromName: cancellationKind === 'staff_reminder' ? 'Luxor Reminders' : cancellationKind === 'tour_cancellation_client' ? 'Luxor Event Space' : 'Luxor Lead Alerts',
+    from: 'booking@luxoratlaspalmas.com', fromName: cancellationKind === 'staff_reminder' ? 'Luxor Reminders' : cancellationKind === 'high_priority_task' ? 'Luxor Tasks' : cancellationKind === 'tour_cancellation_client' ? 'Luxor Event Space' : 'Luxor Lead Alerts',
     idempotencyKey: `email-job/${frozen.id}`,
   })
   return { status: 'sent' }

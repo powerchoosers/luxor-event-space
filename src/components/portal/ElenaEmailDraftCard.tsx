@@ -1,12 +1,12 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Send, Eye, Check, Loader2, RefreshCw, AlertCircle } from '@/lib/icons/phosphor-compat'
+import { Send, Eye, Check, RefreshCw, AlertCircle } from '@/lib/icons/phosphor-compat'
 import { createPortal } from 'react-dom'
 import { buildConversationalEmailHtml } from '@/lib/luxorConversationalEmailServer'
 import { stripTrackingPixels } from '@/lib/luxorTextUtils'
 import { publishLuxorEmailSent } from '@/lib/luxorLeadEmailNotice'
-import { PortalCloseButton, PortalSelect } from '@/components/portal/PortalUI'
+import { PortalCloseButton, PortalSelect, PortalConstellationLoader } from '@/components/portal/PortalUI'
 
 const LUXOR_SENDER_OPTIONS = [
   { value: 'booking@luxoratlaspalmas.com', label: 'Luxor Bookings · booking@luxoratlaspalmas.com' },
@@ -346,7 +346,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
               >
                 {isSending ? (
                   <>
-                    <Loader2 size={13} className="animate-spin" />
+                    <PortalConstellationLoader size={13} tone="white" />
                     <span>Sending...</span>
                   </>
                 ) : (

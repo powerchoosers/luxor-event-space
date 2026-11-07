@@ -6,7 +6,12 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import { LuxorTimePicker } from '@/components/LuxorTimePicker'
 import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
+import { AddFollowUpModal } from '@/components/portal/AddFollowUpModal'
+import { LogCallOutcomeModal } from '@/components/portal/LogCallOutcomeModal'
+import { WorkflowBadge } from '@/components/portal/WorkflowBadge'
+import { formatFollowUpDateLabel } from '@/lib/luxorFollowUpHelpers'
 import { LeadPaymentsDashboard } from '@/components/portal/LeadPaymentsDashboard'
+import { PortalTaskCrossOff } from '@/components/portal/PortalTaskCrossOff'
 import { LeadBreakdownHistory } from '@/components/portal/LeadBreakdownHistory'
 import { breakdownPricingSignature, type LuxorBreakdown } from '@/lib/luxorBreakdownTypes'
 import { PortalAudioPlayer } from '@/components/portal/PortalAudioPlayer'
@@ -479,13 +484,37 @@ export default function LeadDetailPage({
   const [leadReturnPath, setLeadReturnPath] = useState('/portal/leads')
   useEffect(() => {
     try {
+      const queryFrom = searchParams?.get('from') || searchParams?.get('returnTo')
+      if (queryFrom && queryFrom.startsWith('/portal') && !queryFrom.startsWith('/portal//')) {
+        setLeadReturnPath(queryFrom)
+        sessionStorage.setItem('luxor_lead_return', JSON.stringify({ detail: pathname, from: queryFrom }))
+        return
+      }
       const stored = JSON.parse(sessionStorage.getItem('luxor_lead_return') || 'null') as { detail?: string; from?: string } | null
-      if (stored?.detail === pathname && stored.from?.startsWith('/portal') && !stored.from.startsWith('/portal//')) setLeadReturnPath(stored.from)
-      else setLeadReturnPath('/portal/leads')
+      if (stored?.from?.startsWith('/portal') && !stored.from.startsWith('/portal//')) {
+        if (stored.detail === pathname || stored.detail?.startsWith(`/portal/leads/${id}`)) {
+          setLeadReturnPath(stored.from)
+          return
+        }
+      }
+      setLeadReturnPath('/portal/leads')
     } catch { setLeadReturnPath('/portal/leads') }
-  }, [pathname])
+  }, [pathname, searchParams, id])
   const returnSection = leadReturnPath.split('?')[0].split('/')[2] || ''
-  const returnLabel: Record<string, string> = { '': 'Home', leads: 'Leads & Clients', messages: 'Messages', calls: 'Phone', emails: 'Emails', calendar: 'Calendar', planner: 'Planner', finances: 'Finances', operations: 'Operations', marketing: 'Marketing', reports: 'Reports', settings: 'Settings' }
+  const returnLabel: Record<string, string> = {
+    '': 'Home',
+    leads: 'Leads & Clients',
+    messages: 'Messages',
+    calls: 'Phone',
+    emails: 'Emails',
+    calendar: 'Calendars & Tasks',
+    planner: 'Planner',
+    finances: 'Finances',
+    operations: 'Operations',
+    marketing: 'Marketing',
+    reports: 'Reports',
+    settings: 'Settings',
+  }
   const backLabel = returnLabel[returnSection] || returnSection.replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 
   const [lead, setLead] = useState<LuxorInquiry | null>(null)
@@ -570,6 +599,8 @@ export default function LeadDetailPage({
   const [taskDueDate, setTaskDueDate] = useState('')
   const [taskPriority, setTaskPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium')
   const [submittingTask, setSubmittingTask] = useState(false)
+  const [addFollowUpOpen, setAddFollowUpOpen] = useState(false)
+  const [outcomeDraftTask, setOutcomeDraftTask] = useState<LuxorTask | null>(null)
 
   // Invoice creation state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
@@ -682,7 +713,7 @@ export default function LeadDetailPage({
   const [activityWindow, setActivityWindow] = useState<'all' | '30d' | '90d' | 'year'>('all')
   const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE)
   const [showInternalSignals, setShowInternalSignals] = useState(false)
-  const [showTaskTools, setShowTaskTools] = useState(false)
+  const [showTaskTools, setShowTaskTools] = useState(true)
   const [textPopupOpen, setTextPopupOpen] = useState(false)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [editClientSummaryRequested, setEditClientSummaryRequested] = useState(false)
@@ -1394,7 +1425,7 @@ export default function LeadDetailPage({
 
   useEffect(() => {
     setShowInternalSignals(false)
-    setShowTaskTools(false)
+    setShowTaskTools(true)
   }, [id])
 
   useEffect(() => {
@@ -5123,7 +5154,7 @@ export default function LeadDetailPage({
 
             <div className="contents sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
               <div className="min-w-0 pr-12 sm:pr-14 md:pr-0">
-                <h1 className="min-w-0 [overflow-wrap:anywhere] font-serif text-[26px] font-semibold leading-[1.1] tracking-[-0.015em] text-[color:var(--portal-text)] sm:text-3xl lg:text-4xl">
+                <h1 className="min-w-0 [overflow-wrap:anywhere] text-[26px] font-bold leading-[1.1] tracking-tight text-[color:var(--portal-text)] sm:text-3xl lg:text-4xl">
                   {lead.full_name}
                 </h1>
               </div>
@@ -5199,7 +5230,7 @@ export default function LeadDetailPage({
                       const tracker = emailNoticeTracker || ensureLeadEmailNoticeTracker(storage, resolution)
                       setEmailNoticeTracker(dismissLeadEmailNoticeTracker(storage, resolution, tracker))
                     }}
-                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-emerald-800 transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/40 dark:text-emerald-200 dark:hover:bg-emerald-400/10"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-emerald-800 transition-colors hover:bg-emerald-500/10 hover:text-emerald-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/40 dark:text-emerald-200 dark:hover:bg-emerald-400/10 dark:hover:text-white"
                   >
                     <X size={13} aria-hidden="true" />
                   </button>
@@ -5583,7 +5614,7 @@ export default function LeadDetailPage({
                       className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
                       gradientColor="rgba(202, 162, 76, 0.08)"
                     >
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                             <Mail size={18} />
@@ -5597,7 +5628,7 @@ export default function LeadDetailPage({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3 border-y border-[color:var(--portal-border)] py-3 text-left sm:flex sm:border-y-0 sm:border-l sm:py-0 sm:pl-4 xl:shrink-0">
+                        <div className="grid grid-cols-3 gap-3 border-y border-[color:var(--portal-border)] py-3 text-left md:flex md:border-y-0 md:border-l md:py-0 md:pl-4 shrink-0">
                           <div className="min-w-0 sm:min-w-[86px]">
                             <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Source</p>
                             <p className="mt-1 truncate text-[10px] font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
@@ -5612,7 +5643,7 @@ export default function LeadDetailPage({
                           </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-2 xl:justify-end">
+                        <div className="flex shrink-0 items-center gap-2 md:justify-end">
                           <button
                             type="button"
                             onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))}
@@ -5675,7 +5706,7 @@ export default function LeadDetailPage({
                       className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
                       gradientColor="rgba(202, 162, 76, 0.08)"
                     >
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <ClipboardCheck size={18} />
@@ -5687,7 +5718,7 @@ export default function LeadDetailPage({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3 border-y border-[color:var(--portal-border)] py-3 text-left sm:flex sm:border-y-0 sm:border-l sm:py-0 sm:pl-4 xl:shrink-0">
+                        <div className="grid grid-cols-3 gap-3 border-y border-[color:var(--portal-border)] py-3 text-left md:flex md:border-y-0 md:border-l md:py-0 md:pl-4 shrink-0">
                           <div className="min-w-0 sm:min-w-[86px]">
                             <p className="text-[8px] font-black uppercase tracking-wider text-[color:var(--portal-muted)]">Source</p>
                             <p className="mt-1 truncate text-[10px] font-bold capitalize text-[color:var(--portal-text)]">{formatSourceLabel(lead)}</p>
@@ -5698,7 +5729,7 @@ export default function LeadDetailPage({
                           </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-2 xl:justify-end">
+                        <div className="flex shrink-0 items-center gap-2 md:justify-end">
                           <button
                             type="button"
                             onClick={() => openTourScheduleModal('new_visit')}
@@ -5849,7 +5880,7 @@ export default function LeadDetailPage({
                       className="relative overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
                       gradientColor="rgba(202, 162, 76, 0.08)"
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <Calendar size={18} />
@@ -6129,7 +6160,7 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <Sliders size={18} />
@@ -6353,7 +6384,7 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]"><Send size={18} /></span>
                           <div>
@@ -6453,7 +6484,7 @@ export default function LeadDetailPage({
                             </span>
                           </div>
                           <div className="mt-2.5">
-                            <p className="text-lg font-serif font-bold tabular-nums text-[color:var(--portal-text)]">{proposalAmount > 0 ? formatMoney(proposalAmount) : '$0.00'}</p>
+                            <p className="text-lg font-bold tabular-nums text-[color:var(--portal-text)]">{proposalAmount > 0 ? formatMoney(proposalAmount) : '$0.00'}</p>
                             <p className="mt-0.5 text-[10px] tabular-nums text-[color:var(--portal-muted)]">
                               {proposalInvoice ? (proposalPaidTotal > 0 ? `${formatMoney(proposalPaidTotal)} paid · ${formatMoney(proposalBalance)} left` : `${formatMoney(proposalBalance)} balance remaining`) : 'No saved proposal'}
                             </p>
@@ -6519,7 +6550,7 @@ export default function LeadDetailPage({
                           <div className="grid gap-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-5 py-4 text-xs sm:ml-auto sm:w-80">
                             <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Subtotal</span><span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{formatMoney(proposalInvoice.subtotal)}</span></div>
                             <div className="flex justify-between text-[color:var(--portal-muted)]"><span>Tax ({(Number(proposalInvoice.tax_rate) * 100).toFixed(2)}%)</span><span className="tabular-nums font-semibold text-[color:var(--portal-text)]">{formatMoney(Number(proposalInvoice.total) - Number(proposalInvoice.subtotal))}</span></div>
-                            <div className="flex justify-between border-t border-[color:var(--portal-border)] pt-2 text-sm font-black text-[color:var(--portal-text)]"><span>Total</span><span className="font-serif tabular-nums text-base text-[#a8792f] dark:text-[#f1d27a]">{formatMoney(proposalInvoice.total)}</span></div>
+                            <div className="flex justify-between border-t border-[color:var(--portal-border)] pt-2 text-sm font-black text-[color:var(--portal-text)]"><span>Total</span><span className="font-bold tabular-nums text-base text-[#a8792f] dark:text-[#f1d27a]">{formatMoney(proposalInvoice.total)}</span></div>
                             <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold"><span>Paid</span><span className="tabular-nums">{formatMoney(proposalPaidTotal)}</span></div>
                             <div className="flex justify-between font-bold text-[color:var(--portal-text)]"><span>Balance</span><span className="tabular-nums">{formatMoney(proposalBalance)}</span></div>
                           </div>
@@ -6546,7 +6577,7 @@ export default function LeadDetailPage({
                       transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
                       className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm luxor-soft-enter"
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <FileText size={18} />
@@ -6923,7 +6954,7 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <DollarSign size={18} />
@@ -7010,7 +7041,7 @@ export default function LeadDetailPage({
                                 <p className="font-bold text-[color:var(--portal-text)]">1. Initial Booking Payment + Security Deposit</p>
                                 <p className="text-[9px] text-[color:var(--portal-muted)]">Due with agreement signature</p>
                               </div>
-                              <span className="font-serif font-bold tabular-nums text-sm text-[#a8792f] dark:text-[#caa24c]">{formatMoney(initialPaymentInvoiceTotal)}</span>
+                              <span className="font-bold tabular-nums text-sm text-[#a8792f] dark:text-[#caa24c]">{formatMoney(initialPaymentInvoiceTotal)}</span>
                             </div>
                             <div className="flex justify-between py-2">
                               <div>
@@ -7043,7 +7074,7 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
                           <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#a8792f] dark:text-[#caa24c]">Final payment</p>
                           <h4 className="mt-1 text-xl font-black text-[color:var(--portal-text)]">Track the event payment schedule</h4>
@@ -7095,7 +7126,7 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <Flame size={18} />
@@ -7223,7 +7254,7 @@ export default function LeadDetailPage({
                       gradientTo="#8c6529"
                       gradientOpacity={0.22}
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-start gap-3">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#caa24c]/10 text-[#a8792f] dark:text-[#caa24c]">
                             <CheckCircle size={18} />
@@ -7641,18 +7672,28 @@ export default function LeadDetailPage({
           <div className="min-w-0 space-y-5">
           {activeLeadTab === 'tasks' ? (
           <div id="lead-tasks" className="scroll-mt-24 rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
-            <div className="mb-4 flex items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] pb-3">
               <h3 className="flex items-center gap-2.5 text-base font-semibold text-[color:var(--portal-text)]">
                 <Briefcase size={16} className="text-[color:var(--portal-muted)]" />
-                Tasks
+                Tasks &amp; Follow-Ups
               </h3>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="text-xs tabular-nums text-[color:var(--portal-muted)]">{pendingTaskCount} remaining</span>
+                <PortalButton
+                  type="button"
+                  onClick={() => setAddFollowUpOpen(true)}
+                  variant="secondary"
+                  size="sm"
+                  className="h-9 gap-1.5 px-3 text-xs font-semibold"
+                >
+                  <Plus size={14} />
+                  Add Follow-Up
+                </PortalButton>
                 <button
                   type="button"
                   onClick={() => setShowTaskTools((current) => !current)}
                   aria-expanded={showTaskTools}
-                  className="min-h-11 rounded-lg px-3 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                  className="min-h-9 rounded-lg px-2.5 text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                 >
                   {showTaskTools ? 'Hide checklist' : 'Open checklist'}
                 </button>
@@ -7674,7 +7715,7 @@ export default function LeadDetailPage({
                     aria-label="New task"
                     value={taskTitle}
                     onChange={(e) => setTaskTitle(e.target.value)}
-                    placeholder="New follow-up task..."
+                    placeholder="New checklist task..."
                     className="min-h-11 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-muted)] focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                   />
                   <div className="flex flex-wrap gap-2">
@@ -7695,20 +7736,30 @@ export default function LeadDetailPage({
                       ]}
                     />
                   </div>
-                  <PortalButton
-                    type="submit"
-                    disabled={submittingTask || !taskTitle.trim()}
-                    variant="primary"
-                    className="w-full sm:w-auto"
-                  >
-                    {submittingTask ? 'Adding…' : 'Add task'}
-                  </PortalButton>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <PortalButton
+                      type="submit"
+                      disabled={submittingTask || !taskTitle.trim()}
+                      variant="primary"
+                      className="w-full sm:w-auto"
+                    >
+                      {submittingTask ? 'Adding…' : 'Add task'}
+                    </PortalButton>
+                    <PortalButton
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setAddFollowUpOpen(true)}
+                      className="w-full sm:w-auto"
+                    >
+                      <Plus size={14} /> Schedule follow-up with time &amp; reminder type
+                    </PortalButton>
+                  </div>
                 </form>
 
                 {sortedTasks.length === 0 ? (
                   <div className="px-1 py-4 text-sm leading-6 text-[color:var(--portal-muted)]">
                     <p className="font-semibold text-[color:var(--portal-text)]">No follow-up tasks yet.</p>
-                    <p className="mt-1">Add the next action and its due date above.</p>
+                    <p className="mt-1">Add the next action and its due date above, or use Add Follow-Up.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -7718,42 +7769,118 @@ export default function LeadDetailPage({
                       let prioColor = 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)]'
                       if (task.priority === 'high') prioColor = 'bg-amber-500/10 text-amber-800 dark:text-amber-300'
                       else if (task.priority === 'urgent') prioColor = 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                      const cleanDescription = (task.description || '').replace(/^\[follow-up:(?:email|phone)\]\s*/i, '').replace(/^\[post-tour\]\s*/i, '').trim()
+                      const hasPhone = Boolean(lead?.phone?.trim())
+                      const hasEmail = Boolean(lead?.email?.trim())
 
                       return (
                         <div
                           key={task.id}
-                          className={`flex items-start justify-between gap-3 rounded-xl border p-3 transition-colors ${
+                          className={`flex flex-col gap-3 rounded-xl border p-3.5 transition-colors sm:flex-row sm:items-start sm:justify-between ${
                             isHighlightedTask ? 'border-[#caa24c] bg-[#caa24c]/8' : 'border-[color:var(--portal-border)]'
                           }`}
                         >
-                          <button
-                            type="button"
-                            onClick={() => handleToggleTask(task)}
-                            aria-label={isCompleted ? `Mark ${task.title} as pending` : `Complete ${task.title}`}
-                            aria-pressed={isCompleted}
-                            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
-                          >
-                            {isCompleted ? (
-                              <CheckCircle2 size={16} className="text-emerald-500" />
-                            ) : (
-                              <Circle size={18} className="text-[color:var(--portal-muted)]" />
-                            )}
-                          </button>
-                          <div className="min-w-0 flex-1 py-1">
-                            <p className={`break-words text-sm leading-5 ${isCompleted ? 'font-normal text-[color:var(--portal-muted)] line-through' : 'font-semibold text-[color:var(--portal-text)]'}`}>
-                              {task.title}
-                            </p>
-                            {task.due_date ? (
-                              <p className="mt-1 flex items-center gap-1 text-xs text-[color:var(--portal-muted)]">
-                                <Clock size={10} /> {new Date(task.due_date).toLocaleDateString()}
-                              </p>
-                            ) : (
-                              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">No due date</p>
-                            )}
+                          <div className="flex min-w-0 flex-1 items-start gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!isCompleted && task.workflow_name) {
+                                  setOutcomeDraftTask(task)
+                                } else {
+                                  void handleToggleTask(task)
+                                }
+                              }}
+                              aria-label={isCompleted ? `Mark ${task.title} as pending` : `Complete ${task.title}`}
+                              aria-pressed={isCompleted}
+                              className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                            >
+                              {isCompleted ? (
+                                <CheckCircle2 size={17} className="text-emerald-500" />
+                              ) : (
+                                <Circle size={18} className="text-[color:var(--portal-muted)]" />
+                              )}
+                            </button>
+                            <div className="min-w-0 flex-1 py-0.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="relative inline-block max-w-full">
+                                  <p className={`break-words text-sm leading-5 ${isCompleted ? 'font-normal text-[color:var(--portal-muted)] opacity-60' : 'font-semibold text-[color:var(--portal-text)]'}`}>
+                                    {task.title}
+                                  </p>
+                                  <PortalTaskCrossOff isDone={isCompleted} />
+                                </div>
+                                <WorkflowBadge workflowName={task.workflow_name} workflowType={task.workflow_type} />
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${prioColor}`}>
+                                  {task.priority}
+                                </span>
+                              </div>
+                              {cleanDescription ? (
+                                <p className="mt-1 break-words text-xs leading-5 text-[color:var(--portal-muted)]">
+                                  {cleanDescription}
+                                </p>
+                              ) : null}
+                              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[color:var(--portal-muted)]">
+                                {task.due_at || task.due_date ? (
+                                  <span className="flex items-center gap-1">
+                                    <Clock size={11} /> {formatFollowUpDateLabel(task.due_at ?? null, task.due_date ?? null)}
+                                  </span>
+                                ) : (
+                                  <span>No due date</span>
+                                )}
+                                {task.call_outcome ? (
+                                  <span className="rounded-md bg-[color:var(--portal-soft)] px-2 py-0.5 text-[10px] font-semibold capitalize text-[color:var(--portal-text)]">
+                                    Outcome: {task.call_outcome.replaceAll('_', ' ')}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
                           </div>
-                          <span className={`mt-1 rounded-full px-2 py-1 text-[11px] font-medium capitalize ${prioColor}`}>
-                            {task.priority}
-                          </span>
+
+                          <div className="flex flex-wrap items-center gap-1.5 pl-12 sm:shrink-0 sm:pl-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!lead?.phone?.trim()) {
+                                  notify({ title: 'No phone number on this lead', description: 'Add a phone number to the lead before calling.', variant: 'warning' })
+                                  return
+                                }
+                                startLuxorBrowserCall({ phoneNumber: lead.phone, contactName: lead.full_name, inquiryId: lead.id })
+                              }}
+                              disabled={!hasPhone}
+                              title={hasPhone ? `Call ${lead?.full_name || 'lead'}` : 'Call unavailable: no phone number on this lead'}
+                              aria-label={hasPhone ? `Call ${lead?.full_name || 'lead'} through Luxor` : 'Call unavailable: no phone number on this lead'}
+                              className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-soft)]/70 text-[#8c6529] transition-colors hover:bg-[#caa24c]/15 hover:text-[#724f1c] dark:text-[#dfbd68] dark:hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+                            >
+                              <Phone size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!lead?.email) {
+                                  notify({ title: 'No email address on this lead', variant: 'warning' })
+                                  return
+                                }
+                                window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))
+                              }}
+                              disabled={!hasEmail}
+                              title={hasEmail ? `Email ${lead?.full_name || 'lead'}` : 'Email unavailable: no email on this lead'}
+                              aria-label={hasEmail ? `Email ${lead?.full_name || 'lead'}` : 'Email unavailable: no email on this lead'}
+                              className="portal-inline-action inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--portal-soft)]/70 text-[#8c6529] transition-colors hover:bg-[#caa24c]/15 hover:text-[#724f1c] dark:text-[#dfbd68] dark:hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+                            >
+                              <Mail size={15} />
+                            </button>
+                            {!isCompleted ? (
+                              <button
+                                type="button"
+                                onClick={() => setOutcomeDraftTask(task)}
+                                title={`Log call outcome and complete follow-up for ${lead?.full_name || 'lead'}`}
+                                aria-label={`Log call outcome and complete follow-up for ${lead?.full_name || 'lead'}`}
+                                className="portal-inline-action inline-flex h-9 items-center gap-1.5 rounded-lg bg-[color:var(--portal-soft)]/70 px-2.5 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[#caa24c]/15 hover:text-[#8c6529] dark:hover:text-[#f1d27a] cursor-pointer"
+                              >
+                                <Check size={14} />
+                                <span>Log Outcome</span>
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       )
                     })}
@@ -9053,7 +9180,7 @@ export default function LeadDetailPage({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#a8792f] dark:text-[#f1d27a]">New event</p>
-              <h3 className="mt-1 text-xl font-serif font-semibold text-[color:var(--portal-text)]">Add another event</h3>
+              <h3 className="mt-1 text-lg font-bold text-[color:var(--portal-text)]">Add another event</h3>
               <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">This stays under {lead.full_name}&apos;s lead and starts with its own proposal, booking, and planning track.</p>
             </div>
             <PortalCloseButton onClick={() => setIsAddEventModalOpen(false)} aria-label="Close add event" />
@@ -9373,6 +9500,40 @@ export default function LeadDetailPage({
               </PortalButton>
             </form>
       </PortalModal>
+
+      <AddFollowUpModal
+        isOpen={addFollowUpOpen}
+        onClose={() => setAddFollowUpOpen(false)}
+        initialLead={lead}
+        onCreated={async () => {
+          await fetchAllData(false, false)
+        }}
+      />
+
+      <LogCallOutcomeModal
+        isOpen={Boolean(outcomeDraftTask)}
+        onClose={() => setOutcomeDraftTask(null)}
+        lead={lead}
+        task={outcomeDraftTask}
+        onSaved={async () => {
+          setOutcomeDraftTask(null)
+          await fetchAllData(false, false)
+        }}
+        onOpenLeadWorkspace={(_targetLead, stage) => {
+          setOutcomeDraftTask(null)
+          if (stage === 'tour') {
+            setIsTourScheduleModalOpen(true)
+          } else if (stage === 'proposal') {
+            setActiveLeadTab('proposals')
+            setSelectedStageOverride('proposal')
+          }
+        }}
+        onComposeEmail={() => {
+          if (lead?.email) {
+            window.dispatchEvent(new CustomEvent('luxor-compose-email', { detail: { lead } }))
+          }
+        }}
+      />
 
     </PortalPageFrame>
   )
@@ -10427,7 +10588,7 @@ function SignalMetric({
   return (
     <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-3">
       <p className="text-xs font-medium text-[color:var(--portal-muted)]">{label}</p>
-      <p className="mt-2 font-serif text-lg font-bold tabular-nums text-[color:var(--portal-text)]">{value}</p>
+      <p className="mt-2 text-lg font-bold tabular-nums text-[color:var(--portal-text)]">{value}</p>
       <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">{detail}</p>
     </div>
   )

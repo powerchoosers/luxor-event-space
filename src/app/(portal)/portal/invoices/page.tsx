@@ -438,7 +438,7 @@ export default function InvoicesPage() {
       />
       {voidTarget ? <div className="fixed inset-0 z-[120] grid place-items-center bg-black/45 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !voidBusy) setVoidTarget(null) }}>
         <section role="dialog" aria-modal="true" aria-labelledby="void-invoice-title" className="w-full max-w-lg rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-6 shadow-2xl">
-          <h2 id="void-invoice-title" className="font-serif text-xl font-semibold text-[color:var(--portal-text)]">Cancel sent invoice?</h2>
+          <h2 id="void-invoice-title" className="text-lg font-bold text-[color:var(--portal-text)]">Cancel sent invoice?</h2>
           <p className="mt-2 text-sm leading-6 text-[color:var(--portal-muted)]">This records a cancellation in the financial audit history. Paid, accepted, booked, or payment-request invoices cannot be cancelled here. No refund or customer email will be created.</p>
           <label className="mt-5 block text-xs font-semibold text-[color:var(--portal-text)]" htmlFor="void-invoice-reason">Reason for cancellation</label>
           <textarea id="void-invoice-reason" value={voidReason} onChange={(event) => setVoidReason(event.target.value)} maxLength={1000} rows={3} className="mt-2 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-3 text-sm text-[color:var(--portal-text)] outline-none focus:border-[#caa24c]" placeholder="Enter at least 8 characters" />

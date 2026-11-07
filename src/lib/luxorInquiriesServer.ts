@@ -15,7 +15,7 @@ import { findRecentLuxorInquiryMatch } from './luxorInquiryDuplicateMatch'
 import { compareLuxorScheduledTours, getLuxorInquiryPageRequest, loadLuxorPages } from './luxorTourMetrics'
 import { recordLuxorWebsiteSmsConsent } from './luxorTextAutomationsServer'
 
-export type LuxorTaskInquiryContext = Pick<LuxorInquiry, 'id' | 'full_name' | 'event_type' | 'target_date'>
+export type LuxorTaskInquiryContext = Pick<LuxorInquiry, 'id' | 'full_name' | 'event_type' | 'target_date' | 'phone' | 'email' | 'status' | 'tour_attendance_status'>
 
 /** Load the small set of inquiry fields needed to identify task owners in the calendar. */
 export async function listTaskInquiryContexts(inquiryIds: string[]): Promise<LuxorTaskInquiryContext[]> {
@@ -24,7 +24,7 @@ export async function listTaskInquiryContexts(inquiryIds: string[]): Promise<Lux
 
   const chunks = Array.from({ length: Math.ceil(ids.length / 100) }, (_, index) => ids.slice(index * 100, (index + 1) * 100))
   const results = await Promise.all(chunks.map((chunk) =>
-    supabaseRest<LuxorTaskInquiryContext[]>(`luxor_inquiries?select=id,full_name,event_type,target_date&id=in.(${chunk.join(',')})`),
+    supabaseRest<LuxorTaskInquiryContext[]>(`luxor_inquiries?select=id,full_name,event_type,target_date,phone,email,status,tour_attendance_status&id=in.(${chunk.join(',')})`),
   ))
   return results.flat()
 }

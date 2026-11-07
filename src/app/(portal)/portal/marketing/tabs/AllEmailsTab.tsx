@@ -47,7 +47,6 @@ import {
 } from '@/components/portal/PortalUI'
 import { EmailRichTextEditor } from '@/components/portal/EmailRichTextEditor'
 import { ComposerAiActions } from '@/components/portal/ComposerAiActions'
-import { TextAnimate } from '@/components/ui/text-animate'
 import type { LuxorInquiry } from '@/lib/luxorInquiryTypes'
 import type { LuxorSharedMailbox } from '@/lib/luxorSharedMailboxes'
 import { LUXOR_EMAIL_SENT_EVENT } from '@/lib/luxorLeadEmailNotice'
@@ -139,6 +138,7 @@ interface EmailThreadData {
 const messageDetailCache = new Map<string, EmailMessageItem>()
 const messageDetailRequests = new Map<string, Promise<EmailMessageItem>>()
 const threadCache = new Map<string, EmailThreadData>()
+const threadRequests = new Map<string, Promise<EmailThreadData>>()
 const LUXOR_MAILBOXES = new Set(['booking@luxoratlaspalmas.com', 'hello@luxoratlaspalmas.com'])
 
 function messageKey(message: EmailMessageItem) {
@@ -283,6 +283,50 @@ async function requestMessageDetail(messageId: string, folderId?: string) {
   return request
 }
 
+async function requestThread(threadId: string, signal?: AbortSignal) {
+  const cached = threadCache.get(threadId)
+  if (cached) return cached
+  const existing = threadRequests.get(threadId)
+  if (existing) return existing
+
+  const request = (async () => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await fetch(`/api/email/threads/${encodeURIComponent(threadId)}`, {
+        cache: 'no-store',
+        signal,
+      })
+      const data = (await response.json()) as EmailThreadData & { error?: string }
+      if (response.ok) {
+        threadCache.set(threadId, data)
+        return data
+      }
+      if (response.status === 503 && attempt < 2) {
+        const retryAfter = Number.parseFloat(response.headers.get('retry-after') || '')
+        const delay = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 30_000) : 5_000 * (attempt + 1)
+        await new Promise<void>((resolve, reject) => {
+          const timer = window.setTimeout(resolve, delay)
+          signal?.addEventListener(
+            'abort',
+            () => {
+              window.clearTimeout(timer)
+              reject(new DOMException('Aborted', 'AbortError'))
+            },
+            { once: true },
+          )
+        })
+        continue
+      }
+      throw new Error(data.error || 'Unable to load conversation.')
+    }
+    throw new Error('Unable to load conversation.')
+  })().finally(() => {
+    threadRequests.delete(threadId)
+  })
+
+  threadRequests.set(threadId, request)
+  return request
+}
+
 async function requestMailbox(input: LuxorMailboxPageRequest, signal: AbortSignal) {
   const response = await fetch('/api/email/mailbox', { method: 'POST', cache: 'no-store', signal,
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
@@ -312,6 +356,15 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   sharedMailboxes, activeMailboxKey, onReaderOpenChange, mailboxDrawerOpen, onMailboxDrawerOpenChange, onMailboxChange }: AllEmailsTabProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const fromParam = searchParams?.get('from') || ''
+
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      router.back()
+      return
+    }
+    router.push(fromParam.startsWith('/portal') ? fromParam : '/portal')
+  }
   const isMobileReader = useSyncExternalStore(
     subscribeToEmailReaderMobileLayout,
     getEmailReaderMobileLayoutSnapshot,
@@ -359,6 +412,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [compactReaderOpen, setCompactReaderOpen] = useState(Boolean(initialMessageId))
   const [thread, setThread] = useState<EmailThreadData | null>(null)
   const [loadingThread, setLoadingThread] = useState(false)
+  const [waitingForThread, setWaitingForThread] = useState(false)
+  const threadWaitTimerRef = useRef<number | null>(null)
+  const mountedThreadMessageIdsRef = useRef<Set<string>>(new Set())
   const [threadError, setThreadError] = useState<string | null>(null)
   const [threadRetryKey, setThreadRetryKey] = useState(0)
   const [replyText, setReplyText] = useState('')
@@ -372,6 +428,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const replyDelivery = useRef<{ fingerprint: string; key: string } | null>(null)
   const [replyStatus, setReplyStatus] = useState<string | null>(null)
   const [replyOpen, setReplyOpen] = useState(false)
+  const [replyAnimating, setReplyAnimating] = useState(false)
   const [replyPromptOpen, setReplyPromptOpen] = useState(false)
   const [animatingDraft, setAnimatingDraft] = useState(false)
   const [animatingDraftText, setAnimatingDraftText] = useState('')
@@ -394,7 +451,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const syncReplyBounds = useCallback(() => {
     const bounds = mobileReplyAnchor?.getBoundingClientRect()
     const visualViewport = window.visualViewport
-    if (bounds?.width && bounds.height) {
+    if (!replyOpen && bounds?.width && bounds.height) {
       const nextBounds = { top: bounds.top, left: bounds.left, width: bounds.width, height: bounds.height }
       setMobileReplyBounds((current) => current && current.top === nextBounds.top && current.left === nextBounds.left && current.width === nextBounds.width && current.height === nextBounds.height ? current : nextBounds)
     }
@@ -405,7 +462,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       height: visualViewport?.height || window.innerHeight,
     }
     setReplyViewport((current) => current.top === nextViewport.top && current.left === nextViewport.left && current.width === nextViewport.width && current.height === nextViewport.height ? current : nextViewport)
-  }, [mobileReplyAnchor])
+  }, [mobileReplyAnchor, replyOpen])
 
   useEffect(() => {
     if (!isMobileReader || !mobileReplyAnchor) return
@@ -428,16 +485,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
   useEffect(() => {
     if (!mobileReplyFocusOpen) return
-    // The writer is a body-level focus surface, not a card inside the reader.
-    // Keep the thread and navigation mounted for a lossless return, but hide
-    // and disable them while the keyboard changes the visual viewport.
+    // Keep the thread and navigation mounted and visible underneath so the
+    // expanding and collapsing reply container animates smoothly over them.
     const background = Array.from(document.querySelectorAll<HTMLElement>('main.portal-main, .portal-mobile-nav, body.portal-shell > aside'))
-    const previousBackground = background.map((element) => ({ element, inert: element.inert, visibility: element.style.visibility }))
+    const previousBackground = background.map((element) => ({ element, inert: element.inert }))
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     background.forEach((element) => {
       element.inert = true
-      element.style.visibility = 'hidden'
     })
     const handleReplyKeys = (event: KeyboardEvent) => {
       const panel = mobileReplyPortalRef.current
@@ -464,9 +519,8 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     document.addEventListener('keydown', handleReplyKeys)
     return () => {
       document.body.style.overflow = previousOverflow
-      previousBackground.forEach(({ element, inert, visibility }) => {
+      previousBackground.forEach(({ element, inert }) => {
         element.inert = inert
-        element.style.visibility = visibility
       })
       document.removeEventListener('keydown', handleReplyKeys)
       mobileReplyTriggerRef.current?.focus({ preventScroll: true })
@@ -814,7 +868,17 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       const target = messages.find((message) => message.id === nextInitialMessageId)
       setSelectedId(nextInitialMessageId)
       setReadRequestedId(nextInitialMessageId)
-      if (target) setSelectedMessageKey(messageKey(target))
+      if (target) {
+        setSelectedMessageKey(messageKey(target))
+        const targetThreadId = target.threadId
+        const cachedTargetThread = targetThreadId ? threadCache.get(targetThreadId) || null : null
+        if (targetThreadId && (target.threadMessageCount || 1) > 1 && !cachedTargetThread) {
+          setWaitingForThread(true)
+          if (threadWaitTimerRef.current) window.clearTimeout(threadWaitTimerRef.current)
+          threadWaitTimerRef.current = window.setTimeout(() => setWaitingForThread(false), 260)
+          void requestThread(targetThreadId)
+        }
+      }
       setCompactReaderOpen(true)
       return
     }
@@ -826,10 +890,18 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     if (target) { setSelectedId(target.id); setSelectedMessageKey(messageKey(target)) }
   }, [initialMessageId, isMobileReader, loading, messages, selectedId])
 
+  useEffect(() => {
+    return () => {
+      if (threadWaitTimerRef.current) window.clearTimeout(threadWaitTimerRef.current)
+    }
+  }, [])
+
   const selectedMailboxSummary = messages.find((message) => messageKey(message) === selectedMessageKey)
     || messages.find((message) => message.id === selectedId)
   // Detail loading must not change its own folder dependency as it clears/repopulates the detail.
   const selectedFolderId = selectedMailboxSummary?.folderId
+  const activeThreadId = messageDetail?.threadId || selectedMailboxSummary?.threadId || null
+  const isReaderLoading = loadingDetail || (waitingForThread && !thread)
 
   const inquiryByEmail = useMemo(() => {
     const entries = new Map<string, LuxorInquiry>()
@@ -941,82 +1013,69 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }, [selectedId, selectedFolderId, readRequestedId, detailRetry, persistReadState])
 
   useEffect(() => {
-    const threadId = messageDetail?.threadId
+    const threadId = activeThreadId
     if (!threadId || messageDetail?.direction === 'campaign') {
-      setThread(null)
-      setThreadError(null)
+      if (!threadId) {
+        setThread(null)
+        setThreadError(null)
+        setWaitingForThread(false)
+      }
       return
     }
     let current = true
     const cached = threadCache.get(threadId)
-    if (cached) setThread(cached)
+    if (cached) {
+      setThread(cached)
+      setWaitingForThread(false)
+    }
     setLoadingThread(!cached)
     setThreadError(null)
     setReplyStatus(null)
     const controller = new AbortController()
     const loadThread = async () => {
       try {
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          const response = await fetch(`/api/email/threads/${encodeURIComponent(threadId)}`, {
-            cache: 'no-store',
-            signal: controller.signal,
-          })
-          const data = await response.json() as EmailThreadData & { error?: string }
-          if (response.ok) {
-            const unreadArchived = data.messages.filter((message) => message.direction === 'incoming' && !message.isRead
-              && /^mail-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(message.id))
-            const readResults = await Promise.all(unreadArchived.map(async (message) => {
-              try {
-                const readResponse = await fetch(`/api/email/messages/${encodeURIComponent(message.id)}`, {
-                  method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isRead: true }),
-                })
-                return readResponse.ok ? message.id : null
-              } catch { return null }
-            }))
-            const successfullyRead = new Set(readResults.filter((id): id is string => Boolean(id)))
-            const nextData = successfullyRead.size
-              ? { ...data, messages: data.messages.map((message) => successfullyRead.has(message.id) ? { ...message, isRead: true } : message) }
-              : data
-            if (current) {
-              threadCache.set(threadId, nextData)
-              setThread(nextData)
-              if (successfullyRead.size) {
-                setMessages((currentMessages) => {
-                  const next = currentMessages.map((message) => {
-                    if (message.threadId !== threadId || message.threadUnreadCount === undefined) return message
-                    const remainingUnread = Math.max(0, message.threadUnreadCount - successfullyRead.size)
-                    return { ...message, threadUnreadCount: remainingUnread, threadHasUnread: remainingUnread > 0, isRead: remainingUnread === 0 }
-                  })
-                  messagesRef.current = next
-                  return next
-                })
-              }
-            }
-            return
-          }
-
-          if (response.status === 503 && attempt < 2) {
-            const retryAfter = Number.parseFloat(response.headers.get('retry-after') || '')
-            const delay = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 30_000) : 5_000 * (attempt + 1)
-            await new Promise<void>((resolve, reject) => {
-              const timer = window.setTimeout(resolve, delay)
-              controller.signal.addEventListener('abort', () => {
-                window.clearTimeout(timer)
-                reject(new DOMException('Aborted', 'AbortError'))
-              }, { once: true })
+        const data = await requestThread(threadId, controller.signal)
+        if (!current) return
+        const unreadArchived = data.messages.filter((message) => message.direction === 'incoming' && !message.isRead
+          && /^mail-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(message.id))
+        const readResults = await Promise.all(unreadArchived.map(async (message) => {
+          try {
+            const readResponse = await fetch(`/api/email/messages/${encodeURIComponent(message.id)}`, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isRead: true }),
             })
-            continue
+            return readResponse.ok ? message.id : null
+          } catch { return null }
+        }))
+        const successfullyRead = new Set(readResults.filter((id): id is string => Boolean(id)))
+        const nextData = successfullyRead.size
+          ? { ...data, messages: data.messages.map((message) => successfullyRead.has(message.id) ? { ...message, isRead: true } : message) }
+          : data
+        if (current) {
+          threadCache.set(threadId, nextData)
+          setThread(nextData)
+          setWaitingForThread(false)
+          if (successfullyRead.size) {
+            setMessages((currentMessages) => {
+              const next = currentMessages.map((message) => {
+                if (message.threadId !== threadId || message.threadUnreadCount === undefined) return message
+                const remainingUnread = Math.max(0, message.threadUnreadCount - successfullyRead.size)
+                return { ...message, threadUnreadCount: remainingUnread, threadHasUnread: remainingUnread > 0, isRead: remainingUnread === 0 }
+              })
+              messagesRef.current = next
+              return next
+            })
           }
-
-          throw new Error(data.error || 'Unable to load conversation.')
         }
       } catch (error) {
-        if (controller.signal.aborted) return
+        if (controller.signal.aborted || !current) return
         console.error(error)
-        if (current) setThreadError(error instanceof Error ? error.message : 'Unable to load the rest of this conversation.')
-        if (current && !cached) setThread(null)
+        setThreadError(error instanceof Error ? error.message : 'Unable to load the rest of this conversation.')
+        if (!cached) setThread(null)
       } finally {
-        if (current) setLoadingThread(false)
+        if (current) {
+          setLoadingThread(false)
+          setWaitingForThread(false)
+        }
       }
     }
     void loadThread()
@@ -1024,10 +1083,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       current = false
       controller.abort()
     }
-  }, [messageDetail?.threadId, messageDetail?.direction, threadRetryKey])
+  }, [activeThreadId, messageDetail?.direction, threadRetryKey])
 
   const draftWithElena = async () => {
-    if (!thread?.threadId || replyGenerationInFlight.current || polishingReply) return
+    const targetThreadId = thread?.threadId || activeThreadId || messageDetail?.id
+    if (!targetThreadId || replyGenerationInFlight.current || polishingReply) return
     const originalText = replyText
     const originalId = selectedId
     replyGenerationInFlight.current = true
@@ -1036,7 +1096,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     setAnimatingDraftText('')
     setReplyStatus(null)
     try {
-      const response = await fetch(`/api/email/threads/${encodeURIComponent(thread.threadId)}/elena-reply`, {
+      const response = await fetch(`/api/email/threads/${encodeURIComponent(targetThreadId)}/elena-reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instruction: replyInstruction }),
@@ -1102,6 +1162,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       if (replyDraftStorageKey) {
         try { window.localStorage.removeItem(replyDraftStorageKey) } catch { /* The sent reply remains cleared in memory. */ }
       }
+      setReplyAnimating(true)
       setReplyOpen(false)
       setReplyPreviewOpen(false)
     } catch (error) {
@@ -1170,8 +1231,12 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       activeTargetIdRef.current = targetId
       userInteractedScrollRef.current = false
       targetViewportOffsetRef.current = null
+      mountedThreadMessageIdsRef.current.clear()
     }
     if (targetId && !userInteractedScrollRef.current) scrollToMessage(targetId)
+    if (thread?.messages) {
+      thread.messages.forEach((m) => mountedThreadMessageIdsRef.current.add(m.id))
+    }
   }, [messageDetail?.id, thread, scrollToMessage])
 
   useEffect(() => {
@@ -1361,6 +1426,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   }, [readerMenuOpen])
 
   const collapseReplyComposer = () => {
+    setReplyAnimating(true)
     setReplyOpen(false)
     setReplyPreviewOpen(false)
     setReplyPromptOpen(false)
@@ -1421,8 +1487,18 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
     setLoadingDetail(!cached)
     setDetailError(null)
     setCompactReaderOpen(true)
-    setThread(message.threadId ? threadCache.get(message.threadId) || null : null)
+    const threadId = message.threadId
+    const cachedThread = threadId ? threadCache.get(threadId) || null : null
+    setThread(cachedThread)
     setThreadError(null)
+    if (threadId && (message.threadMessageCount || 1) > 1 && !cachedThread) {
+      setWaitingForThread(true)
+      if (threadWaitTimerRef.current) window.clearTimeout(threadWaitTimerRef.current)
+      threadWaitTimerRef.current = window.setTimeout(() => setWaitingForThread(false), 260)
+      void requestThread(threadId)
+    } else {
+      setWaitingForThread(false)
+    }
     setReplyOpen(false)
     setReplyPreviewOpen(false)
     setReplyPromptOpen(false)
@@ -1495,32 +1571,14 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           disabled={sendingReply || !replyText.trim()}
           aria-label={sendingReply ? 'Sending reply' : 'Send reply'}
           title="Send reply"
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white shadow-sm transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-card)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="luxor-gold-raised inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full !text-white transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-card)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
         >
-          {sendingReply ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+          {sendingReply ? <Loader2 size={18} className="animate-spin !text-white" /> : <Send size={18} className="!text-white" />}
         </button>
       </header>
-      <div className="flex min-h-0 flex-1 px-2">
+      <div className="relative flex min-h-0 flex-1 px-2">
         {draftingReply ? (
           <ElenaAiDraftingState mobile />
-        ) : animatingDraft && animatingDraftText ? (
-          <div
-            onClick={() => setAnimatingDraft(false)}
-            title="Click to edit"
-            className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 py-2.5 cursor-text portal-scrollbar"
-          >
-            <TextAnimate
-              animation="blurInUp"
-              by="word"
-              duration={Math.min(2, Math.max(0.6, animatingDraftText.split(/\s+/).length * 0.035))}
-              className="text-[15px] sm:text-base leading-relaxed text-[color:var(--portal-text)]"
-              onAnimationComplete={() => {
-                setTimeout(() => setAnimatingDraft(false), 500)
-              }}
-            >
-              {animatingDraftText}
-            </TextAnimate>
-          </div>
         ) : (
           <EmailRichTextEditor
             value={replyText}
@@ -1533,87 +1591,135 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             readOnly={sendingReply}
           />
         )}
-      </div>
-      <div className="max-h-[45%] shrink-0 overflow-y-auto overscroll-contain border-t border-[color:var(--portal-border)]/60 bg-[color:var(--portal-card)] px-3 py-2 sm:px-4">
-        <AnimatePresence initial={false}>
-          {replyPromptOpen && (
+        <AnimatePresence>
+          {!replyText.trim() && !draftingReply && !animatingDraft && (
             <motion.div
-              key="reply-elena-prompt"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
-              className="overflow-hidden mb-2"
+              key="mobile-elena-reply-btn"
+              initial={{ opacity: 0, scale: 0.9, filter: 'blur(4px)' }}
+              animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, scale: 0.9, filter: 'blur(4px)' }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className="pointer-events-none absolute bottom-3 right-4 z-10 flex items-center justify-end"
             >
-              <div className="relative rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-3 shadow-sm transition-colors focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/10">
-                <label htmlFor="mobile-reply-instruction" className="sr-only">Direction for Elena</label>
-                <textarea
-                  id="mobile-reply-instruction"
-                  value={replyInstruction}
-                  onChange={(event) => setReplyInstruction(event.target.value)}
-                  placeholder="Ask Elena to draft a reply…"
-                  rows={2}
-                  className="portal-input-transparent min-h-16 max-h-32 w-full resize-none border-0 bg-transparent pr-10 text-base leading-6 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setReplyPromptOpen(false)}
-                  aria-label="Hide Elena prompt"
-                  title="Hide prompt"
-                  className="absolute right-1.5 top-1.5 inline-flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--portal-faint)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
-                >
-                  <X size={14} />
-                </button>
-                <div className="mt-1 flex items-center justify-between gap-3">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--portal-muted)]">
-                    <FilePenLine size={13} /> Elena
+              <motion.button
+                onMouseEnter={() => setReplyButtonHovered(true)}
+                onMouseLeave={() => setReplyButtonHovered(false)}
+                whileTap={{ scale: 0.96 }}
+                animate={{
+                  width: 92,
+                  backgroundColor: replyButtonHovered ? '#eae0d0' : '#f4efe7',
+                  color: replyButtonHovered ? '#6e4c10' : '#8c6218',
+                  boxShadow: replyButtonHovered
+                    ? '0 2px 10px -1px rgba(140, 98, 24, 0.16), inset 0 0 0 1px rgba(202, 162, 76, 0.38)'
+                    : 'none',
+                  scale: replyButtonHovered ? 1.025 : 1,
+                }}
+                transition={{
+                  width: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                  backgroundColor: { duration: 0.18 },
+                  color: { duration: 0.18 },
+                  boxShadow: { duration: 0.18 },
+                  scale: { duration: 0.18 },
+                }}
+                style={{ height: 38 }}
+                type="button"
+                onClick={() => void draftWithElena()}
+                disabled={draftingReply || polishingReply || (!thread?.threadId && !activeThreadId && !messageDetail?.id)}
+                aria-label="Draft reply with Elena"
+                title="Draft reply automatically with Elena"
+                className="pointer-events-auto relative flex h-[38px] shrink-0 items-center justify-center overflow-hidden rounded-xl border-0 text-xs font-semibold disabled:cursor-wait disabled:opacity-45"
+              >
+                <span className="flex items-center justify-center gap-1.5">
+                  <span className="relative flex h-4.5 w-4.5 shrink-0 overflow-hidden rounded-full ring-1 ring-[#caa24c]/40">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/luxor-concierge.png" alt="" className="h-full w-full object-cover" />
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => void draftWithElena()}
-                    disabled={draftingReply || polishingReply || loadingThread}
-                    aria-label={draftingReply ? 'Elena is drafting' : 'Generate reply with Elena'}
-                    title="Generate reply"
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)] disabled:cursor-wait disabled:opacity-50"
-                  >
-                    {draftingReply ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
-                  </button>
-                </div>
-              </div>
+                  <span>Elena</span>
+                </span>
+              </motion.button>
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="flex flex-wrap items-center gap-2">
-          {!replyPromptOpen ? (
-            <button
-              type="button"
-              onClick={() => { setReplyPromptOpen(true); void draftWithElena() }}
-              aria-expanded={false}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[#a8792f] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 dark:text-[#f1d27a]"
-            >
-              <FilePenLine size={14} /> Write with Elena
-            </button>
-          ) : (
-            <span className="text-[11px] font-medium text-[color:var(--portal-muted)]">Instruct Elena</span>
-          )}
-          <ComposerAiActions channel="email" value={replyText} setValue={setReplyText} contextKey={selectedId || ''} polishOnly disabled={draftingReply || sendingReply || polishingReply} requestLock={replyGenerationInFlight} onBusyChange={(busy) => { setPolishingReply(busy); if (busy) setReplyStatus(null) }} />
-          {replyStatus && (
-            <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-              <p role="status" aria-live="polite" className="truncate text-[11px] leading-tight text-[color:var(--portal-muted)]">
-                {replyStatus}
-              </p>
-              <button
-                type="button"
-                onClick={() => setReplyStatus(null)}
-                className="shrink-0 p-0.5 text-[color:var(--portal-faint)] hover:text-[color:var(--portal-text)]"
-                aria-label="Dismiss status message"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          )}
-        </div>
       </div>
+      <AnimatePresence>
+        {(replyPromptOpen || replyText.trim() || replyStatus) && (
+          <motion.div
+            key="mobile-reply-bottom-bar"
+            initial={{ opacity: 0, y: 12, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: 12, height: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="max-h-[45%] shrink-0 overflow-y-auto overscroll-contain border-t border-[color:var(--portal-border)]/60 bg-[color:var(--portal-card)] px-3 py-2 sm:px-4"
+          >
+          <AnimatePresence initial={false}>
+            {replyPromptOpen && (
+              <motion.div
+                key="reply-elena-prompt"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
+                className="overflow-hidden mb-2"
+              >
+                <div className="relative rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-3 shadow-sm transition-colors focus-within:border-[#caa24c]/55 focus-within:ring-2 focus-within:ring-[#caa24c]/10">
+                  <label htmlFor="mobile-reply-instruction" className="sr-only">Direction for Elena</label>
+                  <textarea
+                    id="mobile-reply-instruction"
+                    value={replyInstruction}
+                    onChange={(event) => setReplyInstruction(event.target.value)}
+                    placeholder="Ask Elena to draft a reply…"
+                    rows={2}
+                    className="portal-input-transparent min-h-16 max-h-32 w-full resize-none border-0 bg-transparent pr-10 text-base leading-6 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setReplyPromptOpen(false)}
+                    aria-label="Hide Elena prompt"
+                    title="Hide prompt"
+                    className="absolute right-1.5 top-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                  >
+                    <X size={14} />
+                  </button>
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--portal-muted)]">
+                      <FilePenLine size={13} /> Elena
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void draftWithElena()}
+                      disabled={draftingReply || polishingReply || (!thread?.threadId && !activeThreadId && !messageDetail?.id)}
+                      aria-label={draftingReply ? 'Elena is drafting' : 'Generate reply with Elena'}
+                      title="Generate reply"
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)] disabled:cursor-wait disabled:opacity-50"
+                    >
+                      {draftingReply ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <ComposerAiActions channel="email" value={replyText} setValue={setReplyText} contextKey={selectedId || ''} polishOnly disabled={draftingReply || sendingReply || polishingReply} requestLock={replyGenerationInFlight} onBusyChange={(busy) => { setPolishingReply(busy); if (busy) setReplyStatus(null) }} />
+            {replyStatus && (
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+                <p role="status" aria-live="polite" className="truncate text-[11px] leading-tight text-[color:var(--portal-muted)]">
+                  {replyStatus}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setReplyStatus(null)}
+                  className="shrink-0 p-0.5 text-[color:var(--portal-faint)] hover:text-[color:var(--portal-text)]"
+                  aria-label="Dismiss status message"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
+      </AnimatePresence>
     </>
   ) : (
     <>
@@ -1624,14 +1730,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             type="button"
             onClick={collapseReplyComposer}
             disabled={sendingReply}
-            className={mobile
-              ? 'inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:cursor-wait disabled:opacity-50'
-              : 'rounded-lg p-1.5 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 disabled:cursor-wait disabled:opacity-50'}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-wait disabled:opacity-50"
             aria-label="Collapse reply composer and keep draft"
             title="Collapse reply composer and keep draft"
           >
-            {mobile ? <span className="text-[11px] font-medium">Cancel</span> : null}
-            <X size={14} />
+            <X size={15} />
           </button>
         </div>
       </div>
@@ -1639,45 +1742,9 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       <div className={mobile
         ? 'flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain p-3 portal-scrollbar'
         : 'flex min-h-[360px] flex-col gap-2.5 p-3 sm:min-h-[400px] sm:p-4'}>
-        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-          <input
-            value={replyInstruction}
-            onChange={(event) => setReplyInstruction(event.target.value)}
-            placeholder="Optional direction for Elena"
-            className="min-h-10 min-w-0 flex-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50"
-          />
-          <button
-            type="button"
-            onClick={() => void draftWithElena()}
-            disabled={draftingReply || polishingReply || loadingThread}
-            className={`${mobile ? 'inline-flex' : 'hidden'} min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-medium text-[#a8792f] hover:bg-[color:var(--portal-soft)] disabled:opacity-50 dark:text-[#f1d27a]`}
-          >
-            {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <FilePenLine size={13} />}
-            Draft with Elena
-          </button>
-        </div>
-        <ComposerAiActions channel="email" value={replyText} setValue={setReplyText} contextKey={selectedId || ''} polishOnly disabled={draftingReply || sendingReply || polishingReply} requestLock={replyGenerationInFlight} onBusyChange={(busy) => { setPolishingReply(busy); if (busy) setReplyStatus(null) }} />
         {draftingReply ? (
           <div className="flex min-h-[280px] flex-col rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)]">
             <ElenaAiDraftingState />
-          </div>
-        ) : animatingDraft && animatingDraftText ? (
-          <div
-            onClick={() => setAnimatingDraft(false)}
-            title="Click to edit"
-            className="flex min-h-[280px] flex-1 flex-col rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-4 cursor-text overflow-y-auto overscroll-contain portal-scrollbar"
-          >
-            <TextAnimate
-              animation="blurInUp"
-              by="word"
-              duration={Math.min(2, Math.max(0.6, animatingDraftText.split(/\s+/).length * 0.035))}
-              className="text-sm leading-relaxed text-[color:var(--portal-text)] sm:text-base"
-              onAnimationComplete={() => {
-                setTimeout(() => setAnimatingDraft(false), 500)
-              }}
-            >
-              {animatingDraftText}
-            </TextAnimate>
           </div>
         ) : replyPreviewOpen ? (
           <iframe
@@ -1694,6 +1761,21 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             placeholder="Write your message…"
             ariaLabel="Write your reply"
             className="min-h-[280px]"
+            toolbarExtra={
+              <ComposerAiActions
+                channel="email"
+                value={replyText}
+                setValue={setReplyText}
+                contextKey={selectedId || ''}
+                polishOnly
+                disabled={draftingReply || sendingReply || polishingReply || animatingDraft}
+                requestLock={replyGenerationInFlight}
+                onBusyChange={(busy) => {
+                  setPolishingReply(busy)
+                  if (busy) setReplyStatus(null)
+                }}
+              />
+            }
           />
         )}
         <div className={mobile ? "sticky bottom-0 -mx-3 -mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-3 py-2 backdrop-blur" : "flex shrink-0 flex-wrap items-center justify-between gap-3"}>
@@ -1740,7 +1822,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 style={{ height: 40 }}
                 type="button"
                 onClick={() => { if (replyText.trim()) void sendInlineReply(); else void draftWithElena() }}
-                disabled={replyText.trim() ? sendingReply : (draftingReply || polishingReply || loadingThread || sendingReply)}
+                disabled={replyText.trim() ? sendingReply : (draftingReply || polishingReply || sendingReply || (!thread?.threadId && !activeThreadId && !messageDetail?.id))}
                 aria-label={replyText.trim() ? 'Send reply' : 'Draft reply with Elena'}
                 className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border-0 text-xs font-semibold shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1900,76 +1982,96 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
         inert={isMobileReader && compactReaderOpen ? true : undefined}
         className="flex min-h-0 min-w-0 w-full [--message-list-width:100%] lg:w-80 lg:[--message-list-width:20rem] xl:w-96 xl:[--message-list-width:24rem] shrink-0 lg:border-r border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/20 flex-col overflow-hidden"
       >
-      <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--portal-border)]/70 bg-[color:var(--portal-card)] px-2.5 py-2 lg:hidden">
-        <button
-          type="button"
-          onClick={() => onMailboxDrawerOpenChange(true)}
-          aria-label="Open mailbox navigation"
-          title="Open mailbox navigation"
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]"
-        >
-          <Menu size={19} aria-hidden="true" />
-        </button>
-        <div className="relative min-w-0 flex-1">
-          <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
-          <input
-            type="search"
-            aria-label="Search saved email"
-            value={searchQuery}
-            maxLength={200}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search mail"
-            className="min-h-10 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] pl-9 pr-3 text-sm font-medium text-[color:var(--portal-text)] outline-none transition-all focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10 placeholder:text-[color:var(--portal-muted)]"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email'))}
-          aria-label="Compose email"
-          title="Compose email"
-          className="luxor-gold-raised inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] focus-visible:ring-offset-2"
-        >
-          <SquarePen size={18} aria-hidden="true" />
-        </button>
-      </div>
-        <div className="shrink-0 border-b border-[color:var(--portal-border)]/70 bg-[color:var(--portal-card)] px-3 py-2.5 sm:px-4">
-          <div className="hidden items-center gap-2 lg:flex">
+        {/* Top header bar: Back button + Folder Name (e.g. Inbox) + Count + Refresh button */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--portal-border)]/70 bg-[color:var(--portal-card)] px-2.5 py-2.5 sm:px-4">
+          <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
-              onClick={() => onMailboxDrawerOpenChange(!mailboxDrawerOpen)}
-              aria-label={mailboxDrawerOpen ? "Close mailbox navigation" : "Open mailbox navigation"}
-              title={mailboxDrawerOpen ? "Close mailbox navigation" : "Open mailbox navigation"}
-              aria-expanded={mailboxDrawerOpen}
-              className={`inline-flex h-9.5 w-9.5 !min-h-9.5 !min-w-9.5 shrink-0 items-center justify-center rounded-xl p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${
-                mailboxDrawerOpen
-                  ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]'
-                  : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
-              }`}
+              onClick={handleGoBack}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
+              aria-label="Go back"
+              title="Go back"
             >
-              <Menu size={17} aria-hidden="true" />
+              <ArrowLeft size={15} />
             </button>
-            <div className="relative min-w-0 flex-1">
-              <Search size={15} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
-              <input
-                type="search"
-                aria-label="Search saved email"
-                value={searchQuery}
-                maxLength={200}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search mail"
-                className="h-9.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] pl-9 pr-3 text-xs font-medium text-[color:var(--portal-text)] outline-none transition-all focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10 placeholder:text-[color:var(--portal-muted)]"
-              />
-            </div>
-          </div>
-          <div className="mt-2 flex min-h-9 items-center justify-between gap-3 px-1">
             <div className="flex min-w-0 items-baseline gap-2">
-              <h3 className="truncate text-sm font-semibold text-[color:var(--portal-text)]" title={activeFolderLabel}>{activeFolderLabel}</h3>
+              <h3 className="truncate text-base font-bold text-[color:var(--portal-text)] sm:text-lg" title={activeFolderLabel}>{activeFolderLabel}</h3>
               <span className="shrink-0 text-xs tabular-nums text-[color:var(--portal-muted)]">{totalItems.toLocaleString()}</span>
             </div>
-            <button type="button" onClick={() => void loadEmails(true)} disabled={loading || loadingMore} aria-label="Refresh messages" title="Refresh messages"
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]">
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadEmails(true)}
+            disabled={loading || loadingMore}
+            aria-label="Refresh messages"
+            title="Refresh messages"
+            className="inline-flex h-8 w-8 sm:h-8.5 sm:w-8.5 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] cursor-pointer"
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {/* Mobile search bar + hamburger menu + compose button */}
+        <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--portal-border)]/70 bg-[color:var(--portal-card)] px-2.5 py-2 lg:hidden">
+          <button
+            type="button"
+            onClick={() => onMailboxDrawerOpenChange(true)}
+            aria-label="Open mailbox navigation"
+            title="Open mailbox navigation"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]"
+          >
+            <Menu size={19} aria-hidden="true" />
+          </button>
+          <div className="relative min-w-0 flex-1">
+            <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
+            <input
+              type="search"
+              aria-label="Search saved email"
+              value={searchQuery}
+              maxLength={200}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search mail"
+              className="min-h-10 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] pl-9 pr-3 text-sm font-medium text-[color:var(--portal-text)] outline-none transition-all focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10 placeholder:text-[color:var(--portal-muted)]"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('luxor-compose-email'))}
+            aria-label="Compose email"
+            title="Compose email"
+            className="luxor-gold-raised inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] focus-visible:ring-offset-2"
+          >
+            <SquarePen size={18} aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* Desktop search bar + hamburger menu */}
+        <div className="hidden shrink-0 items-center gap-2 border-b border-[color:var(--portal-border)]/70 bg-[color:var(--portal-card)] px-3 py-2.5 sm:px-4 lg:flex">
+          <button
+            type="button"
+            onClick={() => onMailboxDrawerOpenChange(!mailboxDrawerOpen)}
+            aria-label={mailboxDrawerOpen ? "Close mailbox navigation" : "Open mailbox navigation"}
+            title={mailboxDrawerOpen ? "Close mailbox navigation" : "Open mailbox navigation"}
+            aria-expanded={mailboxDrawerOpen}
+            className={`inline-flex h-9.5 w-9.5 !min-h-9.5 !min-w-9.5 shrink-0 items-center justify-center rounded-xl p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] ${
+              mailboxDrawerOpen
+                ? 'bg-[#caa24c]/12 text-[#a8792f] dark:text-[#f1d27a]'
+                : 'bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
+            }`}
+          >
+            <Menu size={17} aria-hidden="true" />
+          </button>
+          <div className="relative min-w-0 flex-1">
+            <Search size={15} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--portal-muted)]" />
+            <input
+              type="search"
+              aria-label="Search saved email"
+              value={searchQuery}
+              maxLength={200}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search mail"
+              className="h-9.5 w-full rounded-xl border border-transparent bg-[color:var(--portal-soft)] pl-9 pr-3 text-xs font-medium text-[color:var(--portal-text)] outline-none transition-all focus:border-[#caa24c]/40 focus:bg-[color:var(--portal-card)] focus:ring-2 focus:ring-[#caa24c]/10 placeholder:text-[color:var(--portal-muted)]"
+            />
           </div>
         </div>
         <div ref={mailboxListRef} aria-busy={loading || loadingMore} className="min-h-0 flex-1 overflow-y-auto overscroll-contain portal-scrollbar divide-y divide-[color:var(--portal-border)]">
@@ -2039,7 +2141,18 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 return (
                   <article key={messageKey(msg)} data-read={isRead ? 'true' : 'false'}
                     className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 transition-colors sm:px-4 ${isSelected ? 'bg-[#caa24c]/[0.08] shadow-[inset_3px_0_0_#caa24c]' : 'hover:bg-[color:var(--portal-soft)]/55'}`}>
-                    {isOpenable ? <button type="button" onClick={() => selectMessage(msg)} aria-label={`Open conversation: ${subject}`}
+                    {isOpenable ? <button
+                      type="button"
+                      onClick={() => selectMessage(msg)}
+                      onPointerEnter={() => {
+                        if (msg.id) void requestMessageDetail(msg.id, msg.folderId)
+                        if (msg.threadId) void requestThread(msg.threadId)
+                      }}
+                      onFocus={() => {
+                        if (msg.id) void requestMessageDetail(msg.id, msg.folderId)
+                        if (msg.threadId) void requestThread(msg.threadId)
+                      }}
+                      aria-label={`Open conversation: ${subject}`}
                       aria-current={isSelected ? 'true' : undefined}
                       className="flex min-h-[4.75rem] min-w-0 items-center gap-3 pr-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]">{primaryRow}</button>
                       : <div aria-label={`${subject}, message details unavailable`} className="flex min-h-[4.75rem] min-w-0 items-center gap-3 pr-1 text-left">{primaryRow}</div>}
@@ -2100,11 +2213,11 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           <button type="button" onClick={closeReader} aria-label="Back to email list" title="Back to email list" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c] lg:hidden">
             <ArrowLeft size={17} aria-hidden="true" />
           </button>
-          {selectedId && messageDetail ? (
+          {selectedId && messageDetail && !isReaderLoading ? (
             <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-[color:var(--portal-text)] sm:text-sm lg:text-base" title={decodeHtmlEntities(messageDetail.subject)}>
               {decodeHtmlEntities(messageDetail.subject)}
             </h2>
-          ) : selectedId && loadingDetail ? (
+          ) : selectedId && isReaderLoading ? (
             <PortalSkeleton className="h-3.5 w-2/5 min-w-24 rounded sm:h-4" />
           ) : null}
           <div className="flex min-w-0 items-center gap-1">
@@ -2246,7 +2359,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             <p className="max-w-md text-sm text-[color:var(--portal-muted)]">{detailError}</p>
             <button type="button" onClick={() => setDetailRetry((value) => value + 1)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-sm hover:bg-[color:var(--portal-soft)]"><RefreshCw size={15} /> Retry loading email</button>
           </motion.div>
-        ) : loadingDetail ? (
+        ) : isReaderLoading ? (
           <motion.div
             key={`loading:${selectedMessageKey || selectedId || 'email'}`}
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(6px)' }}
@@ -2398,42 +2511,87 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                     </button>
                   </div>
                 )}
-                {orderedConversationMessages(thread?.messages || [], messageDetail).map((message, index, orderedMessages) => {
-                  const outgoing = isOutgoingEmailMessage(message)
-                  const previous = orderedMessages[index - 1]
-                  const grouped = Boolean(previous && isOutgoingEmailMessage(previous) === outgoing && messagesShareVisualGroup(previous, message))
-                  const currentMessage = message.id === messageDetail.id
-                  return (
-                    <React.Fragment key={message.id}>
-                      {index === 0 || !sameConversationDay(orderedMessages[index - 1], message) ? (
-                        <div className="flex items-center gap-3 py-2" aria-label={formatConversationDate(message.receivedAt)}>
-                          <span className="h-px flex-1 bg-[color:var(--portal-border)]" />
-                          <time className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1 text-[11px] font-medium text-[color:var(--portal-muted)]">{formatConversationDate(message.receivedAt)}</time>
-                          <span className="h-px flex-1 bg-[color:var(--portal-border)]" />
-                        </div>
-                      ) : null}
-                      <div
-                        id={`thread-message-${message.id}`}
-                        data-message-id={message.id}
-                        className="scroll-mt-4"
-                      >
-                        <ThreadMessage
-                          message={message}
-                          expanded
-                          currentMessage={currentMessage}
-                          chat
-                          grouped={grouped}
-                          viewMode={viewMode}
-                          blockExternalImages={blockExternalImages}
-                          inquiryByEmail={inquiryByEmail}
-                          onThreadInteraction={markThreadInteraction}
-                          onOpenAttachment={openAttachmentPreview}
-                          openingAttachment={openingAttachment}
-                        />
-                      </div>
-                    </React.Fragment>
-                  )
-                })}
+                {(() => {
+                  const orderedMessages = orderedConversationMessages(thread?.messages || [], messageDetail)
+                  const selectedMessageIndex = orderedMessages.findIndex((m) => m.id === messageDetail.id)
+                  const isInitialAllAtOnce = !mountedThreadMessageIdsRef.current.has(messageDetail.id) && orderedMessages.length > 1 && !loadingThread
+                  if (isInitialAllAtOnce) {
+                    orderedMessages.forEach((m) => mountedThreadMessageIdsRef.current.add(m.id))
+                  } else if (mountedThreadMessageIdsRef.current.size === 0) {
+                    mountedThreadMessageIdsRef.current.add(messageDetail.id)
+                  }
+
+                  return orderedMessages.map((message, index) => {
+                    const outgoing = isOutgoingEmailMessage(message)
+                    const previous = orderedMessages[index - 1]
+                    const grouped = Boolean(previous && isOutgoingEmailMessage(previous) === outgoing && messagesShareVisualGroup(previous, message))
+                    const currentMessage = message.id === messageDetail.id
+                    const wasAlreadyMounted = mountedThreadMessageIdsRef.current.has(message.id)
+                    const isNewlyArrived = !wasAlreadyMounted
+                    const isPreceding = selectedMessageIndex >= 0 && index < selectedMessageIndex
+                    const staggerDistance = selectedMessageIndex >= 0 ? Math.abs(index - selectedMessageIndex) : index
+
+                    return (
+                      <React.Fragment key={message.id}>
+                        {index === 0 || !sameConversationDay(orderedMessages[index - 1], message) ? (
+                          <motion.div
+                            initial={
+                              isNewlyArrived
+                                ? reduceMotion
+                                  ? { opacity: 0 }
+                                  : { opacity: 0, filter: 'blur(6px)' }
+                                : false
+                            }
+                            animate={{ opacity: 1, filter: 'blur(0px)' }}
+                            transition={{ duration: reduceMotion ? 0.12 : 0.3, ease: [0.16, 1, 0.3, 1] }}
+                            className="flex items-center gap-3 py-2"
+                            aria-label={formatConversationDate(message.receivedAt)}
+                          >
+                            <span className="h-px flex-1 bg-[color:var(--portal-border)]" />
+                            <time className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1 text-[11px] font-medium text-[color:var(--portal-muted)]">{formatConversationDate(message.receivedAt)}</time>
+                            <span className="h-px flex-1 bg-[color:var(--portal-border)]" />
+                          </motion.div>
+                        ) : null}
+                        <motion.div
+                          id={`thread-message-${message.id}`}
+                          data-message-id={message.id}
+                          className="scroll-mt-4"
+                          initial={
+                            isNewlyArrived
+                              ? reduceMotion
+                                ? { opacity: 0 }
+                                : {
+                                    opacity: 0,
+                                    filter: 'blur(10px)',
+                                    y: isPreceding ? -8 : 8,
+                                  }
+                              : false
+                          }
+                          animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+                          transition={{
+                            duration: reduceMotion ? 0.12 : 0.36,
+                            ease: [0.16, 1, 0.3, 1],
+                            delay: reduceMotion ? 0 : Math.min(staggerDistance * 0.035, 0.22),
+                          }}
+                        >
+                          <ThreadMessage
+                            message={message}
+                            expanded
+                            currentMessage={currentMessage}
+                            chat
+                            grouped={grouped}
+                            viewMode={viewMode}
+                            blockExternalImages={blockExternalImages}
+                            inquiryByEmail={inquiryByEmail}
+                            onThreadInteraction={markThreadInteraction}
+                            onOpenAttachment={openAttachmentPreview}
+                            openingAttachment={openingAttachment}
+                          />
+                        </motion.div>
+                      </React.Fragment>
+                    )
+                  })
+                })()}
 
                 <AnimatePresence initial={false}>
                   {!isMobileReader && messageDetail.direction !== 'campaign' && replyOpen && (
@@ -2552,28 +2710,75 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       <AnimatePresence initial={false}>
       {isMobileReader && compactReaderOpen && mobileReplyAnchor && messageDetail && messageDetail.category !== 'Website Inquiry' && messageDetail.direction !== 'campaign' && mobileReplyBounds ? (
       <motion.div
+        ref={mobileReplyPortalRef}
         key="mobile-reply-container"
         id="mobile-reply-container"
-        inert={replyOpen}
+        role={replyOpen ? 'dialog' : undefined}
+        aria-modal={replyOpen ? 'true' : undefined}
+        aria-label={replyOpen ? `Reply to ${replyRecipientDisplayName}` : undefined}
         initial={reduceMotion ? { opacity: 0 } : { x: '100%' }}
-        animate={{ ...mobileReplyBounds, borderRadius: 24, x: 0, opacity: 1 }}
+        animate={(() => {
+          const expandedWidth = replyViewport.width || (typeof window !== 'undefined' ? window.innerWidth : mobileReplyBounds.width)
+          const expandedHeight = replyViewport.height || (typeof window !== 'undefined' ? window.innerHeight : mobileReplyBounds.height)
+          return {
+            top: replyOpen ? replyViewport.top : mobileReplyBounds.top,
+            left: replyOpen ? replyViewport.left : mobileReplyBounds.left,
+            width: replyOpen ? expandedWidth : mobileReplyBounds.width,
+            height: replyOpen ? expandedHeight : mobileReplyBounds.height,
+            borderRadius: replyOpen ? 0 : 24,
+            x: 0,
+            opacity: 1,
+          }
+        })()}
         exit={reduceMotion ? { opacity: 0 } : { x: '100%' }}
-        transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.32, x: { duration: 0.36, ease: [0.22, 1, 0.36, 1] } }}
+        transition={
+          reduceMotion
+            ? { duration: 0 }
+            : {
+                duration: 0.36,
+                ease: [0.22, 1, 0.36, 1],
+                x: { duration: 0.36, ease: [0.22, 1, 0.36, 1] },
+              }
+        }
         onAnimationComplete={() => {
+          setReplyAnimating(false)
           if (!replyOpen) syncReplyBounds()
         }}
-        className="fixed flex min-h-0 flex-col overflow-hidden border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-lg"
-        style={{ zIndex: 65, visibility: replyOpen ? 'hidden' : undefined }}
+        className={`fixed flex min-h-0 flex-col overflow-hidden bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-lg ${
+          replyOpen ? 'border-transparent' : 'border border-[color:var(--portal-border)]'
+        }`}
+        style={{ zIndex: replyOpen || replyAnimating ? 130 : 65 }}
       >
-            <button
+        <AnimatePresence initial={false}>
+          {replyOpen ? (
+            <motion.div
+              key="mobile-reply-writer"
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 32 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 32 }}
+              transition={reduceMotion ? { duration: 0 } : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+              className="flex h-full min-h-0 w-full flex-1 flex-col"
+              style={{
+                paddingTop: 'env(safe-area-inset-top)',
+                paddingBottom: replyViewport.height < window.innerHeight - 120 ? 0 : 'env(safe-area-inset-bottom)',
+              }}
+            >
+              {renderReplyComposerContent(true)}
+            </motion.div>
+          ) : (
+            <motion.button
               ref={mobileReplyTriggerRef}
               key="mobile-reply-trigger"
               type="button"
-              onClick={() => { syncReplyBounds(); setReplyOpen(true) }}
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
+              onClick={() => { syncReplyBounds(); setReplyAnimating(true); setReplyOpen(true) }}
               aria-label={hasUnsentReply ? `Continue draft to ${replyRecipientDisplayName}` : `Reply to ${replyRecipientDisplayName}`}
-              aria-controls="mobile-reply-focus"
+              aria-controls="mobile-reply-container"
               aria-expanded={replyOpen}
-              className="flex min-h-11 w-full shrink-0 items-center gap-3 px-3 text-left text-sm text-[color:var(--portal-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
+              className="absolute inset-x-0 top-0 flex min-h-11 w-full shrink-0 items-center gap-3 px-3 text-left text-sm text-[color:var(--portal-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
             >
               <Reply size={17} className={`shrink-0 ${hasUnsentReply ? 'text-[#caa24c]' : ''}`} />
               {hasUnsentReply ? (
@@ -2585,39 +2790,10 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                 <span className="min-w-0 flex-1 truncate">Reply to {replyRecipientDisplayName}…</span>
               )}
               <Send size={17} className="shrink-0 text-[#caa24c]" />
-            </button>
+            </motion.button>
+          )}
+        </AnimatePresence>
       </motion.div>
-      ) : null}
-      {mobileReplyFocusOpen ? (
-        <motion.div
-          key="mobile-reply-focus"
-          className="fixed inset-0 z-[130] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0 : 0.12 }}
-        >
-          <div
-            ref={mobileReplyPortalRef}
-            id="mobile-reply-focus"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Reply to ${replyRecipientDisplayName}`}
-            className="fixed flex min-h-0 min-w-0 flex-col overflow-hidden bg-[color:var(--portal-bg)]"
-            style={{
-              // Follow the visible screen directly, without tweening keyboard
-              // resizes or inheriting the collapsed reply pill's dimensions.
-              top: replyViewport.top,
-              left: replyViewport.left,
-              width: replyViewport.width || '100%',
-              height: replyViewport.height || '100dvh',
-              paddingTop: 'env(safe-area-inset-top)',
-              paddingBottom: replyViewport.height < window.innerHeight - 120 ? 0 : 'env(safe-area-inset-bottom)',
-            }}
-          >
-            {renderReplyComposerContent(true)}
-          </div>
-        </motion.div>
       ) : null}
       </AnimatePresence>,
       document.body,
@@ -2710,7 +2886,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
 
 const emailScrollMomentumCancelers = new WeakMap<HTMLElement, Set<() => void>>()
 
-function ElenaAiDraftingState({ mobile = false }: { mobile?: boolean }) {
+export function ElenaAiDraftingState({ mobile = false }: { mobile?: boolean }) {
   return (
     <div className={`flex min-h-0 flex-1 flex-col items-center justify-center text-center ${mobile ? 'px-4 py-6' : 'p-8'} space-y-3.5`}>
       <div className="relative flex items-center justify-center">
@@ -3206,8 +3382,8 @@ export function ThreadMessage({
     return (
       <>
       <article
-        id={`thread-message-${message.id}`}
-        data-message-id={message.id}
+        id={`thread-article-${message.id}`}
+        data-message-article={message.id}
         className={`flex w-full min-w-0 scroll-mt-4 ${outgoing ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-1' : 'mt-4'}`}
       >
         <div className={`flex min-w-0 max-w-full items-end gap-2 ${outgoing ? 'flex-row-reverse' : ''} sm:max-w-[min(88%,44rem)]`}>
@@ -3349,8 +3525,8 @@ export function ThreadMessage({
 
   return (
     <article
-      id={`thread-message-${message.id}`}
-      data-message-id={message.id}
+      id={`thread-article-${message.id}`}
+      data-message-article={message.id}
       className={`scroll-mt-4 ${currentMessage ? 'w-full rounded-xl bg-[color:var(--portal-bg)] ring-2 ring-[#caa24c]' : `overflow-hidden rounded-xl border transition-colors sm:rounded-2xl ${expanded ? 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-md' : 'border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/80 hover:bg-[color:var(--portal-card)]'}`}`}
     >
       {!currentMessage && <button type="button" onClick={() => setExpanded((value) => !value)} className="flex w-full cursor-pointer items-center gap-2.5 p-3 text-left sm:gap-3 sm:p-4">
@@ -3938,7 +4114,7 @@ function escapeHtml(str: string) {
     .replace(/"/g, '&quot;')
 }
 
-function plainTextToEmailHtml(str: string, collapseQuotes = false) {
+export function plainTextToEmailHtml(str: string, collapseQuotes = false) {
   if (!collapseQuotes) return escapeHtml(str).replace(/\r\n?|\n/g, '<br>')
   const lines = (str || '').split(/\r\n?|\n/)
   const html: string[] = []

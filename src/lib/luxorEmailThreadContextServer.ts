@@ -10,32 +10,90 @@ function addresses(value: string) {
   return Array.from(value.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)).map((match) => match[0].toLowerCase())
 }
 
+function htmlToPlainText(html?: string | null): string {
+  if (!html) return ''
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<head[\s\S]*?<\/head>/gi, ' ')
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|tr|li|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
+export function extractEmailMessagePlainText(message: { content?: string | null; summary?: string | null; htmlContent?: string | null } | null | undefined): string {
+  if (!message) return ''
+  const plain = (message.content || message.summary || '').trim()
+  if (plain) return plain
+  return htmlToPlainText(message.htmlContent)
+}
+
 export async function getLuxorEmailThreadContext(threadId: string) {
-  const messages = threadId.startsWith('mail-')
+  let resolvedThreadId = threadId
+  let messages = threadId.startsWith('mail-')
     ? await (await import('./luxorMailboxServer')).listLuxorMailboxMessages({ threadId, limit: 100, withAttachments: true }).then((items) => items.reverse())
     : await listLuxorZohoThread(threadId, 50)
-  const participants = Array.from(new Set(messages.flatMap((message) => [
-    ...addresses(message.from), ...addresses(message.to), ...addresses(message.cc),
-  ])))
-  const clientEmail = participants.find((email) => !LUXOR_SENDERS.has(email)) || ''
+
+  if (!messages.length && threadId.startsWith('mail-')) {
+    const { getLuxorMailboxMessage, listLuxorMailboxMessages } = await import('./luxorMailboxServer')
+    const single = await getLuxorMailboxMessage(threadId)
+    if (single) {
+      resolvedThreadId = single.threadId || single.id
+      const threadItems = await listLuxorMailboxMessages({ threadId: resolvedThreadId, limit: 100, withAttachments: true }).then((items) => items.reverse())
+      messages = threadItems.length ? threadItems : [single]
+    }
+  }
+
+  const latestIncoming = [...messages].reverse().find((message) => message.direction === 'incoming')
+  const participants = Array.from(new Set([
+    ...(latestIncoming ? addresses(latestIncoming.from) : []),
+    ...messages.flatMap((message) => [
+      ...addresses(message.from), ...addresses(message.to), ...addresses(message.cc),
+    ]),
+  ]))
+  const nonLuxorParticipants = participants.filter((email) => !LUXOR_SENDERS.has(email))
+  let clientEmail = nonLuxorParticipants[0] || ''
 
   let inquiry: LuxorInquiry | null = null
   let notes: LuxorNote[] = []
   let bookings: LuxorBooking[] = []
-  if (clientEmail) {
-    const matches = await supabaseRest<LuxorInquiry[]>(
-      `luxor_inquiries?select=*&email=ilike.${encodeURIComponent(clientEmail)}&order=created_at.desc&limit=1`,
-    )
-    inquiry = matches[0] || null
-    if (inquiry) {
+  for (const candidateEmail of nonLuxorParticipants) {
+    try {
+      const matches = await supabaseRest<LuxorInquiry[]>(
+        `luxor_inquiries?select=*&email=ilike.${encodeURIComponent(candidateEmail)}&order=created_at.desc&limit=1`,
+      )
+      if (matches[0]) {
+        inquiry = matches[0]
+        clientEmail = candidateEmail
+        break
+      }
+    } catch {
+      /* continue without failing thread context */
+    }
+  }
+  if (inquiry) {
+    try {
       ;[notes, bookings] = await Promise.all([
         supabaseRest<LuxorNote[]>(`luxor_notes?select=*&inquiry_id=eq.${encodeURIComponent(inquiry.id)}&order=created_at.asc&limit=100`),
         supabaseRest<LuxorBooking[]>(`luxor_bookings?select=*&inquiry_id=eq.${encodeURIComponent(inquiry.id)}&order=created_at.desc&limit=20`),
       ])
+    } catch {
+      notes = []
+      bookings = []
     }
   }
 
-  return { threadId, clientEmail: normalizeEmailAddress(clientEmail), messages, inquiry, notes, bookings }
+  return { threadId: resolvedThreadId, clientEmail: normalizeEmailAddress(clientEmail), messages, inquiry, notes, bookings }
 }
 
 export function buildElenaReplyContext(context: Awaited<ReturnType<typeof getLuxorEmailThreadContext>>) {
@@ -45,7 +103,7 @@ export function buildElenaReplyContext(context: Awaited<ReturnType<typeof getLux
     `From: ${message.from}`,
     `To: ${message.to}`,
     `Subject: ${message.subject}`,
-    `Body: ${(message.content || message.summary || '').slice(0, 12000)}`,
+    `Body: ${extractEmailMessagePlainText(message).slice(0, 12000) || '(No text body)'}`,
   ].join('\n')).join('\n\n')
 
   const inquiry = context.inquiry
@@ -60,7 +118,7 @@ export function buildElenaReplyContext(context: Awaited<ReturnType<typeof getLux
     `Guests: ${inquiry.guest_count ?? 'Unknown'}`,
     `Package interest: ${inquiry.package_interest || 'Unknown'}`,
     `Original inquiry: ${inquiry.message || 'None'}`,
-  ].join('\n') : `No matching lead record. Client email: ${context.clientEmail || 'Unknown'}`
+  ].join('\n') : `No matching portal contact record yet. Sender email: ${context.clientEmail || 'Unknown'}`
 
   const notes = context.notes.length
     ? context.notes.map((note) => `${note.created_at} — ${note.author}: ${note.content}`).join('\n')

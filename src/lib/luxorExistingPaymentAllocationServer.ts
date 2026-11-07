@@ -13,10 +13,14 @@ type AllocationResult = {
   allocations?: unknown[]
 }
 
+function isPaymentAutoAllocationEnabled() {
+  return process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY !== 'false'
+}
+
 // This marker is saved with the receipt, before the allocation call. It makes
 // a failed RPC retryable without selecting arbitrary historical receipts.
 export function pendingExistingPaymentAllocation(invoiceKind: string | null | undefined) {
-  return process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY === 'true' && ['event', 'deposit', 'final_balance'].includes(invoiceKind || '')
+  return isPaymentAutoAllocationEnabled() && ['event', 'deposit', 'final_balance'].includes(invoiceKind || '')
     ? { installment_allocation_status: 'pending' }
     : {}
 }
@@ -82,7 +86,7 @@ async function ensureAllocationNote(payment: LuxorPayment, detail: string) {
 }
 
 export async function allocateExistingPayment(payment: LuxorPayment, expected: { bookingId: string; invoiceId: string }) {
-  if (process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY !== 'true') throw new Error('Payment allocation is disabled; the receipt remains pending for reconciliation.')
+  if (!isPaymentAutoAllocationEnabled()) throw new Error('Payment allocation is disabled; the receipt remains pending for reconciliation.')
   if (!existingPaymentAllocationPending(payment)) throw new Error('This receipt is not marked for automatic allocation.')
   if (!payment.id || payment.status !== 'paid' || payment.booking_id !== expected.bookingId || payment.invoice_id !== expected.invoiceId) {
     throw new Error('The saved receipt does not match the expected booking and invoice.')
@@ -117,7 +121,7 @@ export async function allocateExistingPayment(payment: LuxorPayment, expected: {
 
 /** Continue only receipts marked by this feature, in stable receipt order. */
 export async function drainPendingPaymentAllocations(bookingId: string) {
-  if (process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY !== 'true') throw new Error('Payment allocation is disabled; pending receipts are preserved.')
+  if (!isPaymentAutoAllocationEnabled()) throw new Error('Payment allocation is disabled; pending receipts are preserved.')
   const pending = await supabaseRestStrict<LuxorPayment[]>(`luxor_payments?select=*&booking_id=eq.${encodeURIComponent(bookingId)}&status=eq.paid&metadata->>installment_allocation_status=eq.pending&order=paid_at.asc,id.asc&limit=101`)
   for (const receipt of pending.slice(0, 100)) {
     if (!receipt.invoice_id) throw new Error('A pending payment has no invoice; owner review is required.')
@@ -141,7 +145,7 @@ async function deferPendingReceipt(id: string) {
 
 /** Independent, bounded recovery; no unmarked historical receipt is selected. */
 export async function processPendingPaymentAllocations(limit = 10) {
-  if (process.env.LUXOR_PAYMENT_AUTO_ALLOCATION_READY !== 'true') throw new Error('Payment allocation is disabled; pending receipts are preserved.')
+  if (!isPaymentAutoAllocationEnabled()) throw new Error('Payment allocation is disabled; pending receipts are preserved.')
   const bounded = Math.min(20, Math.max(1, Math.floor(limit)))
   // Failed rows move behind never-attempted and older-attempted rows, so a
   // permanently failing receipt cannot starve the rest of the queue.

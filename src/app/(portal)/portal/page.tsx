@@ -219,7 +219,7 @@ async function PortalOverviewContent() {
   }
 
   businessLeads.filter((lead) => lead.status === 'new' && lead.created_at && luxorTodayKey(new Date(lead.created_at)) === todayDateStr).forEach((lead) => {
-    priorities.push({ title: `New inquiry · ${lead.full_name}`, meta: 'Today', href: `/portal/leads/${lead.id}`, rank: 1 });
+    priorities.push({ title: `New inquiry · ${lead.full_name}`, meta: 'Today', href: `/portal/leads/${lead.id}?from=/portal`, rank: 1 });
   });
 
   // 2. Pending tasks due today or overdue
@@ -232,7 +232,7 @@ async function PortalOverviewContent() {
     priorities.push({
       title: contact ? `${t.title} · ${contact.full_name}` : t.title,
       meta: t.due_date === todayDateStr ? 'Due today' : 'Overdue',
-      href: t.inquiry_id ? `/portal/leads/${t.inquiry_id}?tab=tasks` : '/portal/leads',
+      href: t.inquiry_id ? `/portal/leads/${t.inquiry_id}?tab=tasks&from=/portal` : '/portal/leads',
       isOverdue: t.due_date! < todayDateStr,
       taskId: t.id,
       bounce: t.title === 'Review bounced email address',
@@ -325,7 +325,7 @@ async function PortalOverviewContent() {
     if (!l.created_at) return;
     const createdAt = new Date(l.created_at);
     const title = `Inquiry received from ${l.full_name}`;
-    const href = `/portal/leads/${l.id}`;
+    const href = `/portal/leads/${l.id}?from=/portal`;
 
     rawActivities.push({
       id: `lead-${l.id}`,
@@ -362,7 +362,7 @@ async function PortalOverviewContent() {
       subtitle = 'Secure signing portal';
       icon = CheckCircle2;
     }
-    const href = n.inquiry_id ? `/portal/leads/${n.inquiry_id}` : '/portal/leads';
+    const href = n.inquiry_id ? `/portal/leads/${n.inquiry_id}?from=/portal` : '/portal/leads';
 
     rawActivities.push({
       id: `note-${n.id}`,
@@ -386,7 +386,7 @@ async function PortalOverviewContent() {
     const title = clientName
       ? `Payment received from ${clientName}`
       : `Payment of $${Number(p.amount || 0).toLocaleString()} received`;
-    const href = p.inquiry_id ? `/portal/leads/${p.inquiry_id}` : '/portal/invoices';
+    const href = p.inquiry_id ? `/portal/leads/${p.inquiry_id}?from=/portal` : '/portal/invoices';
 
     rawActivities.push({
       id: `pay-${p.id}`,
@@ -403,7 +403,7 @@ async function PortalOverviewContent() {
     if (!bookingDate) return;
     const rawDate = new Date(bookingDate);
     const title = `Booking created: ${b.client_name}`;
-    const href = b.inquiry_id ? `/portal/leads/${b.inquiry_id}` : '/portal/calendar';
+    const href = b.inquiry_id ? `/portal/leads/${b.inquiry_id}?from=/portal` : '/portal/calendar';
 
     rawActivities.push({
       id: `booking-${b.id}`,
@@ -483,7 +483,7 @@ async function PortalOverviewContent() {
                     <Calendar size={22} strokeWidth={1.5} />
                   </span>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)] mb-1">NEXT EVENT</p>
-                  {nextBooking.inquiry_id ? <Link href={`/portal/leads/${nextBooking.inquiry_id}`} data-home-reveal className="line-clamp-2 text-lg font-bold leading-snug tracking-tight text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{nextBookingDisplayTitle}</Link> : <p data-home-reveal className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">{nextBookingDisplayTitle}</p>}
+                  {nextBooking.inquiry_id ? <Link href={`/portal/leads/${nextBooking.inquiry_id}?from=/portal`} data-home-reveal className="line-clamp-2 text-lg font-bold leading-snug tracking-tight text-[color:var(--portal-text)] no-underline transition-colors hover:text-[#a8792f] dark:hover:text-[#f1d27a]">{nextBookingDisplayTitle}</Link> : <p data-home-reveal className="text-lg font-bold text-[color:var(--portal-text)] tracking-tight leading-snug line-clamp-2">{nextBookingDisplayTitle}</p>}
                   <p data-home-reveal className="text-xs font-bold text-[#caa24c] mt-1">{nextBookingRelativeStr}</p>
                 </div>
                 <div className="mt-4 pt-2 border-t border-[color:var(--portal-border)]/50 text-[11px] font-semibold text-[color:var(--portal-muted)] tabular-nums">

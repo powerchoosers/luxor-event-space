@@ -4,6 +4,7 @@ import { getAllowedZohoPortalEmails, getLuxorPortalSession } from '@/lib/luxorPo
 import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { getLuxorInquiry } from '@/lib/luxorInquiriesServer'
 import { isLuxorInquiryArchived } from '@/lib/luxorInquiryTypes'
+import { queueHighPriorityTaskAlert } from '@/lib/luxorNotificationEmails'
 
 async function hasSignedBooking(inquiryId: string) {
   const bookings = await supabaseRestStrict<Array<{ id: string }>>(
@@ -76,6 +77,14 @@ export async function POST(request: NextRequest) {
     if (!getAllowedZohoPortalEmails().includes(assignee)) return NextResponse.json({ error: 'Assignee must be an authorized portal user.' }, { status: 400 })
     const task = await createTask(inquiryId || null, title, description, dueDate, priority, { dueAt: dueAt || null, assignedTo: assignee, taskType: taskType || null })
     if (isProspectFollowUp(description) && task?.status === 'cancelled') return NextResponse.json({ error: 'This client has a signed booking and no longer needs prospect follow-up.' }, { status: 409 })
+
+    if (task && (task.priority === 'high' || task.priority === 'urgent')) {
+      const lead = inquiryId ? await getLuxorInquiry(inquiryId).catch(() => null) : null
+      await queueHighPriorityTaskAlert(task, lead).catch((err) => {
+        console.error('Failed to queue high-priority task alert:', err)
+      })
+    }
+
     return NextResponse.json(task, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create task.'
@@ -115,6 +124,13 @@ export async function PATCH(request: NextRequest) {
     }
     const updatedTask = await updateTask(id, updates)
     if (updates.status === 'pending' && updatedTask?.status === 'cancelled') return NextResponse.json({ error: 'This client has a signed booking and no longer needs prospect follow-up.' }, { status: 409 })
+
+    if (updatedTask && (updatedTask.priority === 'high' || updatedTask.priority === 'urgent') && updates.priority !== undefined) {
+      const lead = updatedTask.inquiry_id ? await getLuxorInquiry(updatedTask.inquiry_id).catch(() => null) : null
+      await queueHighPriorityTaskAlert(updatedTask, lead).catch((err) => {
+        console.error('Failed to queue high-priority task alert on update:', err)
+      })
+    }
     if (updatedTask?.automation_enrollment_id && updatedTask.automation_step_key && updates.status) {
       await supabaseRest(
         `luxor_follow_up_actions?enrollment_id=eq.${encodeURIComponent(updatedTask.automation_enrollment_id)}&step_key=eq.${encodeURIComponent(updatedTask.automation_step_key)}`,
