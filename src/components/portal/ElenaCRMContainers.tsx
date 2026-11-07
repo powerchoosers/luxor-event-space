@@ -1,5 +1,5 @@
-import { PortalConstellationLoader } from '@/components/portal/PortalConstellationLoader'
 'use client'
+import { PortalConstellationLoader } from '@/components/portal/PortalConstellationLoader'
 import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
 
 import React, { useState } from 'react'
