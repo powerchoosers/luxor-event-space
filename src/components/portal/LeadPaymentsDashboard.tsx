@@ -32,6 +32,7 @@ const PaymentReceiptPdfPreview = dynamic(() => import('./PaymentReceiptPdfPrevie
 
 type PaymentKind = 'deposit' | 'final' | 'security_deposit' | 'installment'
 type ExistingPaymentKind = Exclude<PaymentKind, 'installment'>
+type ExistingPaymentInput = { paymentMethod: string; notes: string; emailReceipt: boolean }
 type ManualInstallmentInput = { installmentId: string; amount: number; paidOn: string; paymentMethod: string; reference: string; notes: string; idempotencyKey: string; emailReceipt: boolean }
 type FinancialTab = 'history' | 'invoices' | 'receipts' | 'reminders'
 type ReceiptPreview = { recipient: string; subject: string; message: string; filename: string; receiptNumber: string; eventName: string; fingerprint: string; pdfSha256: string; pdfUrl: string }
@@ -48,7 +49,7 @@ type Props = {
   installments: LuxorPaymentInstallment[]
   paymentLoadError?: string | null
   paymentInstallmentLoadError?: string | null
-  onRecordPayment: (booking: LuxorBooking, kind: ExistingPaymentKind, emailReceipt?: boolean) => Promise<void>
+  onRecordPayment: (booking: LuxorBooking, kind: ExistingPaymentKind, input: ExistingPaymentInput) => Promise<void>
   onRecordInstallmentPayment: (booking: LuxorBooking, input: ManualInstallmentInput) => Promise<void>
   onViewInvoice: (invoice: LuxorInvoice) => void
   onRequestInvoicePayment: (invoice: LuxorInvoice) => void
@@ -322,6 +323,9 @@ export function LeadPaymentsDashboard({
     setBusy(true)
     setError(null)
     try {
+      if (manualMethod === 'Other' && !manualNotes.trim()) {
+        throw new Error('Add a short note describing the other payment method.')
+      }
       if (recordKind === 'installment') {
         if (!selectedInstallment || !manualPaidOn || !Number.isFinite(Number(manualAmount)) || Number(manualAmount) <= 0) {
           throw new Error('Choose an installment, payment date, and amount greater than zero.')
@@ -342,7 +346,11 @@ export function LeadPaymentsDashboard({
         })
         setInstallmentRequestKey('')
       } else {
-        await onRecordPayment(booking, recordKind, emailReceiptOnSave)
+        await onRecordPayment(booking, recordKind, {
+          paymentMethod: manualMethod,
+          notes: manualMethod === 'Other' ? manualNotes : '',
+          emailReceipt: emailReceiptOnSave,
+        })
       }
       setRecordOpen(false)
     } catch (caught) {
@@ -350,6 +358,11 @@ export function LeadPaymentsDashboard({
     } finally {
       setBusy(false)
     }
+  }
+
+  const changeManualMethod = (value: string) => {
+    if (value !== manualMethod && (value === 'Other' || manualMethod === 'Other')) setManualNotes('')
+    setManualMethod(value)
   }
 
   const openReceiptPreview = async (payment: LuxorPayment) => {
@@ -579,14 +592,15 @@ export function LeadPaymentsDashboard({
             <PortalSelect value={selectedInstallment?.id || ''} onChange={(value) => { const next = timelineInstallments.find((row) => row.id === value); setRecordInstallmentId(value); setManualAmount(next ? String(round(Number(next.amount || 0) - installmentPaidAmount(next, uniquePayments)).toFixed(2)) : '') }} aria-label="Installment" placeholder="Choose an installment" className="mt-1 w-full" options={availableInstallments.map((item) => ({ value: item.id, label: `${item.label} · due ${formatDate(item.due_at)} · remaining ${formatMoney(Math.max(0, Number(item.amount || 0) - installmentPaidAmount(item, uniquePayments)))}` }))} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-[color:var(--portal-muted)]">Amount received<input type="number" min="0.01" max={selectedInstallmentRemaining} step="0.01" value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl bg-[color:var(--portal-soft)] px-3 text-sm font-normal text-[color:var(--portal-text)] tabular-nums outline-none focus:ring-2 focus:ring-[#caa24c]/30" /></label><div><span className="text-xs font-semibold text-[color:var(--portal-muted)]">Actual payment date</span><LuxorDatePicker value={manualPaidOn} onChange={setManualPaidOn} maxDate={formatInputDate()} timeZone="America/Chicago" allowPastDates openToValue label="Actual payment date" theme="portal" className="mt-1 w-full" /></div></div>
-          <div className="grid gap-3 sm:grid-cols-2"><div><span className="text-xs font-semibold text-[color:var(--portal-muted)]">Method</span><PortalSelect value={manualMethod} onChange={setManualMethod} aria-label="Payment method" className="mt-1 w-full" options={['Cash', 'Zelle', 'Check', 'ACH'].map((method) => ({ value: method, label: method }))} /></div><label className="text-xs font-semibold text-[color:var(--portal-muted)]">Reference (optional)<input value={manualReference} onChange={(event) => setManualReference(event.target.value)} maxLength={200} className="mt-1 min-h-11 w-full rounded-xl bg-[color:var(--portal-soft)] px-3 text-sm font-normal text-[color:var(--portal-text)] outline-none focus:ring-2 focus:ring-[#caa24c]/30" /></label></div>
-          <label className="block text-xs font-semibold text-[color:var(--portal-muted)]">Notes (optional)<textarea value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} maxLength={1000} rows={2} className="mt-1 w-full rounded-xl bg-[color:var(--portal-soft)] px-3 py-2 text-sm font-normal text-[color:var(--portal-text)] outline-none focus:ring-2 focus:ring-[#caa24c]/30" /></label>
+          <div className="grid gap-3 sm:grid-cols-2"><div><span className="text-xs font-semibold text-[color:var(--portal-muted)]">Method</span><PortalSelect value={manualMethod} onChange={changeManualMethod} aria-label="Payment method" className="mt-1 w-full" options={['Cash', 'Zelle', 'Check', 'ACH', 'Bank Transfer', 'Other'].map((method) => ({ value: method, label: method }))} /></div><label className="text-xs font-semibold text-[color:var(--portal-muted)]">Reference (optional)<input value={manualReference} onChange={(event) => setManualReference(event.target.value)} maxLength={200} className="mt-1 min-h-11 w-full rounded-xl bg-[color:var(--portal-soft)] px-3 text-sm font-normal text-[color:var(--portal-text)] outline-none focus:ring-2 focus:ring-[#caa24c]/30" /></label></div>
+          <label className="block text-xs font-semibold text-[color:var(--portal-muted)]">Notes {manualMethod === 'Other' ? '(required for Other)' : '(optional)'}<textarea value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} maxLength={1000} rows={2} className="mt-1 w-full rounded-xl bg-[color:var(--portal-soft)] px-3 py-2 text-sm font-normal text-[color:var(--portal-text)] outline-none focus:ring-2 focus:ring-[#caa24c]/30" /></label>
+          {manualMethod === 'Other' ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">Describe the other payment method in the note.</p> : null}
           <p className="text-xs leading-5 text-[color:var(--portal-muted)]">This amount is allocated only to the selected installment. Early payment keeps the actual date entered above. Record other obligations as separate transactions so each receipt remains traceable.</p>
           {paymentInstallmentLoadError ? <p role="alert" className="text-xs text-amber-600">{paymentInstallmentLoadError}</p> : null}
-        </div> : <div className="mt-4 rounded-xl bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-muted)]">This uses the existing protected invoice-balance workflow and its current payment rules.</div>}
+        </div> : <div className="mt-4 space-y-3 rounded-xl bg-[color:var(--portal-soft)] p-4 text-sm leading-6 text-[color:var(--portal-muted)]"><p>This uses the existing protected invoice-balance workflow and its current payment rules.</p><div><span className="text-xs font-semibold text-[color:var(--portal-muted)]">Method</span><PortalSelect value={manualMethod} onChange={changeManualMethod} aria-label="Payment method" className="mt-1 w-full" options={['Cash', 'Zelle', 'Check', 'ACH', 'Bank Transfer', 'Other'].map((method) => ({ value: method, label: method }))} /></div>{manualMethod === 'Other' ? <><label className="block text-xs font-semibold text-[color:var(--portal-muted)]">Describe the other payment method (required)<textarea value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} maxLength={1000} rows={2} className="mt-1 w-full rounded-xl bg-[color:var(--portal-card)] px-3 py-2 text-sm font-normal text-[color:var(--portal-text)] outline-none focus:ring-2 focus:ring-[#caa24c]/30" /></label><p className="text-xs leading-5 text-[color:var(--portal-muted)]">This description will be saved with the payment method.</p></> : null}</div>}
         <label className="mt-3 flex items-center gap-2 text-xs text-[color:var(--portal-muted)]"><input type="checkbox" checked={emailReceiptOnSave} onChange={(event) => setEmailReceiptOnSave(event.target.checked)} disabled={!leadEmail} className="accent-[#b88737]" /> Email the paid receipt to {leadEmail || 'the client (email address missing)'}</label>
         {error ? <p role="alert" className="mt-3 text-sm text-rose-700 dark:text-rose-400">{error}</p> : null}
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setRecordOpen(false)} disabled={busy} className="min-h-11 rounded-xl bg-[color:var(--portal-soft)] px-4 text-sm font-semibold text-[color:var(--portal-text)]">Cancel</button><button type="button" onClick={() => void runRecord()} disabled={busy || !booking || Boolean(paymentLoadError) || booking.contract_status !== 'signed' || (recordKind === 'installment' && (Boolean(paymentInstallmentLoadError) || !selectedInstallment || selectedInstallmentRemaining <= 0 || Number(manualAmount) > selectedInstallmentRemaining))} className="luxor-gold-raised min-h-11 rounded-xl px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Saving…' : recordKind === 'installment' ? 'Record installment payment' : 'Continue with existing payment workflow'}</button></div>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setRecordOpen(false)} disabled={busy} className="min-h-11 rounded-xl bg-[color:var(--portal-soft)] px-4 text-sm font-semibold text-[color:var(--portal-text)]">Cancel</button><button type="button" onClick={() => void runRecord()} disabled={busy || !booking || Boolean(paymentLoadError) || booking.contract_status !== 'signed' || manualMethod === 'Other' && !manualNotes.trim() || (recordKind === 'installment' && (Boolean(paymentInstallmentLoadError) || !selectedInstallment || selectedInstallmentRemaining <= 0 || Number(manualAmount) > selectedInstallmentRemaining))} className="luxor-gold-raised min-h-11 rounded-xl px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Saving…' : recordKind === 'installment' ? 'Record installment payment' : 'Continue with existing payment workflow'}</button></div>
         {booking?.contract_status !== 'signed' ? <p className="mt-3 text-xs text-[color:var(--portal-muted)]">The Event Agreement must be signed before payments can be recorded.</p> : null}
       </PortalModal>
 

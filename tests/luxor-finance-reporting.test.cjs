@@ -36,11 +36,101 @@ loaded.filename = sourcePath
 loaded.paths = Module._nodeModulePaths(path.dirname(sourcePath))
 loaded._compile(compiled, sourcePath)
 Module._load = originalLoad
-const { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorInvoiceFinancialSummary, getLuxorRecordedFinanceExpenses } = loaded.exports
+const revenuePath = path.join(repo, 'src/lib/luxorRevenueCollectionsModel.ts')
+const revenueLoaded = new Module(revenuePath, module)
+revenueLoaded.filename = revenuePath
+revenueLoaded.paths = Module._nodeModulePaths(path.dirname(revenuePath))
+Module._load = function(request, parent, isMain) {
+  if (parent?.filename === revenuePath && request === './luxorFinanceReporting') return loaded.exports
+  if (parent?.filename === revenuePath && request === './luxorPaymentDashboardModel') return dashboardLoaded.exports
+  return originalLoad.call(this, request, parent, isMain)
+}
+revenueLoaded._compile(ts.transpileModule(require('node:fs').readFileSync(revenuePath, 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  fileName: revenuePath,
+}).outputText, revenuePath)
+Module._load = originalLoad
+const { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorFinanceOverview, getLuxorInvoiceFinancialSummary, getLuxorRecordedFinanceExpenses, inspectLuxorFinanceOverviewSources } = loaded.exports
+const { getLuxorRevenueCollectionsModel } = revenueLoaded.exports
 
 const invoice = (id, extra = {}) => ({ id, invoice_kind: 'event', proposal_accepted_at: '2026-01-01T00:00:00Z', total: 1000, status: 'overdue', booking_id: 'booking', ...extra })
 const installment = (id, amount, due_at, extra = {}) => ({ id, booking_id: 'booking', invoice_id: 'master', inquiry_id: null, label: id, installment_order: 1, amount, due_at, status: 'scheduled', metadata: {}, ...extra })
 const payment = (id, amount, metadata = {}, extra = {}) => ({ id, amount, status: 'paid', paid_at: null, invoice_id: 'master', inquiry_id: null, booking_id: 'booking', metadata, ...extra })
+
+test('same-booking receipt matches never replace a persisted installment allocation', () => {
+  const master = invoice('master', { status: 'paid', total: 1000 })
+  const deposit = invoice('deposit', { proposal_accepted_at: null, status: 'paid', total: 500, parent_invoice_id: 'master', invoice_kind: 'deposit' })
+  const addOn = invoice('add-on', { proposal_accepted_at: null, status: 'paid', total: 500, parent_invoice_id: 'master', invoice_kind: 'additional_services' })
+  const otherRevenue = invoice('other-revenue', { proposal_accepted_at: null, status: 'paid', total: 500, parent_invoice_id: 'master', invoice_kind: 'other_revenue' })
+  const installments = [
+    installment('first', 500, '2026-11-01', { status: 'paid', installment_order: 1, label: 'Booking Payment' }),
+    installment('future', 500, '2027-02-01', { status: 'scheduled', installment_order: 2 }),
+  ]
+  const missingLink = payment('missing-link', 500, { payment_kind: 'deposit' }, { invoice_id: null })
+  const cases = [
+    ['same-amount additional-services receipt', { invoices: [master, addOn], payments: [payment('add-on-receipt', 500, { payment_kind: 'additional_services' }, { invoice_id: 'add-on' })] }],
+    ['same-amount other-revenue receipt', { invoices: [master, otherRevenue], payments: [payment('other-revenue-receipt', 500, { payment_kind: 'other_revenue' }, { invoice_id: 'other-revenue' })] }],
+    ['missing invoice link', { invoices: [master, deposit], payments: [missingLink] }],
+    ['wrong invoice link', { invoices: [master, deposit], payments: [payment('master-receipt', 500, { payment_kind: 'final' }, { invoice_id: 'master' })] }],
+    ['ambiguous matching deposits', { invoices: [master, deposit], payments: [payment('deposit-a', 500, { payment_kind: 'deposit' }, { invoice_id: 'deposit' }), payment('deposit-b', 500, { payment_kind: 'deposit' }, { invoice_id: 'deposit' })] }],
+  ]
+  const booking = { id: 'booking', inquiry_id: null, status: 'confirmed', contract_status: 'signed', contract_signed_at: '2026-01-01T00:00:00Z', metadata: {} }
+  for (const [label, rows] of cases) {
+    const input = { ...rows, installments, allocations: [], bookings: [booking], refunds: [], testInquiryIds: new Set(), testBookingIds: new Set(), testInvoiceIds: new Set() }
+    const result = inspectLuxorFinanceOverviewSources(input)
+    assert.ok(result.issues.includes('Paid installment lacks a complete recorded payment allocation'), label)
+    const revenue = getLuxorRevenueCollectionsModel(input, { now: new Date('2026-11-07T18:00:00Z') })
+    const firstRow = revenue.paymentSchedules.find((row) => row.installmentId === 'first')
+    assert.equal(firstRow?.status, 'needs_review', `${label}: payment schedule row must stay under review`)
+    assert.equal(firstRow?.reviewRequired, true, `${label}: payment schedule row must remain unverified`)
+  }
+})
+
+test('canonical deposit allocation verifies without changing the signed balance or future schedule', () => {
+  const master = invoice('master', { status: 'paid', total: 1000 })
+  const deposit = invoice('deposit', { proposal_accepted_at: null, status: 'paid', total: 500, parent_invoice_id: 'master', invoice_kind: 'deposit' })
+  const installments = [
+    installment('first', 500, '2026-11-01', { status: 'paid', installment_order: 1, label: 'Booking Payment' }),
+    installment('future', 500, '2027-02-01', { status: 'scheduled', installment_order: 2 }),
+  ]
+  const allocations = [{ payment_id: 'deposit-receipt', installment_id: 'first', amount: 500 }]
+  const receipt = payment('deposit-receipt', 500, {
+    payment_kind: 'deposit', initial_booking_payment: 500,
+    installment_allocations: [{ installment_id: 'first', amount: 500, label: 'Booking Payment', order: 1 }],
+    installment_allocation_status: 'allocated', installment_unapplied_amount: 0,
+  }, { invoice_id: 'deposit', received_date: '2026-10-31', paid_at: '2026-11-01T16:22:29.849Z' })
+  const inputs = { invoices: [master, deposit], payments: [receipt], installments, allocations }
+  const source = inspectLuxorFinanceOverviewSources(inputs)
+  assert.deepEqual(source.issues, [])
+
+  const overview = getLuxorFinanceOverview({
+    ...inputs,
+    bookings: [{ id: 'booking', inquiry_id: null, status: 'confirmed', contract_status: 'signed', contract_signed_at: '2026-01-01T00:00:00Z', metadata: {} }],
+    refunds: [], testInquiryIds: new Set(), testBookingIds: new Set(), testInvoiceIds: new Set(),
+    now: new Date('2026-11-07T18:00:00Z'),
+  })
+  const receivable = overview.reportingRows.acceptedInvoiceRows[0]
+  assert.equal(receivable.eventObligation, 1000)
+  assert.equal(receivable.received, 500)
+  assert.equal(receivable.outstanding, 500)
+  assert.ok(overview.expectedByMonth)
+  assert.deepEqual(overview.reportingRows.scheduleRows.map((row) => [row.installment.id, row.amountDue, row.credited, row.remaining, row.scheduleReconciled]), [
+    ['first', 500, 500, 0, true],
+    ['future', 500, 0, 500, true],
+  ])
+  const revenue = getLuxorRevenueCollectionsModel({
+    ...inputs,
+    bookings: [{ id: 'booking', inquiry_id: null, status: 'confirmed', contract_status: 'signed', contract_signed_at: '2026-01-01T00:00:00Z', metadata: {} }],
+    refunds: [], testInquiryIds: new Set(), testBookingIds: new Set(), testInvoiceIds: new Set(),
+    now: new Date('2026-11-07T18:00:00Z'),
+  }, { now: new Date('2026-11-07T18:00:00Z') })
+  assert.equal(revenue.receivables[0].remainingBalance, 500)
+  assert.equal(revenue.receivables[0].status, 'partially_paid')
+  assert.deepEqual(revenue.paymentSchedules.map((row) => [row.installmentId, row.amountDue, row.credited, row.remaining, row.reviewRequired]), [
+    ['first', 500, 500, 0, false],
+    ['future', 500, 0, 500, false],
+  ])
+})
 
 test('verified business row scope closes over orphan test bookings and explicit test expenses', () => {
   const rows = getLuxorBusinessFinanceRows({

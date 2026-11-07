@@ -655,7 +655,7 @@ export default function LeadDetailPage({
   const [inPersonHandoffUrl, setInPersonHandoffUrl] = useState<string | null>(null)
   const [inPersonCloseBusy, setInPersonCloseBusy] = useState(false)
   const [manualSignedAgreementFile, setManualSignedAgreementFile] = useState<File | null>(null)
-  const [sameDayReceipt, setSameDayReceipt] = useState<{ booking: LuxorBooking; method?: 'cash' | 'zelle' | 'check' } | null>(null)
+  const [sameDayReceipt, setSameDayReceipt] = useState<{ booking: LuxorBooking; method?: string; notes?: string; emailReceipt?: boolean } | null>(null)
   const [paperSignedAt, setPaperSignedAt] = useState('')
   const [paperSignatureEvidence, setPaperSignatureEvidence] = useState('')
   const [paperSignatureConfirmed, setPaperSignatureConfirmed] = useState(false)
@@ -4117,9 +4117,9 @@ export default function LeadDetailPage({
     }
   }
 
-  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final' | 'security_deposit', receivedMethod?: 'cash' | 'zelle' | 'check', timingEvidence?: SameDayReceiptEvidence, propagateError = false, emailReceipt = false) => {
+  const handleRecordManualPayment = async (booking: LuxorBooking, paymentKind: 'deposit' | 'final' | 'security_deposit', receivedMethod?: string, timingEvidence?: SameDayReceiptEvidence, propagateError = false, emailReceipt = false, notes = '') => {
     const master = invoices.find(invoice => invoice.id === booking.invoice_id)
-    if (paymentKind === 'deposit' && sameDayBookingPromotion(master)?.coverage_amount && !timingEvidence) { setSameDayReceipt({ booking, method: receivedMethod }); return }
+    if (paymentKind === 'deposit' && sameDayBookingPromotion(master)?.coverage_amount && !timingEvidence) { setSameDayReceipt({ booking, method: receivedMethod, notes, emailReceipt }); return }
     const preferredMethod = receivedMethod || ((booking.metadata?.client_payment_preference as { method?: string } | undefined)?.method || 'manual').toLowerCase()
     try {
       setUpdatingStatus(true)
@@ -4130,6 +4130,7 @@ export default function LeadDetailPage({
           bookingId: booking.id,
           paymentKind,
           paymentMethod: preferredMethod,
+          notes,
           ...timingEvidence,
         }),
       })
@@ -8633,7 +8634,7 @@ export default function LeadDetailPage({
                 installments={paymentInstallments}
                 paymentLoadError={paymentLoadError}
                 paymentInstallmentLoadError={paymentInstallmentLoadError}
-                onRecordPayment={(booking, kind, emailReceipt) => handleRecordManualPayment(booking, kind, undefined, undefined, true, emailReceipt)}
+                onRecordPayment={(booking, kind, input) => handleRecordManualPayment(booking, kind, input.paymentMethod, undefined, true, input.emailReceipt, input.notes)}
                 onRecordInstallmentPayment={handleRecordManualInstallmentPayment}
                 onViewInvoice={setPdfPreviewInvoice}
                 onRequestInvoicePayment={openPaymentRequest}
@@ -9220,7 +9221,7 @@ export default function LeadDetailPage({
         </form>
       </PortalModal>
 
-      <SameDayReceiptDialog isOpen={Boolean(sameDayReceipt)} onClose={() => !updatingStatus && setSameDayReceipt(null)} busy={updatingStatus} onSubmit={evidence => { if (sameDayReceipt) void handleRecordManualPayment(sameDayReceipt.booking, 'deposit', sameDayReceipt.method, evidence) }} />
+      <SameDayReceiptDialog isOpen={Boolean(sameDayReceipt)} onClose={() => !updatingStatus && setSameDayReceipt(null)} busy={updatingStatus} onSubmit={evidence => { if (sameDayReceipt) void handleRecordManualPayment(sameDayReceipt.booking, 'deposit', sameDayReceipt.method, evidence, false, sameDayReceipt.emailReceipt, sameDayReceipt.notes) }} />
       <ProposalBuilderModal
         isOpen={isInvoiceModalOpen}
         isEditing={Boolean(editingInvoiceId)}

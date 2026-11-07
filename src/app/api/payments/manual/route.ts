@@ -56,23 +56,34 @@ function securityDepositAmount(invoice: LuxorInvoice) {
 }
 
 function paymentMethod(value: unknown) {
-  const method = String(value || 'manual').toLowerCase()
+  const method = String(value || 'manual').trim().toLowerCase()
   if (method === 'zelle') return 'Zelle'
   if (method === 'cash') return 'Cash'
   if (method === 'check') return 'Check'
+  if (method === 'ach') return 'ACH'
+  if (method === 'bank transfer') return 'Bank Transfer'
+  if (method === 'other') return 'Other'
   return 'Manual record'
 }
 
-function paymentMetadata(kind: ManualPaymentKind, invoice: LuxorInvoice, preferredMethod: unknown) {
+function selectedPaymentMethod(value: unknown) {
+  const method = String(value || 'manual').trim().toLowerCase()
+  return ['zelle', 'cash', 'check', 'ach', 'bank transfer', 'other'].includes(method) ? method : 'manual'
+}
+
+function paymentMetadata(kind: ManualPaymentKind, invoice: LuxorInvoice, preferredMethod: unknown, notes?: string) {
   const securityDeposit = kind === 'deposit' ? securityDepositAmount(invoice) : 0
   const initialBookingPayment = kind === 'deposit'
     ? Math.max(0, roundMoney(Number(invoice.total || 0) - securityDeposit))
     : 0
+  const selectedMethod = selectedPaymentMethod(preferredMethod)
+  const methodNote = selectedMethod === 'other' ? notes?.trim().slice(0, 1000) : ''
 
   return {
     payment_kind: kind,
     manual_entry: true,
-    payment_method_selected: String(preferredMethod || 'manual').toLowerCase(),
+    payment_method_selected: selectedMethod,
+    ...(methodNote ? { payment_method_note: methodNote } : {}),
     ...(kind === 'final' || kind === 'deposit' ? pendingExistingPaymentAllocation(invoice.invoice_kind) : {}),
     ...(kind === 'deposit' ? {
       initial_booking_payment: initialBookingPayment,
@@ -162,16 +173,22 @@ export async function POST(request: NextRequest) {
       bookingId?: string
       paymentKind?: ManualPaymentKind
       paymentMethod?: string
+      notes?: string
       receivedAt?: string
       receiptEvidence?: string
       receiptTimingConfirmed?: boolean
     }
     const bookingId = typeof body.bookingId === 'string' ? body.bookingId : ''
+    const selectedMethod = selectedPaymentMethod(body.paymentMethod)
+    const notes = typeof body.notes === 'string' ? body.notes.trim().slice(0, 1000) : ''
     const kind: ManualPaymentKind | null = body.paymentKind === 'deposit' || body.paymentKind === 'final' || body.paymentKind === 'security_deposit'
       ? body.paymentKind
       : null
     if (!bookingId || !kind) {
       return NextResponse.json({ error: 'bookingId and paymentKind are required.' }, { status: 400 })
+    }
+    if (selectedMethod === 'other' && !notes) {
+      return NextResponse.json({ error: 'Add a short note describing the other payment method.' }, { status: 400 })
     }
     if (kind === 'deposit' && isLuxorBookingDepositPaused()) return NextResponse.json({ error: 'Booking deposit payments are temporarily unavailable. Please contact Luxor before recording a payment.' }, { status: 503 })
 
@@ -224,9 +241,9 @@ export async function POST(request: NextRequest) {
         if (!reservation.created) return NextResponse.json({ error: 'A payment is in progress and needs reconciliation.' }, { status: 409 })
         const guarded = await recordClaimedSameDayDeposit({ bookingId: booking.id, invoiceId: invoice.id, claimId: reservation.claim.id, amount,
           paidAt: received?.toISOString() || null, processor: 'manual', reference: 'manual:' + invoice.id + ':full-balance',
-          method: paymentMethod(body.paymentMethod), eventId: 'manual:' + invoice.id + ':full-balance',
+          method: paymentMethod(selectedMethod), eventId: 'manual:' + invoice.id + ':full-balance',
           timingVerified: Boolean(received && evidence && body.receiptTimingConfirmed === true), fingerprint,
-          metadata: { ...paymentMetadata(kind, invoice, body.paymentMethod), recorded_at: now,
+          metadata: { ...paymentMetadata(kind, invoice, selectedMethod, notes), recorded_at: now,
             receipt_evidence: evidence, receipt_timing_attested_by: session.email, same_day_fingerprint: fingerprint, competing_checkout: competingCheckout } })
         if (guarded.review || !guarded.payment) {
           return NextResponse.json({ payment: guarded.payment, reviewRequired: true,
@@ -245,9 +262,9 @@ export async function POST(request: NextRequest) {
       let competingCheckout = false
       if (invoice.stripe_checkout_session_id) { try { await expireLuxorCheckoutForRepricing(invoice) } catch { competingCheckout = true } }
       const guarded = await recordLuxorSameDayScheduledPayment({ invoice, booking, amount, paidAt: actualPaidAt,
-        processor: 'manual', reference: 'manual:' + invoice.id + ':full-balance', paymentMethod: paymentMethod(body.paymentMethod),
+        processor: 'manual', reference: 'manual:' + invoice.id + ':full-balance', paymentMethod: paymentMethod(selectedMethod),
         eventId: 'manual:' + invoice.id + ':full-balance', timingVerified: true,
-        metadata: { ...paymentMetadata(kind, invoice, body.paymentMethod), recorded_at: now, recorded_by: session.email, competing_checkout: competingCheckout } })
+        metadata: { ...paymentMetadata(kind, invoice, selectedMethod, notes), recorded_at: now, recorded_by: session.email, competing_checkout: competingCheckout } })
       if (guarded.reviewRequired) {
         await closeSameDayReviewCheckout(invoice.id)
         return NextResponse.json({ payment: guarded.payment, reviewRequired: true, message: 'Receipt recorded for owner review. The booking changed or another payment is processing; no confirmation was sent.' }, { status: 202 })
@@ -361,7 +378,7 @@ export async function POST(request: NextRequest) {
       if (!reservation.created) return NextResponse.json({ error: 'A card payment is in progress; reconcile it before recording a manual deposit.' }, { status: 409 })
       const recorded = await recordClaimedDeposit({ bookingId: booking.id, invoiceId: invoice.id,
         claimId: reservation.claim.id, amount, processor: 'manual', reference: 'manual:' + invoice.id + ':full-balance',
-        paidAt: actualPaidAt, method: paymentMethod(body.paymentMethod), metadata: paymentMetadata(kind, invoice, body.paymentMethod) })
+        paidAt: actualPaidAt, method: paymentMethod(selectedMethod), metadata: paymentMetadata(kind, invoice, selectedMethod, notes) })
       if (recorded.review) return NextResponse.json({ payment: recorded.payment, reviewRequired: true,
         message: 'The receipt was recorded for owner review. Do not collect another payment.' }, { status: 202 })
       guardedManualPayment = recorded.payment
@@ -379,7 +396,7 @@ export async function POST(request: NextRequest) {
         invoice_id: invoice.id,
         amount,
         status: 'paid',
-        payment_method: paymentMethod(body.paymentMethod),
+        payment_method: paymentMethod(selectedMethod),
         paid_at: actualPaidAt,
         processor: 'manual',
         processor_reference: 'manual:' + invoice.id + ':full-balance',
@@ -388,7 +405,7 @@ export async function POST(request: NextRequest) {
           : kind === 'deposit'
           ? 'Initial booking payment recorded manually in owner portal. The separate refundable security deposit remains due 30 days before the event.'
           : 'Final Event Price balance recorded manually in owner portal. The refundable security deposit remains held separately.',
-        metadata: paymentMetadata(kind, invoice, body.paymentMethod),
+        metadata: paymentMetadata(kind, invoice, selectedMethod, notes),
       }),
     })
     if (!payment) throw new Error('Payment record could not be created.')

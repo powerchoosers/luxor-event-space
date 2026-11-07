@@ -544,21 +544,8 @@ export function inspectLuxorFinanceOverviewSources(input: {
       if (table.has(key)) issues.push('Duplicate allocation table row')
       table.set(key, money((table.get(key) || 0) + amount))
     }
-    // Recognize deposit-anchored Booking Payment (installment 1) when a single matching deposit receipt exists on the booking
-    for (const row of installments) {
-      if (row.status === 'paid' && row.installment_order === 1 && row.label.trim().toLowerCase() === 'booking payment') {
-        const hasMeta = [...metadata.keys()].some((k) => JSON.parse(k)[1] === row.id)
-        const hasTable = [...table.keys()].some((k) => JSON.parse(k)[1] === row.id)
-        if (!hasMeta && !hasTable) {
-          const matchingDeposits = payments.filter((p) => p.status === 'paid' && p.booking_id === row.booking_id && !Array.isArray(p.metadata?.installment_allocations) && Math.abs(Number(p.amount) - Number(row.amount)) <= 0.005)
-          if (matchingDeposits.length === 1) {
-            const key = JSON.stringify([matchingDeposits[0].id, row.id])
-            metadata.set(key, money(Number(row.amount)))
-            table.set(key, money(Number(row.amount)))
-          }
-        }
-      }
-    }
+    // Allocation verification must come from persisted metadata and allocation rows.
+    // A same-booking/same-amount receipt does not prove which installment it paid.
     if ([...new Set([...metadata.keys(), ...table.keys()])].some((key) => (metadata.get(key) || 0) !== (table.get(key) || 0))) issues.push('Payment allocation sources disagree')
   }
   if (installments.some((row) => row.status === 'paid' && money([...metadata].filter(([key]) => JSON.parse(key)[1] === row.id).reduce((sum, [, amount]) => sum + amount, 0)) + 0.005 < Number(row.amount))) issues.push('Paid installment lacks a complete recorded payment allocation')
