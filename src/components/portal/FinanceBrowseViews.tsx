@@ -23,6 +23,11 @@ export type FinanceBrowseView =
   | 'invoices'
   | 'payments'
   | 'expenses'
+  | 'expense-dashboard'
+  | 'recurring-expenses'
+  | 'business-expenses'
+  | 'event-expenses'
+  | 'expense-receipts'
   | 'reports'
   | 'revenue'
   | 'schedules'
@@ -108,9 +113,49 @@ const links: BrowseItem[] = [
     id: 'expenses',
     label: 'Expenses Tracking',
     description: 'Operational and event-linked venue expenses',
-    href: '/portal/finances?view=expenses',
+    href: '/portal/finances/expenses',
     group: 'Ledgers & Reports',
     icon: <TrendDown size={16} weight="regular" />,
+  },
+  {
+    id: 'expense-dashboard',
+    label: 'Expense Dashboard',
+    description: 'Paid spending, upcoming obligations, and expense trends',
+    href: '/portal/finances/expenses',
+    group: 'Expense Management',
+    icon: <TrendDown size={16} weight="regular" />,
+  },
+  {
+    id: 'recurring-expenses',
+    label: 'Recurring Expenses',
+    description: 'Fixed and variable expenses generated from active templates',
+    href: '/portal/finances/expenses/recurring',
+    group: 'Expense Management',
+    icon: <CalendarBlank size={16} weight="regular" />,
+  },
+  {
+    id: 'business-expenses',
+    label: 'Business Expenses',
+    description: 'Record and manage general operating costs',
+    href: '/portal/finances/expenses/business',
+    group: 'Expense Management',
+    icon: <Wallet size={16} weight="regular" />,
+  },
+  {
+    id: 'event-expenses',
+    label: 'Event Expenses',
+    description: 'Track costs linked to individual bookings',
+    href: '/portal/finances/expenses/events',
+    group: 'Expense Management',
+    icon: <CalendarDots size={16} weight="regular" />,
+  },
+  {
+    id: 'expense-receipts',
+    label: 'Receipts & Records',
+    description: 'Search and review expense documentation',
+    href: '/portal/finances/expenses/receipts',
+    group: 'Expense Management',
+    icon: <FileText size={16} weight="regular" />,
   },
   {
     id: 'reports',
@@ -122,7 +167,7 @@ const links: BrowseItem[] = [
   },
 ]
 
-const groups = ['Overview', 'Revenue & Collections', 'Ledgers & Reports']
+const groups = ['Overview', 'Revenue & Collections', 'Ledgers & Reports', 'Expense Management']
 
 export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
   overview: 'Financial Overview',
@@ -134,6 +179,11 @@ export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
   invoices: 'Invoices Ledger',
   payments: 'Payments Log',
   expenses: 'Expenses Tracking',
+  'expense-dashboard': 'Expense Dashboard',
+  'recurring-expenses': 'Recurring Expenses',
+  'business-expenses': 'Business Expenses',
+  'event-expenses': 'Event Expenses',
+  'expense-receipts': 'Receipts & Records',
   reports: 'Financial Reports',
 }
 

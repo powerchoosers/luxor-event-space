@@ -8,7 +8,7 @@ import { MagicCard } from '@/components/ui/magic-card'
 import { BorderBeam } from '@/components/ui/border-beam'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice, type LuxorPayment, type LuxorPaymentInstallment, type LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
-import { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorInvoiceFinancialSummary, getLuxorPaidFinanceExpenses, getLuxorPaymentCalendarDateKey } from '@/lib/luxorFinanceReporting'
+import { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorInvoiceFinancialSummary, getLuxorPaidExpenseValue, getLuxorPaidFinanceExpenses, getLuxorPaymentCalendarDateKey } from '@/lib/luxorFinanceReporting'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from '@/lib/luxorTestLeadPolicy'
 
 type ReportData = {
@@ -238,7 +238,7 @@ export default function ReportsPage() {
           </p>
         )}
 
-        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use signed, confirmed event obligations, paid-status receipts, and separately linked Stripe refunds. Paid expense totals include only costs marked paid; planned, incurred-unpaid, and cancelled costs are excluded. Only confirmed refunds reduce known cash. Pending or uncertain refunds remain excluded until reconciled. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
+        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use signed, confirmed event obligations, paid-status receipts, and separately linked Stripe refunds. Expense totals use recorded payment and refund history; expected and unpaid costs are excluded. Older paid expenses without transaction history remain in all-time totals, but are not assigned to a month without a verified payment date. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
       </div>}
     </PortalPageFrame>
   )
@@ -255,7 +255,7 @@ function buildMetrics(data: ReportData, testInquiryIds: ReadonlySet<string>, tes
   const finance = getLuxorInvoiceFinancialSummary(data.invoices, data.payments, verifiedTestInquiryIds, verifiedTestBookingIds, data.installments, new Date(), financeRows.testInvoiceIds, data.refunds, businessBookings)
   const paidRevenue = finance.eventPaymentsReceived
   const outstandingRevenue = finance.outstandingEventReceivable
-  const paidExpenses = getLuxorPaidFinanceExpenses(businessExpenses).reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
+  const paidExpenses = getLuxorPaidFinanceExpenses(businessExpenses).reduce((sum, expense) => sum + (getLuxorPaidExpenseValue(expense) ?? 0), 0)
   const bookedLeadIds = new Set(confirmedBookings.map((booking) => booking.inquiry_id).filter((id): id is string => Boolean(id)))
   const conversionRate = businessInquiries.length ? (bookedLeadIds.size / businessInquiries.length) * 100 : 0
   const averageBookingValue = confirmedBookings.length ? confirmedBookings.reduce((sum, booking) => sum + Number(booking.contract_total || 0), 0) / confirmedBookings.length : 0

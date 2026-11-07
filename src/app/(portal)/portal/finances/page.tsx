@@ -79,6 +79,10 @@ type LuxorBookingExpense = {
   status: string
   notes: string | null
   metadata: Record<string, unknown>
+  paid_amount?: number
+  remaining_balance?: number
+  payment_status?: 'expected' | 'due_today' | 'overdue' | 'partially_paid' | 'paid' | 'cancelled'
+  payments?: Array<{ id: string; transaction_type: 'payment' | 'refund' | 'reversal'; amount: number }>
 }
 
   // Add Expense form state
@@ -587,6 +591,7 @@ type LuxorBookingExpense = {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Operations expense ledger</h3>
               <div className="flex flex-wrap items-center gap-3">
+                <Link href="/portal/finances/expenses" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Open Expense Management</Link>
                 {cancelledExpenseCount > 0 && <button type="button" onClick={() => setShowCancelledExpenses((show) => !show)} className="text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">{showCancelledExpenses ? 'Hide' : 'Show'} removed ({cancelledExpenseCount})</button>}
                 <button
                   type="button"
@@ -603,6 +608,7 @@ type LuxorBookingExpense = {
             {isAddingExpense && (
               <form onSubmit={handleAddExpense} className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4 max-w-md">
                 <h4 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Log Operational Expense</h4>
+                <p className="text-xs text-[color:var(--portal-muted)]">Payments must be recorded separately from the expense. Use Expense Management for payment history, receipts, and recurring costs.</p>
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Booking (optional)</label>
@@ -643,7 +649,6 @@ type LuxorBookingExpense = {
                       options={[
                         { value: 'planned', label: 'Planned - not incurred' },
                         { value: 'incurred', label: 'Incurred - unpaid' },
-                        { value: 'paid', label: 'Paid' },
                       ]}
                       aria-label="Expense status"
                     />
@@ -690,7 +695,7 @@ type LuxorBookingExpense = {
                       <th className="px-6 py-5">Description</th>
                       <th className="px-6 py-5">Category</th>
                       <th className="px-6 py-5">Status</th>
-                      <th className="px-8 py-5 text-right">Debit (USD)</th>
+                      <th className="px-8 py-5 text-right">Expense (USD)</th>
                       <th className="px-6 py-5 text-right">Actions</th>
                     </tr>
                   </PortalStickyThead>
@@ -716,12 +721,15 @@ type LuxorBookingExpense = {
                             {exp.description || 'General Operational Expense'}
                           </td>
                           <td className="px-6 py-5 font-bold uppercase tracking-wider text-[10px] text-[#a37d2c] dark:text-[#caa24c]">{exp.category}</td>
-                          <td className="px-6 py-5 text-xs capitalize text-[color:var(--portal-muted)]">{exp.status === 'cancelled' ? 'Removed' : exp.status === 'incurred' ? 'Incurred - unpaid' : exp.status === 'paid' ? 'Paid' : 'Planned'}</td>
+                          <td className="px-6 py-5 text-xs capitalize text-[color:var(--portal-muted)]">{exp.payment_status === 'overdue' ? 'Overdue' : exp.payment_status === 'due_today' ? 'Due today' : exp.payment_status === 'partially_paid' ? 'Partially paid' : exp.payment_status === 'paid' ? 'Paid' : exp.payment_status === 'cancelled' || exp.status === 'cancelled' ? 'Canceled' : exp.status === 'incurred' ? 'Incurred - unpaid' : 'Expected'}</td>
                           <td className="px-8 py-5 text-right tabular-nums font-bold text-rose-600 dark:text-rose-400">
                             {exp.status === 'cancelled' ? '' : '-'}${Number(exp.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
                           <td className="px-6 py-5 text-right">
-                            {exp.status !== 'cancelled' && <button type="button" onClick={() => void handleRemoveExpense(exp)} disabled={expenseActionBusyId === exp.id} aria-label={`Remove ${exp.description || 'expense'}`} className="text-xs font-semibold text-[color:var(--portal-muted)] underline decoration-[color:var(--portal-border)] underline-offset-4 hover:text-rose-700 dark:hover:text-rose-300 disabled:opacity-50">{expenseActionBusyId === exp.id ? 'Removing...' : 'Remove'}</button>}
+                            <div className="flex items-center justify-end gap-3">
+                              {exp.status !== 'cancelled' && <Link href={`/portal/finances/expenses/${encodeURIComponent(exp.id)}`} className="text-xs font-semibold text-[#9a712e] underline decoration-[color:var(--portal-border)] underline-offset-4 dark:text-[#e6c77f]">Details</Link>}
+                              {exp.status !== 'cancelled' && !(Number(exp.paid_amount || 0) > 0 || exp.payments?.length) && <button type="button" onClick={() => void handleRemoveExpense(exp)} disabled={expenseActionBusyId === exp.id} aria-label={`Cancel ${exp.description || 'expense'}`} className="text-xs font-semibold text-[color:var(--portal-muted)] underline decoration-[color:var(--portal-border)] underline-offset-4 hover:text-rose-700 dark:hover:text-rose-300 disabled:opacity-50">{expenseActionBusyId === exp.id ? 'Canceling...' : 'Cancel'}</button>}
+                            </div>
                           </td>
                         </tr>
                       ))

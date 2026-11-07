@@ -77,7 +77,10 @@ function Amount({ value, fallback = 0 }: { value: number | null | undefined; fal
 }
 
 function CategoryChart({ values, label }: { values: Array<{ category: string; amount: number }>; label: string }) {
-  const data = getLuxorCategoryShares(values)
+  const positiveValues = values.filter((row) => row.amount > 0)
+  const refunds = values.filter((row) => row.amount < 0)
+  const data = getLuxorCategoryShares(positiveValues)
+  const netTotal = values.reduce((sum, row) => sum + row.amount, 0)
   const colors = ['#a87827', '#c49650', '#dbb47b', '#e8cba2', '#b9a380', '#83725e', '#cfb18b', '#e5d7c2', '#8d7f6c', '#d0c0a8']
   const stops = data.rows
     .map((row, index) => {
@@ -85,7 +88,7 @@ function CategoryChart({ values, label }: { values: Array<{ category: string; am
       return `${colors[index % colors.length]} ${start}% ${start + row.percent}%`
     })
     .join(', ')
-  if (!data.total) return <p className={`${muted} mt-3`}>No {label.toLowerCase()} recorded for this period ($0.00).</p>
+  if (!data.total) return <p className={`${muted} mt-3`}>{refunds.length ? `Refunds exceed ${label.toLowerCase()} paid in this period.` : `No ${label.toLowerCase()} recorded for this period ($0.00).`}</p>
   return (
     <div className="mt-4 flex flex-wrap items-center gap-5">
       <div
@@ -94,7 +97,7 @@ function CategoryChart({ values, label }: { values: Array<{ category: string; am
         style={{ background: `conic-gradient(${stops})` }}
       >
         <div className="grid h-20 w-20 place-items-center rounded-full bg-[color:var(--portal-bg)] text-center text-xs font-semibold text-[color:var(--portal-text)]">
-          {currency(data.total)}
+          {currency(netTotal)}
         </div>
       </div>
       <ul className="min-w-0 flex-1 space-y-2">
@@ -113,6 +116,7 @@ function CategoryChart({ values, label }: { values: Array<{ category: string; am
             </span>
           </li>
         ))}
+        {refunds.length ? <li className="flex items-start justify-between gap-3 border-t border-[color:var(--portal-border)] pt-2 text-xs text-[color:var(--portal-muted)]"><span>Refunds and reversals</span><span className="shrink-0 tabular-nums">{currency(refunds.reduce((sum, row) => sum + row.amount, 0))}</span></li> : null}
       </ul>
     </div>
   )
@@ -831,7 +835,7 @@ export default function FinancialOverview({
           ) : expenseMonthCategories.length > 0 ? (
             <>
               <CategoryChart label="expenses" values={expenseMonthCategories} />
-              <p className="mt-3 text-xs text-[color:var(--portal-muted)]">Showing paid expenses recorded in {monthName}.</p>
+              <p className="mt-3 text-xs text-[color:var(--portal-muted)]">Showing expense payments and refunds recorded in {monthName}.</p>
             </>
           ) : expenses?.available && expenses.categories.length > 0 ? (
             <>

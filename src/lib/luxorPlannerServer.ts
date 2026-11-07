@@ -17,10 +17,12 @@ export class PlannerMutationOutcomeUnknownError extends Error {
 }
 
 function plannerBookingView(booking: LuxorBookingWithPayments) {
-  const contractTotal = Number(booking.contract_total || 0)
+  const contractTotal = booking.contract_total === null || booking.contract_total === undefined
+    ? null
+    : Number(booking.contract_total)
   const paidTotal = Number(booking.paid_total || 0)
   const balanceDue = Number(booking.balance_due || 0)
-  const paymentStatus = contractTotal <= 0 ? 'Payment status unavailable' : balanceDue <= 0 ? 'Paid' : paidTotal > 0 ? 'Partially paid' : 'Payment due'
+  const paymentStatus = contractTotal === null || !Number.isFinite(contractTotal) ? 'Payment status unavailable' : contractTotal <= 0 ? 'Payment status unavailable' : balanceDue <= 0 ? 'Paid' : paidTotal > 0 ? 'Partially paid' : 'Payment due'
   return {
     id: booking.id,
     inquiry_id: booking.inquiry_id,
@@ -33,6 +35,8 @@ function plannerBookingView(booking: LuxorBookingWithPayments) {
     guest_count: booking.guest_count,
     package_name: booking.package_name,
     status: booking.status,
+    contract_total: contractTotal,
+    paid_total: paidTotal,
     booked_at: booking.booked_at,
     created_at: booking.created_at,
     final_payment_due_date: booking.final_payment_due_date,

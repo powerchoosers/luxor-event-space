@@ -7,6 +7,7 @@ import { processPendingLuxorResendEvents } from '@/lib/luxorResendWebhookServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { processPendingLuxorBillIntakes } from '@/lib/luxorBillIntakeServer'
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
+import { generateLuxorExpenseOccurrences } from '@/lib/luxorExpensesServer'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -17,6 +18,18 @@ const SEND_WINDOW_END_HOUR = 20
 
 function isHourlyConnectionCheck(date: Date) {
   return date.getUTCMinutes() === 0
+}
+
+function isDailyExpenseGenerationWindow(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: EMAIL_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value)
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value)
+  return hour === 1 && Number.isFinite(minute) && minute >= 0 && minute < 10
 }
 
 export async function POST(request: NextRequest) {
@@ -51,6 +64,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, authenticated: true, processed: 0 })
   }
 
+  const now = new Date()
+  let expenseGeneration: { status: 'outside_window' | 'processed' | 'failed'; inserted?: number } = { status: 'outside_window' }
+  if (isDailyExpenseGenerationWindow(now)) {
+    try {
+      const generated = await generateLuxorExpenseOccurrences(now)
+      expenseGeneration = { status: 'processed', inserted: generated.inserted }
+    } catch {
+      // Occurrence inserts are unique by recurring template and billing period,
+      // so a later authenticated invocation in this Chicago-time window can
+      // retry safely without duplicating obligations.
+      console.warn('Daily expense generation failed; a later authenticated invocation can retry safely.')
+      expenseGeneration = { status: 'failed' }
+    }
+  }
+
   // Independent read-only Zoho sync; health=1 above still performs no queue processing.
   // Durable event metadata tracks retries and leases if this invocation is interrupted.
   after(async () => {
@@ -62,7 +90,6 @@ export async function POST(request: NextRequest) {
     catch { console.warn('[email-archive] background sync could not run; pending records retained') }
   })
 
-  const now = new Date()
   const centralHour = Number(
     new Intl.DateTimeFormat('en-US', {
       timeZone: EMAIL_TIME_ZONE,
@@ -145,7 +172,7 @@ export async function POST(request: NextRequest) {
         metadata: { provider, mailConnection: 'healthy', ...(outsideSendWindow ? { reason: 'outside_customer_send_window' } : {}) },
       })
     }
-    return NextResponse.json({ success: true, processed: results.length, results,
+    return NextResponse.json({ success: true, processed: results.length, results, expenseGeneration,
       ...(reconciliationError ? { reconciliationWarning: 'Signed-booking follow-up cleanup failed. Check worker health and the database migration.' } : {}),
       ...(outsideSendWindow && !testResults.length && !followUpResults.length ? { skipped: 'outside_customer_send_window', sendWindow: '8:00 AM-8:00 PM America/Chicago' } : {}) })
   } catch (error) {

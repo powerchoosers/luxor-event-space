@@ -75,7 +75,18 @@ export async function GET(request: NextRequest) {
       supabaseRest<LuxorMaintenanceTask[]>('luxor_maintenance_tasks?select=*&order=due_date.asc,created_at.desc').catch(() => []),
     ])
 
-    return NextResponse.json({ bills, billIntakes, inventory, vendors, utilities, cleaning, tasks })
+    const billIds = bills.map((bill) => bill.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+    const linkedExpenses = billIds.length
+      ? await supabaseRestStrict<Array<{ id: string; source_bill_id: string | null }>>(
+        `luxor_booking_expenses?select=id,source_bill_id&source_bill_id=in.(${billIds.join(',')})`,
+      )
+      : []
+    const linkedExpenseByBill = new Map(linkedExpenses.flatMap((expense) => expense.source_bill_id ? [[expense.source_bill_id, expense.id] as const] : []))
+
+    return NextResponse.json({
+      bills: bills.map((bill) => ({ ...bill, linked_expense_id: linkedExpenseByBill.get(bill.id) || null })),
+      billIntakes, inventory, vendors, utilities, cleaning, tasks,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch operations data.'
     return NextResponse.json({ error: message }, { status: 500 })

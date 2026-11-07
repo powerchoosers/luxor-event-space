@@ -668,6 +668,7 @@ export type LuxorBill = {
   frequency: string
   provider: string
   amount: number
+  linked_expense_id?: string | null
   vendor_id?: string | null
   vendor_link_method?: 'owner' | 'matched' | null
   bill_category?: 'Rent' | 'Maintenance' | 'Utilities' | 'Supplies' | 'Marketing' | null
@@ -857,6 +858,17 @@ export type LuxorPaymentRefundView = Pick<LuxorPaymentRefund,
 >
 
 export type LuxorBookingExpenseStatus = 'planned' | 'incurred' | 'paid' | 'cancelled'
+export type LuxorExpensePayment = {
+  id: string
+  expense_id: string
+  amount: number
+  transaction_type: 'payment' | 'refund' | 'reversal'
+  payment_date: string
+  payment_method: string
+  reference_number: string | null
+  notes: string | null
+  created_at: string
+}
 
 export type LuxorBookingExpense = {
   id: string
@@ -871,6 +883,19 @@ export type LuxorBookingExpense = {
   status: LuxorBookingExpenseStatus
   notes: string | null
   metadata: Record<string, unknown>
+  expense_type?: 'business' | 'event'
+  due_date?: string | null
+  payment_method?: string | null
+  reference_number?: string | null
+  source_bill_id?: string | null
+  tax_amount?: number | null
+  recurring_template_id?: string | null
+  billing_period_start?: string | null
+  billing_period_end?: string | null
+  paid_amount?: number
+  remaining_balance?: number
+  payment_status?: 'expected' | 'due_today' | 'overdue' | 'partially_paid' | 'paid' | 'cancelled'
+  payments?: LuxorExpensePayment[]
 }
 
 export type LuxorDepositType = 'solidify_date' | 'non_refundable_booking'

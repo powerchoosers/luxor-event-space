@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOperationsSession } from '@/lib/luxorOperationsAccess'
-import { supabaseRest } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import type { LuxorBill } from '@/lib/luxorInquiryTypes'
 
 const ALLOWED_FIELDS = new Set(['service', 'frequency', 'provider', 'amount', 'due_date', 'invoice_number', 'review_notes'])
@@ -36,6 +36,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const [current] = await supabaseRest<LuxorBill[]>(`luxor_bills?id=eq.${id}&select=*&limit=1`)
     if (!current) return NextResponse.json({ error: 'Bill not found.' }, { status: 404 })
     if (current.updated_at !== body.expectedUpdatedAt || current.status === 'paid') return NextResponse.json({ error: 'Bill changed or is already paid. Reload before continuing.' }, { status: 409 })
+    if (body.action === 'mark_paid') {
+      const [linkedExpense] = await supabaseRestStrict<Array<{ id: string }>>(
+        `luxor_booking_expenses?select=id&source_bill_id=eq.${encodeURIComponent(current.id)}&limit=1`,
+      )
+      if (linkedExpense) {
+        return NextResponse.json({
+          error: 'This bill is linked to an expense. Record its payment in Expense Management so balances and cash reporting stay in sync.',
+          expense_id: linkedExpense.id,
+        }, { status: 409 })
+      }
+    }
     if (body.action === 'approve' || body.action === 'mark_paid') {
       if (current.source_type !== 'manual' && !current.vendor_id) return NextResponse.json({ error: 'Link a company before approving or recording payment.' }, { status: 400 })
       if (!current.bill_category) return NextResponse.json({ error: 'Confirm a category before approving or recording payment.' }, { status: 400 })

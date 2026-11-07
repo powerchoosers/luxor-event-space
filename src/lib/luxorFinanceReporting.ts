@@ -7,12 +7,21 @@ export type LuxorFinanceExpense = {
   booking_id: string | null
   metadata?: Record<string, unknown> | null
   status?: string | null
+  amount?: number | string | null
+  paid_amount?: number | string | null
+  payments?: Array<{
+    id?: string | null
+    amount: number | string
+    transaction_type: 'payment' | 'refund' | 'reversal' | string
+    payment_date?: string | null
+    paid_at?: string | null
+  }> | null
 }
 
 export type LuxorInvoiceFinancialSummary = {
   acceptedInvoices: LuxorInvoice[]
   acceptedInvoiceRows: Array<{ invoice: LuxorInvoice; eventObligation: number; received: number; outstanding: number; overdue: number }>
-  eventPaymentRows: Array<{ id: string; category: string | null; amount: number; paid_at: string | null; received_date: string | null }>
+  eventPaymentRows: Array<{ id: string; booking_id: string | null; category: string | null; amount: number; paid_at: string | null; received_date: string | null }>
   unallocatedPaymentRows: Array<{ amount: number; paid_at: string | null; reason: string }>
   knownPaidCashTotal: number
   refundRecordCount: number
@@ -263,7 +272,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
       : savedAllocations.length && Math.abs(money(savedAllocationTotal) - eventPortion) < 0.005 ? 'Installment Payments'
       : paymentKind === 'additional_services' ? 'Additional Services'
       : paymentKind === 'other_revenue' ? 'Other Revenue' : null
-    eventPaymentRows.push({ id: payment.id, category, amount: money(eventPortion), paid_at: payment.paid_at, received_date: payment.received_date || null })
+    eventPaymentRows.push({ id: payment.id, booking_id: master.booking_id || payment.booking_id, category, amount: money(eventPortion), paid_at: payment.paid_at, received_date: payment.received_date || null })
     if (depositPortion) securityDepositsHeld = money(securityDepositsHeld + depositPortion)
     eventReceiptsByMaster.set(master.id, money((eventReceiptsByMaster.get(master.id) || 0) + eventPortion))
   }
@@ -309,7 +318,7 @@ export function getLuxorInvoiceFinancialSummary(invoices: LuxorInvoice[], paymen
     if (refundKind === 'security_deposit') securityDepositsHeld = money(Math.max(0, securityDepositsHeld - amount))
     else if (refundKind === 'event_revenue') {
       eventPaymentsReceived = money(eventPaymentsReceived - amount)
-      eventPaymentRows.push({ id: refund.id, category: null, amount: -money(amount), paid_at: refund.completed_at, received_date: null })
+      eventPaymentRows.push({ id: refund.id, booking_id: refund.booking_id || (refund.invoice_id ? byId.get(refund.invoice_id)?.booking_id || null : null), category: null, amount: -money(amount), paid_at: refund.completed_at, received_date: null })
     } else refundReconciliationRequired = true
   }
 
@@ -367,24 +376,91 @@ export function getLuxorBusinessInquiries(inquiries: LuxorInquiry[], testInquiry
 
 /** Only paid costs count against cash receipts; incurred, planned, and cancelled rows are excluded. */
 export function getLuxorPaidFinanceExpenses<TExpense extends LuxorFinanceExpense>(expenses: TExpense[]) {
-  return expenses.filter((expense) => expense.status === 'paid')
+  return expenses.filter((expense) => expense.status === 'paid'
+    || Number(expense.paid_amount || 0) !== 0
+    || Boolean(expense.payments?.length))
+}
+
+/** Net recorded cash paid for an expense, including explicit refunds and reversals. */
+export function getLuxorPaidExpenseValue(expense: LuxorFinanceExpense) {
+  const suppliedPaidAmount = expense.paid_amount
+  if (suppliedPaidAmount !== null && suppliedPaidAmount !== undefined) {
+    const value = Number(suppliedPaidAmount)
+    return Number.isFinite(value) ? money(value) : null
+  }
+
+  if (expense.payments?.length) {
+    const legacyValue = Number(expense.metadata?.legacy_paid_amount || 0)
+    let total = Number.isFinite(legacyValue) && legacyValue >= 0 ? legacyValue : 0
+    for (const payment of expense.payments) {
+      const amount = Number(payment.amount)
+      if (!Number.isFinite(amount) || amount <= 0) return null
+      if (payment.transaction_type === 'payment') total += amount
+      else if (payment.transaction_type === 'refund' || payment.transaction_type === 'reversal') total -= amount
+      else return null
+    }
+    return money(total)
+  }
+
+  if (expense.status !== 'paid') return 0
+  const amount = Number(expense.amount)
+  return Number.isFinite(amount) && amount >= 0 ? money(amount) : null
+}
+
+export function getLuxorExpenseCashActivityInPeriod(expense: LuxorFinanceExpense, start: string, end: string) {
+  const paymentHistory = Array.isArray(expense.payments) ? expense.payments : []
+  const rawLegacyValue = expense.metadata?.legacy_paid_amount
+    ?? (paymentHistory.length === 0 && expense.status === 'paid' ? expense.amount : 0)
+  const legacyValue = Number(rawLegacyValue)
+  const legacyAmount = Number.isFinite(legacyValue) && legacyValue >= 0 ? legacyValue : 0
+  const legacyPaidDate = typeof expense.metadata?.legacy_paid_at === 'string'
+    ? getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: expense.metadata.legacy_paid_at })
+    : ''
+  const includeLegacy = start === '0001-01-01' || Boolean(legacyPaidDate && legacyPaidDate >= start && legacyPaidDate <= end)
+  let paid = includeLegacy ? legacyAmount : 0
+  let refunds = 0
+  for (const payment of paymentHistory) {
+    const amount = Number(payment.amount)
+    if (!Number.isFinite(amount) || amount <= 0) continue
+    const paymentDate = getLuxorPaymentCalendarDateKey({
+      received_date: payment.payment_date || null,
+      paid_at: payment.paid_at || null,
+    })
+    if (!paymentDate || paymentDate < start || paymentDate > end) continue
+    if (payment.transaction_type === 'payment') paid += amount
+    else if (payment.transaction_type === 'refund' || payment.transaction_type === 'reversal') refunds += amount
+  }
+  paid = money(paid)
+  refunds = money(refunds)
+  return { paid, refunds, net: money(paid - refunds) }
 }
 
 /**
- * A paid status establishes an all-time ledger total, but incurred_on is not
- * evidence of when money was paid. Do not use this result for a date range.
+ * Count explicit expense payment transactions in their saved payment period.
+ * Legacy paid expenses without payment history remain in the all-time total;
+ * they enter a month only if their metadata contains an explicit paid date.
  * Call with the already test-filtered business expense rows.
  */
 export function getLuxorPaidExpenseBreakdown(expenses: Array<LuxorFinanceExpense & { id: string; amount: number; category: string | null; incurred_on?: string | null; updated_at?: string | null; created_at?: string | null }>) {
-  const paid = getLuxorPaidFinanceExpenses(expenses)
   const ids = new Set<string>()
+  const paymentIds = new Set<string>()
   const categories = new Map<string, number>()
   const byMonth: Record<string, number> = {}
   const monthCategoryMap = new Map<string, Map<string, number>>()
-  for (const expense of paid) {
+  const addMonthAmount = (month: string, category: string, amount: number) => {
+    if (!month) return
+    byMonth[month] = money((byMonth[month] || 0) + amount)
+    const catMap = monthCategoryMap.get(month) || new Map<string, number>()
+    catMap.set(category, money((catMap.get(category) || 0) + amount))
+    monthCategoryMap.set(month, catMap)
+  }
+
+  for (const expense of expenses) {
+    const paymentHistory = Array.isArray(expense.payments) ? expense.payments : []
+    const legacyPaidValue = Number(expense.metadata?.legacy_paid_amount ?? (paymentHistory.length === 0 && expense.status === 'paid' ? expense.amount : 0))
+    if (paymentHistory.length === 0 && expense.status !== 'paid') continue
     const id = expense.id?.trim()
-    const amount = Number(expense.amount)
-    if (!id || ids.has(id) || expense.amount == null || String(expense.amount).trim() === '' || !Number.isFinite(amount) || amount < 0) {
+    if (!id || ids.has(id) || !Number.isFinite(legacyPaidValue) || legacyPaidValue < 0) {
       return {
         available: false as const,
         reason: 'Paid expense records need reconciliation.',
@@ -396,17 +472,48 @@ export function getLuxorPaidExpenseBreakdown(expenses: Array<LuxorFinanceExpense
     }
     ids.add(id)
     const category = expense.category?.trim() || 'Uncategorized'
-    categories.set(category, money((categories.get(category) || 0) + amount))
-    const dateKey = getLuxorPaymentCalendarDateKey({
-      received_date: expense.incurred_on || null,
-      paid_at: expense.updated_at || expense.created_at || null,
-    })
-    const month = dateKey.slice(0, 7)
-    if (month) {
-      byMonth[month] = money((byMonth[month] || 0) + amount)
-      const catMap = monthCategoryMap.get(month) || new Map<string, number>()
-      catMap.set(category, money((catMap.get(category) || 0) + amount))
-      monthCategoryMap.set(month, catMap)
+
+    if (legacyPaidValue > 0) {
+      categories.set(category, money((categories.get(category) || 0) + legacyPaidValue))
+      const legacyPaidDate = typeof expense.metadata?.legacy_paid_at === 'string' ? expense.metadata.legacy_paid_at : null
+      const legacyMonth = getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: legacyPaidDate }).slice(0, 7)
+      addMonthAmount(legacyMonth, category, legacyPaidValue)
+    }
+
+    for (const payment of paymentHistory) {
+      const paymentId = payment.id?.trim()
+      const amount = Number(payment.amount)
+      const type = payment.transaction_type
+      const isRefund = type === 'refund' || type === 'reversal'
+      if (!paymentId || paymentIds.has(paymentId) || !Number.isFinite(amount) || amount <= 0
+        || (type !== 'payment' && !isRefund)) {
+        return {
+          available: false as const,
+          reason: 'Expense payment records need reconciliation.',
+          total: null,
+          categories: [],
+          byMonth: {} as Record<string, number>,
+          categoriesByMonth: {} as Record<string, Array<{ category: string; amount: number }>>,
+        }
+      }
+      const dateKey = getLuxorPaymentCalendarDateKey({
+        received_date: payment.payment_date || null,
+        paid_at: payment.paid_at || null,
+      })
+      if (!dateKey) {
+        return {
+          available: false as const,
+          reason: 'Expense payment dates need reconciliation.',
+          total: null,
+          categories: [],
+          byMonth: {} as Record<string, number>,
+          categoriesByMonth: {} as Record<string, Array<{ category: string; amount: number }>>,
+        }
+      }
+      paymentIds.add(paymentId)
+      const signedAmount = isRefund ? -amount : amount
+      categories.set(category, money((categories.get(category) || 0) + signedAmount))
+      addMonthAmount(dateKey.slice(0, 7), category, signedAmount)
     }
   }
   const rows = [...categories].map(([category, amount]) => ({ category, amount }))
