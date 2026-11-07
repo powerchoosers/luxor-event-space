@@ -125,7 +125,7 @@ export function PortalSmsConsentBadge({
     return (
       <span
         title="Client sent STOP or opted out of SMS. Manual and automated texts are blocked."
-        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-500/20 bg-red-500/10 ${
+        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-red-500/10 ${
           compact ? 'px-1.5 py-0.5 text-[10px] font-semibold' : 'px-2 py-0.5 text-[10px] font-black uppercase tracking-wider'
         } text-red-600 dark:text-red-400 ${className}`}
       >
@@ -151,7 +151,7 @@ export function PortalSmsConsentBadge({
       <span
         title="Client opted in to Luxor SMS updates."
         aria-label={shortOptedInOnMobile ? 'SMS opted in' : undefined}
-        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-emerald-500/20 bg-emerald-500/10 ${
+        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-emerald-500/10 ${
           compact ? 'px-1.5 py-0.5 text-[10px] font-semibold' : 'px-2 py-0.5 text-[10px] font-black uppercase tracking-wider'
         } text-emerald-700 dark:text-emerald-400 ${shortOptedInOnMobile ? 'max-sm:!gap-0 max-sm:!px-0.5 max-sm:[&>svg]:hidden' : ''} ${className}`}
       >

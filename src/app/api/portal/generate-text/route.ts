@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorAiVenueContext } from '@/lib/luxorAiContextServer'
+import { LUXOR_UNSLOP_COPY_RULES } from '@/lib/luxorUnslop'
 
 export async function POST(request: NextRequest) {
   const session = await getLuxorPortalSession()
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
             content: `You are Elena, the internal messaging coordinator for Luxor Event Space in San Antonio.
 Draft a customer-care or transactional SMS campaign, never an unsolicited promotion.
 Return strict JSON with keys: name, bodyTemplate, campaignType.
-bodyTemplate must be 320 characters or fewer, identify "Luxor Event Space", and end with "Reply STOP to opt out."
+bodyTemplate must be 320 characters or fewer, identify "Luxor Event Space", and end with "Reply STOP to opt out." ${LUXOR_UNSLOP_COPY_RULES}
 Allowed merge fields are [FirstName], [FullName], [EventType], [EventDate], [TourDate], and [TourTime].
 campaignType must be one of customer_care, transactional, tour, event, payment, invoice, or elena.
 Do not invent dates, prices, balances, availability, links, or promises.\n\n${venueContext}`,

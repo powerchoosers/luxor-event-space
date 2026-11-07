@@ -4,6 +4,7 @@ import type { LuxorBooking, LuxorEmailJobKind, LuxorInquiry, LuxorInvoice, Luxor
 import { formatLuxorOfferExpiry, hasLuxorOffer, luxorOfferSnapshot } from './luxorOffer'
 import { renderLuxorSystemEmail } from './luxorEmailDesignSystem'
 import { getLuxorAiVenueContext } from './luxorAiContextServer'
+import { LUXOR_UNSLOP_COPY_RULES } from './luxorUnslop'
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.luxoratlaspalmas.com').replace(/\/$/, '')
 
@@ -76,7 +77,7 @@ export async function buildAiOfferReminderEmail(input: {
           model: 'google/gemini-2.5-flash',
           temperature: 0.3,
           messages: [
-            { role: 'system', content: `Write exactly two warm, concise sentences for a Luxor Event Space final-proposal reminder. Encourage the client to review and accept the proposal before the supplied deadline. State that Luxor sends the Event Agreement next and the secure payment link only after signature. Use only the supplied facts. Never invent availability, urgency, pricing, amenities, promises, or terms. Do not repeat dollar amounts or percentages because the approved detail card supplies them. The saved proposal's agreed terms take precedence over current general rates. Return only the two sentences, maximum 55 words.\n\n${venueContext}` },
+            { role: 'system', content: `Write exactly two warm, concise sentences for a Luxor Event Space final-proposal reminder. Encourage the client to review and accept the proposal before the supplied deadline. State that Luxor sends the Event Agreement next and the secure payment link only after signature. Use only the supplied facts. Never invent availability, urgency, pricing, amenities, promises, or terms. Do not repeat dollar amounts or percentages because the approved detail card supplies them. The saved proposal's agreed terms take precedence over current general rates. ${LUXOR_UNSLOP_COPY_RULES} Return only the two sentences, maximum 55 words.\n\n${venueContext}` },
             { role: 'user', content: JSON.stringify({
               clientName: input.inquiry.full_name,
               eventType: input.inquiry.event_type,
@@ -231,7 +232,7 @@ export async function generateAiInvoiceReminderCopy(input: {
           {
             role: 'system',
             content:
-              `Write 2 warm, elegant, concise sentences for a Luxor Event Space payment reminder email. Tailor the text using client details, event type, guest count, the configured payment due date, deposit mode, and recent notes. If a due date is provided, state that exact date; never imply the payment is due soon or overdue unless the date supports that. The supplied invoice and balance govern this client's obligation, even if current general rates differ. Do not invent facts, amenities, or promises. Return only the two sentences (maximum 60 words total).\n\n${venueContext}`,
+              `Write 2 warm, concise sentences for a Luxor Event Space payment reminder email. Tailor the text using client details, event type, guest count, the configured payment due date, deposit mode, and recent notes. If a due date is provided, state that exact date; never imply the payment is due soon or overdue unless the date supports that. The supplied invoice and balance govern this client's obligation, even if current general rates differ. Do not invent facts, amenities, or promises. ${LUXOR_UNSLOP_COPY_RULES} Return only the two sentences (maximum 60 words total).\n\n${venueContext}`,
           },
           {
             role: 'user',

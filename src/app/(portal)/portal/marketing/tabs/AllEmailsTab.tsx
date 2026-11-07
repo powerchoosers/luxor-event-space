@@ -376,6 +376,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
   const [animatingDraft, setAnimatingDraft] = useState(false)
   const [animatingDraftText, setAnimatingDraftText] = useState('')
   const [replyDraftLoadedKey, setReplyDraftLoadedKey] = useState<string | null>(null)
+  const [replyButtonHovered, setReplyButtonHovered] = useState(false)
   const [mobileReplyBounds, setMobileReplyBounds] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
   const [replyViewport, setReplyViewport] = useState({ top: 0, left: 0, width: 0, height: 0 })
   const replyDraftStorageKey = selectedId
@@ -1586,7 +1587,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           {!replyPromptOpen ? (
             <button
               type="button"
-              onClick={() => setReplyPromptOpen(true)}
+              onClick={() => { setReplyPromptOpen(true); void draftWithElena() }}
               aria-expanded={false}
               className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[#a8792f] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 dark:text-[#f1d27a]"
             >
@@ -1649,7 +1650,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             type="button"
             onClick={() => void draftWithElena()}
             disabled={draftingReply || polishingReply || loadingThread}
-            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-medium text-[#a8792f] hover:bg-[color:var(--portal-soft)] disabled:opacity-50 dark:text-[#f1d27a]"
+            className={`${mobile ? 'inline-flex' : 'hidden'} min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-medium text-[#a8792f] hover:bg-[color:var(--portal-soft)] disabled:opacity-50 dark:text-[#f1d27a]`}
           >
             {draftingReply ? <Loader2 size={13} className="animate-spin" /> : <FilePenLine size={13} />}
             Draft with Elena
@@ -1701,15 +1702,68 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
             <button type="button" onClick={() => setReplyPreviewOpen((open) => !open)} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
               <Eye size={14} /> {replyPreviewOpen ? 'Back to editor' : 'Preview'}
             </button>
-            <button
-              type="button"
-              onClick={() => void sendInlineReply()}
-              disabled={sendingReply || !replyText.trim()}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#b98a3d] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {sendingReply ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              {sendingReply ? 'Sending' : 'Send reply'}
-            </button>
+            {mobile ? (
+              <button
+                type="button"
+                onClick={() => void sendInlineReply()}
+                disabled={sendingReply || !replyText.trim()}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#b98a3d] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {sendingReply ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {sendingReply ? 'Sending' : 'Send reply'}
+              </button>
+            ) : (
+              <motion.button
+                onMouseEnter={() => setReplyButtonHovered(true)}
+                onMouseLeave={() => setReplyButtonHovered(false)}
+                whileTap={{ scale: 0.96 }}
+                animate={{
+                  width: replyText.trim() ? 112 : 96,
+                  backgroundColor: replyText.trim()
+                    ? (replyButtonHovered ? '#b98a3d' : '#caa24c')
+                    : (replyButtonHovered ? '#eae0d0' : '#f4efe7'),
+                  color: replyText.trim() ? '#ffffff' : (replyButtonHovered ? '#6e4c10' : '#8c6218'),
+                  boxShadow: replyButtonHovered
+                    ? (replyText.trim()
+                        ? '0 4px 14px -2px rgba(202, 162, 76, 0.45)'
+                        : '0 2px 10px -1px rgba(140, 98, 24, 0.16), inset 0 0 0 1px rgba(202, 162, 76, 0.38)')
+                    : '0 1px 2px rgba(0, 0, 0, 0.04)',
+                  scale: replyButtonHovered ? 1.025 : 1,
+                }}
+                transition={{
+                  width: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                  backgroundColor: { duration: 0.18 },
+                  color: { duration: 0.18 },
+                  boxShadow: { duration: 0.18 },
+                  scale: { duration: 0.18 },
+                }}
+                style={{ height: 40 }}
+                type="button"
+                onClick={() => { if (replyText.trim()) void sendInlineReply(); else void draftWithElena() }}
+                disabled={replyText.trim() ? sendingReply : (draftingReply || polishingReply || loadingThread || sendingReply)}
+                aria-label={replyText.trim() ? 'Send reply' : 'Draft reply with Elena'}
+                className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border-0 text-xs font-semibold shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <AnimatePresence initial={false}>
+                  {replyText.trim() ? (
+                    <motion.span key="send-mode" initial={{ opacity: 0, filter: 'blur(4px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, filter: 'blur(4px)' }} transition={{ duration: 0.18, ease: 'easeOut' }} className="absolute inset-0 flex items-center justify-center gap-1.5">
+                      {sendingReply ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                      <span>{sendingReply ? 'Sending' : 'Send reply'}</span>
+                    </motion.span>
+                  ) : (
+                    <motion.span key="elena-mode" initial={{ opacity: 0, filter: 'blur(4px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, filter: 'blur(4px)' }} transition={{ duration: 0.18, ease: 'easeOut' }} className="absolute inset-0 flex items-center justify-center gap-1.5">
+                      {draftingReply ? <Loader2 size={13} className="animate-spin text-[#caa24c]" /> : (
+                        <span className="relative flex h-5 w-5 shrink-0 overflow-hidden rounded-full ring-1 ring-[#caa24c]/40">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="/luxor-concierge.png" alt="" className="h-full w-full object-cover" />
+                        </span>
+                      )}
+                      <span>{draftingReply ? '…' : 'Elena'}</span>
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.button>
+            )}
           </div>
         </div>
       </div>

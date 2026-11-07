@@ -37,6 +37,8 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
     }
     setTextareaHeight(target)
   }, [body])
+  const [composerFocused, setComposerFocused] = useState(false)
+  const [buttonHovered, setButtonHovered] = useState(false)
   const cardHeight = textareaHeight + 46
 
   useEffect(() => {
@@ -126,7 +128,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
           instruction: '',
           context: JSON.stringify({
             name: contactName,
-            messages: messages.slice(0, 20).reverse().map(({ direction, body: msgBody }) => ({ direction, body: msgBody })),
+            messages: messages.toSorted((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-20).map(({ direction, body: msgBody, created_at }) => ({ direction, body: msgBody, date: created_at })),
           }),
         }),
       })
@@ -239,6 +241,8 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
           </div>
         )}
         <motion.div
+          onFocus={() => setComposerFocused(true)}
+          onBlur={() => setComposerFocused(false)}
           animate={{ height: cardHeight }}
           transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
           className="mx-auto flex max-w-4xl items-end gap-2 overflow-hidden rounded-2xl border border-transparent bg-[color:var(--portal-soft)] p-2 transition-colors focus-within:border-[#caa24c]/40 focus-within:bg-[color:var(--portal-card)] focus-within:ring-2 focus-within:ring-[#caa24c]/10"
@@ -316,8 +320,8 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
               <p className="tabular-nums">
                 {body.length} / 1600<span className="hidden sm:inline"> · Enter to send</span>
               </p>
-              {body.trim() && !draftingWithElena && !animatingDraft ? (
-                <>
+              <AnimatePresence initial={false}>{body.trim() && !draftingWithElena && !animatingDraft ? (
+                <motion.span key="polish" initial={{ opacity: 0, filter: 'blur(4px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, filter: 'blur(4px)' }} transition={{ duration: 0.18, ease: 'easeOut' }} className="flex items-center gap-1.5">
                   <span aria-hidden="true" className="opacity-35 select-none">|</span>
                   <button
                     type="button"
@@ -333,20 +337,35 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
                       ({aiStatus})
                     </span>
                   ) : null}
-                </>
-              ) : null}
+                </motion.span>
+              ) : null}</AnimatePresence>
             </div>
           </div>
           <motion.button
+            onMouseEnter={() => setButtonHovered(true)}
+            onMouseLeave={() => setButtonHovered(false)}
+            whileTap={{ scale: 0.96 }}
             animate={{
               width: body.trim() ? 80 : 92,
-              backgroundColor: body.trim() ? '#caa24c' : '#ffffff',
-              color: body.trim() ? '#ffffff' : '#8c6218',
+              backgroundColor: body.trim()
+                ? (buttonHovered ? '#b98a3d' : '#caa24c')
+                : composerFocused
+                ? (buttonHovered ? '#eae0d0' : '#f4efe7')
+                : (buttonHovered ? '#faf5ec' : '#ffffff'),
+              color: body.trim() ? '#ffffff' : (buttonHovered ? '#6e4c10' : '#8c6218'),
+              boxShadow: buttonHovered
+                ? (body.trim()
+                    ? '0 4px 14px -2px rgba(202, 162, 76, 0.45)'
+                    : '0 2px 10px -1px rgba(140, 98, 24, 0.16), inset 0 0 0 1px rgba(202, 162, 76, 0.38)')
+                : '0 1px 2px rgba(0, 0, 0, 0.04)',
+              scale: buttonHovered ? 1.025 : 1,
             }}
             transition={{
               width: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
-              backgroundColor: { duration: 0.2 },
-              color: { duration: 0.2 },
+              backgroundColor: { duration: 0.18 },
+              color: { duration: 0.18 },
+              boxShadow: { duration: 0.18 },
+              scale: { duration: 0.18 },
             }}
             style={{ height: 38 }}
             type="button"

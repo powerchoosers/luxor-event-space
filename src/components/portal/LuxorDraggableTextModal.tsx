@@ -68,6 +68,8 @@ export function LuxorDraggableTextModal({
     }
     setTextareaHeight(target)
   }, [body])
+  const [composerFocused, setComposerFocused] = useState(false)
+  const [buttonHovered, setButtonHovered] = useState(false)
   const cardHeight = textareaHeight + (body.trim() && !draftingWithElena && !animatingDraft ? 36 : 18)
 
   const fit = useCallback((x: number, y: number) => {
@@ -518,6 +520,8 @@ export function LuxorDraggableTextModal({
           {/* Pinned Composer Footer */}
           <footer className="border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3">
             <motion.div
+              onFocus={() => setComposerFocused(true)}
+              onBlur={() => setComposerFocused(false)}
               animate={{ height: cardHeight }}
               transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
               className="relative flex items-end gap-2 overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/50 p-1.5 focus-within:border-[#caa24c]/50 focus-within:ring-2 focus-within:ring-[#caa24c]/15"
@@ -584,8 +588,8 @@ export function LuxorDraggableTextModal({
                     />
                   )}
                 </motion.div>
-                {body.trim() && !draftingWithElena && !animatingDraft ? (
-                  <div className="flex h-4 items-center gap-1.5 whitespace-nowrap overflow-hidden px-1 pt-1 text-[9px] leading-4 text-[color:var(--portal-muted)]">
+                <AnimatePresence initial={false}>{body.trim() && !draftingWithElena && !animatingDraft ? (
+                  <motion.div key="polish" initial={{ opacity: 0, filter: 'blur(4px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, filter: 'blur(4px)' }} transition={{ duration: 0.18, ease: 'easeOut' }} className="flex h-4 items-center gap-1.5 whitespace-nowrap overflow-hidden px-1 pt-1 text-[9px] leading-4 text-[color:var(--portal-muted)]">
                     <span>{body.length} / 1600<span className="hidden sm:inline"> · Enter to send</span></span>
                     <span aria-hidden="true" className="opacity-35 select-none">|</span>
                     <button
@@ -602,13 +606,13 @@ export function LuxorDraggableTextModal({
                         ({aiStatus})
                       </span>
                     ) : null}
-                  </div>
-                ) : null}
+                  </motion.div>
+                ) : null}</AnimatePresence>
               </div>
               <motion.button
                 animate={{
                   width: body.trim() ? 68 : 78,
-                  backgroundColor: body.trim() ? '#caa24c' : '#ffffff',
+                  backgroundColor: body.trim() ? '#caa24c' : composerFocused ? '#f4efe7' : '#ffffff',
                   color: body.trim() ? '#ffffff' : '#8c6218',
                 }}
                 transition={{

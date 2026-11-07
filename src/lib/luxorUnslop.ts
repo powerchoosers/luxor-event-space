@@ -1,0 +1,7 @@
+/** Shared writing constraints adapted from the UCEP unslop core contract.
+ * Keep these narrow: fix clear drafting defects without flattening natural voice
+ * or changing supported facts, register, meaning, and uncertainty.
+ */
+export const LUXOR_UNSLOP_COPY_RULES = `Use the conversation and requested outcome to decide whether a sentence is actually defective; do not apply a blanket style filter. Remove clear filler, stock framing, empty praise, repeated facts or asks, abstract claims, and unsupported certainty only when they add no useful meaning. Use concrete, ordinary language and a natural rhythm. Do not replace every phrase with a shorter synonym or force choppy prose. Preserve all supplied facts, names, dates, numbers, URLs, quotations, commitments, uncertainty, attribution, and the client's actual meaning. Add no personality, anecdote, reason, urgency, claim, or conclusion that the record does not support. If no useful follow-up is warranted, say so or recommend waiting instead of creating noise.`
+
+export const LUXOR_UNSLOP_CHAT_RULES = `In owner chat, answer the request directly in plain spoken language. Avoid generic assistant preambles, repetitive narration, polished-sounding filler, or a recap that adds no decision or action. Preserve evidence and uncertainty; distinguish known facts from inference. Ask one concise question only when needed. When drafting client copy, apply the shared Luxor unslop copy rules, and keep spoken wording natural rather than reading an email aloud.`
