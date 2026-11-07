@@ -220,7 +220,7 @@ const mobilePrimaryNavItems = [
   { href: '/portal/calendar', icon: <Calendar size={19} />, label: 'Calendar' },
 ]
 const mobileEmailNavItem = { href: '/portal/emails', icon: <Mail size={19} />, label: 'Emails' }
-const mobileMessagesNavItem = { href: '/portal/messages', icon: <MessageSquare size={19} />, label: 'Text' }
+const mobileMessagesNavItem = { href: '/portal/messages', icon: <MessageSquare size={19} />, label: 'Text', tabletOnly: true }
 
 const PORTAL_MOBILE_MEDIA_QUERY = '(max-width: 767px)'
 
@@ -1697,7 +1697,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
 
         <nav
           onWheelCapture={handOffWheelToPage}
-          className={`portal-mobile-nav fixed inset-x-0 bottom-0 z-[60] grid ${accessibleMobilePrimaryNavItems.length >= 5 ? 'grid-cols-6' : 'grid-cols-5'} border-t px-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] backdrop-blur-2xl lg:hidden ${
+          className={`portal-mobile-nav fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 md:grid-cols-6 border-t px-2 shadow-[0_-14px_35px_-30px_rgba(0,0,0,0.7)] backdrop-blur-2xl lg:hidden ${
             portalTheme === 'light'
               ? 'border-[color:var(--portal-border)] bg-[#fffdf9]/85'
               : 'border-[#caa24c]/15 bg-[#080706]/85'
@@ -1710,7 +1710,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group relative isolate flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
+                className={`${('tabletOnly' in item && item.tabletOnly) ? 'hidden md:flex' : 'flex'} group relative isolate min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
                   active ? 'text-[#caa24c]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
                 }`}
                 aria-current={active ? 'page' : undefined}
@@ -1728,17 +1728,17 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
             type="button"
             onClick={() => setMobileMoreOpen(true)}
             className={`group relative isolate flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${
-              !accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams))
+              !accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams) && (!('tabletOnly' in item && item.tabletOnly) || !isMobileViewport))
                 ? 'text-[#caa24c]'
                 : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'
             }`}
             aria-label="More portal sections"
             aria-expanded={mobileMoreOpen}
           >
-            {accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams)) && (
+            {accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams) && (!('tabletOnly' in item && item.tabletOnly) || !isMobileViewport)) && (
               <span className="absolute inset-x-1 inset-y-0 mx-auto max-w-[56px] sm:max-w-[64px] rounded-xl bg-[color:var(--portal-soft)]/80 opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none" />
             )}
-            {!accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams)) ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-x-1 inset-y-0 mx-auto max-w-[56px] sm:max-w-[64px] rounded-xl bg-[#caa24c]/10" /> : null}
+            {!accessibleMobilePrimaryNavItems.some((item) => isActivePath(pathname, item.href, searchParams) && (!('tabletOnly' in item && item.tabletOnly) || !isMobileViewport)) ? <motion.span layoutId="portal-mobile-nav-highlight" aria-hidden="true" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }} className="absolute inset-x-1 inset-y-0 mx-auto max-w-[56px] sm:max-w-[64px] rounded-xl bg-[#caa24c]/10" /> : null}
             <span className="relative z-10"><MoreHorizontal size={20} /></span>
             <span className="relative z-10">More</span>
           </button>
@@ -1777,7 +1777,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                     (item) =>
                       item.href !== '/portal/planner' &&
                       canAccess(item.permission as PortalPermission) &&
-                      !accessibleMobilePrimaryNavItems.some((primary) => primary.href === item.href)
+                      !accessibleMobilePrimaryNavItems.some((primary) => primary.href === item.href && (!('tabletOnly' in primary && primary.tabletOnly) || !isMobileViewport))
                   )
                   .map((item) => {
                     const active = isActivePath(pathname, item.href, searchParams)
