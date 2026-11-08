@@ -349,7 +349,7 @@ export default function CommunicationsPage() {
                           {inq.full_name}
                         </h4>
                         <span className="text-[9px] font-mono text-[color:var(--portal-faint)]">
-                          {new Date(inq.created_at).toLocaleDateString()}
+                          {new Date(inq.created_at).toLocaleDateString('en-US', { dateStyle: 'long' })}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">
@@ -592,7 +592,7 @@ export default function CommunicationsPage() {
                               <span>{note.author}</span>
                               <div className="flex items-center gap-2">
                                 <span className={`text-[8px] font-bold tracking-widest px-2 py-0.5 rounded border ${typeColor}`}>{typeLabel}</span>
-                                <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleDateString()}</span>
+                                <span className="text-[9px] font-mono text-zinc-600">{new Date(note.created_at).toLocaleDateString('en-US', { dateStyle: 'long' })}</span>
                               </div>
                             </div>
                             <p className="text-xs text-zinc-300 font-medium whitespace-pre-wrap leading-relaxed">{note.content}</p>

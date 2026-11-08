@@ -429,7 +429,7 @@ export function EmailBuilderTab({
                           <span className="text-[color:var(--portal-text)]">{decodeHtmlEntities(event.campaign_name || event.campaign_subject) || 'Campaign name unavailable'}</span>
                           <p className="text-[9px] text-[color:var(--portal-muted)] font-medium mt-0.5">{event.event_type} • {event.recipient_name || event.recipient_email || 'Recipient unavailable'}</p>
                         </div>
-                        <span className="font-mono text-[9px] text-[color:var(--portal-muted)] shrink-0">{new Date(event.created_at).toLocaleDateString()}</span>
+                        <span className="font-mono text-[9px] text-[color:var(--portal-muted)] shrink-0">{new Date(event.created_at).toLocaleDateString('en-US', { dateStyle: 'long' })}</span>
                       </div>
                     )) : (
                       <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] p-5 text-center text-xs text-[color:var(--portal-muted)]">No opens, clicks, or unsubscribes have been tracked.</div>

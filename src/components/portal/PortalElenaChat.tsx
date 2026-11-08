@@ -1,5 +1,6 @@
 'use client'
 import { LUXOR_MAX_GUESTS } from '@/lib/luxorInquiryTypes'
+import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useId } from 'react'
 import { 
@@ -1238,7 +1239,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                           </button>
                         )}
                         <span className="text-[9px] text-zinc-650 block mt-1 font-mono">
-                          {new Date(session.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          {formatLuxorDate(session.updated_at, { includeTime: true, includeTimeZone: true, weekday: 'short' }) || 'Date unavailable'}
                         </span>
                       </div>
   
@@ -1958,7 +1959,7 @@ function ElenaContactCard({ payload }: { payload: LeadContactCardPayload }) {
         {payload.email && <p className="truncate">{payload.email}</p>}
         {payload.phone && <p>{payload.phone}</p>}
         {detailLine && <p>{detailLine}</p>}
-        {payload.targetDate && <p className="flex items-center gap-1.5"><CalendarDays size={12} className="text-[#caa24c]" /> {payload.targetDate}</p>}
+        {payload.targetDate && <p className="flex items-center gap-1.5"><CalendarDays size={12} className="text-[#caa24c]" /> {/^(\d{4})-(\d{2})-(\d{2})$/.test(payload.targetDate.trim()) ? formatLuxorDate(payload.targetDate) || payload.targetDate : payload.targetDate}</p>}
         <Link href={`/portal/leads/${payload.inquiryId}`} className="inline-flex items-center gap-1.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#a8792f] transition-colors hover:text-[#caa24c] dark:text-[#f1d27a] dark:hover:text-white">
           View contact <ExternalLink size={11} />
         </Link>

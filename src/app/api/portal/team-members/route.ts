@@ -18,6 +18,7 @@ function cleanOptionalUuid(value: unknown) {
 async function requireTeamAccess() {
   const session = await getLuxorPortalSession()
   const member = session ? await getLuxorPortalMember(session.email) : null
+  if (!member || member.status !== 'active' || !['owner', 'admin'].includes(member.role)) return null
   return memberCan(member, 'team_access') ? member : null
 }
 
