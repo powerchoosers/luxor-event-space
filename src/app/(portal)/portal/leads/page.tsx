@@ -783,8 +783,8 @@ export default function LeadsPage() {
                       <div className="flex items-start flex-col">
                         <span className="text-xs font-medium text-[color:var(--portal-muted)]">{formatDate(lead.created_at)}</span>
                         {getPipelineStage(lead) !== 'newsletter' && lead.target_date ? (
-                          <span className="text-[9px] text-[#caa24c] font-bold uppercase tracking-tighter mt-0.5">
-                            {lead.target_date}
+                          <span className="text-[9px] text-[#caa24c] font-bold tabular-nums tracking-tighter mt-0.5">
+                            {formatLuxorTourDate(lead.target_date)}
                           </span>
                         ) : null}
                       </div>
@@ -1748,7 +1748,7 @@ function LeadsClientsTab({
                 lead={client}
                 className="max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none"
                 badges={[{ label: 'Booked', tone: 'green' }]}
-                subtitle={<>{client.event_type || 'Quinceañera'} · {client.target_date || 'Date TBD'}{client.guest_count ? <> · {client.guest_count} guests</> : <> · Flexible guest count</>}</>}
+                subtitle={<>{client.event_type || 'Quinceañera'} · {client.target_date ? formatLuxorTourDate(client.target_date) : 'Date TBD'}{client.guest_count ? <> · {client.guest_count} guests</> : <> · Flexible guest count</>}</>}
                 onOpen={() => onOpen(client)}
                 interactionLabel={`Open client record for ${client.full_name}`}
                 headerAction={<LeadLifecycleActionsMenu lead={client} onAction={(action) => onLifecycleAction(client, action)} className="!h-7 !w-7" />}
@@ -1925,7 +1925,7 @@ function MobileLeadCard({
     <LuxorCrmRecordCard
       lead={lead}
       badges={badges}
-      subtitle={pipelineStage !== 'newsletter' ? <>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date not set'} · {lead.guest_count || 'Flexible'} guests</> : 'Newsletter contact'}
+      subtitle={pipelineStage !== 'newsletter' ? <>{lead.event_type || 'Quinceañera'} · {lead.target_date ? formatLuxorTourDate(lead.target_date) : 'Date not set'} · {lead.guest_count || 'Flexible'} guests</> : 'Newsletter contact'}
       contact={<span className="block">{lead.email || 'No email captured'}{lead.phone ? <span className="mt-0.5 block">{formatPhoneDisplay(lead.phone)}</span> : null}</span>}
       onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
       selected={selected}
@@ -1938,7 +1938,7 @@ function MobileLeadCard({
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:gap-3">
         {pipelineStage !== 'newsletter' ? <>
           <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Event</p><p className="mt-1 break-words font-semibold text-[color:var(--portal-text)]">{lead.event_type || 'Quinceañera'}</p></div>
-          <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Date</p><p className="mt-1 break-words tabular-nums text-[color:var(--portal-muted)]">{lead.target_date || 'Not set'}</p></div>
+          <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Date</p><p className="mt-1 break-words tabular-nums text-[color:var(--portal-muted)]">{lead.target_date ? formatLuxorTourDate(lead.target_date) : 'Not set'}</p></div>
           <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Guests</p><p className="mt-1 tabular-nums text-[color:var(--portal-muted)]">{lead.guest_count || 'Flexible'}</p></div>
         </> : null}
         <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Language</p><p className="mt-1 break-words font-medium text-[color:var(--portal-muted)]">{getRequestedTourLanguage(lead) || 'Not specified'}</p></div>
@@ -2037,7 +2037,7 @@ function LeadsLostTab({ leads, loading = false }: { leads: LuxorInquiry[]; loadi
                 lead={lead}
                 className="max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none"
                 badges={[{ label: 'Archived', tone: 'neutral' }]}
-                subtitle={<>{lead.event_type || 'Event'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
+                subtitle={<>{lead.event_type || 'Event'} · {lead.target_date ? formatLuxorTourDate(lead.target_date) : 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
                 contact={lead.email || (lead.phone ? formatPhoneDisplay(lead.phone) : 'No contact detail')}
                 actions={<Link href={`/portal/leads/${lead.id}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-4 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">View dossier <ExternalLink size={14} aria-hidden="true" /></Link>}
               >
@@ -2197,7 +2197,7 @@ function LeadsToursTab({
             className="!h-7 !w-7"
           />
         }
-        subtitle={<>{tour.event_type || 'Quinceañera'} · {tour.target_date || 'Event date not set'}{tour.guest_count ? <> · {tour.guest_count} guests</> : null}</>}
+        subtitle={<>{tour.event_type || 'Quinceañera'} · {tour.target_date ? formatLuxorTourDate(tour.target_date) : 'Event date not set'}{tour.guest_count ? <> · {tour.guest_count} guests</> : null}</>}
         contact={tour.email || (tour.phone ? formatPhoneDisplay(tour.phone) : 'No contact details')}
         className="max-md:shadow-none"
         onOpen={() => { window.location.href = `/portal/leads/${tour.id}` }}
@@ -2347,7 +2347,7 @@ function LeadsProposalsTab({
                 lead={lead}
                 className="max-md:!rounded-none max-md:!border-x-0 max-md:!border-t-0 max-md:!shadow-none"
                 badges={[{ label: 'Sent', tone: luxorCrmStatusTone('sent') }]}
-                subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date || 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
+                subtitle={<>{lead.event_type || 'Quinceañera'} · {lead.target_date ? formatLuxorTourDate(lead.target_date) : 'Date not set'}{lead.guest_count ? <> · {lead.guest_count} guests</> : null}</>}
                 contact={lead.email || 'No email registered'}
                 onOpen={() => { window.location.href = `/portal/leads/${lead.id}` }}
                 interactionLabel={`Open lead record for ${lead.full_name}`}

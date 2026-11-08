@@ -12,6 +12,7 @@ import { getLuxorPublicAttribution, getLuxorPublicSessionId, trackLuxorPublicEve
 import { LUXOR_LEGACY_PACKAGE_NAMES, LUXOR_PACKAGE_INTEREST_OPTIONS } from '@/lib/luxorServiceCatalog'
 import { submitLuxorIdempotentForm } from '@/lib/luxorSubmissionIdempotency'
 import { formatLocalDateKey, isLuxorDateSelectable } from '@/lib/publicEventDate'
+import { formatLuxorTourDate } from '@/lib/luxorTourMetrics'
 
 type LuxorInquiryFormProps = {
   source: string
@@ -394,7 +395,7 @@ export function LuxorInquiryForm({
             <motion.div key="contact-details" layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={FORM_TRANSITION}>
               <div className="mb-5 flex flex-wrap items-center gap-2 text-xs text-[#d7c29a]/72">
                 <span className="rounded-full border border-[#caa24c]/22 px-3 py-1.5">{eventType}</span>
-                {targetDate ? <span className="rounded-full border border-[#caa24c]/22 px-3 py-1.5">{targetDate}</span> : null}
+                {targetDate ? <span className="rounded-full border border-[#caa24c]/22 px-3 py-1.5">{formatLuxorTourDate(targetDate)}</span> : null}
                 {packageInterest ? <span className="rounded-full border border-[#caa24c]/22 px-3 py-1.5">{packageInterest}</span> : null}
               </div>
 

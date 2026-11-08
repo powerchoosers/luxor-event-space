@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { PortalButton, PortalDatePicker, PortalModal, PortalSelect } from '@/components/portal/PortalUI'
 import type { LuxorTask, LuxorPromotion } from '@/lib/luxorInquiryTypes'
-import { luxorTodayKey } from '@/lib/luxorTourMetrics'
+import { formatLuxorTourDate, luxorTodayKey } from '@/lib/luxorTourMetrics'
 
 type Reminder = { id: string; subject: string; scheduled_for: string; status: string; last_error: string | null }
 const field = 'h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 text-sm text-[color:var(--portal-text)]'
@@ -61,8 +61,8 @@ export function StaffReminders({ open, onClose, tasks }: { open: boolean; onClos
   }, [])
   useEffect(() => { if (open) void load() }, [open, load])
   const options = kind === 'task'
-    ? tasks.filter(t => t.status === 'pending').map(t => ({ value: t.id, label: `${t.inquiry_context?.full_name ? `${t.inquiry_context.full_name} · ` : ''}${t.title}${t.due_date ? ` · Due ${t.due_date}` : ''}` }))
-    : promotions.filter(p => p.active && p.expires_on && p.expires_on >= luxorTodayKey()).map(p => ({ value: p.id, label: `${p.name} · Expires ${p.expires_on}` }))
+    ? tasks.filter(t => t.status === 'pending').map(t => ({ value: t.id, label: `${t.inquiry_context?.full_name ? `${t.inquiry_context.full_name} · ` : ''}${t.title}${t.due_date ? ` · Due ${formatLuxorTourDate(t.due_date)}` : ''}` }))
+    : promotions.filter(p => p.active && p.expires_on && p.expires_on >= luxorTodayKey()).map(p => ({ value: p.id, label: `${p.name} · Expires ${p.expires_on ? formatLuxorTourDate(p.expires_on) : ''}` }))
   async function save() {
     const normalized = normalizeTime(time)
     const scheduledFor = normalized ? centralTime(date, normalized) : null
