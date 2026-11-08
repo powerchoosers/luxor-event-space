@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -330,6 +330,7 @@ export default function ExpenseManagement({ view, expenseId }: { view: ExpenseMa
     expense_type: 'business', payment_method: '', payment_choice: 'unpaid', first_payment: '', first_payment_date: '', reference_number: '', notes: '', source_bill_id: '', source_bill_occurrence_id: '', bill_review_confirmed: false,
   })
   const [pendingExpenseRequest, setPendingExpenseRequest] = useState<PendingExpenseRequest | null>(null)
+  const entryHandled = useRef(false)
   const [templateForm, setTemplateForm] = useState({
     name: '', category: '', vendor_name: '', expected_amount: '', is_variable: false, frequency: 'monthly', custom_interval: '1', custom_unit: 'months',
     first_due_date: '', start_date: '', end_date: '', payment_method: '', notes: '',
@@ -405,6 +406,36 @@ export default function ExpenseManagement({ view, expenseId }: { view: ExpenseMa
       setNotice('An expense save may not have completed. Retry the unchanged request to resolve it safely.')
     } catch { /* Ignore unavailable or malformed session storage. */ }
   }, [])
+
+  useEffect(() => {
+    if (view !== 'events' || loading || error || entryHandled.current) return
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('add') !== '1') return
+    entryHandled.current = true
+    const requestedId = url.searchParams.get('bookingId') || ''
+    url.searchParams.delete('add')
+    url.searchParams.delete('bookingId')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+    if (pendingExpenseRequest) {
+      setExpenseModalOpen(true)
+      setNotice('Resolve the existing expense save before starting another expense.')
+      return
+    }
+    const booking = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedId)
+      ? data.bookings.find((item) => item.id.toLowerCase() === requestedId.toLowerCase())
+      : undefined
+    if (!booking) {
+      setNotice('That booking is unavailable. Choose a booking before adding an expense.')
+      return
+    }
+    setSelectedBooking(booking.id)
+    setExpenseForm({ description: '', amount: '', incurred_on: '', due_date: '', category: '', vendor_name: '', booking_id: booking.id,
+      expense_type: 'event', payment_method: '', payment_choice: 'unpaid', first_payment: '', first_payment_date: '', reference_number: '', notes: '', source_bill_id: '', source_bill_occurrence_id: '', bill_review_confirmed: false })
+    setExpenseClientRequestId(crypto.randomUUID())
+    setFirstPaymentIdempotencyKey(crypto.randomUUID())
+    setEditExpense(null)
+    setExpenseModalOpen(true)
+  }, [view, loading, error, data.bookings, pendingExpenseRequest])
 
   const page = VIEW_DETAILS[view]
   const activeView = view === 'detail' ? 'business' : view

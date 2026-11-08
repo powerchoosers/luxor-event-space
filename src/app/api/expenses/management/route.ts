@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
+import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
 import { supabaseRestStrict, SupabaseRestError } from '@/lib/supabaseRestServer'
 import {
   authorizeLuxorExpenseRequest,
@@ -116,6 +117,7 @@ export async function POST(request: NextRequest) {
     if (bookingId) {
       const booking = await validateExpenseBooking(bookingId)
       if (!booking) throw new LuxorExpenseRequestError('Booking not found.', 404)
+      if (booking.inquiry_id) await assertLuxorProductionSideEffectsAllowed(booking.inquiry_id)
     }
 
     let sourceBill: LuxorBill | null = null

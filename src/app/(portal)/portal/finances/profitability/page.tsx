@@ -2,24 +2,31 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { EventProfitability } from '@/components/portal/EventProfitability'
+import { EventProfitability, type ProfitabilityEvent } from '@/components/portal/EventProfitability'
 import { PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
-import type { EventProfitability as EventProfitabilityRecord } from '@/lib/luxorEventProfitability'
 
 export default function EventProfitabilityPage() {
-  const [data, setData] = useState<{ events: EventProfitabilityRecord[]; issues: string[] } | null>(null)
+  const [data, setData] = useState<{ events: ProfitabilityEvent[]; issues: string[] } | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
     const controller = new AbortController()
-    fetch('/api/portal/event-profitability', { cache: 'no-store', signal: controller.signal })
+    let generation = 0
+    const refresh = () => {
+      const current = ++generation
+      fetch('/api/portal/event-profitability', { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(response.status === 403 ? 'Financial Center access is required.' : 'Financial records could not be verified. Refresh to retry.')
         const result: unknown = await response.json()
         if (!result || typeof result !== 'object' || !Array.isArray((result as { events?: unknown }).events) || !Array.isArray((result as { issues?: unknown }).issues)) throw new Error('Financial records could not be verified. Refresh to retry.')
-        setData(result as { events: EventProfitabilityRecord[]; issues: string[] })
+        if (current === generation) { setData(result as { events: ProfitabilityEvent[]; issues: string[] }); setError('') }
       })
-      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Financial records could not be verified.') })
-    return () => controller.abort()
+      .catch((reason: unknown) => { if (!controller.signal.aborted && current === generation) { setData(null); setError(reason instanceof Error ? reason.message : 'Financial records could not be verified.') } })
+    }
+    const refreshVisible = () => { if (document.visibilityState === 'visible') refresh() }
+    refresh()
+    window.addEventListener('focus', refreshVisible)
+    const timer = window.setInterval(refreshVisible, 60_000)
+    return () => { controller.abort(); window.removeEventListener('focus', refreshVisible); window.clearInterval(timer) }
   }, [])
   return <PortalPageFrame>
     <PortalPageHeader title="Event profitability" description="Understand what each event brings in and what its direct costs are." />
