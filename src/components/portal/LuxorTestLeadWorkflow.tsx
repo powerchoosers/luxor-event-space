@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, CheckCircle2, Download, FileText, Mail, ReceiptText, RotateCcw, Send, WalletCards } from '@/lib/icons/phosphor-compat'
 import { PortalDatePicker, PortalSelect } from '@/components/portal/PortalUI'
+import { formatLuxorTourDate } from '@/lib/luxorTourMetrics'
+import { isValidCalendarDateKey } from '@/lib/publicEventDate'
 
 type Section = 'proposals' | 'documents' | 'contract' | 'payments' | 'planning'
 type Artifact = { id: string; test_run_id: string; artifact_type: string; status: string; details: Record<string, unknown> }
@@ -42,6 +44,10 @@ const secondaryClass = 'inline-flex min-h-10 items-center justify-center gap-2 r
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function previewDate(value: unknown) {
+  return isValidCalendarDateKey(value) ? formatLuxorTourDate(value) : String(value || 'Not set')
 }
 
 function money(value: unknown) {
@@ -288,7 +294,7 @@ export function LuxorTestLeadWorkflow({
           </div>
           {proposalArtifact && invoice ? <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
             <p><span className="text-[color:var(--portal-muted)]">Event:</span> <span className="text-[color:var(--portal-text)]">{String(invoice.event_type || context.event_type || 'Event')}</span></p>
-            <p><span className="text-[color:var(--portal-muted)]">Date:</span> <span className="text-[color:var(--portal-text)]">{String(context.event_date || 'Not set')}</span></p>
+            <p><span className="text-[color:var(--portal-muted)]">Date:</span> <span className="text-[color:var(--portal-text)]">{previewDate(context.event_date)}</span></p>
             <p><span className="text-[color:var(--portal-muted)]">Guests:</span> <span className="text-[color:var(--portal-text)]">{String(context.expected_guest_count || 'Not set')}</span></p>
             <p><span className="text-[color:var(--portal-muted)]">Proposal total:</span> <span className="font-semibold text-[color:var(--portal-text)]">{moneySummary}</span></p>
             <p className="sm:col-span-2"><span className="text-[color:var(--portal-muted)]">Description:</span> <span className="text-[color:var(--portal-text)]">{invoice.description || 'No description saved.'}</span></p>
@@ -311,7 +317,7 @@ export function LuxorTestLeadWorkflow({
             <button type="button" onClick={() => setBreakdownPreviewOpen((open) => !open)} disabled={busy} className={secondaryClass}>{breakdownPreviewOpen ? 'Hide email preview' : 'Review email preview'}</button>
           </div>
           {breakdownPreviewOpen ? <iframe title="Isolated test Proposal Breakdown email preview" sandbox="" src={`/api/portal/test-lead/proposal?testRunId=${encodeURIComponent(runId)}&format=breakdown-preview`} className="mt-3 h-[640px] w-full rounded-lg border border-[color:var(--portal-border)] bg-white" /> : null}
-          {proposalEmails.length ? <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3"><h4 className="text-xs font-semibold text-[color:var(--portal-text)]">Proposal email history</h4><ul className="mt-2 space-y-2">{[...proposalEmails].reverse().slice(0, 6).map((email) => <li key={email.id} className="flex flex-wrap items-center justify-between gap-2 text-[11px]"><span className="text-[color:var(--portal-text)]">{email.category === 'proposal_breakdown' ? 'Proposal Breakdown' : 'Final proposal'} · {statusLabel(email.status)}</span><span className="text-[color:var(--portal-muted)]">{email.actual_recipient || 'Verified Luxor test inbox'} · {new Date(email.created_at).toLocaleString()}</span></li>)}</ul></div> : <p className="mt-3 text-[11px] text-[color:var(--portal-muted)]">No proposal email is queued for this run yet.</p>}
+          {proposalEmails.length ? <div className="mt-4 border-t border-[color:var(--portal-border)] pt-3"><h4 className="text-xs font-semibold text-[color:var(--portal-text)]">Proposal email history</h4><ul className="mt-2 space-y-2">{[...proposalEmails].reverse().slice(0, 6).map((email) => <li key={email.id} className="flex flex-wrap items-center justify-between gap-2 text-[11px]"><span className="text-[color:var(--portal-text)]">{email.category === 'proposal_breakdown' ? 'Proposal Breakdown' : 'Final proposal'} · {statusLabel(email.status)}</span><span className="text-[color:var(--portal-muted)]">{email.actual_recipient || 'Verified Luxor test inbox'} · {new Date(email.created_at).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })}</span></li>)}</ul></div> : <p className="mt-3 text-[11px] text-[color:var(--portal-muted)]">No proposal email is queued for this run yet.</p>}
         </div> : null}
         <p className="text-[11px] leading-5 text-[color:var(--portal-muted)] lg:col-span-2">The proposal stays in this run’s isolated artifacts. PDF review has a nonbinding test watermark, and no canonical invoice, customer link, booking, signature, payment, availability, or analytics record is created.</p>
       </div> : null}
@@ -349,7 +355,7 @@ export function LuxorTestLeadWorkflow({
           <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
             <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Simulated booking</h3><span className="text-xs capitalize text-[color:var(--portal-muted)]">{statusLabel(bookingArtifact?.status)}</span></div>
             {bookingPreview ? <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-              <p><span className="text-[color:var(--portal-muted)]">Date:</span> <span className="text-[color:var(--portal-text)]">{bookingPreview.event_date || 'Not set'}</span></p>
+              <p><span className="text-[color:var(--portal-muted)]">Date:</span> <span className="text-[color:var(--portal-text)]">{previewDate(bookingPreview.event_date)}</span></p>
               <p><span className="text-[color:var(--portal-muted)]">Guests:</span> <span className="text-[color:var(--portal-text)]">{bookingPreview.guest_count || 'Not set'}</span></p>
               <p><span className="text-[color:var(--portal-muted)]">Package:</span> <span className="text-[color:var(--portal-text)]">{bookingPreview.package_name || 'Custom event'}</span></p>
               <p><span className="text-[color:var(--portal-muted)]">Proposal total:</span> <span className="text-[color:var(--portal-text)]">{money(bookingPreview.contract_total)}</span></p>
@@ -434,7 +440,7 @@ export function LuxorTestLeadWorkflow({
 
         <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-4">
           <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Recent run activity</h3>
-          {activities.length ? <ol className="mt-3 space-y-2">{[...activities].reverse().slice(0, 8).map((activity) => <li key={activity.id} className="flex flex-wrap justify-between gap-2 border-b border-[color:var(--portal-border)] pb-2 text-xs last:border-0"><span className="text-[color:var(--portal-text)]">{String(activity.details.title || activity.event_type.replaceAll('_', ' '))}</span><time className="text-[color:var(--portal-muted)]">{new Date(activity.created_at).toLocaleString()}</time></li>)}</ol> : <p className="mt-2 text-xs text-[color:var(--portal-muted)]">No isolated activity has been recorded yet.</p>}
+          {activities.length ? <ol className="mt-3 space-y-2">{[...activities].reverse().slice(0, 8).map((activity) => <li key={activity.id} className="flex flex-wrap justify-between gap-2 border-b border-[color:var(--portal-border)] pb-2 text-xs last:border-0"><span className="text-[color:var(--portal-text)]">{String(activity.details.title || activity.event_type.replaceAll('_', ' '))}</span><time className="text-[color:var(--portal-muted)]">{new Date(activity.created_at).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })}</time></li>)}</ol> : <p className="mt-2 text-xs text-[color:var(--portal-muted)]">No isolated activity has been recorded yet.</p>}
         </div>
       </div> : null}
 
