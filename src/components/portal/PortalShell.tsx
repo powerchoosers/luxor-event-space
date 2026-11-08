@@ -42,6 +42,7 @@ import type { PortalPermission, PortalRole } from '@/lib/luxorPortalAccess'
 import Image from 'next/image'
 import { ToastProvider, useToast } from '@/components/portal/ToastProvider'
 import { PortalCloseButton, PortalContactAvatar, PortalConstellationLoader } from '@/components/portal/PortalUI'
+import { PortalGlobalTooltip } from '@/components/portal/PortalGlobalTooltip'
 import { PortalViewportDiagnostics } from '@/components/portal/PortalViewportDiagnostics'
 import { MobileActiveCallStrip, PortalPhoneButton, PortalVoiceProvider } from '@/components/portal/PortalVoiceProvider'
 import { usePortalNotifications } from '@/hooks/usePortalNotifications'
@@ -1142,7 +1143,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                   setSearchQuery('')
                   searchInputRef.current?.focus()
                 }}
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
                 aria-label="Clear search"
               >
                 <X size={12} />
@@ -1535,7 +1536,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
                         setSearchQuery('')
                         mobileSearchInputRef.current?.focus()
                       }}
-                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer ${
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer ${
                         searchQuery ? 'opacity-100' : 'opacity-0 pointer-events-none'
                       }`}
                       aria-label="Clear search"
@@ -1882,18 +1883,14 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           />
         )}
       </AnimatePresence>
-      <AnimatePresence>
-        {isNewLeadDrawerOpen && (
-          <NewLeadDrawer
-            isOpen={isNewLeadDrawerOpen}
-            onClose={() => setIsNewLeadDrawerOpen(false)}
-            onCreated={() => {
-              window.dispatchEvent(new CustomEvent('luxor:portal-inquiries-refreshed'))
-            }}
-            pagePath={pathname}
-          />
-        )}
-      </AnimatePresence>
+      <NewLeadDrawer
+        isOpen={isNewLeadDrawerOpen}
+        onClose={() => setIsNewLeadDrawerOpen(false)}
+        onCreated={() => {
+          window.dispatchEvent(new CustomEvent('luxor:portal-inquiries-refreshed'))
+        }}
+        pagePath={pathname}
+      />
       <AnimatePresence>
         {activeTextMessage && (
           <LuxorDraggableTextModal
@@ -1913,6 +1910,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           portalRole={role}
         />
       ) : null}
+      <PortalGlobalTooltip />
       </PortalVoiceProvider>
     </body>
   )
