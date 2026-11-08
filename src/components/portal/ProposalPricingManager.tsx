@@ -231,7 +231,7 @@ export function ProposalPricingManager() {
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-[color:var(--portal-border)] pt-3 text-[10px] text-[color:var(--portal-faint)]">
-          <span>Catalog version {record.version}</span><span>Last updated {new Date(record.updated_at).toLocaleString()}</span>{dirty ? <span className="font-bold text-amber-700 dark:text-amber-300">Unsaved changes</span> : null}
+          <span>Catalog version {record.version}</span><span>Last updated {new Date(record.updated_at).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })}</span>{dirty ? <span className="font-bold text-amber-700 dark:text-amber-300">Unsaved changes</span> : null}
         </div>
       </div>
 

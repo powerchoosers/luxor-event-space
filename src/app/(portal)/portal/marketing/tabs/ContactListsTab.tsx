@@ -192,7 +192,7 @@ export function ContactListsTab({
         event_type: inq.event_type || 'Event',
         source: inq.source || 'Website',
         submittedForm,
-        dateAdded: new Date(inq.created_at).toLocaleString(),
+        dateAdded: new Date(inq.created_at).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' }),
         emailStatus,
         smsStatus,
         tags: tagList,
@@ -216,7 +216,7 @@ export function ContactListsTab({
           event_type: eventVal,
           source: typeof m.metadata?.contact_source === 'string' ? m.metadata.contact_source : m.source || 'Website',
           submittedForm: list.name || 'Newsletter Signup',
-          dateAdded: m.created_at ? new Date(m.created_at).toLocaleString() : 'Date not recorded',
+          dateAdded: m.created_at ? new Date(m.created_at).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' }) : 'Date not recorded',
           emailStatus: 'Subscribed',
           smsStatus: 'Not tracked',
           tags: ['Subscriber'],
@@ -584,7 +584,7 @@ export function ContactListsTab({
                     </span>
                   </td>
                   <td className="max-w-sm px-4 py-4 text-[color:var(--portal-muted)]">{list.description || 'No description'}</td>
-                  <td className="px-4 py-4 font-mono text-[10px] text-[color:var(--portal-muted)]">{new Date(list.updatedAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-4 font-mono text-[10px] text-[color:var(--portal-muted)]">{new Date(list.updatedAt).toLocaleDateString('en-US', { dateStyle: 'long' })}</td>
                   <td className="px-6 py-4 text-right">
                     <button type="button" onClick={() => openMarketingList(list.id)} aria-label={`Open ${list.name}`} className="rounded-md p-2 text-[color:var(--portal-muted)] hover:bg-[#caa24c]/10 hover:text-[color:var(--portal-text)]">
                       <ChevronRight size={15} />
