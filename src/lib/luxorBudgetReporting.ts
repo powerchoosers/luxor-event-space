@@ -5,6 +5,18 @@ import type { getLuxorFinanceOverview } from './luxorFinanceReporting'
 /** A target is an owner-entered monthly spending plan, not an obligation. */
 export type LuxorMonthlyBudget = { month: string; category: string; amount: number }
 
+export type LuxorBudgetSummaryStatus = 'under' | 'on' | 'over' | 'incomplete'
+export type LuxorBudgetSummary = {
+  revenueTarget: number | null
+  revenueActual: number | null
+  revenueVariance: number | null
+  expenseTargetTotal: number | null
+  expenseActual: number | null
+  expenseVariance: number | null
+  operationalMargin: number | null
+  status: LuxorBudgetSummaryStatus
+  statusMessage: string
+}
 export type LuxorBudgetReportIssue = { message: string; href: string }
 export type LuxorBudgetReportLine = {
   id: string
@@ -34,6 +46,87 @@ export function getLuxorMonthEndScenario(opening: number | null, collections: nu
 }
 
 /** Carry uncertainty forward; never substitute zero for unavailable flows. */
+const compareTolerance = 0.005
+
+/** Month-level plan vs actual; null amounts stay unknown. */
+export function buildLuxorBudgetSummary(input: {
+  revenueTarget: number | null
+  revenueActual: number | null
+  expenseTargetTotal: number | null
+  expenseActual: number | null
+}): LuxorBudgetSummary {
+  const revenueVariance =
+    input.revenueTarget !== null && input.revenueActual !== null
+      ? round(input.revenueActual - input.revenueTarget)
+      : null
+  const expenseVariance =
+    input.expenseTargetTotal !== null && input.expenseActual !== null
+      ? round(input.expenseActual - input.expenseTargetTotal)
+      : null
+  const operationalMargin =
+    input.revenueActual !== null && input.expenseActual !== null
+      ? round(input.revenueActual - input.expenseActual)
+      : null
+
+  const collectionComparable = input.revenueTarget !== null && input.revenueActual !== null
+  const spendingComparable = input.expenseTargetTotal !== null && input.expenseActual !== null
+  if (!collectionComparable && !spendingComparable) {
+    return {
+      ...input,
+      revenueVariance,
+      expenseVariance,
+      operationalMargin,
+      status: 'incomplete',
+      statusMessage: 'Set a collection target or expense category targets to compare this month to your plan.',
+    }
+  }
+
+  const collectionOver =
+    collectionComparable && revenueVariance! > compareTolerance
+  const collectionUnder =
+    collectionComparable && revenueVariance! < -compareTolerance
+  const spendingOver =
+    spendingComparable && expenseVariance! > compareTolerance
+  const spendingUnder =
+    spendingComparable && expenseVariance! < -compareTolerance
+
+  let status: LuxorBudgetSummaryStatus = 'on'
+  if ((!collectionComparable && !spendingComparable) || input.revenueActual === null || input.expenseActual === null) {
+    status = 'incomplete'
+  } else if (collectionUnder || spendingOver) {
+    status = 'over'
+  } else if (collectionOver && !spendingOver) {
+    status = 'under'
+  } else if (Math.abs(revenueVariance ?? 0) <= compareTolerance && Math.abs(expenseVariance ?? 0) <= compareTolerance) {
+    status = 'on'
+  } else if (collectionOver || spendingUnder) {
+    status = 'under'
+  }
+
+  let statusMessage = 'This month matches your plan on the measures you set.'
+  if (status === 'incomplete') {
+    statusMessage = 'Some totals need review or targets before this month can be compared.'
+  } else if (status === 'over') {
+    if (collectionUnder && spendingOver) statusMessage = 'Collections are below target and paid expenses are above your spending plan.'
+    else if (collectionUnder) statusMessage = 'Collections are below your monthly target.'
+    else if (spendingOver) statusMessage = 'Paid expenses are above your spending plan for this month.'
+  } else if (status === 'under') {
+    statusMessage = 'Collections and spending are favorable versus the targets you set.'
+  }
+
+  return {
+    revenueTarget: input.revenueTarget,
+    revenueActual: input.revenueActual,
+    revenueVariance,
+    expenseTargetTotal: input.expenseTargetTotal,
+    expenseActual: input.expenseActual,
+    expenseVariance,
+    operationalMargin,
+    status,
+    statusMessage,
+  }
+}
+
 export function getLuxorForecastScenario(opening: number | null, rows: Array<{ month: string; collections: number | null; expenses: number | null }>, reserve: number | null) {
   let balance = opening
   return rows.map((row) => {
@@ -55,6 +148,7 @@ export function getLuxorBudgetReport(input: {
   month: string
   today: string
   budgets: LuxorMonthlyBudget[] | null
+  revenueTarget?: number | null
   availableCategories?: string[]
   expenses: LuxorExpenseRecord[] | null
   bills: LuxorBill[] | null
@@ -158,8 +252,19 @@ export function getLuxorBudgetReport(input: {
     if (!categoryNames.has(name.toLocaleLowerCase())) categoryNames.set(name.toLocaleLowerCase(), name)
   }
   const categories = [...categoryNames.values()].sort((a, b) => a.localeCompare(b))
+  const expenseTargetTotal =
+    budgetsValid && budgets && budgets.length > 0
+      ? round(budgets.reduce((sum, row) => sum + row.amount, 0))
+      : null
+  const revenueTarget = input.revenueTarget ?? null
+  const summary = buildLuxorBudgetSummary({
+    revenueTarget,
+    revenueActual: incomeActual,
+    expenseTargetTotal,
+    expenseActual,
+  })
   return {
-    month: input.month, today: input.today, expenseActual, upcoming, overdue, incomeActual, incomeExpected,
+    month: input.month, today: input.today, expenseActual, upcoming, overdue, incomeActual, incomeExpected, summary,
     // This is a change in recorded flows, not a bank balance. Overdue items are
     // shown separately because their eventual payment date is unknown.
     projectedFlow: expenseActual === null || upcoming === null || incomeActual === null || incomeExpected === null ? null : round(incomeActual + incomeExpected - expenseActual - upcoming),

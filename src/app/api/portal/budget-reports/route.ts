@@ -57,11 +57,21 @@ export async function GET(request: NextRequest) {
     const today = chicagoCalendarDate(new Date())
     const budgetRows = targets.map((row) => ({ month: row.month.slice(0, 7), category: management.categories.find((category) => category.id === row.category_id)?.name || row.category, amount: Number(row.amount) }))
     const shared = { today, budgets: budgetRows, availableCategories: management.categories.filter((row) => row.is_active).map((row) => row.name), expenses, bills: management.bills.filter((row) => !removedBillIds.has(row.id)), revenue }
-    const report = getLuxorBudgetReport({ ...shared, month })
+    const revenueTargetForMonth = revenueTargets?.find((row) => row.month.slice(0, 7) === month)
+    const report = getLuxorBudgetReport({
+      ...shared,
+      month,
+      revenueTarget: revenueTargetForMonth ? Number(revenueTargetForMonth.amount) : null,
+    })
     const months = Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, '0')}`)
     const yearRows = months.map((key) => {
-      const value = key === month ? report : getLuxorBudgetReport({ ...shared, month: key })
-      const revenueTarget = revenueTargets?.find((row) => row.month.slice(0, 7) === key)
+      const revenueTargetRow = revenueTargets?.find((row) => row.month.slice(0, 7) === key)
+      const value = key === month ? report : getLuxorBudgetReport({
+        ...shared,
+        month: key,
+        revenueTarget: revenueTargetRow ? Number(revenueTargetRow.amount) : null,
+      })
+      const revenueTarget = revenueTargetRow
       const expenseTargets = budgetRows.filter((row) => row.month === key)
       return { month: key, revenueTarget: revenueTarget ? Number(revenueTarget.amount) : null, revenueActual: value.incomeActual, expenseTarget: expenseTargets.length ? Math.round(expenseTargets.reduce((sum, row) => sum + row.amount, 0) * 100) / 100 : null, expenseActual: value.expenseActual }
     })

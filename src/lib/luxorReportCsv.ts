@@ -42,12 +42,57 @@ export function buildLuxorLeadBookingCsv(report: LuxorLeadBookingCsvInput) {
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`
 }
 
+export type LuxorBudgetMonthCsvInput = {
+  month: string
+  generatedAt: string
+  summary: {
+    revenueTarget: number | null
+    revenueActual: number | null
+    expenseTargetTotal: number | null
+    expenseActual: number | null
+    operationalMargin: number | null
+    statusMessage: string
+  }
+  categories: Array<{ category: string; target: number | null; actual: number | null; remaining: number | null }>
+}
+
+function formatMoney(value: number | null) {
+  if (value === null) return ''
+  return value.toFixed(2)
+}
+
+/** Month summary for Arianna's Monthly plan page. */
+export function buildLuxorBudgetMonthCsv(input: LuxorBudgetMonthCsvInput) {
+  const rows: string[][] = [
+    ['Luxor monthly plan export', ''],
+    ['Month', input.month],
+    ['Generated', input.generatedAt],
+    [],
+    ['Summary', 'Amount'],
+    ['Collection target', formatMoney(input.summary.revenueTarget)],
+    ['Collected', formatMoney(input.summary.revenueActual)],
+    ['Expense targets (sum)', formatMoney(input.summary.expenseTargetTotal)],
+    ['Paid expenses', formatMoney(input.summary.expenseActual)],
+    ['Month cash margin (operational)', formatMoney(input.summary.operationalMargin)],
+    ['Status', input.summary.statusMessage],
+    [],
+    ['Category', 'Target', 'Paid', 'Remaining'],
+    ...input.categories.map((row) => [
+      row.category,
+      formatMoney(row.target),
+      formatMoney(row.actual),
+      formatMoney(row.remaining),
+    ]),
+  ]
+  return `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`
+}
+
 /** Trigger a browser download, keeping the blob URL alive until the click is handled. */
-export function downloadLuxorCsv(csv: string, date = new Date()) {
+export function downloadLuxorCsv(csv: string, filenameStem: string, date = new Date()) {
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `luxor-lead-booking-report-${date.toISOString().slice(0, 10)}.csv`
+  anchor.download = `${filenameStem}-${date.toISOString().slice(0, 10)}.csv`
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()

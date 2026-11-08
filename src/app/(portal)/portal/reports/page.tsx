@@ -94,7 +94,7 @@ export default function ReportsPage() {
       pipeline: report.pipeline,
       eventTypes: report.eventTypes,
     })
-    downloadLuxorCsv(csv)
+    downloadLuxorCsv(csv, 'luxor-lead-booking-report')
   }
 
   return (

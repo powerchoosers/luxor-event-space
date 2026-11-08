@@ -48,7 +48,7 @@ export function BudgetReportPage() {
     setRevision((value) => value + 1)
   }, [month])
   return <PortalPageFrame className="max-md:pt-4">
-    <PortalPageHeader title="Budgets and reports" description="Compare spending with your plan and review upcoming recorded flows." />
+    <PortalPageHeader title="Monthly plan" description="Set collection and spending targets, then compare them to recorded payments." />
     <Link href="/portal/finances" className="w-fit text-sm font-semibold text-[#9a712e] underline-offset-4 hover:underline dark:text-[#e6c77f]">Financial Center</Link>
     <div className="flex items-center gap-3" aria-label="Report month">
       <button type="button" aria-label="Previous month" onClick={() => setMonth((value) => shiftMonth(value, -1))} className="rounded-lg border border-[color:var(--portal-border)] p-2 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]"><ChevronLeft size={18} /></button>

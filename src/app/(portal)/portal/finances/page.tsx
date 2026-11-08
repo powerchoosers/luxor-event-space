@@ -768,7 +768,7 @@ type LuxorBookingExpense = {
                 </button>
                 {[
                   { href: '/portal/finances/monthly', label: 'Monthly collections', description: 'Recorded and scheduled client payments by month.' },
-                  { href: '/portal/finances/budgets', label: 'Budgets and actuals', description: 'Compare spending targets with recorded payments.' },
+                  { href: '/portal/finances/budgets', label: 'Monthly plan', description: 'Set collection and spending targets; compare to recorded payments.' },
                   { href: '/portal/finances/history', label: 'Payment history', description: 'Review incoming payments and refunds.' },
                   { href: '/portal/finances/accountant', label: 'Accountant export', description: 'Download expense and payment history for review.' },
                 ].map((item) => <Link key={item.href} href={item.href} className="block rounded px-1 py-4 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
