@@ -19,7 +19,6 @@ import {
   PortalSkeleton
 } from '@/components/portal/PortalUI'
 import FinancialOverview from '@/components/portal/FinancialOverview'
-import { AccountingReviewSection } from '@/components/portal/AccountingReviewSection'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView, LuxorBill } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
@@ -53,7 +52,6 @@ export default function FinancesPage() {
   const reduceMotion = useReducedMotion()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
-  const [showAccountingReview, setShowAccountingReview] = useState(false)
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
@@ -775,20 +773,6 @@ type LuxorBookingExpense = {
                   <span className="block text-sm font-semibold text-[color:var(--portal-text)]">{item.label}</span>
                   <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{item.description}</span>
                 </Link>)}
-              </div>
-            </section>
-            <section className="max-w-3xl rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold text-[color:var(--portal-text)]">Accounting review</h2>
-                  <p className="mt-1 text-sm leading-relaxed text-[color:var(--portal-muted)]">Open to check accounting setup and statement history. Saving changes and importing statements are unavailable.</p>
-                </div>
-                <PortalButton type="button" aria-expanded={showAccountingReview} aria-controls="accounting-review-content" onClick={() => setShowAccountingReview((open) => !open)}>
-                  {showAccountingReview ? 'Close review' : 'Open review'}
-                </PortalButton>
-              </div>
-              <div id="accounting-review-content" hidden={!showAccountingReview} className="mt-5">
-                {showAccountingReview && <AccountingReviewSection canEdit={false} />}
               </div>
             </section>
           </div>

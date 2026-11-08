@@ -60,8 +60,6 @@ import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { MagicCard } from '@/components/ui/magic-card'
-import { OperationsLoadingSkeleton } from './OperationsLoadingSkeleton'
-import { NeedsAttentionNow } from '@/components/portal/NeedsAttentionNow'
 
 type SubTab =
   | 'dashboard'
@@ -118,7 +116,7 @@ type EditFormData = {
 
 export default function OperationsPage() {
   return (
-    <Suspense fallback={<OperationsLoadingSkeleton />}>
+    <Suspense fallback={<div className="min-h-[28rem] p-6"><PortalCardSkeleton count={3} /></div>}>
       <OperationsPageContent />
     </Suspense>
   )
@@ -807,12 +805,6 @@ function OperationsPageContent() {
               {completedCount ? <div className="mt-3 flex justify-end"><button type="button" onClick={clearCompletedReadinessTasks} className="min-h-9 rounded-md px-2 text-[10px] font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">Clear completed</button></div> : null}
             </section>
 
-            <NeedsAttentionNow
-              bills={bills}
-              billIntakes={billIntakes}
-              inventory={inventory}
-              maintenanceTasks={maintenanceTasks}
-            />
           </div>
         </div>
       )}
