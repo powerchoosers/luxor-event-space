@@ -10,6 +10,7 @@ import {
   Building2, Clock3, FileCheck2, FileText, Inbox, Mail, Plus, Search, ShieldCheck, X,
 } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
+import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 import ManualBillAnalysis from '@/components/portal/ManualBillAnalysis'
 import type { LuxorBill, LuxorBillIntake, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { isLuxorBillCategory } from '@/lib/luxorBillCategories'
@@ -37,7 +38,7 @@ function billAmount(bill: LuxorBill) {
 
 function dateLabel(value: string | null) {
   if (!value) return 'No due date'
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return formatLuxorDate(value) || 'Unknown date'
 }
 
 function relativeDue(value: string | null) {
@@ -300,7 +301,7 @@ export function BillsPayableLedger({
                   return <button key={bill.id} type="button" onClick={() => selectBill(bill.id)} className={`grid w-full gap-3 border-b border-[color:var(--portal-border)] p-4 text-left last:border-b-0 hover:bg-[color:var(--portal-soft)] sm:grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_1.25rem] sm:items-center lg:grid-cols-[minmax(9rem,1fr)_3.5rem_5.5rem_5.5rem_5.5rem_6.5rem_1.25rem] ${selectedId === bill.id ? 'bg-[#caa24c]/[0.07]' : 'bg-[color:var(--portal-card)]'}`}>
                     <div className="min-w-0"><div className="flex items-center gap-2"><span className="truncate text-xs font-semibold text-[color:var(--portal-text)]">{bill.provider}</span>{bill.source_type === 'email' ? <Mail size={12} className="shrink-0 text-[#a8792f] dark:text-[#caa24c]" /> : null}</div><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.service}{bill.invoice_number ? ` · #${bill.invoice_number}` : ''}</p></div>
                     <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{bill.source_type === 'email' ? 'Email' : bill.source_type === 'portal_upload' ? 'Portal upload' : 'Manual'}</span>
-                    <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{bill.received_at ? new Date(bill.received_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                    <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{formatLuxorDate(bill.received_at) || '—'}</span>
                     <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{dateLabel(bill.due_date)}</span>
                     <div className="lg:text-right"><p className="font-mono text-xs font-semibold text-[color:var(--portal-text)]">{billAmount(bill)}</p><p className="mt-1 text-[9px] text-[color:var(--portal-muted)] lg:hidden">{dateLabel(bill.due_date)}</p></div>
                     <span className={`w-fit rounded-md border px-2 py-1 text-[9px] font-bold ${badge.color}`}>{badge.label}</span><ChevronRight size={15} className="hidden text-[color:var(--portal-faint)] sm:block" />
@@ -340,7 +341,7 @@ function BillReview({ bill, busy, message, onClose, onReview, onBillChanged, onE
       <PortalButton type="button" disabled={!companyName.trim() || Boolean(busy)} onClick={() => onLinkCompany(true)} className="w-full">Add and link company</PortalButton>
     </section>
     <section className={`rounded-xl border p-3 ${bill.arithmetic_status === 'mismatch' ? 'border-rose-500/25 bg-rose-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}><div className="flex gap-2">{bill.arithmetic_status === 'mismatch' ? <AlertCircle size={15} className="mt-0.5 text-rose-500" /> : <ShieldCheck size={15} className="mt-0.5 text-emerald-600 dark:text-emerald-400" />}<div><p className="text-[10px] font-bold text-[color:var(--portal-text)]">Arithmetic {bill.arithmetic_status === 'balanced' ? 'checks out' : bill.arithmetic_status === 'mismatch' ? 'needs review' : 'not available'}</p><p className="mt-1 text-[9px] leading-4 text-[color:var(--portal-muted)]">{bill.arithmetic_status === 'balanced' ? 'Line items match the extracted total.' : bill.arithmetic_status === 'mismatch' ? 'Line items do not match the extracted total.' : 'The document did not provide enough line-item detail.'}</p></div></div></section>
-    {bill.source_type === 'email' ? <section><p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Email provenance</p><div className="mt-3 space-y-2 text-[10px]"><p className="truncate text-[color:var(--portal-text)]">From {bill.source_sender}</p><p className="truncate text-[color:var(--portal-muted)]">{bill.source_subject}</p><p className="text-[color:var(--portal-muted)]">Received {bill.received_at ? new Date(bill.received_at).toLocaleString() : 'unknown'}</p></div></section> : null}
+    {bill.source_type === 'email' ? <section><p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Email provenance</p><div className="mt-3 space-y-2 text-[10px]"><p className="truncate text-[color:var(--portal-text)]">From {bill.source_sender}</p><p className="truncate text-[color:var(--portal-muted)]">{bill.source_subject}</p><p className="text-[color:var(--portal-muted)]">Received {formatLuxorDate(bill.received_at, { includeTime: true }) || 'unknown'}</p></div></section> : null}
     {bill.evidence?.length ? <section><p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Source evidence</p><div className="mt-3 space-y-2">{bill.evidence.slice(0, 3).map((item, index) => <blockquote key={`${item.field}-${index}`} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[9px] leading-4 text-[color:var(--portal-muted)]"><span className="font-bold text-[color:var(--portal-text)]">{item.field}: </span>{item.quote}{item.page_number ? ` · p. ${item.page_number}` : ''}</blockquote>)}</div></section> : null}
     {message ? <p role="status" className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] text-[color:var(--portal-text)]">{message}</p> : null}
     {bill.linked_expense_id && bill.status !== 'paid' ? <Link href={`/portal/finances/expenses/${encodeURIComponent(bill.linked_expense_id)}`} className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] dark:text-[#e6c77f]">Record payment in Expense Management <ArrowUpRight size={13} aria-hidden="true" /></Link> : null}

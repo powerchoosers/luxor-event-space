@@ -11,7 +11,8 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
 import { LuxorInvoice, type LuxorBooking, type LuxorPayment, type LuxorPaymentInstallment, type LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
-import { formatLuxorPaymentCalendarDate, getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
+import { getLuxorBusinessFinanceRows, getLuxorInvoiceFinancialSummary } from '@/lib/luxorFinanceReporting'
+import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 import { getInvoiceCollectionDisplayState } from '@/lib/luxorPaymentDashboardModel'
 import {
   PortalPageFrame,
@@ -370,9 +371,9 @@ export default function InvoicesPage() {
                   </td>
                   <td className="px-6 py-6">
                     <div className="flex flex-col tabular-nums">
-                      <span className="text-xs text-[color:var(--portal-text)] font-medium">{new Date(inv.created_at).toLocaleDateString()}</span>
+                      <span className="text-xs text-[color:var(--portal-text)] font-medium">{formatLuxorDate(inv.created_at) || 'Unknown date'}</span>
                       <span className="text-[10px] text-[color:var(--portal-muted)] font-medium uppercase tracking-tight mt-1">
-                        Due: {inv.due_date ? formatLuxorPaymentCalendarDate(inv.due_date.slice(0, 10)) : 'Immediate'}
+                        Due: {inv.due_date ? formatLuxorDate(inv.due_date) || 'Unknown date' : 'Immediate'}
                       </span>
                     </div>
                   </td>

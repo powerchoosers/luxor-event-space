@@ -23,7 +23,8 @@ import FinancialOverview from '@/components/portal/FinancialOverview'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView, LuxorBill } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
-import { formatLuxorPaymentCalendarDate, getLuxorBusinessFinanceRows, getLuxorFinanceOverview, getLuxorPaidExpenseBreakdown, getLuxorPaymentCalendarDateKey, type LuxorFinanceAllocationRow } from '@/lib/luxorFinanceReporting'
+import { getLuxorBusinessFinanceRows, getLuxorFinanceOverview, getLuxorPaidExpenseBreakdown, getLuxorPaymentCalendarDateKey, type LuxorFinanceAllocationRow } from '@/lib/luxorFinanceReporting'
+import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 
 type BookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -574,7 +575,7 @@ type LuxorBookingExpense = {
                           <p className={`text-[9px] font-bold uppercase tracking-widest mt-1 ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-[#caa24c]'}`}>{label}</p>
                         </td>
                         <td className="px-6 py-5 text-xs text-[color:var(--portal-muted)] font-medium">{isRefund ? 'Stripe' : transaction.payment.payment_method || 'Bank Transfer'}</td>
-                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{at ? isRefund ? new Date(at).toLocaleDateString() : formatLuxorPaymentCalendarDate(at) : 'N/A'}</td>
+                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{formatLuxorDate(at) || 'N/A'}</td>
                         <td className={`px-8 py-5 text-right tabular-nums font-bold ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{isRefund ? status === 'succeeded' ? '-' : '' : status === 'refunded' ? '-' : '+'}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       </tr>
                     })
@@ -715,7 +716,7 @@ type LuxorBookingExpense = {
                       visibleExpenses.map((exp) => (
                         <tr key={exp.id} className={`hover:bg-[color:var(--portal-soft)]/50 transition-colors ${exp.status === 'cancelled' ? 'opacity-60' : ''}`}>
                           <td className="px-8 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">
-                            {exp.incurred_on ? new Date(exp.incurred_on).toLocaleDateString() : 'N/A'}
+                            {formatLuxorDate(exp.incurred_on) || 'N/A'}
                           </td>
                           <td className="px-6 py-5 font-bold text-[color:var(--portal-text)]">
                             {exp.description || 'General Operational Expense'}
