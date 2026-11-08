@@ -54,11 +54,14 @@ import {
 import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog, LuxorMaintenanceTask } from '@/app/api/operations/route'
 import type { LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 import { BillsPayableLedger } from '@/components/portal/BillsPayableLedger'
+import { OperationsArchivePanel } from '@/components/portal/OperationsArchivePanel'
 import { LUXOR_BILL_CATEGORIES, isLuxorBillCategory, type LuxorBillCategory } from '@/lib/luxorBillCategories'
 import { useToast } from '@/components/portal/ToastProvider'
 import { getPortalSupabaseClient } from '@/lib/supabaseClient'
 import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 import { MagicCard } from '@/components/ui/magic-card'
+import { OperationsLoadingSkeleton } from './OperationsLoadingSkeleton'
+import { NeedsAttentionNow } from '@/components/portal/NeedsAttentionNow'
 
 type SubTab =
   | 'dashboard'
@@ -80,7 +83,7 @@ const READINESS_STORAGE_KEY = 'luxor-operations-readiness-checklist-v1'
 
 const operationsTabs: Array<{ id: SubTab; label: string; icon: React.ReactNode; description: string; group: string }> = [
   { id: 'dashboard', label: 'Operations Dashboard', icon: <Activity size={15} />, description: 'Facility readiness, alerts, and operational KPIs', group: 'Overview & Facility' },
-  { id: 'bills', label: 'Bills & Payments', icon: <DollarSign size={15} />, description: 'Vendor payables, invoice ledger, and cost tracking', group: 'Overview & Facility' },
+  { id: 'bills', label: 'Bill review', icon: <DollarSign size={15} />, description: 'Manual entry, intake, AI review and retry, vendor matching, approval, and archive history', group: 'Overview & Facility' },
   { id: 'maintenance', label: 'Maintenance Log', icon: <Wrench size={15} />, description: 'Facility work orders, repairs, and scheduled upkeep', group: 'Overview & Facility' },
   { id: 'inventory', label: 'Inventory Counts', icon: <Package size={15} />, description: 'Tables, chairs, linens, audio gear, and decor stock', group: 'Logistics & Supplies' },
   { id: 'vendors', label: 'Preferred Vendors', icon: <Users size={15} />, description: 'Approved caterers, florists, DJs, and security partners', group: 'Logistics & Supplies' },
@@ -115,12 +118,11 @@ type EditFormData = {
 
 export default function OperationsPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<OperationsLoadingSkeleton />}>
       <OperationsPageContent />
     </Suspense>
   )
 }
-
 function OperationsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -187,8 +189,14 @@ function OperationsPageContent() {
   const [billService, setBillService] = useState('')
   const [billProvider, setBillProvider] = useState('')
   const [billAmount, setBillAmount] = useState('')
+  const [billAmountState, setBillAmountState] = useState<'known' | 'unknown' | 'variable'>('known')
   const [billDueDate, setBillDueDate] = useState('')
-  const [billFrequency, setBillFrequency] = useState('Monthly')
+  const [billFrequency, setBillFrequency] = useState('One-time')
+  const [billCategory, setBillCategory] = useState<LuxorBillCategory>('Utilities')
+  const [billVendorId, setBillVendorId] = useState('')
+  const [billInvoiceNumber, setBillInvoiceNumber] = useState('')
+  const [billIssueDate, setBillIssueDate] = useState('')
+  const [billSaveBusy, setBillSaveBusy] = useState(false)
   const [billUploadFile, setBillUploadFile] = useState<File | null>(null)
   const [billUploadBusy, setBillUploadBusy] = useState(false)
 
@@ -203,7 +211,7 @@ function OperationsPageContent() {
   const [invUnit, setInvUnit] = useState('pcs')
   const [invStatus, setInvStatus] = useState('Good')
 
-  const [vendorType, setVendorType] = useState('DJs & Music')
+  const [vendorType, setVendorType] = useState('Utilities')
   const [vendorName, setVendorName] = useState('')
   const [vendorEmail, setVendorEmail] = useState('')
   const [vendorPhone, setVendorPhone] = useState('')
@@ -382,31 +390,58 @@ function OperationsPageContent() {
 
   const handleAddBillSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!billService || !billAmount) return
+    if (billSaveBusy) return
+    const service = billService.trim()
+    const provider = billProvider.trim()
+    if (!service || !provider) return
+    if (billAmountState === 'known' && (billAmount === '' || !Number.isFinite(Number(billAmount)) || Number(billAmount) < 0)) return
+    const draft = {
+      service,
+      provider,
+      frequency: billFrequency,
+      due_date: billDueDate || null,
+      amount_state: billAmountState,
+      amount: billAmountState === 'known' ? Number(billAmount) : null,
+      bill_category: billCategory,
+      vendor_id: billVendorId || null,
+      invoice_number: billInvoiceNumber.trim() || null,
+      issue_date: billIssueDate || null,
+    }
+    const fingerprint = JSON.stringify(draft)
+    const storageKey = 'luxor-manual-bill-create'
+    let requestId = crypto.randomUUID()
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null') as { id?: string; fingerprint?: string } | null
+      if (saved?.fingerprint === fingerprint && saved.id) requestId = saved.id
+    } catch { /* a fresh id is safe when stored state is unreadable */ }
+    sessionStorage.setItem(storageKey, JSON.stringify({ id: requestId, fingerprint }))
+    setBillSaveBusy(true)
     try {
       const res = await fetch('/api/operations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'bill',
-          service: billService,
-          provider: billProvider || 'Other',
-          amount: Number(billAmount),
-          due_date: billDueDate,
-          frequency: billFrequency,
-          status: 'unpaid'
-        })
+        body: JSON.stringify({ type: 'bill', client_request_id: requestId, status: 'unpaid', ...draft }),
       })
-      if (!res.ok) throw new Error('Failed to save bill.')
-      const newBill = await res.json()
-      setBills((prev) => [newBill, ...prev])
+      const body = await res.json().catch(() => null) as { error?: string; id?: string; recurring_obligation?: string } | null
+      if (!res.ok || !body?.id) throw new Error(body?.error || 'Failed to save bill.')
+      sessionStorage.removeItem(storageKey)
+      setBills((prev) => prev.some((bill) => bill.id === body.id) ? prev : [body as LuxorBill, ...prev])
       setIsBillModalOpen(false)
+      if (body.recurring_obligation) alert(`Saved. “${body.recurring_obligation}” is already a recurring expense for this vendor and category, so another recurring expense was not created.`)
       setBillService('')
       setBillProvider('')
       setBillAmount('')
+      setBillAmountState('known')
       setBillDueDate('')
+      setBillFrequency('One-time')
+      setBillCategory('Utilities')
+      setBillVendorId('')
+      setBillInvoiceNumber('')
+      setBillIssueDate('')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save bill.')
+      alert(err instanceof Error ? err.message : 'Failed to save bill. Save again with the same details to avoid a duplicate.')
+    } finally {
+      setBillSaveBusy(false)
     }
   }
 
@@ -630,10 +665,6 @@ function OperationsPageContent() {
   // Calculate readiness score
   const completedCount = readinessTasks.filter((t) => t.checked).length
   const readinessScore = readinessTasks.length ? Math.round((completedCount / readinessTasks.length) * 100) : 0
-  const openBills = bills.filter((bill) => bill.status !== 'paid')
-  const unpaidBillsTotal = openBills.filter((bill) => bill.amount_state === 'known').reduce((sum, bill) => sum + Number(bill.amount || 0), 0)
-  const pendingMaintenance = maintenanceTasks.filter((task) => task.status === 'pending')
-  const lowSupplyItems = suppliesCounts.filter((item) => item.status === 'Low')
   const sensorsOnline = utilities.length > 0
 
   return (
@@ -706,16 +737,7 @@ function OperationsPageContent() {
             <p className="max-w-md text-[11px] leading-5 text-[color:var(--portal-muted)]">Current records across payments, facility work, inventory, and utilities.</p>
           </div>
 
-                    <PortalStaggerGroup className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <PortalStaggerCard>
-              <StatsCard icon={<DollarSign size={16} />} label="Open bills" value={`$${unpaidBillsTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} subtitle={`${openBills.length} awaiting payment · confirmed amounts only`} tone="gold" onClick={() => router.push('/portal/operations?tab=bills')} />
-            </PortalStaggerCard>
-            <PortalStaggerCard>
-              <StatsCard icon={<Wrench size={16} />} label="Maintenance" value={String(pendingMaintenance.length)} subtitle="Open facility tasks" tone={pendingMaintenance.length ? 'gold' : 'green'} onClick={() => router.push('/portal/operations?tab=maintenance')} />
-            </PortalStaggerCard>
-            <PortalStaggerCard>
-              <StatsCard icon={<Package size={16} />} label="Supply alerts" value={String(lowSupplyItems.length)} subtitle="Low-stock items" tone={lowSupplyItems.length ? 'gold' : 'green'} onClick={() => router.push('/portal/operations?tab=inventory')} />
-            </PortalStaggerCard>
+          <PortalStaggerGroup className="max-w-sm">
             <PortalStaggerCard>
               <StatsCard icon={<Zap size={16} />} label="Utilities" value={sensorsOnline ? 'Reporting' : 'No data'} subtitle={sensorsOnline ? `${utilities.length} recent records` : 'Check utility setup'} tone={sensorsOnline ? 'green' : 'gold'} onClick={() => router.push('/portal/operations?tab=utilities')} />
             </PortalStaggerCard>
@@ -785,21 +807,20 @@ function OperationsPageContent() {
               {completedCount ? <div className="mt-3 flex justify-end"><button type="button" onClick={clearCompletedReadinessTasks} className="min-h-9 rounded-md px-2 text-[10px] font-semibold text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">Clear completed</button></div> : null}
             </section>
 
-            <aside className="rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 shadow-sm sm:p-6">
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--portal-muted)]">Needs attention</p>
-              <h3 className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">Next operational actions</h3>
-              <div className="mt-4 space-y-2">
-                <AttentionRow icon={<DollarSign size={15} />} title={`${openBills.length} bill${openBills.length === 1 ? '' : 's'} waiting`} detail={`${unpaidBillsTotal.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} confirmed`} onClick={() => router.push('/portal/operations?tab=bills')} urgent={openBills.length > 0} />
-                <AttentionRow icon={<Package size={15} />} title={`${lowSupplyItems.length} low-stock item${lowSupplyItems.length === 1 ? '' : 's'}`} detail={lowSupplyItems.length ? 'Review inventory levels' : 'Inventory is in range'} onClick={() => router.push('/portal/operations?tab=inventory')} urgent={lowSupplyItems.length > 0} />
-                <AttentionRow icon={pendingMaintenance.length ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />} title={pendingMaintenance.length ? `${pendingMaintenance.length} facility task${pendingMaintenance.length === 1 ? '' : 's'} open` : 'No open facility tasks'} detail={pendingMaintenance.length ? 'Review the maintenance queue' : 'Maintenance queue is clear'} onClick={() => router.push('/portal/operations?tab=maintenance')} urgent={pendingMaintenance.length > 0} />
-              </div>
-            </aside>
+            <NeedsAttentionNow
+              bills={bills}
+              billIntakes={billIntakes}
+              inventory={inventory}
+              maintenanceTasks={maintenanceTasks}
+            />
           </div>
         </div>
       )}
 
       {/* BILLS & PAYMENTS TAB */}
       {activeTab === 'bills' && (
+        <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+        <OperationsArchivePanel type="bill" records={bills.map((bill) => ({ id: bill.id, updated_at: bill.updated_at, archived_at: bill.archived_at, label: `${bill.provider} · ${bill.service}` }))} onUpdated={() => void loadOperationsData(false)} />
         <BillsPayableLedger
           bills={bills}
           intakes={billIntakes}
@@ -810,6 +831,7 @@ function OperationsPageContent() {
           onIntakeChanged={(intake) => setBillIntakes((current) => current.map((item) => item.id === intake.id ? intake : item))}
           onEditBill={(bill) => setEditingItem({ type: 'bill', data: bill })}
         />
+        </div>
         )}
 
       {/* MAINTENANCE LOG TAB */}
@@ -978,6 +1000,7 @@ function OperationsPageContent() {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8">
+            <OperationsArchivePanel type="vendor" records={vendors.map((vendor) => ({ id: vendor.id, updated_at: vendor.updated_at, archived_at: vendor.archived_at, label: vendor.name }))} onUpdated={() => void loadOperationsData(false)} />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {preferredVendors.length === 0 ? (
                 <div className="col-span-3 text-center py-12 text-xs text-zinc-505">No preferred vendors logged.</div>
@@ -989,7 +1012,7 @@ function OperationsPageContent() {
                         <PortalBulkRowSelector checked={bulkSelection.isSelected(v.id)} index={idx + 1} onChange={() => bulkSelection.toggle(v.id)} label={v.name} />
                         <div>
                         <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{v.vendor_type}</span>
-                        <h4 className="text-sm font-bold text-white mt-1">{v.name}</h4>
+                        <h4 className="text-sm font-bold text-white mt-1">{v.name}{v.archived_at ? <span className="ml-2 text-[10px] font-semibold text-[color:var(--portal-muted)]">Archived</span> : null}</h4>
                         </div>
                       </div>
                       <span className="text-[10px] text-[color:var(--portal-muted)]">{v.rating?.trim() || 'Unrated'}</span>
@@ -1105,8 +1128,6 @@ function OperationsPageContent() {
             onSelectAll={bulkSelection.selectAllMatching}
             onClear={bulkSelection.clear}
             onAction={(action) => {
-              if (action === 'primary' && bulkType === 'bill') void runOperationsBulkUpdate({ status: 'paid' }, action)
-              if (action === 'secondary' && bulkType === 'bill') void runOperationsBulkUpdate({ status: 'unpaid' }, action)
               if (action === 'primary' && bulkType === 'task') void runOperationsBulkUpdate({ status: 'completed', completed_at: new Date().toISOString() }, action)
               if (action === 'secondary' && bulkType === 'task') void runOperationsBulkUpdate({ status: 'pending', completed_at: null }, action)
               if (action === 'primary' && bulkType === 'inventory') void runOperationsBulkUpdate({ status: 'Good' }, action)
@@ -1115,10 +1136,10 @@ function OperationsPageContent() {
               if (action === 'secondary' && bulkType === 'vendor') void runOperationsBulkUpdate({ coi_active: false }, action)
               if (action === 'delete') setConfirmBulkDelete(true)
             }}
-            actions={[
-              { id: 'primary', label: bulkType === 'bill' ? 'Mark paid' : bulkType === 'task' ? 'Complete' : bulkType === 'inventory' ? 'Stock good' : 'Verify COI', icon: <CheckCircle2 size={13} /> },
-              { id: 'secondary', label: bulkType === 'bill' ? 'Mark unpaid' : bulkType === 'task' ? 'Reopen' : bulkType === 'inventory' ? 'Mark low' : 'COI inactive', icon: bulkType === 'inventory' ? <AlertTriangle size={13} /> : <Clock size={13} /> },
-              { id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' },
+            actions={bulkType === 'bill' ? [] : [
+              { id: 'primary', label: bulkType === 'task' ? 'Complete' : bulkType === 'inventory' ? 'Stock good' : 'Verify COI', icon: <CheckCircle2 size={13} /> },
+              { id: 'secondary', label: bulkType === 'task' ? 'Reopen' : bulkType === 'inventory' ? 'Mark low' : 'COI inactive', icon: bulkType === 'inventory' ? <AlertTriangle size={13} /> : <Clock size={13} /> },
+              ...(bulkType === 'vendor' ? [] : [{ id: 'delete', label: 'Delete', icon: <Trash2 size={13} />, tone: 'danger' as const }]),
             ]}
           />
           <PortalBulkConfirmDialog
@@ -1173,6 +1194,7 @@ function OperationsPageContent() {
           </div>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-zinc-500">Provider / Account</label>
+            <PortalSelect value={billVendorId} onChange={(value) => { const vendor = vendors.find((item) => item.id === value); setBillVendorId(value); if (vendor) setBillProvider(vendor.name) }} options={[{ value: '', label: 'No saved vendor' }, ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))]} />
             <input
               type="text"
               required
@@ -1184,14 +1206,18 @@ function OperationsPageContent() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[9px] uppercase font-bold text-zinc-500">Amount (USD)</label>
+              <label className="text-[9px] uppercase font-bold text-zinc-500">Amount</label>
+              <PortalSelect value={billAmountState} onChange={(value) => setBillAmountState(value as 'known' | 'unknown' | 'variable')} options={[{ value: 'known', label: 'Known amount' }, { value: 'unknown', label: 'Unknown until the bill arrives' }, { value: 'variable', label: 'Variable amount' }]} />
               <input
                 type="number"
-                required
-                value={billAmount}
+                required={billAmountState === 'known'}
+                disabled={billAmountState !== 'known'}
+                min="0"
+                step="0.01"
+                value={billAmountState === 'known' ? billAmount : ''}
                 onChange={(e) => setBillAmount(e.target.value)}
-                placeholder="120.00"
-                className="w-full bg-[#050505] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-zinc-300 outline-none"
+                placeholder={billAmountState === 'known' ? '120.00' : 'Not entered'}
+                className="mt-2 w-full rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none disabled:opacity-60"
               />
             </div>
             <div className="space-y-1">
@@ -1200,11 +1226,29 @@ function OperationsPageContent() {
                 value={billFrequency}
                 onChange={setBillFrequency}
                 options={[
+                  { value: 'One-time', label: 'One-time' },
+                  { value: 'Weekly', label: 'Weekly' },
+                  { value: 'Biweekly', label: 'Biweekly' },
                   { value: 'Monthly', label: 'Monthly' },
                   { value: 'Quarterly', label: 'Quarterly' },
-                  { value: 'Annually', label: 'Annually' }
+                  { value: 'Annually', label: 'Annually' },
                 ]}
               />
+              <p className="text-[10px] leading-4 text-zinc-500">This describes the bill. It does not create future bills or payments. Recurring expenses stay in Expense Management and remain unpaid until a payment is recorded.</p>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] uppercase font-bold text-zinc-500">Category</label>
+            <PortalSelect value={billCategory} onChange={(value) => { if (isLuxorBillCategory(value)) setBillCategory(value) }} options={LUXOR_BILL_CATEGORIES.map((value) => ({ value, label: value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-500">Invoice number</label>
+              <input type="text" maxLength={80} value={billInvoiceNumber} onChange={(event) => setBillInvoiceNumber(event.target.value)} placeholder="Optional" className="w-full rounded-md border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] uppercase font-bold text-zinc-500">Issue date</label>
+              <PortalDatePicker value={billIssueDate} onChange={setBillIssueDate} placeholder="Optional" />
             </div>
           </div>
           <div className="space-y-1">
@@ -1225,9 +1269,10 @@ function OperationsPageContent() {
             </button>
             <button
               type="submit"
-              className="luxor-gold-raised rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-widest text-white transition-all"
+              disabled={billSaveBusy}
+              className="luxor-gold-raised rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-widest !text-white transition-all disabled:cursor-not-allowed disabled:opacity-45"
             >
-              Save Bill
+              {billSaveBusy ? 'Saving…' : 'Save Bill'}
             </button>
           </div>
         </form>
@@ -1398,6 +1443,19 @@ function OperationsPageContent() {
               value={vendorType}
               onChange={setVendorType}
               options={[
+                { value: 'Venue Maintenance', label: 'Venue Maintenance' },
+                { value: 'Utilities', label: 'Utilities' },
+                { value: 'Insurance', label: 'Insurance' },
+                { value: 'Marketing', label: 'Marketing' },
+                { value: 'Event Rentals', label: 'Event Rentals' },
+                { value: 'Decor', label: 'Decor' },
+                { value: 'Entertainment', label: 'Entertainment' },
+                { value: 'Catering', label: 'Catering' },
+                { value: 'Cleaning', label: 'Cleaning' },
+                { value: 'Security', label: 'Security' },
+                { value: 'Technology', label: 'Technology' },
+                { value: 'Professional Services', label: 'Professional Services' },
+                { value: 'Other', label: 'Other' },
                 { value: 'DJs & Music', label: 'DJs & Music' },
                 { value: 'Fine Caterers', label: 'Fine Caterers' },
                 { value: 'Security Crew', label: 'Security Crew' },
@@ -1406,7 +1464,7 @@ function OperationsPageContent() {
                 { value: 'Valet Service', label: 'Valet Service' },
                 { value: 'Bartenders', label: 'Bartenders' },
                 { value: 'Photographers', label: 'Photographers' },
-                { value: 'Makeup Artist', label: 'Makeup Artist' }
+                { value: 'Makeup Artist', label: 'Makeup Artist' },
               ]}
             />
           </div>
@@ -1549,13 +1607,9 @@ function OperationsPageContent() {
                   <div className="space-y-1">
                     <label className="text-[9px] uppercase font-bold text-zinc-550">Frequency</label>
                     <PortalSelect
-                      value={editFormData.frequency || 'Monthly'}
+                      value={editFormData.frequency || 'One-time'}
                       onChange={(val) => setEditFormData({ ...editFormData, frequency: val })}
-                      options={[
-                        { value: 'Monthly', label: 'Monthly' },
-                        { value: 'Quarterly', label: 'Quarterly' },
-                        { value: 'Annually', label: 'Annually' }
-                      ]}
+                      options={['One-time', 'Weekly', 'Biweekly', 'Monthly', 'Quarterly', 'Annually', editFormData.frequency || ''].filter((value, index, list) => value && list.indexOf(value) === index).map((value) => ({ value, label: value }))}
                     />
                   </div>
                 </div>
@@ -1706,6 +1760,19 @@ function OperationsPageContent() {
                     value={editFormData.vendor_type || 'DJs & Music'}
                     onChange={(val) => setEditFormData({ ...editFormData, vendor_type: val })}
                     options={[
+                      { value: 'Venue Maintenance', label: 'Venue Maintenance' },
+                      { value: 'Utilities', label: 'Utilities' },
+                      { value: 'Insurance', label: 'Insurance' },
+                      { value: 'Marketing', label: 'Marketing' },
+                      { value: 'Event Rentals', label: 'Event Rentals' },
+                      { value: 'Decor', label: 'Decor' },
+                      { value: 'Entertainment', label: 'Entertainment' },
+                      { value: 'Catering', label: 'Catering' },
+                      { value: 'Cleaning', label: 'Cleaning' },
+                      { value: 'Security', label: 'Security' },
+                      { value: 'Technology', label: 'Technology' },
+                      { value: 'Professional Services', label: 'Professional Services' },
+                      { value: 'Other', label: 'Other' },
                       { value: 'DJs & Music', label: 'DJs & Music' },
                       { value: 'Fine Caterers', label: 'Fine Caterers' },
                       { value: 'Security Crew', label: 'Security Crew' },
@@ -1714,7 +1781,7 @@ function OperationsPageContent() {
                       { value: 'Valet Service', label: 'Valet Service' },
                       { value: 'Bartenders', label: 'Bartenders' },
                       { value: 'Photographers', label: 'Photographers' },
-                      { value: 'Makeup Artist', label: 'Makeup Artist' }
+                      { value: 'Makeup Artist', label: 'Makeup Artist' },
                     ]}
                   />
                 </div>
@@ -1781,7 +1848,7 @@ function OperationsPageContent() {
             )}
 
             <div className="flex gap-2 justify-between pt-2">
-              <button
+              {editingItem.type !== 'bill' && editingItem.type !== 'vendor' ? <button
                 type="button"
                 onClick={() => {
                   setDeletingItem({
@@ -1793,7 +1860,7 @@ function OperationsPageContent() {
                 className="px-4 py-2 border border-rose-500/25 bg-rose-500/5 hover:bg-rose-500/15 text-rose-400 text-xs font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all"
               >
                 Delete
-              </button>
+              </button> : <span className="text-xs text-[color:var(--portal-muted)]">This record is retained for history.</span>}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -1888,31 +1955,6 @@ function StatsCard({
           <p className="mt-1 text-[10px] text-[color:var(--portal-muted)]">{subtitle}</p>
         </div>
       </MagicCard>
-    </button>
-  )
-}
-
-function AttentionRow({
-  icon,
-  title,
-  detail,
-  onClick,
-  urgent,
-}: {
-  icon: React.ReactNode
-  title: string
-  detail: string
-  onClick: () => void
-  urgent: boolean
-}) {
-  return (
-    <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-left transition-colors hover:border-[#caa24c]/30 hover:bg-[#caa24c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/35">
-      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${urgent ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}>{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-semibold text-[color:var(--portal-text)]">{title}</span>
-        <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">{detail}</span>
-      </span>
-      <ChevronRight size={14} className="shrink-0 text-[color:var(--portal-faint)] transition-transform group-hover:translate-x-0.5 group-hover:text-[color:var(--portal-muted)]" />
     </button>
   )
 }

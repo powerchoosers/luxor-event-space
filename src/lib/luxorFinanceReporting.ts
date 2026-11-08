@@ -2,6 +2,7 @@ import { isLuxorTestAvailabilityBooking } from './luxorAvailability'
 import type { LuxorBooking, LuxorInquiry, LuxorInvoice, LuxorPayment, LuxorPaymentInstallment, LuxorPaymentRefundView } from './luxorInquiryTypes'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from './luxorTestLeadPolicy'
 import { chicagoCalendarDate, installmentDisplayState, installmentPaidAmount, invoiceEventObligation, isLuxorBookingReceivableEligible, refundableSecurityAmount } from './luxorPaymentDashboardModel'
+import { expenseAmountState } from './luxorExpenseAmount'
 
 export type LuxorFinanceExpense = {
   booking_id: string | null
@@ -383,6 +384,7 @@ export function getLuxorPaidFinanceExpenses<TExpense extends LuxorFinanceExpense
 
 /** Net recorded cash paid for an expense, including explicit refunds and reversals. */
 export function getLuxorPaidExpenseValue(expense: LuxorFinanceExpense) {
+  if (!expenseAmountState(expense.amount, expense.metadata).known || expense.paid_amount === null) return null
   const suppliedPaidAmount = expense.paid_amount
   if (suppliedPaidAmount !== null && suppliedPaidAmount !== undefined) {
     const value = Number(suppliedPaidAmount)
@@ -403,16 +405,24 @@ export function getLuxorPaidExpenseValue(expense: LuxorFinanceExpense) {
   }
 
   if (expense.status !== 'paid') return 0
-  const amount = Number(expense.amount)
-  return Number.isFinite(amount) && amount >= 0 ? money(amount) : null
+  return null
 }
 
 export function getLuxorExpenseCashActivityInPeriod(expense: LuxorFinanceExpense, start: string, end: string) {
+  if (!expenseAmountState(expense.amount, expense.metadata).known || expense.paid_amount === null) {
+    return { available: false as const, paid: null, refunds: null, net: null }
+  }
   const paymentHistory = Array.isArray(expense.payments) ? expense.payments : []
-  const rawLegacyValue = expense.metadata?.legacy_paid_amount
-    ?? (paymentHistory.length === 0 && expense.status === 'paid' ? expense.amount : 0)
+  const hasLegacy = Object.prototype.hasOwnProperty.call(expense.metadata ?? {}, 'legacy_paid_amount')
+  if (paymentHistory.length === 0 && expense.status === 'paid' && !hasLegacy) {
+    return { available: false as const, paid: null, refunds: null, net: null }
+  }
+  const rawLegacyValue = hasLegacy ? expense.metadata?.legacy_paid_amount : 0
   const legacyValue = Number(rawLegacyValue)
-  const legacyAmount = Number.isFinite(legacyValue) && legacyValue >= 0 ? legacyValue : 0
+  if (hasLegacy && (!Number.isFinite(legacyValue) || legacyValue < 0)) {
+    return { available: false as const, paid: null, refunds: null, net: null }
+  }
+  const legacyAmount = hasLegacy ? legacyValue : 0
   const legacyPaidDate = typeof expense.metadata?.legacy_paid_at === 'string'
     ? getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: expense.metadata.legacy_paid_at })
     : ''
@@ -421,27 +431,32 @@ export function getLuxorExpenseCashActivityInPeriod(expense: LuxorFinanceExpense
   let refunds = 0
   for (const payment of paymentHistory) {
     const amount = Number(payment.amount)
-    if (!Number.isFinite(amount) || amount <= 0) continue
     const paymentDate = getLuxorPaymentCalendarDateKey({
       received_date: payment.payment_date || null,
       paid_at: payment.paid_at || null,
     })
-    if (!paymentDate || paymentDate < start || paymentDate > end) continue
+    if (!Number.isFinite(amount) || amount <= 0 || !paymentDate || !['payment', 'refund', 'reversal'].includes(payment.transaction_type)) {
+      return { available: false as const, paid: null, refunds: null, net: null }
+    }
+    if (paymentDate < start || paymentDate > end) continue
     if (payment.transaction_type === 'payment') paid += amount
-    else if (payment.transaction_type === 'refund' || payment.transaction_type === 'reversal') refunds += amount
+    else refunds += amount
   }
   paid = money(paid)
   refunds = money(refunds)
-  return { paid, refunds, net: money(paid - refunds) }
+  return { available: true as const, paid, refunds, net: money(paid - refunds) }
 }
 
 /**
  * Count explicit expense payment transactions in their saved payment period.
- * Legacy paid expenses without payment history remain in the all-time total;
- * they enter a month only if their metadata contains an explicit paid date.
+ * A paid status with no payment lines is not cash. Legacy amounts enter a month
+ * only when metadata contains an explicit paid date.
  * Call with the already test-filtered business expense rows.
  */
-export function getLuxorPaidExpenseBreakdown(expenses: Array<LuxorFinanceExpense & { id: string; amount: number; category: string | null; incurred_on?: string | null; updated_at?: string | null; created_at?: string | null }>) {
+export function getLuxorPaidExpenseBreakdown(expenses: Array<LuxorFinanceExpense & { id: string; amount: number | null; category: string | null; incurred_on?: string | null; updated_at?: string | null; created_at?: string | null }>) {
+  if (expenses.some((expense) => !expenseAmountState(expense.amount, expense.metadata).known || expense.paid_amount === null)) {
+    return { available: false as const, reason: 'Expense amounts need review.', total: null, categories: [], byMonth: {} as Record<string, number>, categoriesByMonth: {} as Record<string, Array<{ category: string; amount: number }>> }
+  }
   const ids = new Set<string>()
   const paymentIds = new Set<string>()
   const categories = new Map<string, number>()
@@ -457,7 +472,18 @@ export function getLuxorPaidExpenseBreakdown(expenses: Array<LuxorFinanceExpense
 
   for (const expense of expenses) {
     const paymentHistory = Array.isArray(expense.payments) ? expense.payments : []
-    const legacyPaidValue = Number(expense.metadata?.legacy_paid_amount ?? (paymentHistory.length === 0 && expense.status === 'paid' ? expense.amount : 0))
+    const hasLegacy = Object.prototype.hasOwnProperty.call(expense.metadata ?? {}, 'legacy_paid_amount')
+    if (paymentHistory.length === 0 && expense.status === 'paid' && !hasLegacy) {
+      return {
+        available: false as const,
+        reason: 'Paid expense records need reconciliation.',
+        total: null,
+        categories: [],
+        byMonth: {} as Record<string, number>,
+        categoriesByMonth: {} as Record<string, Array<{ category: string; amount: number }>>,
+      }
+    }
+    const legacyPaidValue = Number(hasLegacy ? expense.metadata?.legacy_paid_amount : 0)
     if (paymentHistory.length === 0 && expense.status !== 'paid') continue
     const id = expense.id?.trim()
     if (!id || ids.has(id) || !Number.isFinite(legacyPaidValue) || legacyPaidValue < 0) {

@@ -110,6 +110,7 @@ type ExpenseBill = {
   service: string
   provider: string
   amount: number
+  amount_state?: 'known' | 'unknown' | 'variable' | null
   status: string
   due_date: string | null
   issue_date?: string | null
@@ -211,7 +212,8 @@ function money(value: number | null | undefined) {
 }
 
 function hasKnownAmount(expense: ExpenseRow) {
-  return expense.amount_known !== false && expense.metadata?.amount_state !== 'variable'
+  const state = expense.metadata?.amount_state
+  return expense.amount_known !== false && state !== 'variable' && state !== 'unknown'
 }
 
 function expenseAmountLabel(expense: ExpenseRow) {
@@ -274,7 +276,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function paidInPeriod(expense: ExpenseRow, start: string, end: string) {
-  return getLuxorExpenseCashActivityInPeriod(expense, start, end).net
+  const activity = getLuxorExpenseCashActivityInPeriod(expense, start, end)
+  return activity.available ? activity.net : null
 }
 
 function expenseDateInPeriod(expense: ExpenseRow, start: string, end: string) {
@@ -441,7 +444,7 @@ export default function ExpenseManagement({ view, expenseId }: { view: ExpenseMa
   const activeView = view === 'detail' ? 'business' : view
   const categories = useMemo(() => activeCategories(data.categories), [data.categories])
   const categoryOptions = useMemo(() => categories.map((name) => ({ value: name, label: name })), [categories])
-  const approvedBills = useMemo(() => data.bills.filter((bill) => Boolean(bill.payment_ready_at || bill.extraction_status === 'ready') && bill.status !== 'paid' && !data.expenses.some((expense) => expense.source_bill_id === bill.id)), [data.bills, data.expenses])
+  const approvedBills = useMemo(() => data.bills.filter((bill) => bill.payment_ready_at && bill.extraction_status === 'ready' && bill.amount_state === 'known' && Number.isFinite(Number(bill.amount)) && Number(bill.amount) >= 0 && bill.status !== 'paid' && !data.expenses.some((expense) => expense.source_bill_id === bill.id)), [data.bills, data.expenses])
   const variableOccurrenceOptions = useMemo(() => data.expenses.filter((expense) => !hasKnownAmount(expense) && !expense.source_bill_id && expense.status !== 'cancelled' && Boolean(expense.recurring_template_id) && data.templates.some((template) => template.id === expense.recurring_template_id && template.is_variable)).map((expense) => ({ value: expense.id, label: `${expense.description || expense.category} · ${formatDate(expense.due_date || expense.incurred_on)} · ${expense.vendor_name || 'Vendor not set'}` })), [data.expenses, data.templates])
   const selectedExpense = useMemo(() => data.expenses.find((expense) => expense.id === expenseId) || null, [data.expenses, expenseId])
   const selectedExpenseId = selectedExpense?.id
@@ -463,9 +466,15 @@ export default function ExpenseManagement({ view, expenseId }: { view: ExpenseMa
 
   const periodRange = useMemo(() => periodBounds(period, customStart, customEnd), [period, customStart, customEnd])
   const periodExpenses = useMemo(() => data.expenses.filter((expense) => expense.status !== 'cancelled' && expenseDateInPeriod(expense, periodRange.start, periodRange.end)), [data.expenses, periodRange])
-  const paidTotal = useMemo(() => data.expenses.reduce((sum, expense) => sum + paidInPeriod(expense, periodRange.start, periodRange.end), 0), [data.expenses, periodRange])
-  const overdueTotal = useMemo(() => periodExpenses.filter((expense) => expense.payment_status === 'overdue').reduce((sum, expense) => sum + Math.max(0, Number(expense.remaining_balance) || 0), 0), [periodExpenses])
-  const upcomingTotal = useMemo(() => periodExpenses.filter((expense) => ['expected', 'due_today', 'partially_paid'].includes(expense.payment_status)).reduce((sum, expense) => sum + Math.max(0, Number(expense.remaining_balance) || 0), 0), [periodExpenses])
+  const paidSummary = useMemo(() => data.expenses.reduce((summary, expense) => {
+    const net = paidInPeriod(expense, periodRange.start, periodRange.end)
+    if (net === null) return { total: summary.total, excluded: summary.excluded + 1 }
+    return { total: summary.total + net, excluded: summary.excluded }
+  }, { total: 0, excluded: 0 }), [data.expenses, periodRange])
+  const paidTotal = paidSummary.total
+  const paidExcluded = paidSummary.excluded
+  const overdueTotal = useMemo(() => periodExpenses.filter((expense) => expense.payment_status === 'overdue' && hasKnownAmount(expense)).reduce((sum, expense) => sum + Math.max(0, Number(expense.remaining_balance) || 0), 0), [periodExpenses])
+  const upcomingTotal = useMemo(() => periodExpenses.filter((expense) => ['expected', 'due_today', 'partially_paid'].includes(expense.payment_status) && hasKnownAmount(expense)).reduce((sum, expense) => sum + Math.max(0, Number(expense.remaining_balance) || 0), 0), [periodExpenses])
   const unpaidTotal = overdueTotal + upcomingTotal
   const monthlyFixed = useMemo(() => data.templates.filter((template) => template.is_active && !template.is_variable && template.expected_amount !== null).reduce((sum, template) => {
     const amount = Number(template.expected_amount) || 0
@@ -929,7 +938,7 @@ export default function ExpenseManagement({ view, expenseId }: { view: ExpenseMa
       {error ? <div role="alert" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-300"><p className="font-semibold">Expense records are unavailable</p><p className="mt-1">{error}</p><button type="button" onClick={refresh} className="mt-3 font-semibold underline underline-offset-2">Try again</button></div> : null}
       {loading && !data.expenses.length ? <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className={`${CARD_CLASS} p-5`}><PortalSkeleton className="h-3 w-28 rounded" /><PortalSkeleton className="mt-4 h-7 w-32 rounded" /><PortalSkeleton className="mt-3 h-3 w-40 rounded" /></div>)}</div><div className={`${CARD_CLASS} p-5`}><PortalSkeleton className="h-5 w-48 rounded" /><PortalSkeleton className="mt-5 h-52 w-full rounded-xl" /></div></div> : null}
       {!loading && !error ? <PortalTabTransition activeKey={view}>
-        {view === 'dashboard' ? <DashboardView data={data} period={period} setPeriod={setPeriod} periodRange={periodRange} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} trendPeriod={trendPeriod} setTrendPeriod={setTrendPeriod} paidTotal={paidTotal} unpaidTotal={unpaidTotal} overdueTotal={overdueTotal} upcomingTotal={upcomingTotal} monthlyFixed={monthlyFixed} variableTotal={variableTotal} unknownVariableCount={unknownVariableCount} eventTotal={eventTotal} recentExpenses={recentExpenses} bookingById={bookingById} /> : null}
+        {view === 'dashboard' ? <DashboardView data={data} period={period} setPeriod={setPeriod} periodRange={periodRange} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} trendPeriod={trendPeriod} setTrendPeriod={setTrendPeriod} paidTotal={paidTotal} paidExcluded={paidExcluded} unpaidTotal={unpaidTotal} overdueTotal={overdueTotal} upcomingTotal={upcomingTotal} monthlyFixed={monthlyFixed} variableTotal={variableTotal} unknownVariableCount={unknownVariableCount} eventTotal={eventTotal} recentExpenses={recentExpenses} bookingById={bookingById} /> : null}
         {view === 'recurring' ? <RecurringView data={data} busy={busy} onAdd={() => openNewTemplate()} onEdit={openNewTemplate} onToggle={toggleTemplate} onViewExpense={(id) => router.push(`/portal/finances/expenses/${encodeURIComponent(id)}`)} onEditExpense={openEditExpense} onSkip={skipOccurrence} /> : null}
         {view === 'business' ? <BusinessView data={data} categoryOptions={categoryOptions} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} statusFilter={statusFilter} setStatusFilter={setStatusFilter} query={query} setQuery={setQuery} onAdd={() => openNewExpense('business')} onImportBill={(bill) => openNewExpense('business', bill)} onEdit={openEditExpense} onCancel={cancelExpense} onOpen={(id) => router.push(`/portal/finances/expenses/${encodeURIComponent(id)}`)} onManageCategories={() => setCategoryModalOpen(true)} loading={loading} /> : null}
         {view === 'events' ? <EventExpensesView data={data} ledger={ledger} selectedBooking={selectedBooking} setSelectedBooking={setSelectedBooking} onAdd={(id) => { if (!id) { setNotice('Choose a booking before adding an event expense.'); return } if (pendingExpenseRequest) { setExpenseModalOpen(true); setNotice('Resolve the existing expense save before starting another expense.'); return } openNewExpense('event'); setExpenseField('booking_id', id) }} /> : null}
@@ -1042,9 +1051,9 @@ export default function ExpenseManagement({ view, expenseId }: { view: ExpenseMa
 
 function DashboardView({
   data, period, setPeriod, periodRange, customStart, setCustomStart, customEnd, setCustomEnd, trendPeriod, setTrendPeriod,
-  paidTotal, unpaidTotal, overdueTotal, upcomingTotal, monthlyFixed, variableTotal, unknownVariableCount, eventTotal, recentExpenses, bookingById,
+  paidTotal, paidExcluded = 0, unpaidTotal, overdueTotal, upcomingTotal, monthlyFixed, variableTotal, unknownVariableCount, eventTotal, recentExpenses, bookingById,
 }: {
-  data: ExpenseManagementData; period: string; setPeriod: (value: string) => void; periodRange: { start: string; end: string }; customStart: string; setCustomStart: (value: string) => void; customEnd: string; setCustomEnd: (value: string) => void; trendPeriod: string; setTrendPeriod: (value: string) => void; paidTotal: number; unpaidTotal: number; overdueTotal: number; upcomingTotal: number; monthlyFixed: number; variableTotal: number; unknownVariableCount: number; eventTotal: number; recentExpenses: ExpenseRow[]; bookingById: Map<string, ExpenseBooking>;
+  data: ExpenseManagementData; period: string; setPeriod: (value: string) => void; periodRange: { start: string; end: string }; customStart: string; setCustomStart: (value: string) => void; customEnd: string; setCustomEnd: (value: string) => void; trendPeriod: string; setTrendPeriod: (value: string) => void; paidTotal: number; paidExcluded?: number; unpaidTotal: number; overdueTotal: number; upcomingTotal: number; monthlyFixed: number; variableTotal: number; unknownVariableCount: number; eventTotal: number; recentExpenses: ExpenseRow[]; bookingById: Map<string, ExpenseBooking>;
 }) {
   const filteredExpenses = data.expenses.filter((expense) => expense.status !== 'cancelled' && hasKnownAmount(expense) && expenseDateInPeriod(expense, periodRange.start, periodRange.end))
   const categoryTotals = new Map<string, number>()
@@ -1077,7 +1086,7 @@ function DashboardView({
       </div>
     </section>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-      <MetricCard label="Total expenses paid" value={money(paidTotal)} detail="Payments less refunds dated in period" tone="gold" />
+      <MetricCard label="Total expenses paid" value={money(paidTotal)} detail={paidExcluded ? `Payments less refunds dated in period. ${paidExcluded} ${paidExcluded === 1 ? 'expense is' : 'expenses are'} excluded until the amount is confirmed.` : 'Payments less refunds dated in period'} tone="gold" />
       <MetricCard label="Unpaid expenses" value={money(unpaidTotal)} detail={`${money(upcomingTotal)} upcoming · ${money(overdueTotal)} overdue${unknownVariableCount ? ` · ${unknownVariableCount} variable ${unknownVariableCount === 1 ? 'bill' : 'bills'} awaiting amount` : ''}`} />
       <MetricCard label="Monthly fixed costs" value={money(monthlyFixed)} detail="Expected monthly equivalent" />
       <MetricCard label="Variable expenses" value={money(variableTotal)} detail={unknownVariableCount ? `${unknownVariableCount} variable ${unknownVariableCount === 1 ? 'bill' : 'bills'} awaiting actual amount` : 'Known amounts recorded in period'} />
@@ -1092,7 +1101,7 @@ function DashboardView({
             const refundHeight = bucket.refunds / maxTrend * 100
             const unpaidHeight = bucket.unpaid / maxTrend * 100
             return <div key={bucket.label} className="flex h-full min-w-0 flex-col items-center justify-end gap-1">
-              <div className="flex h-[calc(100%-1.25rem)] w-full items-end justify-center gap-1" aria-label={`${bucket.label}: ${money(bucket.paid)} paid, ${money(bucket.refunds)} refunded, ${money(bucket.unpaid)} unpaid`}>
+              <div className="flex h-[calc(100%-1.25rem)] w-full items-end justify-center gap-1" aria-label={`${bucket.label}: ${money(bucket.paid)} paid, ${money(bucket.refunds)} refunded, ${money(bucket.unpaid)} unpaid${bucket.unknown ? `, ${bucket.unknown} awaiting an amount` : ''}`}>
                 <div className="w-[42%] max-w-7 rounded-t bg-[#b98a3e] transition-[height]" style={{ height: `${Math.max(bucket.paid > 0 ? 3 : 0, paidHeight)}%` }} title={`Paid ${money(bucket.paid)}`} />
                 <div className="w-[32%] max-w-6 rounded-t bg-emerald-700/60 transition-[height] dark:bg-emerald-300/60" style={{ height: `${Math.max(bucket.refunds > 0 ? 3 : 0, refundHeight)}%` }} title={`Refunded ${money(bucket.refunds)}`} />
                 <div className="w-[42%] max-w-7 rounded-t bg-[#b98a3e]/30 dark:bg-[#e6c77f]/30 transition-[height]" style={{ height: `${Math.max(bucket.unpaid > 0 ? 3 : 0, unpaidHeight)}%` }} title={`Unpaid ${money(bucket.unpaid)}`} />
@@ -1138,9 +1147,10 @@ function buildTrendBuckets(expenses: ExpenseRow[], group: string) {
     const rangeExpenses = expenses.filter((expense) => expense.status !== 'cancelled' && expenseDateInPeriod(expense, start, end))
     const cash = expenses.reduce((result, expense) => {
       const activity = getLuxorExpenseCashActivityInPeriod(expense, start, end)
+      if (!activity.available) return result
       return { paid: result.paid + activity.paid, refunds: result.refunds + activity.refunds }
     }, { paid: 0, refunds: 0 })
-    const unpaid = rangeExpenses.reduce((sum, expense) => sum + Math.max(0, Number(expense.remaining_balance) || 0), 0)
+    const unpaid = rangeExpenses.filter(hasKnownAmount).reduce((sum, expense) => sum + Math.max(0, Number(expense.remaining_balance) || 0), 0)
     const unknown = rangeExpenses.filter((expense) => !hasKnownAmount(expense)).length
     return { key, label: group === 'monthly' ? `${label} '${bucketYear.slice(-2)}` : label, paid: cash.paid, refunds: cash.refunds, unpaid, unknown }
   })
@@ -1190,7 +1200,7 @@ function BusinessView({ data, categoryOptions, categoryFilter, setCategoryFilter
   const businessExpenses = data.expenses.filter((expense) => !expense.booking_id && expense.expense_type !== 'event')
   const filtered = businessExpenses.filter((expense) => (categoryFilter === 'all' || expense.category === categoryFilter) && (statusFilter === 'all' || expense.payment_status === statusFilter) && (!query.trim() || `${expense.description} ${expense.vendor_name} ${expense.category}`.toLowerCase().includes(query.trim().toLowerCase())))
   return <div className="space-y-5">
-    {data.bills.length ? <section className={`${CARD_CLASS} border-l-2 border-l-[#b98a3e] p-4 sm:p-5`}><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Reviewed vendor bills</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Bills from the invoice inbox stay in review until their facts are confirmed. Add a reviewed bill to the expense ledger once; its source file remains linked.</p></div><LinkButton href="/portal/operations?tab=bills">Open bill intake <ArrowRight size={14} /></LinkButton></div>{data.bills.some((bill) => Boolean(bill.payment_ready_at || bill.extraction_status === 'ready')) ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{data.bills.filter((bill) => Boolean(bill.payment_ready_at || bill.extraction_status === 'ready') && bill.status !== 'paid').slice(0, 3).map((bill) => <div key={bill.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{bill.provider} · {bill.service}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{money(bill.amount)} · Due {formatDate(bill.due_date)}{bill.source_filename ? ` · ${bill.source_filename}` : ''}</p></div>{data.expenses.some((expense) => expense.source_bill_id === bill.id) ? <span className="shrink-0 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Added to expenses</span> : <PortalButton type="button" onClick={() => onImportBill(bill)}>Review &amp; log</PortalButton>}</div>)}</div> : <p className="mt-3 text-xs text-[color:var(--portal-muted)]">Bills awaiting extraction or owner review remain in Operations and won’t affect expense totals.</p>}</section> : null}
+    {data.bills.length ? <section className={`${CARD_CLASS} border-l-2 border-l-[#b98a3e] p-4 sm:p-5`}><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Reviewed vendor bills</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-[color:var(--portal-muted)]">Bills from the invoice inbox stay in review until their facts are confirmed. Add a reviewed bill to the expense ledger once; its source file remains linked.</p></div><LinkButton href="/portal/operations?tab=bills">Open bill intake <ArrowRight size={14} /></LinkButton></div>{data.bills.some((bill) => bill.payment_ready_at && bill.extraction_status === 'ready' && bill.amount_state === 'known' && Number.isFinite(Number(bill.amount)) && Number(bill.amount) >= 0) ? <div className="mt-3 divide-y divide-[color:var(--portal-border)]">{data.bills.filter((bill) => bill.payment_ready_at && bill.extraction_status === 'ready' && bill.amount_state === 'known' && Number.isFinite(Number(bill.amount)) && Number(bill.amount) >= 0 && bill.status !== 'paid').slice(0, 3).map((bill) => <div key={bill.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-semibold text-[color:var(--portal-text)]">{bill.provider} · {bill.service}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{money(bill.amount)} · Due {formatDate(bill.due_date)}{bill.source_filename ? ` · ${bill.source_filename}` : ''}</p></div>{data.expenses.some((expense) => expense.source_bill_id === bill.id) ? <span className="shrink-0 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Added to expenses</span> : <PortalButton type="button" onClick={() => onImportBill(bill)}>Review &amp; log</PortalButton>}</div>)}</div> : <p className="mt-3 text-xs text-[color:var(--portal-muted)]">Bills awaiting extraction or owner review remain in Operations and won’t affect expense totals.</p>}</section> : null}
     <section className={`${CARD_CLASS} overflow-hidden`}>
       <div className="border-b border-[color:var(--portal-border)] p-4 sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Business expense ledger</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">General operating expenses remain separate from event costs.</p></div><div className="flex flex-wrap gap-2">{data.can_manage_categories ? <PortalButton type="button" onClick={onManageCategories}>Manage categories</PortalButton> : null}<PortalButton type="button" variant="primary" onClick={onAdd}><Plus size={14} /> Log expense</PortalButton></div></div>
         <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_12rem]"><label className="flex min-h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3"><MagnifyingGlass size={14} className="shrink-0 text-[color:var(--portal-muted)]" /><span className="sr-only">Search expenses</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search description or vendor" className="min-w-0 flex-1 bg-transparent text-sm text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)]" /></label><PortalSelect value={categoryFilter} onChange={setCategoryFilter} options={[{ value: 'all', label: 'All categories' }, ...categoryOptions]} buttonClassName="min-h-10 w-full" /><PortalSelect value={statusFilter} onChange={setStatusFilter} options={[{ value: 'all', label: 'All statuses' }, ...['expected', 'due_today', 'overdue', 'partially_paid', 'paid', 'cancelled'].map((value) => ({ value, label: expenseStatusLabel(value) }))]} buttonClassName="min-h-10 w-full" /></div>

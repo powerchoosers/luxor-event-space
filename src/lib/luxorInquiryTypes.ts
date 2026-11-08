@@ -662,6 +662,7 @@ export type LuxorBillEvidence = {
 
 export type LuxorBill = {
   id: string
+  archived_at?: string | null
   created_at: string
   updated_at: string
   service: string
@@ -755,6 +756,9 @@ export type LuxorTaskStatus = 'pending' | 'completed' | 'cancelled'
 export type LuxorTaskType = 'todo' | 'call' | 'email' | 'meeting' | 'other'
 
 export type LuxorTask = {
+  adoption_designation?: 'current' | 'deferred' | 'historical' | 'review' | null
+  adoption_due_at?: string | null
+  adoption_held?: boolean
   id: string
   created_at: string
   inquiry_id: string | null
@@ -1069,6 +1073,7 @@ export type LuxorMarketingSuppression = {
 
 export type LuxorVendor = {
   id: string
+  archived_at?: string | null
   created_at: string
   updated_at: string
   vendor_type: string
@@ -1077,4 +1082,9 @@ export type LuxorVendor = {
   phone: string | null
   rating: string | null
   coi_active: boolean
+  contact_person?: string | null
+  business_website?: string | null
+  mailing_address?: string | null
+  vendor_category?: string | null
+  internal_notes?: string | null
 }

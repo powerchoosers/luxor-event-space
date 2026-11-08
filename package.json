@@ -15,9 +15,13 @@
     "test:payments-dashboard": "node --test tests/luxor-payment-dashboard-model.test.cjs tests/luxor-manual-installment-route.test.cjs tests/luxor-payment-receipt-email-route.test.cjs tests/luxor-payment-reminder-history-route.test.cjs tests/luxor-payment-reminder-retry-route.test.cjs",
     "test:payment-ledger-postgres": "node --test tests/luxor-final-balance-guard-postgres.test.cjs",
     "test:follow-ups": "node --test tests/follow-ups-*.test.cjs tests/notes-route.test.cjs",
+    "test:workflow-portal": "node --test tests/workflow-call-continue-modal.test.cjs tests/workflow-current-email-lease.test.cjs tests/workflow-adopted-preview.test.cjs tests/ordered-workflow-task-display.test.cjs",
     "test:automations-library": "node --test tests/marketing-automations-library.test.cjs",
     "test:inquiry-consent": "node --test tests/inquiry-consent.test.cjs",
-    "test:payments-dashboard-model": "node --test tests/luxor-payment-dashboard-model.test.cjs"
+    "test:payments-dashboard-model": "node --test tests/luxor-payment-dashboard-model.test.cjs",
+    "test:phase5-bills": "node --test tests/luxor-phase5-bills.test.cjs",
+    "phase5:migration-readiness": "node scripts/phase5-migration-readiness.cjs",
+    "phase5:stage": "node scripts/stage-phase5.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

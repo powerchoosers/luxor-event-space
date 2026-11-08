@@ -25,7 +25,8 @@ function clean(value: unknown, max: number) {
 
 function money(value: unknown) {
   const parsed = typeof value === 'number' || typeof value === 'string' ? Number(value) : Number.NaN
-  return Number.isFinite(parsed) && parsed > 0 && Math.round(parsed * 100) === parsed * 100 ? parsed : null
+  const cents = Math.round(parsed * 100)
+  return Number.isFinite(parsed) && parsed > 0 && Number.isSafeInteger(cents) && Math.abs(parsed * 100 - cents) <= 1e-6 ? parsed : null
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -35,6 +36,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!isExpenseUuid(id)) throw new LuxorExpenseRequestError('Choose a valid expense.')
     const current = await getExpenseRecordWithHistory(id)
     if (!current) throw new LuxorExpenseRequestError('Expense not found.', 404)
+    // A fresh variable occurrence may still be confirmed or canceled. Other
+    // unknown balances must not be treated as zero during financial edits.
+    const freshVariableOccurrence = current.amount === 0
+      && current.metadata?.amount_state === 'variable'
+      && !Object.prototype.hasOwnProperty.call(current.metadata ?? {}, 'legacy_paid_amount')
+      && current.payments.length === 0
+      && current.status !== 'paid'
     const body = objectBody(await request.json())
     if (!body) throw new LuxorExpenseRequestError('Invalid expense update.')
 
@@ -52,7 +60,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         case 'amount': {
           const amount = money(body.amount)
           if (amount === null) throw new LuxorExpenseRequestError('Enter a positive amount to the nearest cent.')
-          if (amount < current.paid_amount) throw new LuxorExpenseRequestError('The expense total cannot be lower than its recorded paid amount. Record an adjustment first.')
+          if (current.paid_amount === null && !freshVariableOccurrence) throw new LuxorExpenseRequestError('Payment history needs review before changing this amount.', 409)
+          if (current.paid_amount !== null && amount < current.paid_amount) throw new LuxorExpenseRequestError('The expense total cannot be lower than its recorded paid amount. Record an adjustment first.')
           patch.amount = amount
           break
         }
@@ -91,7 +100,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           if (!['planned','incurred','cancelled'].includes(String(body.status))) throw new LuxorExpenseRequestError('Use Record payment to mark an expense paid.')
           if (body.status === 'cancelled') {
             if (current.source_bill_id) throw new LuxorExpenseRequestError('Unlink or resolve the source bill before canceling this expense.', 409)
-            if (current.paid_amount > 0) throw new LuxorExpenseRequestError('Record a refund or reversal before canceling an expense with a remaining paid balance.', 409)
+            if (current.paid_amount === null && !freshVariableOccurrence) throw new LuxorExpenseRequestError('Payment history needs review before canceling this expense.', 409)
+            if (current.paid_amount !== null && current.paid_amount > 0) throw new LuxorExpenseRequestError('Record a refund or reversal before canceling an expense with a remaining paid balance.', 409)
           }
           patch.status = body.status
           break

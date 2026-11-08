@@ -2,8 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOperationsSession } from '@/lib/luxorOperationsAccess'
 import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import type { LuxorBill } from '@/lib/luxorInquiryTypes'
+import { luxorTimestampIsKnown, luxorTimestampMs } from '@/lib/luxorTimestamp'
 
 const ALLOWED_FIELDS = new Set(['service', 'frequency', 'provider', 'amount', 'due_date', 'invoice_number', 'review_notes'])
+
+function realDueDate(value: string | null) {
+  if (!value) return true
+  const day = value.slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false
+  const [year, month, date] = day.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, date))
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === date
+}
 
 function reviewUpdates(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -15,8 +25,12 @@ function reviewUpdates(value: unknown) {
     if (!Number.isFinite(amount) || amount < 0) throw new Error('Amount must be a valid positive number.')
     updates.amount = amount
   }
-  if ('due_date' in updates && updates.due_date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(String(updates.due_date))) {
-    throw new Error('Due date must use YYYY-MM-DD.')
+  if ('due_date' in updates && updates.due_date !== null && updates.due_date !== '') {
+    const value = String(updates.due_date)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Due date must use YYYY-MM-DD.')
+    const [year, month, day] = value.split('-').map(Number)
+    const date = new Date(Date.UTC(year, month - 1, day))
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) throw new Error('Due date must be a real calendar day.')
   }
   return updates
 }
@@ -29,10 +43,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'Invalid bill.' }, { status: 400 })
     const body = await request.json() as { action?: string; updates?: unknown; note?: unknown; expectedUpdatedAt?: unknown }
     if (!['approve', 'flag', 'mark_paid', 'confirm_distinct'].includes(body.action || '')) return NextResponse.json({ error: 'Invalid review action.' }, { status: 400 })
-    const now = new Date(Math.max(Date.now(), Date.parse(String(body.expectedUpdatedAt)) + 1)).toISOString()
+    if (typeof body.expectedUpdatedAt !== 'string' || !luxorTimestampIsKnown(body.expectedUpdatedAt)) return NextResponse.json({ error: 'Reload the bill before reviewing.' }, { status: 400 })
+    const priorMs = luxorTimestampMs(body.expectedUpdatedAt)!
+    const now = new Date(Math.max(Date.now(), priorMs + 1)).toISOString()
     const changes = reviewUpdates(body.updates)
     if (Object.keys(changes).length) return NextResponse.json({ error: 'Save corrections before reviewing this bill.' }, { status: 400 })
-    if (typeof body.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(body.expectedUpdatedAt))) return NextResponse.json({ error: 'Reload the bill before reviewing.' }, { status: 400 })
     const [current] = await supabaseRest<LuxorBill[]>(`luxor_bills?id=eq.${id}&select=*&limit=1`)
     if (!current) return NextResponse.json({ error: 'Bill not found.' }, { status: 404 })
     if (current.updated_at !== body.expectedUpdatedAt || current.status === 'paid') return NextResponse.json({ error: 'Bill changed or is already paid. Reload before continuing.' }, { status: 409 })
@@ -40,17 +55,19 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       const [linkedExpense] = await supabaseRestStrict<Array<{ id: string }>>(
         `luxor_booking_expenses?select=id&source_bill_id=eq.${encodeURIComponent(current.id)}&limit=1`,
       )
-      if (linkedExpense) {
-        return NextResponse.json({
-          error: 'This bill is linked to an expense. Record its payment in Expense Management so balances and cash reporting stay in sync.',
-          expense_id: linkedExpense.id,
-        }, { status: 409 })
-      }
+      return NextResponse.json({
+        error: linkedExpense
+          ? 'Record this payment in Expense Management so balances and cash reporting stay in sync.'
+          : 'Link this reviewed bill to an expense in Expense Management, then record the payment there.',
+        expense_id: linkedExpense?.id || null,
+      }, { status: 409 })
     }
     if (body.action === 'approve' || body.action === 'mark_paid') {
       if (current.source_type !== 'manual' && !current.vendor_id) return NextResponse.json({ error: 'Link a company before approving or recording payment.' }, { status: 400 })
       if (!current.bill_category) return NextResponse.json({ error: 'Confirm a category before approving or recording payment.' }, { status: 400 })
       if (current.amount_state !== 'known') return NextResponse.json({ error: 'Confirm the bill amount before approving or recording payment.' }, { status: 400 })
+      if (!realDueDate(current.due_date)) return NextResponse.json({ error: 'Correct the due date before approving. A missing date is allowed, but an impossible date is not.' }, { status: 400 })
+      if (!realDueDate(current.issue_date)) return NextResponse.json({ error: 'Correct the issue date before approving. A missing issue date is allowed, but an impossible date is not.' }, { status: 400 })
       if (current.arithmetic_status === 'mismatch' || current.extraction_status === 'duplicate' || current.duplicate_of_bill_id) return NextResponse.json({ error: 'Resolve the duplicate or arithmetic discrepancy before approval or payment.' }, { status: 400 })
       if (body.action === 'approve' && current.extraction_status !== 'needs_review') return NextResponse.json({ error: 'Only a bill awaiting review can be approved.' }, { status: 400 })
       if (body.action === 'mark_paid' && current.extraction_status !== 'ready') return NextResponse.json({ error: 'Approve the bill before recording payment.' }, { status: 400 })
@@ -67,7 +84,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       extraction_status: 'needs_review', reviewed_at: now, reviewed_by: session.email,
       payment_ready_at: null, review_notes: typeof body.note === 'string' ? body.note.trim().slice(0, 1000) || 'Flagged for review.' : 'Flagged for review.',
     })
-    else Object.assign(changes, { status: 'paid', reviewed_at: now, reviewed_by: session.email })
     const [bill] = await supabaseRest<LuxorBill[]>(`luxor_bills?id=eq.${id}&updated_at=eq.${encodeURIComponent(body.expectedUpdatedAt)}&status=neq.paid&select=*`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ ...changes, updated_at: now }),
     })

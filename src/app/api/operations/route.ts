@@ -1,8 +1,11 @@
 import { after, NextRequest, NextResponse } from 'next/server'
-import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestStrict, SupabaseRestError } from '@/lib/supabaseRestServer'
 import { getOperationsSession } from '@/lib/luxorOperationsAccess'
 import { isLuxorBillCategory } from '@/lib/luxorBillCategories'
 import { analyzeManualBill } from '@/lib/luxorManualBillAnalysisServer'
+import { parseManualBillCreate } from '@/lib/luxorManualBillCreate'
+import { loadOperationsBillsWithExpenseLinks } from '@/lib/luxorOperationsBillExpenses'
+import { luxorTimestampIsKnown, luxorTimestampMs } from '@/lib/luxorTimestamp'
 import { LuxorBill, LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 export type { LuxorBill, LuxorBillIntake }
 export const maxDuration = 60
@@ -20,6 +23,7 @@ export type LuxorInventoryItem = {
 
 export type LuxorVendor = {
   id: string
+  archived_at?: string | null
   created_at: string
   updated_at: string
   vendor_type: string
@@ -68,25 +72,25 @@ export async function GET(request: NextRequest) {
     }
 
     const [bills, billIntakes, inventory, vendors, utilities, cleaning, tasks] = await Promise.all([
-      supabaseRestStrict<LuxorBill[]>('luxor_bills?select=*&order=due_date.asc,created_at.desc'),
+      loadOperationsBillsWithExpenseLinks<LuxorBill>({
+        embedded: () => supabaseRestStrict<Array<LuxorBill & { linked_expense: { id: string } | { id: string }[] | null }>>(
+          'luxor_bills?select=*,linked_expense:luxor_booking_expenses!luxor_booking_expenses_source_bill_id_fkey(id)&order=due_date.asc,created_at.desc',
+        ),
+        bills: () => supabaseRestStrict<LuxorBill[]>('luxor_bills?select=*&order=due_date.asc,created_at.desc'),
+        expenses: (billIds) => supabaseRestStrict<Array<{ id: string; source_bill_id: string | null }>>(
+          `luxor_booking_expenses?select=id,source_bill_id&source_bill_id=in.(${billIds.join(',')})`,
+        ),
+      }),
       supabaseRestStrict<LuxorBillIntake[]>('luxor_bill_intakes?select=*&order=received_at.desc&limit=100'),
       supabaseRest<LuxorInventoryItem[]>('luxor_inventory?select=*&order=name.asc').catch(() => []),
-      supabaseRestStrict<LuxorVendor[]>('luxor_vendors?select=*&order=name.asc'),
+      supabaseRestStrict<LuxorVendor[]>('luxor_vendors?select=id,created_at,updated_at,archived_at,vendor_type,name,email,phone,rating,coi_active&order=name.asc'),
       supabaseRest<LuxorUtilityReading[]>('luxor_utility_readings?select=*&order=sensor_type.asc').catch(() => []),
       supabaseRest<LuxorCleaningLog[]>('luxor_cleaning_logs?select=*&order=created_at.desc').catch(() => []),
       supabaseRest<LuxorMaintenanceTask[]>('luxor_maintenance_tasks?select=*&order=due_date.asc,created_at.desc').catch(() => []),
     ])
 
-    const billIds = bills.map((bill) => bill.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id))
-    const linkedExpenses = billIds.length
-      ? await supabaseRestStrict<Array<{ id: string; source_bill_id: string | null }>>(
-        `luxor_booking_expenses?select=id,source_bill_id&source_bill_id=in.(${billIds.join(',')})`,
-      )
-      : []
-    const linkedExpenseByBill = new Map(linkedExpenses.flatMap((expense) => expense.source_bill_id ? [[expense.source_bill_id, expense.id] as const] : []))
-
     return NextResponse.json({
-      bills: bills.map((bill) => ({ ...bill, linked_expense_id: linkedExpenseByBill.get(bill.id) || null })),
+      bills,
       billIntakes, inventory, vendors, utilities, cleaning, tasks,
     })
   } catch (error) {
@@ -110,31 +114,59 @@ export async function POST(request: NextRequest) {
     }
 
     let created: LuxorBill | LuxorInventoryItem | LuxorVendor | LuxorCleaningLog | LuxorMaintenanceTask | null = null
+    let replayedBill = false
 
     if (type === 'bill') {
-      if (data.amount_state !== undefined && !['known', 'unknown', 'variable'].includes(data.amount_state)) return NextResponse.json({ error: 'Invalid amount state.' }, { status: 400 })
-      const amountState = data.amount_state || 'known'
-      if (amountState === 'known' && (!['number', 'string'].includes(typeof data.amount) || (typeof data.amount === 'string' && !data.amount.trim()) || !Number.isFinite(Number(data.amount)) || Number(data.amount) < 0)) return NextResponse.json({ error: 'Enter a valid amount.' }, { status: 400 })
-      if (data.status && data.status !== 'unpaid') return NextResponse.json({ error: 'New bills must start unpaid.' }, { status: 400 })
-      const [res] = await supabaseRest<LuxorBill[]>('luxor_bills?select=*', {
-        method: 'POST',
-        headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({
-          service: data.service,
-          frequency: data.frequency || 'Monthly',
-          provider: data.provider,
-          amount: amountState === 'known' ? Number(data.amount) : 0,
-          amount_state: amountState,
-          status: 'unpaid',
-          due_date: data.due_date || null,
-          source_type: 'manual',
-          extraction_status: 'needs_review',
-          extracted_fields: { manual_analysis: { status: 'queued', queued_at: new Date().toISOString() } },
-          arithmetic_status: 'not_checked',
-          currency: 'USD',
-        }),
-      })
-      created = res
+      let parsed: ReturnType<typeof parseManualBillCreate>
+      try { parsed = parseManualBillCreate(data) }
+      catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Enter a valid bill.' }, { status: 400 }) }
+      const requestPath = `luxor_bills?select=*&client_request_id=eq.${encodeURIComponent(parsed.requestId)}&limit=1`
+      const readSaved = () => supabaseRestStrict<Array<LuxorBill & { client_request_fingerprint?: string | null }>>(requestPath)
+      const existing = await readSaved()
+      if (parsed.draft.vendorId) {
+        const [vendor] = await supabaseRestStrict<Array<{ id: string }>>(`luxor_vendors?select=id&id=eq.${encodeURIComponent(parsed.draft.vendorId)}&limit=1`)
+        if (!vendor) return NextResponse.json({ error: 'Choose a vendor that is already saved.' }, { status: 400 })
+      }
+      if (existing[0]) {
+        if (existing[0].client_request_fingerprint !== parsed.fingerprint) return NextResponse.json({ error: 'This save was already used for a different bill. Change a detail and save again.' }, { status: 409 })
+        created = existing[0]
+        replayedBill = true
+      } else {
+        try {
+          const [res] = await supabaseRest<LuxorBill[]>('luxor_bills?select=*', {
+            method: 'POST',
+            headers: { Prefer: 'return=representation' },
+            body: JSON.stringify({
+              service: parsed.draft.service,
+              frequency: parsed.draft.frequency,
+              provider: parsed.draft.provider,
+              amount: parsed.draft.amountCents === null ? 0 : parsed.draft.amountCents / 100,
+              amount_state: parsed.draft.amountState,
+              bill_category: parsed.draft.billCategory,
+              status: 'unpaid',
+              due_date: parsed.draft.dueDate,
+              invoice_number: parsed.draft.invoiceNumber,
+              issue_date: parsed.draft.issueDate,
+              source_type: 'manual',
+              extraction_status: 'needs_review',
+              extracted_fields: { manual_analysis: { status: 'queued', queued_at: new Date().toISOString() } },
+              arithmetic_status: 'not_checked',
+              currency: 'USD',
+              vendor_id: parsed.draft.vendorId,
+              vendor_link_method: parsed.draft.vendorId ? 'owner' : null,
+              client_request_id: parsed.requestId,
+              client_request_fingerprint: parsed.fingerprint,
+            }),
+          })
+          created = res
+        } catch (error) {
+          if (!(error instanceof SupabaseRestError) || error.code !== '23505') throw error
+          const raced = await readSaved()
+          if (!raced[0] || raced[0].client_request_fingerprint !== parsed.fingerprint) return NextResponse.json({ error: 'This save was already used for a different bill. Change a detail and save again.' }, { status: 409 })
+          created = raced[0]
+          replayedBill = true
+        }
+      }
     } else if (type === 'inventory') {
       const [res] = await supabaseRest<LuxorInventoryItem[]>('luxor_inventory?select=*', {
         method: 'POST',
@@ -149,7 +181,7 @@ export async function POST(request: NextRequest) {
       })
       created = res
     } else if (type === 'vendor') {
-      const [res] = await supabaseRest<LuxorVendor[]>('luxor_vendors?select=*', {
+      const [res] = await supabaseRest<LuxorVendor[]>('luxor_vendors?select=id,created_at,updated_at,archived_at,vendor_type,name,email,phone,rating,coi_active', {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
@@ -191,13 +223,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid operation type.' }, { status: 400 })
     }
 
-    if (type === 'bill' && created) {
+    if (type === 'bill' && created && !replayedBill) {
       const id = created.id
       try { after(async () => { await analyzeManualBill(id).catch((error) => console.error('Manual bill analysis failed:', error)) }) }
       catch (error) { console.error('Manual bill analysis scheduling failed:', error) }
     }
-    return NextResponse.json(created, { status: 201 })
+    let recurringObligation: string | null = null
+    if (type === 'bill' && created && 'provider' in created && 'bill_category' in created && typeof created.provider === 'string' && typeof created.bill_category === 'string') {
+      try {
+        const templates = await supabaseRestStrict<Array<{ name: string; vendor_name: string | null; category: string }>>('luxor_expense_templates?select=name,vendor_name,category&is_active=eq.true')
+        const provider = created.provider.trim().toLowerCase()
+        const category = created.bill_category.trim().toLowerCase()
+        let vendorName = ''
+        if ('vendor_id' in created && typeof created.vendor_id === 'string' && created.vendor_id) {
+          const [vendor] = await supabaseRestStrict<Array<{ name: string }>>(`luxor_vendors?select=name&id=eq.${encodeURIComponent(created.vendor_id)}&limit=1`)
+          vendorName = vendor?.name.trim().toLowerCase() || ''
+        }
+        const sameCategory = (template: { vendor_name: string | null; category: string }) => template.category.trim().toLowerCase() === category
+        recurringObligation = templates.find((template) => vendorName && (template.vendor_name || '').trim().toLowerCase() === vendorName && sameCategory(template))?.name
+          || templates.find((template) => provider && (template.vendor_name || '').trim().toLowerCase() === provider && sameCategory(template))?.name
+          || null
+      } catch { recurringObligation = null }
+    }
+    return NextResponse.json(recurringObligation ? { ...created, recurring_obligation: recurringObligation } : created, { status: 201 })
   } catch (error) {
+    if (error instanceof SupabaseRestError && error.code === '23505') return NextResponse.json({ error: 'A vendor with this name already exists. Review the existing vendor.' }, { status: 409 })
     const message = error instanceof Error ? error.message : 'Failed to create operation entry.'
     return NextResponse.json({ error: message }, { status: 500 })
   }
@@ -228,8 +278,10 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid operation type.' }, { status: 400 })
     }
 
-    if (type === 'vendor' && Object.prototype.hasOwnProperty.call(updates, 'rating')) {
-      updates.rating = typeof updates.rating === 'string' && updates.rating.trim() ? updates.rating.trim() : null
+    if (type === 'vendor') {
+      const allowed = new Set(['name', 'vendor_type', 'email', 'phone', 'rating', 'coi_active'])
+      for (const key of Object.keys(updates)) if (!allowed.has(key)) delete updates[key]
+      if (Object.prototype.hasOwnProperty.call(updates, 'rating')) updates.rating = typeof updates.rating === 'string' && updates.rating.trim() ? updates.rating.trim() : null
     }
 
     let versionGuard = ''
@@ -240,29 +292,50 @@ export async function PATCH(request: NextRequest) {
       if (updates.amount_state != null && !['known', 'unknown', 'variable'].includes(updates.amount_state)) return NextResponse.json({ error: 'Invalid amount state.' }, { status: 400 })
       if ('amount' in updates && (!['number', 'string'].includes(typeof updates.amount) || (typeof updates.amount === 'string' && !updates.amount.trim()) || !Number.isFinite(Number(updates.amount)) || Number(updates.amount) < 0)) return NextResponse.json({ error: 'Enter a valid amount.' }, { status: 400 })
       if (updates.amount_state === 'known' && !('amount' in updates)) return NextResponse.json({ error: 'Enter a confirmed amount.' }, { status: 400 })
-      if (typeof expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(expectedUpdatedAt))) return NextResponse.json({ error: 'Reload the bill before editing.' }, { status: 400 })
+      if (updates.amount_state === 'unknown' || updates.amount_state === 'variable') updates.amount = 0
+      if (typeof expectedUpdatedAt !== 'string' || !luxorTimestampIsKnown(expectedUpdatedAt)) return NextResponse.json({ error: 'Reload the bill before editing.' }, { status: 400 })
       const [current] = await supabaseRest<LuxorBill[]>(`luxor_bills?id=eq.${encodeURIComponent(id)}&select=*&limit=1`)
       if (!current) return NextResponse.json({ error: 'Bill not found.' }, { status: 404 })
       if (current.status === 'paid') return NextResponse.json({ error: 'Paid bills require an audited correction workflow.' }, { status: 409 })
       if (updates.status === 'paid') return NextResponse.json({ error: 'Use the bill review action to record payment.' }, { status: 400 })
       if (current.updated_at !== expectedUpdatedAt) return NextResponse.json({ error: 'Bill changed. Reload and try again.' }, { status: 409 })
+      if (typeof updates.frequency === 'string') {
+        const next = updates.frequency.trim()
+        const allowed = ['One-time', 'Weekly', 'Biweekly', 'Monthly', 'Quarterly', 'Annually']
+        if (!next || next.length > 40 || (!allowed.includes(next) && next !== current.frequency)) return NextResponse.json({ error: 'Choose a bill frequency.' }, { status: 400 })
+        updates.frequency = next
+      }
+      if ('due_date' in updates) {
+        const value = updates.due_date
+        if (value === null || value === '') updates.due_date = null
+        else if (typeof value !== 'string') return NextResponse.json({ error: 'Choose a valid due date.' }, { status: 400 })
+        else {
+          const day = value.slice(0, 10)
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return NextResponse.json({ error: 'Choose a valid due date.' }, { status: 400 })
+          const [year, month, dayNumber] = day.split('-').map(Number)
+          const date = new Date(Date.UTC(year, month - 1, dayNumber))
+          if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== dayNumber) return NextResponse.json({ error: 'Choose a valid due date.' }, { status: 400 })
+          updates.due_date = day
+        }
+      }
       versionGuard = `&updated_at=eq.${encodeURIComponent(expectedUpdatedAt)}&status=neq.paid`
       updates.extraction_status = 'needs_review'
       updates.payment_ready_at = null
     }
 
-    const [updated] = await supabaseRest<(LuxorBill | LuxorInventoryItem | LuxorVendor | LuxorCleaningLog | LuxorUtilityReading | LuxorMaintenanceTask)[]>(`${table}?select=*&id=eq.${encodeURIComponent(id)}${versionGuard}`, {
+    const [updated] = await supabaseRest<(LuxorBill | LuxorInventoryItem | LuxorVendor | LuxorCleaningLog | LuxorUtilityReading | LuxorMaintenanceTask)[]>(`${table}?select=${type === 'vendor' ? 'id,created_at,updated_at,vendor_type,name,email,phone,rating,coi_active' : '*'}&id=eq.${encodeURIComponent(id)}${versionGuard}`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({
         ...updates,
-        updated_at: new Date(type === 'bill' ? Math.max(Date.now(), Date.parse(expectedUpdatedAt) + 1) : Date.now()).toISOString(),
+        updated_at: new Date(type === 'bill' ? Math.max(Date.now(), luxorTimestampMs(expectedUpdatedAt)! + 1) : Date.now()).toISOString(),
       }),
     })
 
     if (!updated) return NextResponse.json({ error: 'Record changed. Reload and try again.' }, { status: 409 })
     return NextResponse.json(updated)
   } catch (error) {
+    if (error instanceof SupabaseRestError && error.code === '23505') return NextResponse.json({ error: 'A vendor with this name already exists. Review the existing vendor.' }, { status: 409 })
     const message = error instanceof Error ? error.message : 'Failed to update operation entry.'
     return NextResponse.json({ error: message }, { status: 500 })
   }
@@ -283,10 +356,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Type and ID parameters are required.' }, { status: 400 })
     }
 
+    if (type === 'bill' || type === 'vendor') {
+      return NextResponse.json({ error: 'Bills and vendors are retained for history and cannot be deleted.' }, { status: 409 })
+    }
+
     let table = ''
-    if (type === 'bill') table = 'luxor_bills'
-    else if (type === 'inventory') table = 'luxor_inventory'
-    else if (type === 'vendor') table = 'luxor_vendors'
+    if (type === 'inventory') table = 'luxor_inventory'
     else if (type === 'cleaning') table = 'luxor_cleaning_logs'
     else if (type === 'utility') table = 'luxor_utility_readings'
     else if (type === 'task') table = 'luxor_maintenance_tasks'
@@ -294,12 +369,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid operation type.' }, { status: 400 })
     }
 
-    const result = await supabaseRest<unknown[]>(`${table}?id=eq.${encodeURIComponent(id)}${type === 'bill' ? '&status=neq.paid&select=id' : ''}`, {
-      method: 'DELETE',
-      ...(type === 'bill' ? { headers: { Prefer: 'return=representation' } } : {}),
-    })
-
-    if (type === 'bill' && !result?.length) return NextResponse.json({ error: 'Paid bills cannot be deleted; use an audited correction workflow.' }, { status: 409 })
+    await supabaseRest<unknown[]>(`${table}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' })
 
     return NextResponse.json({ success: true })
   } catch (error) {

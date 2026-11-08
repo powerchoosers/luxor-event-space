@@ -1,0 +1,121 @@
+# Phase 5 only — stage list and commit message (do not push unless Lewis asks)
+# Branch today: main behind origin/main by 7 (date/readability + Team Access commits on remote).
+# Merge blocked until Phase 5 is committed OR tracked WIP is stashed, then `git merge origin/main`, then `git stash pop` (expect conflicts on finances page, BillsPayableLedger, PortalElenaChat, TeamAccessManager, LuxorTestLeadPanel, invoices page).
+
+## Suggested commit message
+
+Phase 5: honest bill balances, vendor profiles, and in-portal reminders.
+
+Wire Financial Bills and Operations payables to verified expense payment history,
+vendor profiles with documents and archive, manual-bill idempotency, and reminder
+preferences that list in-portal only. Hide vendor linking on paid bills and explain
+why. Excludes Elena confirmations, financial planning, and statement-match work.
+
+## Stage (paths relative to repo root)
+
+### Portal UI
+src/app/(portal)/portal/finances/bills/page.tsx
+src/app/(portal)/portal/finances/bills/vendors/[id]/page.tsx
+src/components/portal/BillPlanning.tsx
+src/components/portal/BillsPayableLedger.tsx
+src/components/portal/FinancialBills.tsx
+src/components/portal/FinanceBrowseViews.tsx
+src/components/portal/ManualBillAnalysis.tsx
+src/components/portal/OperationsArchivePanel.tsx
+src/components/portal/VendorBillsProfile.tsx
+src/components/portal/VendorBusinessDetails.tsx
+src/components/portal/VendorDocuments.tsx
+src/components/portal/expenses/ExpenseManagement.tsx
+
+### Portal shells touched for Bills routes only (review diff before staging)
+src/app/(portal)/portal/finances/page.tsx
+src/app/(portal)/portal/operations/page.tsx
+
+### API
+src/app/api/operations/archive/
+src/app/api/operations/bills/[id]/planning/
+src/app/api/operations/bills/[id]/analysis/route.ts
+src/app/api/operations/bills/[id]/company/route.ts
+src/app/api/operations/bills/[id]/review/route.ts
+src/app/api/operations/route.ts
+src/app/api/portal/bill-center/
+src/app/api/portal/vendor-profile/
+src/app/api/expenses/management/route.ts
+src/app/api/expenses/[id]/route.ts
+src/app/api/expenses/[id]/payments/route.ts
+
+### Shared libs (Phase 5)
+src/lib/luxorBillBalances.ts
+src/lib/luxorBillReminders.ts
+src/lib/luxorManualBillCreate.ts
+src/lib/luxorTimestamp.ts
+src/lib/luxorVendorBillLinks.ts
+src/lib/luxorVendorDocumentsServer.ts
+src/lib/luxorVendorRefreshFence.ts
+src/lib/luxorOperationsBillExpenses.ts
+src/lib/luxorExpenseAmount.ts
+src/lib/luxorPostgrestSchema.ts
+src/lib/luxorFinanceReporting.ts
+src/lib/luxorExpensesServer.ts
+src/lib/luxorExpenseTypes.ts
+src/lib/luxorManualBillAnalysisServer.ts
+src/lib/luxorInquiryTypes.ts
+
+### Migrations (production batch — already applied; check in for reproducibility)
+supabase/migrations/20261108031817_luxor_archive_bill_vendor.sql
+supabase/migrations/20261108032405_luxor_vendor_profiles_and_bill_plans.sql
+supabase/migrations/20261108040719_luxor_vendor_name_guard.sql
+supabase/migrations/20261108042619_luxor_vendor_claim_archive_completion.sql
+supabase/migrations/20261108044218_luxor_vendor_document_audit.sql
+supabase/migrations/20261108050127_luxor_manual_bill_due_queue.sql
+supabase/migrations/20261108210000_luxor_manual_bill_request_id.sql
+
+### Tests, scripts, docs
+tests/luxor-phase5-bills.test.cjs
+scripts/phase5-migration-readiness.cjs
+scripts/stage-phase5.cjs
+scripts/phase5-commit-scope.txt
+docs/phase5-completion-report.md
+package.json
+
+## Local dev fix (do not stage with Phase 5 unless leads call-modal ship is in scope)
+src/lib/luxorCallStopIntent.ts
+src/lib/luxorNextFollowUpDisplay.ts
+
+## Do NOT stage with Phase 5 (Phase 6 / 7 / Elena / proposals)
+src/app/api/portal/elena-*
+src/app/api/portal/financial-planning/
+src/app/api/portal/statement-*
+src/app/api/portal/accountant-client-payments/
+src/app/api/portal/accounting-setup/
+src/components/portal/FinancialPlanning*
+src/components/portal/Statement*
+src/components/portal/Accounting*
+src/components/portal/AccountantSourceExports.tsx
+src/components/portal/Elena*
+src/lib/luxorFinancialPlanning*
+src/lib/luxorStatement*
+src/lib/luxorElena*
+src/lib/luxorAccounting*
+src/lib/luxorCashStatement*
+src/lib/luxorHistoricalPaymentReview*
+src/lib/luxorFinancialRevenuePlan*
+src/lib/luxorLegacyExpenseBalances.ts
+supabase/migrations/20261108031232_luxor_bill_history_guards.sql
+supabase/migrations/20261108053000_luxor_historical_payment_review_foundation.sql
+supabase/migrations/20261108060500_elena_note_confirmations.sql
+supabase/migrations/20261108070000_elena_task_confirmations.sql
+supabase/migrations/20261108073000_elena_tour_close_confirmations.sql
+supabase/migrations/20261108074000_elena_cleaning_completion_confirmations.sql
+supabase/migrations/20261108133927_luxor_revenue_budget_targets.sql
+supabase/*.sql proposal files under supabase/ (non-migrations)
+
+## Pre-commit checks (Phase 5 scope)
+npm run test:phase5-bills
+npm run phase5:migration-readiness
+npm run lint -- --quiet
+# Full repo typecheck currently fails on Phase 6 luxorFinancialPlanningForecast.ts — fix or split commits.
+
+## UAT evidence (Nov 8, 2026, prod DB + localhost:3000)
+- Balance bill 3ca1fff2-…5742: $150 paid, KPI Paid this month $150, vendor link blocked when paid (DB + UI copy).
+- Reminder bill 6e3bcadc-…902fd: vendor Golden Rose linked, expense 959faaa9-…, prefs seven_days=true, Bill reminders list shows Due in 7 days · $75.

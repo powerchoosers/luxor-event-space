@@ -38,7 +38,8 @@ function cleanText(value: unknown, max = 500) {
 function parsedAmount(value: unknown) {
   if (typeof value !== 'number' && typeof value !== 'string') return null
   const amount = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(amount) && amount > 0 && Math.round(amount * 100) === amount * 100 ? amount : null
+  const cents = Math.round(amount * 100)
+  return Number.isFinite(amount) && amount > 0 && Number.isSafeInteger(cents) && Math.abs(amount * 100 - cents) <= 1e-6 ? amount : null
 }
 
 export async function GET() {

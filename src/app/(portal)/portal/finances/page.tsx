@@ -18,12 +18,14 @@ import {
   PortalButton,
   PortalSkeleton
 } from '@/components/portal/PortalUI'
-import { MagicCard } from '@/components/ui/magic-card'
 import FinancialOverview from '@/components/portal/FinancialOverview'
+import { AccountingReviewSection } from '@/components/portal/AccountingReviewSection'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView, LuxorBill } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
-import { formatLuxorPaymentCalendarDate, getLuxorBusinessFinanceRows, getLuxorFinanceOverview, getLuxorPaidExpenseBreakdown, getLuxorPaymentCalendarDateKey, type LuxorFinanceAllocationRow } from '@/lib/luxorFinanceReporting'
+import { getLuxorBusinessFinanceRows, getLuxorFinanceOverview, getLuxorPaidExpenseBreakdown, getLuxorPaymentCalendarDateKey, type LuxorFinanceAllocationRow } from '@/lib/luxorFinanceReporting'
+import { formatLuxorDate } from '@/lib/luxorDateFormatting'
+import { expenseAmountState } from '@/lib/luxorExpenseAmount'
 
 type BookingWithPayments = LuxorBooking & {
   payments?: LuxorPayment[]
@@ -51,6 +53,7 @@ export default function FinancesPage() {
   const reduceMotion = useReducedMotion()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
+  const [showAccountingReview, setShowAccountingReview] = useState(false)
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
@@ -74,14 +77,14 @@ type LuxorBookingExpense = {
   category: string
   description: string | null
   vendor_name: string | null
-  amount: number
+  amount: number | null
   incurred_on: string
   status: string
   notes: string | null
   metadata: Record<string, unknown>
-  paid_amount?: number
-  remaining_balance?: number
-  payment_status?: 'expected' | 'due_today' | 'overdue' | 'partially_paid' | 'paid' | 'cancelled'
+  paid_amount?: number | null
+  remaining_balance?: number | null
+  payment_status?: 'expected' | 'due_today' | 'overdue' | 'partially_paid' | 'paid' | 'cancelled' | 'needs_review'
   payments?: Array<{ id: string; transaction_type: 'payment' | 'refund' | 'reversal'; amount: number }>
 }
 
@@ -172,7 +175,7 @@ type LuxorBookingExpense = {
   useEffect(() => {
     const syncViewFromUrl = () => {
       const view = new URLSearchParams(window.location.search).get('view')
-      if (view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'reports') setActiveTab(view)
+      setActiveTab(view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'reports' ? view : 'dashboard')
     }
     syncViewFromUrl()
     window.addEventListener('popstate', syncViewFromUrl)
@@ -225,7 +228,9 @@ type LuxorBookingExpense = {
 
   const handleRemoveExpense = async (expense: LuxorBookingExpense) => {
     const description = expense.description || 'this expense'
-    const amount = Number(expense.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const amountState = expenseAmountState(expense.amount, expense.metadata)
+    if (!amountState.known || amountState.amount === null) return
+    const amount = amountState.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     if (!window.confirm(`Remove “${description}” ($${amount}) from the expense totals? It will be marked cancelled and remain in the ledger history.`)) return
     try {
       setExpenseActionError(null)
@@ -379,7 +384,7 @@ type LuxorBookingExpense = {
             { id: 'reports', label: 'Financial Reports', icon: <Eye size={16} weight="regular" /> },
           ]}
           activeTab={activeTab}
-          onTabChange={(tab) => { setActiveTab(tab as Tab); setSearchTerm('') }}
+          onTabChange={(tab) => selectLegacyView(tab as Tab)}
         />
       </div>
 
@@ -391,7 +396,7 @@ type LuxorBookingExpense = {
           overview={overview}
           expenses={expenseBreakdown}
           bills={bills}
-          openView={setActiveTab}
+          openView={selectLegacyView}
           activity={allLedgerTransactions.flatMap((transaction) => {
             if (transaction.kind === 'payment') {
               const payment = transaction.payment
@@ -574,7 +579,7 @@ type LuxorBookingExpense = {
                           <p className={`text-[9px] font-bold uppercase tracking-widest mt-1 ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-[#caa24c]'}`}>{label}</p>
                         </td>
                         <td className="px-6 py-5 text-xs text-[color:var(--portal-muted)] font-medium">{isRefund ? 'Stripe' : transaction.payment.payment_method || 'Bank Transfer'}</td>
-                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{at ? isRefund ? new Date(at).toLocaleDateString() : formatLuxorPaymentCalendarDate(at) : 'N/A'}</td>
+                        <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{formatLuxorDate(at) || 'N/A'}</td>
                         <td className={`px-8 py-5 text-right tabular-nums font-bold ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{isRefund ? status === 'succeeded' ? '-' : '' : status === 'refunded' ? '-' : '+'}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       </tr>
                     })
@@ -715,20 +720,24 @@ type LuxorBookingExpense = {
                       visibleExpenses.map((exp) => (
                         <tr key={exp.id} className={`hover:bg-[color:var(--portal-soft)]/50 transition-colors ${exp.status === 'cancelled' ? 'opacity-60' : ''}`}>
                           <td className="px-8 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">
-                            {exp.incurred_on ? new Date(exp.incurred_on).toLocaleDateString() : 'N/A'}
+                            {formatLuxorDate(exp.incurred_on) || 'N/A'}
                           </td>
                           <td className="px-6 py-5 font-bold text-[color:var(--portal-text)]">
                             {exp.description || 'General Operational Expense'}
                           </td>
                           <td className="px-6 py-5 font-bold uppercase tracking-wider text-[10px] text-[#a37d2c] dark:text-[#caa24c]">{exp.category}</td>
-                          <td className="px-6 py-5 text-xs capitalize text-[color:var(--portal-muted)]">{exp.payment_status === 'overdue' ? 'Overdue' : exp.payment_status === 'due_today' ? 'Due today' : exp.payment_status === 'partially_paid' ? 'Partially paid' : exp.payment_status === 'paid' ? 'Paid' : exp.payment_status === 'cancelled' || exp.status === 'cancelled' ? 'Canceled' : exp.status === 'incurred' ? 'Incurred - unpaid' : 'Expected'}</td>
+                          <td className="px-6 py-5 text-xs capitalize text-[color:var(--portal-muted)]">{exp.payment_status === 'cancelled' || exp.status === 'cancelled' ? 'Canceled' : exp.payment_status === 'needs_review' || exp.paid_amount == null || exp.remaining_balance == null ? 'Needs review' : exp.payment_status === 'overdue' ? 'Overdue' : exp.payment_status === 'due_today' ? 'Due today' : exp.payment_status === 'partially_paid' ? 'Partially paid' : exp.payment_status === 'paid' ? 'Paid' : exp.status === 'incurred' ? 'Incurred - unpaid' : 'Expected'}</td>
                           <td className="px-8 py-5 text-right tabular-nums font-bold text-rose-600 dark:text-rose-400">
-                            {exp.status === 'cancelled' ? '' : '-'}${Number(exp.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            {(() => {
+                              const state = expenseAmountState(exp.amount, exp.metadata)
+                              if (!state.known || state.amount === null) return exp.metadata?.amount_state === 'variable' ? 'Variable amount' : exp.metadata?.amount_state === 'unknown' ? 'Unknown amount' : 'Amount pending'
+                              return `${exp.status === 'cancelled' ? '' : '-'}${state.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`
+                            })()}
                           </td>
                           <td className="px-6 py-5 text-right">
                             <div className="flex items-center justify-end gap-3">
                               {exp.status !== 'cancelled' && <Link href={`/portal/finances/expenses/${encodeURIComponent(exp.id)}`} className="text-xs font-semibold text-[#9a712e] underline decoration-[color:var(--portal-border)] underline-offset-4 dark:text-[#e6c77f]">Details</Link>}
-                              {exp.status !== 'cancelled' && !(Number(exp.paid_amount || 0) > 0 || exp.payments?.length) && <button type="button" onClick={() => void handleRemoveExpense(exp)} disabled={expenseActionBusyId === exp.id} aria-label={`Cancel ${exp.description || 'expense'}`} className="text-xs font-semibold text-[color:var(--portal-muted)] underline decoration-[color:var(--portal-border)] underline-offset-4 hover:text-rose-700 dark:hover:text-rose-300 disabled:opacity-50">{expenseActionBusyId === exp.id ? 'Canceling...' : 'Cancel'}</button>}
+                              {exp.status !== 'cancelled' && exp.payment_status !== 'needs_review' && expenseAmountState(exp.amount, exp.metadata).known && exp.paid_amount === 0 && exp.remaining_balance != null && Array.isArray(exp.payments) && exp.payments.length === 0 && <button type="button" onClick={() => void handleRemoveExpense(exp)} disabled={expenseActionBusyId === exp.id} aria-label={`Cancel ${exp.description || 'expense'}`} className="text-xs font-semibold text-[color:var(--portal-muted)] underline decoration-[color:var(--portal-border)] underline-offset-4 hover:text-rose-700 dark:hover:text-rose-300 disabled:opacity-50">{expenseActionBusyId === exp.id ? 'Canceling...' : 'Cancel'}</button>}
                             </div>
                           </td>
                         </tr>
@@ -744,12 +753,44 @@ type LuxorBookingExpense = {
 
         {/* REPORTS TAB */}
         {activeTab === 'reports' && (
-          <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-            <MagicCard className="rounded-2xl p-6">
-              <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Live Business Reports</h3>
-              <p className="mt-3 max-w-xl text-xs leading-relaxed text-[color:var(--portal-muted)]">The previous category percentages were estimates presented as facts. The Business Reports page now calculates revenue, conversion, booking value, event types, expenses, and outstanding invoices from saved records.</p>
-              <Link href="/portal/reports" className="mt-5 inline-flex rounded-lg border border-[#caa24c]/30 bg-[#caa24c]/15 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#a37d2c] dark:text-[#f1d27a]">Open live reports</Link>
-            </MagicCard>
+          <div className="flex-1 min-h-0 space-y-4 overflow-y-auto portal-scrollbar pr-1 pb-8">
+            <section className="max-w-3xl rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
+              <h2 className="text-base font-semibold text-[color:var(--portal-text)]">Financial reports</h2>
+              <p className="mt-2 text-sm leading-relaxed text-[color:var(--portal-muted)]">Review recorded collections, expenses, budgets, and payment history in Finances.</p>
+              <div className="mt-5 border-t border-[color:var(--portal-border)] pt-4">
+                <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">All-time cash and payment review</h3>
+                <p className="mt-1 text-xs leading-relaxed text-[color:var(--portal-muted)]">A verified all-time summary is not available yet. Open payment history to review recorded payments and refunds.</p>
+              </div>
+              <div className="mt-5 divide-y divide-[color:var(--portal-border)] border-t border-[color:var(--portal-border)]">
+                <button type="button" onClick={() => selectLegacyView('dashboard')} className="block w-full rounded px-1 py-4 text-left hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+                  <span className="block text-sm font-semibold text-[color:var(--portal-text)]">Financial overview</span>
+                  <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">Collections, paid expenses, balances, and monthly trends.</span>
+                </button>
+                {[
+                  { href: '/portal/finances/monthly', label: 'Monthly collections', description: 'Recorded and scheduled client payments by month.' },
+                  { href: '/portal/finances/budgets', label: 'Budgets and actuals', description: 'Compare spending targets with recorded payments.' },
+                  { href: '/portal/finances/history', label: 'Payment history', description: 'Review incoming payments and refunds.' },
+                  { href: '/portal/finances/accountant', label: 'Accountant export', description: 'Download expense and payment history for review.' },
+                ].map((item) => <Link key={item.href} href={item.href} className="block rounded px-1 py-4 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+                  <span className="block text-sm font-semibold text-[color:var(--portal-text)]">{item.label}</span>
+                  <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{item.description}</span>
+                </Link>)}
+              </div>
+            </section>
+            <section className="max-w-3xl rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-[color:var(--portal-text)]">Accounting review</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-[color:var(--portal-muted)]">Open to check accounting setup and statement history. Saving changes and importing statements are unavailable.</p>
+                </div>
+                <PortalButton type="button" aria-expanded={showAccountingReview} aria-controls="accounting-review-content" onClick={() => setShowAccountingReview((open) => !open)}>
+                  {showAccountingReview ? 'Close review' : 'Open review'}
+                </PortalButton>
+              </div>
+              <div id="accounting-review-content" hidden={!showAccountingReview} className="mt-5">
+                {showAccountingReview && <AccountingReviewSection canEdit={false} />}
+              </div>
+            </section>
           </div>
         )}
       </PortalTabTransition>

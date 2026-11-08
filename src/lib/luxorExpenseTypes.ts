@@ -5,7 +5,7 @@ export type LuxorExpenseType = 'business' | 'event'
 export type LuxorExpenseFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annually' | 'custom'
 export type LuxorExpensePaymentMethod = 'Credit Card' | 'Debit Card' | 'Cash' | 'Zelle' | 'Bank Transfer' | 'Check' | 'Stripe' | 'Other'
 export type LuxorExpensePaymentTransactionType = 'payment' | 'refund' | 'reversal'
-export type LuxorExpensePaymentStatus = 'expected' | 'due_today' | 'overdue' | 'partially_paid' | 'paid' | 'cancelled'
+export type LuxorExpensePaymentStatus = 'expected' | 'due_today' | 'overdue' | 'partially_paid' | 'paid' | 'cancelled' | 'needs_review'
 
 export type LuxorExpensePayment = {
   id: string
@@ -100,7 +100,7 @@ export type LuxorExpenseRecord = {
   category_id: string | null
   description: string | null
   vendor_name: string | null
-  amount: number
+  amount: number | null
   incurred_on: string | null
   due_date: string | null
   status: LuxorExpenseRecordStatus
@@ -114,7 +114,7 @@ export type LuxorExpenseRecord = {
   billing_period_start: string | null
   billing_period_end: string | null
   source_bill_id: string | null
-  paid_amount: number
+  paid_amount: number | null
   remaining_balance: number | null
   payments: LuxorExpensePayment[]
 }

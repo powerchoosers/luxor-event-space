@@ -46,7 +46,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const paymentDate = body.payment_date
     const paymentMethod = clean(body.payment_method, 40)
     const idempotencyKey = clean(body.idempotency_key, 200)
-    if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) throw new LuxorExpenseRequestError('Enter a positive payment amount to the nearest cent.')
+    const cents = Math.round(amount * 100)
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isSafeInteger(cents) || Math.abs(amount * 100 - cents) > 1e-6) throw new LuxorExpenseRequestError('Enter a positive payment amount to the nearest cent.')
     if (!['payment','refund','reversal'].includes(String(transactionType))) throw new LuxorExpenseRequestError('Choose a payment, refund, or reversal transaction type.')
     if (!isDateKey(paymentDate)) throw new LuxorExpenseRequestError('Choose a valid transaction date.')
     if (!LUXOR_EXPENSE_PAYMENT_METHODS.includes(paymentMethod as typeof LUXOR_EXPENSE_PAYMENT_METHODS[number])) throw new LuxorExpenseRequestError('Choose a valid payment method.')

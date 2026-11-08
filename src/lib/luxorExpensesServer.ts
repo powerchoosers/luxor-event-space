@@ -5,6 +5,7 @@ import {
   type LuxorPortalSession,
 } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
+import { expenseAmountState } from '@/lib/luxorExpenseAmount'
 import { SupabaseRestError, supabaseRest, supabaseRestCount, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import type { LuxorBill } from '@/lib/luxorInquiryTypes'
 import type {
@@ -22,7 +23,7 @@ export const LUXOR_EXPENSE_PAYMENT_METHODS = [
 
 export type LuxorExpenseTemplateFrequency = LuxorExpenseTemplate['frequency']
 export type LuxorExpenseTemplateRow = LuxorExpenseTemplate
-export type LuxorExpenseRecordRow = Omit<LuxorExpenseRecord, 'paid_amount' | 'remaining_balance' | 'payment_status' | 'payments'>
+export type LuxorExpenseRecordRow = Omit<LuxorExpenseRecord, 'amount' | 'paid_amount' | 'remaining_balance' | 'payment_status' | 'payments'> & { amount: unknown }
 
 export class LuxorExpenseRequestError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -123,32 +124,55 @@ function paymentSort(left: LuxorExpensePayment, right: LuxorExpensePayment) {
 }
 
 export function paidAmountForExpense(expense: Pick<LuxorExpenseRecordRow, 'amount' | 'status' | 'metadata'>, payments: LuxorExpensePayment[]) {
-  const rawLegacy = expense.metadata?.legacy_paid_amount
-  const legacyAmount = typeof rawLegacy === 'number' || typeof rawLegacy === 'string'
-    ? Number(rawLegacy)
-    : payments.length === 0 && expense.status === 'paid' ? Number(expense.amount) : 0
+  const metadata = expense.metadata ?? {}
+  const hasLegacy = Object.prototype.hasOwnProperty.call(metadata, 'legacy_paid_amount')
+  if (payments.length === 0 && expense.status === 'paid' && !hasLegacy) return null
+  const rawLegacy = hasLegacy ? metadata.legacy_paid_amount : 0
+  const legacyAmount = typeof rawLegacy === 'number' || typeof rawLegacy === 'string' ? Number(rawLegacy) : Number.NaN
+  if (hasLegacy && (!Number.isFinite(legacyAmount) || legacyAmount < 0)) return null
   const legacyPaid = Number.isFinite(legacyAmount) && legacyAmount > 0 ? legacyAmount : 0
-  const transactionTotal = payments.reduce((sum, payment) => {
+  let transactionTotal = 0
+  for (const payment of payments) {
     const amount = Number(payment.amount)
-    if (!Number.isFinite(amount) || amount <= 0) return sum
-    return sum + (payment.transaction_type === 'payment' ? amount : -amount)
-  }, 0)
-  return money(Math.max(0, legacyPaid + transactionTotal))
+    const paymentDay = payment.payment_date?.slice(0, 10)
+    if (!Number.isFinite(amount) || amount <= 0 || !['payment', 'refund', 'reversal'].includes(payment.transaction_type) || !isDateKey(paymentDay)) return null
+    transactionTotal += payment.transaction_type === 'payment' ? amount : -amount
+  }
+  const net = legacyPaid + transactionTotal
+  if (net < -0.005) return null
+  return money(net)
 }
 
 export function deriveExpensePaymentStatus(expense: Pick<LuxorExpenseRecordRow, 'amount' | 'status' | 'due_date' | 'metadata'>, paidAmount: number, today = luxorTodayDateKey()) {
   if (expense.status === 'cancelled') return 'cancelled' as const
   const amount = Number(expense.amount)
-  if (expense.metadata?.amount_state === 'variable' && amount === 0) {
+  if ((expense.metadata?.amount_state === 'variable' || expense.metadata?.amount_state === 'unknown') && amount === 0) {
     // The due date cannot determine an overdue balance until the variable
     // invoice amount has been reviewed and confirmed.
     return 'expected' as const
   }
   if (Number.isFinite(amount) && amount > 0 && paidAmount >= amount) return 'paid' as const
-  if (expense.due_date === today) return 'due_today' as const
-  if (expense.due_date && expense.due_date < today) return 'overdue' as const
+  if (isDateKey(expense.due_date) && expense.due_date === today) return 'due_today' as const
+  if (isDateKey(expense.due_date) && expense.due_date < today) return 'overdue' as const
   if (paidAmount > 0) return 'partially_paid' as const
   return 'expected' as const
+}
+
+/** Use the same amount and balance rules for list and detail reads. */
+export function expenseRecordWithHistory(expense: LuxorExpenseRecordRow, payments: LuxorExpensePayment[], today = luxorTodayDateKey()): LuxorExpenseRecord {
+  const { amount, known } = expenseAmountState(expense.amount, expense.metadata)
+  const paidAmount = known ? paidAmountForExpense(expense, payments) : null
+  const overpaid = amount !== null && paidAmount !== null && paidAmount - amount > 0.005
+  const settled = paidAmount !== null && !overpaid
+  return {
+    ...expense,
+    amount,
+    amount_known: known,
+    payments,
+    paid_amount: settled ? paidAmount : null,
+    remaining_balance: known && amount !== null && settled ? money(amount - paidAmount) : null,
+    payment_status: settled && paidAmount !== null ? deriveExpensePaymentStatus(expense, paidAmount, today) : (expense.status === 'cancelled' ? 'cancelled' : 'needs_review'),
+  }
 }
 
 function dateParts(value: string) {
@@ -251,15 +275,24 @@ export async function generateLuxorExpenseOccurrences(now = new Date(), template
   const path = `luxor_expense_templates?select=*&is_active=eq.true&order=first_due_date.asc,id.asc${templateId ? `&id=eq.${encodeURIComponent(templateId)}` : ''}`
   const templates = await readAllStrict<LuxorExpenseTemplate>(path, 'Recurring templates')
   let inserted = 0
+  let skipped = 0
   for (const template of templates) {
-    const dates = occurrenceRange(template, currentMonthStart, horizon)
+    if (!isDateKey(template.first_due_date) || !isDateKey(template.start_date) || (template.end_date && !isDateKey(template.end_date))) {
+      skipped += 1
+      continue
+    }
+    const dates = occurrenceRange(template, currentMonthStart, horizon).filter((dueDate) => isDateKey(dueDate))
+    const isVariable = template.is_variable
+    const amount = isVariable ? 0 : Number(template.expected_amount)
+    if (!isVariable && (!Number.isFinite(amount) || amount <= 0)) {
+      skipped += 1
+      continue
+    }
     const occurrences: Array<Record<string, unknown>> = []
     for (let index = 0; index < dates.length; index += 1) {
       const dueDate = dates[index]
       const nextDate = dates[index + 1] || occurrenceAt(template, firstOccurrenceIndex(template, dueDate) + 1)
-      const isVariable = template.is_variable
-      const amount = isVariable ? 0 : Number(template.expected_amount)
-      if (!isVariable && (!Number.isFinite(amount) || amount <= 0)) throw new Error(`Recurring template “${template.name}” has no valid expected amount.`)
+      if (!isDateKey(nextDate)) continue
       const metadata = {
         generated_from_template: true,
         template_name_at_generation: template.name,
@@ -299,7 +332,7 @@ export async function generateLuxorExpenseOccurrences(now = new Date(), template
       inserted += created.length
     }
   }
-  return { inserted, templates_checked: templates.length }
+  return { inserted, skipped, templates_checked: templates.length }
 }
 
 export async function loadLuxorExpenseManagementData(options: { generate?: boolean; now?: Date } = {}): Promise<LuxorExpenseManagementData> {
@@ -323,16 +356,7 @@ export async function loadLuxorExpenseManagementData(options: { generate?: boole
   const today = luxorTodayDateKey(options.now)
   const expenses: LuxorExpenseRecord[] = expenseRows.map((expense) => {
     const history = (paymentRowsByExpense.get(expense.id) || []).sort(paymentSort)
-    const paidAmount = paidAmountForExpense(expense, history)
-    const amountKnown = !(expense.metadata?.amount_state === 'variable' && Number(expense.amount) === 0)
-    return {
-      ...expense,
-      amount_known: amountKnown,
-      payments: history,
-      paid_amount: paidAmount,
-      remaining_balance: amountKnown ? money(Math.max(0, Number(expense.amount) - paidAmount)) : null,
-      payment_status: deriveExpensePaymentStatus(expense, paidAmount, today),
-    }
+    return expenseRecordWithHistory(expense, history, today)
   })
   const linkedBills = new Map(expenses.filter((expense) => expense.source_bill_id).map((expense) => [expense.source_bill_id as string, expense.id]))
   return {
@@ -350,17 +374,7 @@ export async function getExpenseRecordWithHistory(id: string) {
   const [expense] = await supabaseRestStrict<LuxorExpenseRecordRow[]>(`luxor_booking_expenses?select=*&id=eq.${encodeURIComponent(id)}&limit=1`)
   if (!expense) return null
   const history = await supabaseRestStrict<LuxorExpensePayment[]>(`luxor_expense_payments?select=*&expense_id=eq.${encodeURIComponent(id)}&order=payment_date.desc,created_at.desc,id.asc`)
-  const paidAmount = paidAmountForExpense(expense, history)
-  const amountKnown = !(expense.metadata?.amount_state === 'variable' && Number(expense.amount) === 0)
-  if (!amountKnown && paidAmount > 0) throw new Error('A variable expense with payment history needs a confirmed bill amount.')
-  return {
-    ...expense,
-    amount_known: amountKnown,
-    payments: history,
-    paid_amount: paidAmount,
-    remaining_balance: amountKnown ? money(Math.max(0, Number(expense.amount) - paidAmount)) : null,
-    payment_status: deriveExpensePaymentStatus(expense, paidAmount),
-  } satisfies LuxorExpenseRecord
+  return expenseRecordWithHistory(expense, history)
 }
 
 export async function getLuxorExpenseStorageConfig() {

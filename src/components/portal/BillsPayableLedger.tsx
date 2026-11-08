@@ -11,8 +11,11 @@ import {
 } from '@/lib/icons/phosphor-compat'
 import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
 import ManualBillAnalysis from '@/components/portal/ManualBillAnalysis'
+import BillPlanning from '@/components/portal/BillPlanning'
 import type { LuxorBill, LuxorBillIntake, LuxorVendor } from '@/lib/luxorInquiryTypes'
 import { isLuxorBillCategory } from '@/lib/luxorBillCategories'
+import { getBillBalance, type BillBalance, type BillExpense } from '@/lib/luxorBillBalances'
+import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 
 type LedgerTab = 'all' | 'review' | 'due' | 'ready' | 'paid' | 'hold'
 
@@ -24,6 +27,20 @@ const VENDOR_DOMAINS: Record<string, string> = {
 }
 
 const PERSONAL_EMAIL_DOMAINS = new Set(['gmail.com', 'hotmail.com', 'icloud.com', 'outlook.com', 'yahoo.com'])
+
+function chicagoToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+  return ['year', 'month', 'day'].map((type) => parts.find((part) => part.type === type)?.value).join('-')
+}
+
+function dueDayOffset(dueDate: string, today: string) {
+  const due = dueDate.slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(due) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return null
+  const [year, month, day] = due.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return null
+  return Math.round((Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
+}
 
 function money(value: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format(Number(value || 0))
@@ -37,12 +54,13 @@ function billAmount(bill: LuxorBill) {
 
 function dateLabel(value: string | null) {
   if (!value) return 'No due date'
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return formatLuxorDate(value) || 'Unknown date'
 }
 
 function relativeDue(value: string | null) {
   if (!value) return 'Due date missing'
-  const days = Math.ceil((new Date(`${value}T23:59:59`).getTime() - Date.now()) / 86_400_000)
+  const days = dueDayOffset(value, chicagoToday())
+  if (days === null) return 'Due date missing'
   if (days < 0) return `${Math.abs(days)}d overdue`
   if (days === 0) return 'Due today'
   return `Due in ${days}d`
@@ -51,8 +69,9 @@ function relativeDue(value: string | null) {
 function ledgerStatus(bill: LuxorBill): LedgerTab {
   if (bill.status === 'paid') return 'paid'
   if (bill.extraction_status === 'needs_review' || bill.extraction_status === 'failed') return 'review'
-  if (bill.extraction_status === 'duplicate') return 'hold'
-  if (bill.due_date && new Date(`${bill.due_date}T23:59:59`).getTime() <= Date.now() + 7 * 86_400_000) return 'due'
+  if (bill.extraction_status === 'duplicate' || bill.duplicate_of_bill_id) return 'hold'
+  const days = bill.due_date ? dueDayOffset(bill.due_date, chicagoToday()) : null
+  if (days !== null && days <= 7) return 'due'
   if (bill.payment_ready_at || bill.extraction_status === 'ready') return 'ready'
   return 'all'
 }
@@ -63,7 +82,8 @@ function statusLabel(bill: LuxorBill) {
   if (status === 'paid') return { label: 'Paid', color: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/20' }
   if (status === 'hold') return { label: 'On hold', color: 'text-rose-700 dark:text-rose-300 bg-rose-500/10 border-rose-500/20' }
   if (status === 'due') return { label: relativeDue(bill.due_date), color: 'text-rose-700 dark:text-rose-300 bg-rose-500/10 border-rose-500/20' }
-  return { label: 'Ready to pay', color: 'text-blue-700 dark:text-blue-300 bg-blue-500/10 border-blue-500/20' }
+  if (status === 'ready') return { label: 'Ready to pay', color: 'text-blue-700 dark:text-blue-300 bg-blue-500/10 border-blue-500/20' }
+  return { label: 'Open', color: 'text-[color:var(--portal-muted)] bg-[color:var(--portal-soft)] border-[color:var(--portal-border)]' }
 }
 
 function sourceUrl(bill: LuxorBill) {
@@ -104,12 +124,28 @@ export function BillsPayableLedger({
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [expenses, setExpenses] = useState<BillExpense[] | null>(null)
   const reduceMotion = useReducedMotion()
   const selected = bills.find((bill) => bill.id === selectedId && (vendor === 'all' || bill.vendor_id === vendor)) || null
   const failedIntakes = intakes.filter((intake) => intake.status === 'failed')
   const processingIntakes = intakes.filter((intake) => intake.status === 'received' || intake.status === 'processing')
 
   useEffect(() => setMounted(true), [])
+  useEffect(() => {
+    let active = true
+    const refresh = async () => {
+      try {
+        const response = await fetch('/api/expenses', { cache: 'no-store' })
+        if (!response.ok || response.headers.get('X-Luxor-Expense-History') === 'legacy-only') throw new Error('Payment history unavailable')
+        const records: unknown = await response.json()
+        if (!Array.isArray(records)) throw new Error('Expense data unavailable')
+        if (active) setExpenses(records as BillExpense[])
+      } catch { if (active) setExpenses(null) }
+    }
+    void refresh()
+    window.addEventListener('focus', refresh)
+    return () => { active = false; window.removeEventListener('focus', refresh) }
+  }, [])
   useEffect(() => { setVendor(searchParams.get('company') || 'all') }, [searchParams])
   useEffect(() => { setSelectedId(searchParams.get('bill')) }, [searchParams])
 
@@ -133,23 +169,30 @@ export function BillsPayableLedger({
   const counts = useMemo(() => Object.fromEntries((['review', 'due', 'ready', 'paid', 'hold'] as LedgerTab[])
     .map((key) => [key, bills.filter((bill) => ledgerStatus(bill) === key).length])), [bills])
   const vendorOptions = useMemo(() => [{ value: 'all', label: 'All companies' }, ...vendors.filter((item) => bills.some((bill) => bill.vendor_id === item.id)).map((item) => ({ value: item.id, label: item.name }))], [bills, vendors])
-  const openBills = bills.filter((bill) => bill.status !== 'paid' && bill.extraction_status !== 'duplicate')
-  const totalDue = openBills.filter((bill) => bill.amount_state === 'known').reduce((sum, bill) => sum + Number(bill.amount || 0), 0)
-  const nextDue = openBills.filter((bill) => bill.due_date).sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0]
+  const openBills = bills.filter((bill) => bill.status !== 'paid' && bill.extraction_status !== 'duplicate' && !bill.duplicate_of_bill_id)
+  const openBalances = openBills.map((bill) => getBillBalance(bill, expenses))
+  const knownDue = openBalances.reduce((sum, balance) => sum + (balance.remaining ?? 0), 0)
+  const unresolvedCount = openBalances.filter((balance) => balance.remaining === null).length
+  const nextDue = openBills
+    .map((bill, index) => ({ bill, remaining: openBalances[index]?.remaining }))
+    .filter((item) => item.bill.due_date && item.remaining !== 0)
+    .sort((a, b) => String(a.bill.due_date).localeCompare(String(b.bill.due_date)))[0]?.bill
+  const today = chicagoToday()
   const visible = useMemo(() => bills.filter((bill) => {
     if (tab !== 'all' && ledgerStatus(bill) !== tab) return false
     if (source !== 'all' && bill.source_type !== source) return false
     if (vendor !== 'all' && bill.vendor_id !== vendor) return false
     if (dueWindow !== 'all') {
       if (!bill.due_date) return dueWindow === 'missing'
-      const days = Math.ceil((new Date(`${bill.due_date}T23:59:59`).getTime() - Date.now()) / 86_400_000)
+      const days = dueDayOffset(bill.due_date, today)
+      if (days === null) return false
       if (dueWindow === 'overdue' && days >= 0) return false
       if (dueWindow === '7' && (days < 0 || days > 7)) return false
       if (dueWindow === '30' && (days < 0 || days > 30)) return false
     }
     const haystack = `${bill.provider} ${bill.service} ${bill.invoice_number || ''} ${bill.source_subject || ''}`.toLowerCase()
     return !query.trim() || haystack.includes(query.trim().toLowerCase())
-  }), [bills, dueWindow, query, source, tab, vendor])
+  }), [bills, dueWindow, query, source, tab, today, vendor])
 
   const groups = useMemo(() => {
     const order: LedgerTab[] = ['review', 'due', 'ready', 'paid', 'hold', 'all']
@@ -240,7 +283,7 @@ export function BillsPayableLedger({
           }}
           transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.23, 1, 0.32, 1] }}
         >
-          <BillReview bill={selected} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} onBillChanged={onBillChanged} onEdit={() => onEditBill(selected)} vendors={vendors} companyChoice={companyChoice} setCompanyChoice={setCompanyChoice} companyName={companyName} setCompanyName={setCompanyName} onLinkCompany={linkCompany} showClose />
+          <BillReview bill={selected} balance={getBillBalance(selected, expenses)} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} onBillChanged={onBillChanged} onEdit={() => onEditBill(selected)} vendors={vendors} companyChoice={companyChoice} setCompanyChoice={setCompanyChoice} companyName={companyName} setCompanyName={setCompanyName} onLinkCompany={linkCompany} showClose />
         </motion.aside>
       </motion.div> : null}
     </AnimatePresence>,
@@ -254,7 +297,7 @@ export function BillsPayableLedger({
           <div>
             <div className="flex items-center gap-2"><CircleDollarSign size={19} className="text-[#a8792f] dark:text-[#caa24c]" /><h2 className="text-lg font-semibold tracking-tight text-[color:var(--portal-text)]">Payables Ledger</h2></div>
             <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Review every vendor bill from source to payment readiness.</p>
-            <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">{money(totalDue)} in stated amounts (review where needed) <span className="ml-2 text-[10px] font-normal text-[color:var(--portal-muted)]">{openBills.filter((bill) => bill.amount_state !== 'known').length} open bill(s) need an amount confirmed · {nextDue ? `Next: ${dateLabel(nextDue.due_date)} · ${nextDue.provider}` : 'No open due dates'}</span></p>
+            <p className="mt-3 text-sm font-semibold text-[color:var(--portal-text)]">{expenses ? `${money(knownDue)} in verified linked balances` : 'Expense balances unavailable'} <span className="ml-2 text-[10px] font-normal text-[color:var(--portal-muted)]">{unresolvedCount ? `${unresolvedCount} open bill(s) need balance reconciliation · ` : ''}{nextDue ? `Next: ${dateLabel(nextDue.due_date)} · ${nextDue.provider}` : 'No open due dates'}</span></p>
           </div>
           <div className="flex flex-wrap gap-2">
             {counts.review ? <PortalButton type="button" size="sm" variant="primary" onClick={() => setTab('review')}>Review {counts.review} bill{counts.review === 1 ? '' : 's'}</PortalButton> : null}
@@ -300,7 +343,7 @@ export function BillsPayableLedger({
                   return <button key={bill.id} type="button" onClick={() => selectBill(bill.id)} className={`grid w-full gap-3 border-b border-[color:var(--portal-border)] p-4 text-left last:border-b-0 hover:bg-[color:var(--portal-soft)] sm:grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_1.25rem] sm:items-center lg:grid-cols-[minmax(9rem,1fr)_3.5rem_5.5rem_5.5rem_5.5rem_6.5rem_1.25rem] ${selectedId === bill.id ? 'bg-[#caa24c]/[0.07]' : 'bg-[color:var(--portal-card)]'}`}>
                     <div className="min-w-0"><div className="flex items-center gap-2"><span className="truncate text-xs font-semibold text-[color:var(--portal-text)]">{bill.provider}</span>{bill.source_type === 'email' ? <Mail size={12} className="shrink-0 text-[#a8792f] dark:text-[#caa24c]" /> : null}</div><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.service}{bill.invoice_number ? ` · #${bill.invoice_number}` : ''}</p></div>
                     <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{bill.source_type === 'email' ? 'Email' : bill.source_type === 'portal_upload' ? 'Portal upload' : 'Manual'}</span>
-                    <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{bill.received_at ? new Date(bill.received_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{formatLuxorDate(bill.received_at) || '-'}</span>
                     <span className="hidden text-[9px] text-[color:var(--portal-muted)] lg:block">{dateLabel(bill.due_date)}</span>
                     <div className="lg:text-right"><p className="font-mono text-xs font-semibold text-[color:var(--portal-text)]">{billAmount(bill)}</p><p className="mt-1 text-[9px] text-[color:var(--portal-muted)] lg:hidden">{dateLabel(bill.due_date)}</p></div>
                     <span className={`w-fit rounded-md border px-2 py-1 text-[9px] font-bold ${badge.color}`}>{badge.label}</span><ChevronRight size={15} className="hidden text-[color:var(--portal-faint)] sm:block" />
@@ -311,7 +354,7 @@ export function BillsPayableLedger({
           </div>
         </div>
         <aside className="hidden min-h-0 overflow-y-auto bg-[color:var(--portal-soft)] p-5 portal-scrollbar xl:block">
-          {selected ? <BillReview bill={selected} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} onBillChanged={onBillChanged} onEdit={() => onEditBill(selected)} vendors={vendors} companyChoice={companyChoice} setCompanyChoice={setCompanyChoice} companyName={companyName} setCompanyName={setCompanyName} onLinkCompany={linkCompany} /> : <div className="flex min-h-72 flex-col items-center justify-center text-center"><FileText size={24} className="text-[color:var(--portal-faint)]" /><p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">Select a bill</p><p className="mt-1 max-w-52 text-[10px] leading-4 text-[color:var(--portal-muted)]">Review the original document, extracted facts, arithmetic, and email source together.</p></div>}
+          {selected ? <BillReview bill={selected} balance={getBillBalance(selected, expenses)} busy={busy} message={message} onClose={() => selectBill(null)} onReview={review} onBillChanged={onBillChanged} onEdit={() => onEditBill(selected)} vendors={vendors} companyChoice={companyChoice} setCompanyChoice={setCompanyChoice} companyName={companyName} setCompanyName={setCompanyName} onLinkCompany={linkCompany} /> : <div className="flex min-h-72 flex-col items-center justify-center text-center"><FileText size={24} className="text-[color:var(--portal-faint)]" /><p className="mt-3 text-xs font-semibold text-[color:var(--portal-text)]">Select a bill</p><p className="mt-1 max-w-52 text-[10px] leading-4 text-[color:var(--portal-muted)]">Review the original document, extracted facts, arithmetic, and email source together.</p></div>}
         </aside>
       </div>
     </section>
@@ -319,32 +362,35 @@ export function BillsPayableLedger({
   </>
 }
 
-function BillReview({ bill, busy, message, onClose, onReview, onBillChanged, onEdit, vendors, companyChoice, setCompanyChoice, companyName, setCompanyName, onLinkCompany, showClose = false }: { bill: LuxorBill; busy: string | null; message: string | null; onClose: () => void; onReview: (action: 'approve' | 'flag' | 'mark_paid' | 'confirm_distinct') => void; onBillChanged: (bill: LuxorBill) => void; onEdit: () => void; vendors: LuxorVendor[]; companyChoice: string; setCompanyChoice: (value: string) => void; companyName: string; setCompanyName: (value: string) => void; onLinkCompany: (create: boolean) => void; showClose?: boolean }) {
+function BillReview({ bill, balance, busy, message, onClose, onReview, onBillChanged, onEdit, vendors, companyChoice, setCompanyChoice, companyName, setCompanyName, onLinkCompany, showClose = false }: { bill: LuxorBill; balance: BillBalance; busy: string | null; message: string | null; onClose: () => void; onReview: (action: 'approve' | 'flag' | 'mark_paid' | 'confirm_distinct') => void; onBillChanged: (bill: LuxorBill) => void; onEdit: () => void; vendors: LuxorVendor[]; companyChoice: string; setCompanyChoice: (value: string) => void; companyName: string; setCompanyName: (value: string) => void; onLinkCompany: (create: boolean) => void; showClose?: boolean }) {
   const url = sourceUrl(bill)
   const badge = statusLabel(bill)
   return <div className="space-y-5">
     {bill.status !== 'paid' ? <PortalButton type="button" disabled={Boolean(busy)} onClick={onEdit} className="w-full">Edit extracted facts</PortalButton> : null}
-    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-bold ${badge.color}`}>{badge.label}</span><div className="mt-3 flex min-w-0 items-center gap-3"><VendorMark bill={bill} /><div className="min-w-0"><h3 id="bill-review-title" className="truncate text-base font-semibold text-[color:var(--portal-text)]">{bill.provider}</h3><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.source_filename || bill.service}</p></div></div></div>{showClose ? <button type="button" onClick={onClose} aria-label="Close bill detail" className="-mr-1 rounded-lg p-2 text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]"><X size={16} /></button> : null}</div>
+    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-bold ${badge.color}`}>{badge.label}</span><div className="mt-3 flex min-w-0 items-center gap-3"><VendorMark bill={bill} /><div className="min-w-0"><h3 id="bill-review-title" className="truncate text-base font-semibold text-[color:var(--portal-text)]">{bill.provider}</h3><p className="mt-1 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.source_filename || bill.service}</p></div></div></div>{showClose ? <button type="button" onClick={onClose} aria-label="Close bill detail" className="-mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><X size={15} /></button> : null}</div>
     <div className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
       {url && bill.source_content_type?.startsWith('image/') ? <img src={url} alt={`Source invoice from ${bill.provider}`} className="h-44 w-full object-contain p-3" /> : <div className="flex h-40 flex-col items-center justify-center bg-[color:var(--portal-soft)]"><FileText size={30} className="text-[#a8792f] dark:text-[#caa24c]" /><p className="mt-3 max-w-56 truncate text-[10px] text-[color:var(--portal-muted)]">{bill.source_filename || 'Manual bill'}</p></div>}
       {url ? <a href={url} target="_blank" rel="noreferrer" className="flex min-h-10 items-center justify-center gap-1.5 border-t border-[color:var(--portal-border)] text-[10px] font-bold text-[#a8792f] hover:bg-[#caa24c]/5 dark:text-[#caa24c]">View full document <ArrowUpRight size={11} /></a> : null}
     </div>
     <section><p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">{bill.source_type === 'manual' ? 'Manually entered details' : 'AI-extracted details'}</p><p className="mt-2 text-xs text-[color:var(--portal-muted)]">{bill.source_type === 'manual' ? 'No source document was provided for AI analysis.' : 'Check these suggestions against the source document before approval.'}</p><dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4"><Fact label="Total" value={billAmount(bill)} /><Fact label="Due date" value={dateLabel(bill.due_date)} /><Fact label="Invoice" value={bill.invoice_number || 'Not found'} /><Fact label="Confidence" value={bill.extraction_confidence === null ? 'Manual' : `${Math.round(bill.extraction_confidence * 100)}%`} /><Fact label="Service" value={bill.service} wide /><Fact label="Frequency" value={bill.frequency} /></dl></section>
+    <section><p className="text-xs font-semibold text-[color:var(--portal-text)]">Payment balance</p><p className="mt-1 text-xs tabular-nums text-[color:var(--portal-muted)]">{balance.remaining === null ? balance.reason : `${money(balance.paid ?? 0)} paid · ${money(balance.remaining)} remaining`}</p></section>
+    <BillPlanning key={bill.id} billId={bill.id} canPlan={!bill.archived_at && bill.status !== 'paid' && bill.extraction_status === 'ready' && Boolean(bill.linked_expense_id)} canConfigure={!bill.archived_at} />
     {bill.source_type === 'manual' ? <ManualBillAnalysis key={bill.id} bill={bill} onBillChanged={onBillChanged} /> : null}
     <section><p className="text-xs font-semibold text-[color:var(--portal-text)]">Category</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">{bill.bill_category || (isLuxorBillCategory(bill.extracted_fields?.category_suggestion) ? `Suggested: ${bill.extracted_fields.category_suggestion} · not confirmed` : 'Not categorized')}</p></section>
     {bill.duplicate_of_bill_id ? <section className="space-y-2"><p className="text-xs text-[color:var(--portal-text)]">Another bill has the same company and invoice number. Compare both documents before proceeding.</p><Link href={`/portal/operations?tab=bills&bill=${encodeURIComponent(bill.duplicate_of_bill_id)}`} className="text-xs font-semibold text-[#a8792f]">View possible duplicate</Link><PortalButton type="button" disabled={Boolean(busy)} onClick={() => onReview('confirm_distinct')} className="w-full">I compared them; this is a separate bill</PortalButton></section> : null}
-    <section className="space-y-2"><p className="text-xs font-semibold text-[color:var(--portal-text)]">Company</p>{bill.vendor_id ? <><Link className="text-xs font-semibold text-[#a8792f] dark:text-[#caa24c]" href={`/portal/operations?tab=bills&company=${encodeURIComponent(bill.vendor_id)}`}>View bills for {vendors.find((item) => item.id === bill.vendor_id)?.name || bill.provider} <ArrowUpRight size={12} className="inline" /></Link>{bill.vendor_link_method === 'matched' ? <p className="text-xs text-[color:var(--portal-muted)]">Matched from a previously confirmed sender. Check this company when reviewing the bill.</p> : null}</> : <p className="text-xs text-[color:var(--portal-muted)]">Choose a company for this bill. Suggested name: {bill.provider}</p>}
+    <section className="space-y-2"><p className="text-xs font-semibold text-[color:var(--portal-text)]">Company</p>{bill.vendor_id ? <><Link className="text-xs font-semibold text-[#a8792f] dark:text-[#caa24c]" href={`/portal/operations?tab=bills&company=${encodeURIComponent(bill.vendor_id)}`}>View bills for {vendors.find((item) => item.id === bill.vendor_id)?.name || bill.provider} <ArrowUpRight size={12} className="inline" /></Link><Link className="block text-xs font-semibold text-[#a8792f] dark:text-[#caa24c]" href={`/portal/finances/bills/vendors/${encodeURIComponent(bill.vendor_id)}`}>Open vendor profile <ArrowUpRight size={12} className="inline" /></Link>{bill.vendor_link_method === 'matched' ? <p className="text-xs text-[color:var(--portal-muted)]">Matched from a previously confirmed sender. Check this company when reviewing the bill.</p> : null}</> : bill.status === 'paid' ? <p className="text-xs leading-5 text-[color:var(--portal-muted)]">This bill is already paid. Link a company while the bill is still open for payment. The name shown here stays <span className="font-semibold text-[color:var(--portal-text)]">{bill.provider}</span> until then.</p> : <p className="text-xs text-[color:var(--portal-muted)]">Choose a company for this bill. Suggested name: {bill.provider}</p>}
+      {bill.vendor_id || bill.status === 'paid' ? null : <>
       <PortalSelect value={companyChoice} onChange={setCompanyChoice} options={[{ value: '', label: 'Choose existing company' }, ...vendors.map((item) => ({ value: item.id, label: `${item.name} · ${item.vendor_type}` }))]} buttonClassName="min-h-10 w-full" />
       <PortalButton type="button" disabled={!companyChoice || Boolean(busy)} onClick={() => onLinkCompany(false)} className="w-full">Link company</PortalButton>
       <label className="block text-xs text-[color:var(--portal-muted)]">Or add a service company<input value={companyName} onChange={(event) => setCompanyName(event.target.value)} maxLength={200} className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-sm text-[color:var(--portal-text)]" /></label>
       <PortalButton type="button" disabled={!companyName.trim() || Boolean(busy)} onClick={() => onLinkCompany(true)} className="w-full">Add and link company</PortalButton>
+      </>}
     </section>
     <section className={`rounded-xl border p-3 ${bill.arithmetic_status === 'mismatch' ? 'border-rose-500/25 bg-rose-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}><div className="flex gap-2">{bill.arithmetic_status === 'mismatch' ? <AlertCircle size={15} className="mt-0.5 text-rose-500" /> : <ShieldCheck size={15} className="mt-0.5 text-emerald-600 dark:text-emerald-400" />}<div><p className="text-[10px] font-bold text-[color:var(--portal-text)]">Arithmetic {bill.arithmetic_status === 'balanced' ? 'checks out' : bill.arithmetic_status === 'mismatch' ? 'needs review' : 'not available'}</p><p className="mt-1 text-[9px] leading-4 text-[color:var(--portal-muted)]">{bill.arithmetic_status === 'balanced' ? 'Line items match the extracted total.' : bill.arithmetic_status === 'mismatch' ? 'Line items do not match the extracted total.' : 'The document did not provide enough line-item detail.'}</p></div></div></section>
-    {bill.source_type === 'email' ? <section><p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Email provenance</p><div className="mt-3 space-y-2 text-[10px]"><p className="truncate text-[color:var(--portal-text)]">From {bill.source_sender}</p><p className="truncate text-[color:var(--portal-muted)]">{bill.source_subject}</p><p className="text-[color:var(--portal-muted)]">Received {bill.received_at ? new Date(bill.received_at).toLocaleString() : 'unknown'}</p></div></section> : null}
+    {bill.source_type === 'email' ? <section><p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Email provenance</p><div className="mt-3 space-y-2 text-[10px]"><p className="truncate text-[color:var(--portal-text)]">From {bill.source_sender}</p><p className="truncate text-[color:var(--portal-muted)]">{bill.source_subject}</p><p className="text-[color:var(--portal-muted)]">Received {formatLuxorDate(bill.received_at, { includeTime: true }) || 'unknown'}</p></div></section> : null}
     {bill.evidence?.length ? <section><p className="text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-muted)]">Source evidence</p><div className="mt-3 space-y-2">{bill.evidence.slice(0, 3).map((item, index) => <blockquote key={`${item.field}-${index}`} className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-[9px] leading-4 text-[color:var(--portal-muted)]"><span className="font-bold text-[color:var(--portal-text)]">{item.field}: </span>{item.quote}{item.page_number ? ` · p. ${item.page_number}` : ''}</blockquote>)}</div></section> : null}
     {message ? <p role="status" className="rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-2 text-[10px] text-[color:var(--portal-text)]">{message}</p> : null}
-    {bill.linked_expense_id && bill.status !== 'paid' ? <Link href={`/portal/finances/expenses/${encodeURIComponent(bill.linked_expense_id)}`} className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] dark:text-[#e6c77f]">Record payment in Expense Management <ArrowUpRight size={13} aria-hidden="true" /></Link> : null}
-    {bill.status !== 'paid' ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">{bill.extraction_status === 'needs_review' ? <PortalButton type="button" variant="primary" disabled={Boolean(busy)} onClick={() => onReview('approve')} className="w-full"><CheckCircle2 size={13} />{busy === 'approve' ? 'Approving…' : 'Approve & mark ready'}</PortalButton> : <PortalButton type="button" variant="primary" disabled={Boolean(busy)} onClick={() => onReview('mark_paid')} className="w-full"><CheckCircle2 size={13} />{busy === 'mark_paid' ? 'Saving…' : 'Mark paid'}</PortalButton>}<PortalButton type="button" disabled={Boolean(busy)} onClick={() => onReview('flag')} className="w-full"><Clock3 size={13} /> Keep in review</PortalButton></div> : <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300"><Check size={14} /> Payment recorded</div>}
+    {bill.status !== 'paid' ? <div className="space-y-2">{bill.linked_expense_id ? <Link href={`/portal/finances/expenses/${encodeURIComponent(bill.linked_expense_id)}`} className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] dark:text-[#e6c77f]">Record payment in Expense Management <ArrowUpRight size={13} aria-hidden="true" /></Link> : bill.extraction_status === 'ready' && bill.payment_ready_at ? <Link href="/portal/finances/expenses/business" className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] dark:text-[#e6c77f]">Link a reviewed bill to an expense <ArrowUpRight size={13} aria-hidden="true" /></Link> : null}{bill.extraction_status === 'needs_review' ? <PortalButton type="button" variant="primary" disabled={Boolean(busy)} onClick={() => onReview('approve')} className="w-full"><CheckCircle2 size={13} />{busy === 'approve' ? 'Approving…' : 'Approve & mark ready'}</PortalButton> : null}<PortalButton type="button" disabled={Boolean(busy) || Boolean(bill.linked_expense_id)} onClick={() => onReview('flag')} className="w-full"><Clock3 size={13} /> Keep in review</PortalButton></div> : <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300"><Check size={14} /> {balance.paid === null ? 'Marked paid · payment details unavailable' : 'Payment recorded'}</div>}
   </div>
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -187,7 +187,13 @@ const links: BrowseItem[] = [
   },
 ]
 
-const groups = ['Overview', 'Revenue & Collections', 'Ledgers & Reports', 'Expense Management']
+const groups = ['Overview', 'Revenue & Collections', 'Ledgers & Reports', 'Expense Management', 'Bills & Vendors']
+
+function getFinanceGroup(view: FinanceBrowseView) {
+  if (view === 'bills') return 'Bills & Vendors'
+  if (view === 'expenses') return 'Expense Management'
+  return links.find((item) => item.id === view)?.group ?? 'Overview'
+}
 
 export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
   overview: 'Financial Overview',
@@ -222,14 +228,22 @@ export function FinanceBrowseViews({
   currentView: FinanceBrowseView
   onLegacySelect?: (view: 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports') => void
 }) {
+  const currentGroup = getFinanceGroup(currentView)
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
+  const activeExpandedGroup = expandedGroup ?? currentGroup
+  const handleClose = useCallback(() => {
+    setExpandedGroup(null)
+    close()
+  }, [close])
+
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close()
+      if (event.key === 'Escape') handleClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [open, close])
+  }, [open, handleClose])
 
   if (typeof document === 'undefined') return null
 
@@ -252,7 +266,7 @@ export function FinanceBrowseViews({
             initial={{ opacity: 0, y: 56, scale: 0.985 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.985 }}
-            transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-5 py-4 backdrop-blur-xl">
@@ -273,16 +287,38 @@ export function FinanceBrowseViews({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
-              <nav aria-label="Financial Center views" className="space-y-4">
-                {groups.map((group) => (
-                  <section key={group}>
-                    <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">
-                      {group}
-                    </h3>
-                    <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
-                      {links
-                        .filter((item) => item.group === group)
-                        .map((item) => {
+              <nav aria-label="Financial Center views" className="space-y-2">
+                {[currentGroup, ...groups.filter((group) => group !== currentGroup)].map((group) => {
+                  const expanded = activeExpandedGroup === group
+                  const groupLinks = links.filter((item) => item.group === group)
+                  return (
+                  <section key={group} className="overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={expanded ? `finance-views-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : undefined}
+                      onClick={() => setExpandedGroup(expanded ? '' : group)}
+                      className="flex min-h-12 w-full items-center justify-between gap-3 bg-[color:var(--portal-card)] px-3.5 py-3 text-left text-sm font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45"
+                    >
+                      <span>{group}</span>
+                      <ChevronRight size={16} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`} aria-hidden="true" />
+                    </button>
+                    {expanded ? <div id={`finance-views-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} className="divide-y divide-[color:var(--portal-border)] border-t border-[color:var(--portal-border)]">
+                      {group === 'Bills & Vendors' ? (
+                        <Link
+                          href="/portal/finances/bills"
+                          onClick={handleClose}
+                          aria-current={currentView === 'bills' ? 'page' : undefined}
+                          className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${currentView === 'bills' ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}
+                        >
+                          <FileText size={16} weight="regular" aria-hidden="true" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-bold">Bills and vendors</span>
+                            <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">Balances, payment history, reminders, and vendor profiles</span>
+                          </span>
+                          <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
+                        </Link>
+                      ) : groupLinks.map((item) => {
                           const isCurrent = item.id === currentView
                           const itemClass = `flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${
                             isCurrent
@@ -325,7 +361,7 @@ export function FinanceBrowseViews({
                                 aria-current={isCurrent ? 'page' : undefined}
                                 onClick={() => {
                                   onLegacySelect(legacyTab)
-                                  close()
+                                  handleClose()
                                 }}
                                 className={itemClass}
                               >
@@ -338,7 +374,7 @@ export function FinanceBrowseViews({
                             <Link
                               key={item.id}
                               href={item.href}
-                              onClick={close}
+                              onClick={handleClose}
                               aria-current={isCurrent ? 'page' : undefined}
                               className={itemClass}
                             >
@@ -346,33 +382,9 @@ export function FinanceBrowseViews({
                             </Link>
                           )
                         })}
-                    </div>
+                    </div> : null}
                   </section>
-                ))}
-
-                <section>
-                  <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">
-                    Bills &amp; Vendors
-                  </h3>
-                  <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
-                    <Link
-                      href="/portal/finances/bills"
-                      onClick={close}
-                      className="flex w-full items-center gap-3 px-3.5 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45"
-                    >
-                      <span className="shrink-0">
-                        <FileText size={16} weight="regular" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-bold">Bills and vendors</span>
-                        <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">
-                          Review bills, linked expenses, and vendors
-                        </span>
-                      </span>
-                      <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
-                    </Link>
-                  </div>
-                </section>
+                )})}
               </nav>
             </div>
           </motion.section>
