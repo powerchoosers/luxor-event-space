@@ -230,7 +230,7 @@ export function PortalNotificationModal({ isOpen, triggerRef, onClose, items, un
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={onRefresh} disabled={loading} className="rounded-lg p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-50" aria-label="Refresh notifications"><RotateCw size={15} className={loading ? 'animate-spin' : ''} /></button>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]" aria-label="Close notifications"><X size={16} /></button>
+          <button type="button" onClick={onClose} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45" aria-label="Close notifications"><X size={15} /></button>
         </div>
       </header>
 

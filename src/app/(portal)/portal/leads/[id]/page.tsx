@@ -9,7 +9,7 @@ import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal
 import { AddFollowUpModal } from '@/components/portal/AddFollowUpModal'
 import { LogCallOutcomeModal } from '@/components/portal/LogCallOutcomeModal'
 import { WorkflowBadge } from '@/components/portal/WorkflowBadge'
-import { formatFollowUpDateLabel } from '@/lib/luxorFollowUpHelpers'
+import { formatFollowUpDateLabel, partitionLeadTasksForDisplay } from '@/lib/luxorFollowUpHelpers'
 import { LeadPaymentsDashboard } from '@/components/portal/LeadPaymentsDashboard'
 import { PortalTaskCrossOff } from '@/components/portal/PortalTaskCrossOff'
 import { LeadBreakdownHistory } from '@/components/portal/LeadBreakdownHistory'
@@ -106,6 +106,8 @@ import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { LeadWorkspaceNav } from '@/components/portal/LeadWorkspaceNav'
 import { LeadActivityDisclosure } from '@/components/portal/LeadActivityDisclosure'
 import { LeadEmailActivity } from '@/components/portal/LeadEmailActivity'
+import { LeadTaskActivity } from '@/components/portal/LeadTaskActivity'
+import { LeadCurrentWorkflowEmail } from '@/components/portal/LeadScheduledWorkflowEmail'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -183,6 +185,7 @@ type ActivityEntry =
   | { kind: 'email'; id: string; createdAt: string; email: ZohoEmailMessage }
   | { kind: 'call'; id: string; createdAt: string; call: LuxorCall }
   | { kind: 'text'; id: string; createdAt: string; message: LuxorMessage }
+  | { kind: 'task'; id: string; createdAt: string; task: LuxorTask }
 
 function tourDisplayStatus(lead: LuxorInquiry) {
   if (lead.tour_attendance_status === 'cancelled') return 'Cancelled'
@@ -708,7 +711,8 @@ export default function LeadDetailPage({
     setLayoutDesignerOpenState(open)
   }, [])
   const [layoutReviewRefreshKey, setLayoutReviewRefreshKey] = useState(0)
-  const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'calls' | 'texts' | 'emails' | 'system'>('all')
+  const [activeFeedTab, setActiveFeedTab] = useState<'all' | 'notes' | 'comms' | 'calls' | 'texts' | 'emails' | 'tasks' | 'system'>('all')
+  const [workflowEmailRefreshKey, setWorkflowEmailRefreshKey] = useState(0)
   const [activitySearch, setActivitySearch] = useState('')
   const [activityWindow, setActivityWindow] = useState<'all' | '30d' | '90d' | 'year'>('all')
   const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE)
@@ -1167,6 +1171,7 @@ export default function LeadDetailPage({
         allActivityEntries: [] as ActivityEntry[],
         activityCounts: { all: 0, notes: 0, comms: 0, system: 0 },
         sortedTasks: [] as LuxorTask[],
+        hiddenOrderedDuplicateTaskCount: 0,
         pendingTaskCount: 0,
         sortedBookings: [] as LuxorBooking[],
         sortedInvoices: [] as LuxorInvoice[],
@@ -1193,10 +1198,12 @@ export default function LeadDetailPage({
       call,
     }))
     const derivedTextEntries: ActivityEntry[] = textRecords.map((message) => ({ kind: 'text', id: `text-${message.id}`, createdAt: message.created_at, message }))
-    const derivedAllActivityEntries = [...derivedNoteEntries, ...derivedEmailEntries, ...derivedCallEntries, ...derivedTextEntries].sort(
+    const { visibleTasks: tasksForLeadDisplay, hiddenOrderedDuplicateCount } = partitionLeadTasksForDisplay(tasks)
+    const derivedTaskEntries: ActivityEntry[] = tasksForLeadDisplay.map((task) => ({ kind: 'task', id: `task-${task.id}`, createdAt: task.created_at, task }))
+    const derivedAllActivityEntries = [...derivedNoteEntries, ...derivedEmailEntries, ...derivedCallEntries, ...derivedTextEntries, ...derivedTaskEntries].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
-    const derivedSortedTasks = [...tasks].sort((a, b) => {
+    const derivedSortedTasks = [...tasksForLeadDisplay].sort((a, b) => {
       const rank = (task: LuxorTask) => {
         if (task.status === 'pending' && task.priority === 'urgent') return 0
         if (task.status === 'pending' && task.priority === 'high') return 1
@@ -1244,6 +1251,7 @@ export default function LeadDetailPage({
         system: notes.filter((note) => note.note_type === 'status_change').length,
       },
       sortedTasks: derivedSortedTasks,
+      hiddenOrderedDuplicateTaskCount: hiddenOrderedDuplicateCount,
       pendingTaskCount: derivedSortedTasks.filter((task) => task.status === 'pending').length,
       sortedBookings: derivedSortedBookings,
       sortedInvoices: derivedSortedInvoices,
@@ -1261,6 +1269,7 @@ export default function LeadDetailPage({
       if (activeFeedTab === 'calls' && entry.kind !== 'call' && !(entry.kind === 'note' && entry.note.note_type === 'call_log')) return false
       if (activeFeedTab === 'texts' && entry.kind !== 'text') return false
       if (activeFeedTab === 'emails' && entry.kind !== 'email' && !(entry.kind === 'note' && entry.note.note_type === 'email_log')) return false
+      if (activeFeedTab === 'tasks' && entry.kind !== 'task') return false
       if (activeFeedTab === 'system' && !(entry.kind === 'note' && entry.note.note_type === 'status_change')) return false
 
       if (activityWindow !== 'all') {
@@ -1276,6 +1285,7 @@ export default function LeadDetailPage({
           : entry.kind === 'call'
             ? `${entry.call.caller_number} ${entry.call.callee_number} ${entry.call.direction} ${entry.call.status} ${entry.call.notes || ''} ${entry.call.summary_text || ''} ${entry.call.metadata?.voicemail_transcript || ''} ${entry.call.metadata?.transcript || ''} ${(entry.call.transcript_segments || []).map((segment) => segment.text).join(' ')}`
             : entry.kind === 'text' ? `${entry.message.body} ${entry.message.from_number} ${entry.message.to_number} ${entry.message.status}`
+            : entry.kind === 'task' ? `${entry.task.title} ${entry.task.description || ''} ${entry.task.status} ${entry.task.priority}`
             : `${entry.note.content} ${entry.note.note_type}`
         if (!searchable.toLowerCase().includes(query)) return false
       }
@@ -4407,6 +4417,7 @@ export default function LeadDetailPage({
     activityCounts,
     sortedTasks,
     pendingTaskCount,
+    hiddenOrderedDuplicateTaskCount,
     sortedBookings,
     sortedInvoices,
     sortedPayments,
@@ -5124,7 +5135,7 @@ export default function LeadDetailPage({
         ) : <PortalStatusBadge status={proposalWorkflowDisplay.status} borderless />}
       </div>
 
-      <section className="overflow-visible rounded-t-2xl border border-b-0 border-[color:var(--portal-border)] bg-[color:var(--portal-card)] sm:shadow-2xl sm:shadow-black/10">
+      <section className="overflow-visible rounded-t-2xl bg-[color:var(--portal-card)]">
         <div aria-label="Contact summary" className="relative flex flex-col gap-3 p-4 sm:p-5 md:flex-row md:items-start md:justify-between lg:p-6">
           <div className="grid min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-3 gap-y-3 sm:flex sm:items-start sm:gap-4">
             <div className="relative shrink-0">
@@ -5133,7 +5144,7 @@ export default function LeadDetailPage({
                 avatarUrl={lead.metadata?.avatar_url as string | null}
                 inquiryId={lead.id}
                 size="2xl"
-                className="h-12 w-12 text-lg sm:h-16 sm:w-16 sm:text-2xl sm:shadow-xl sm:shadow-black/10"
+                className="h-12 w-12 text-lg sm:h-16 sm:w-16 sm:text-2xl"
                 onAvatarUpdate={(newUrl) => {
                   setLead((current) => current ? {
                     ...current,
@@ -5456,7 +5467,7 @@ export default function LeadDetailPage({
           </div>
         </div>
 
-        <section aria-label="Lead essentials" className="grid grid-cols-2 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 sm:grid-cols-3 xl:grid-cols-6">
+        <section aria-label="Lead essentials" className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/45 px-4 py-4 sm:grid-cols-3 sm:px-5 xl:grid-cols-6">
           {(isNewsletter ? [
             { label: 'Current stage', value: activeStage.replaceAll('_', ' ') },
             { label: 'Contact', value: lead.full_name },
@@ -5472,9 +5483,9 @@ export default function LeadDetailPage({
             { label: 'Guests', value: displayGuestCount ? `${displayGuestCount} expected` : 'Not captured' },
             { label: 'Package Interest', value: currentEventPackageInterest || 'Not captured' },
           ]).map((item) => (
-            <div key={item.label} className="min-w-0 border-b border-r border-[color:var(--portal-border)] px-3 py-2.5 sm:px-4 sm:py-3 last:border-r-0 sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(3n)]:border-r xl:last:border-r-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--portal-muted)]">{item.label}</p>
-              <p className="mt-1 break-words text-[11px] font-bold capitalize text-[color:var(--portal-text)]" title={item.value}>{item.value}</p>
+            <div key={item.label} className="min-w-0 py-1">
+              <p className="text-xs font-medium text-[color:var(--portal-muted)]">{item.label}</p>
+              <p className="mt-1 break-words text-sm font-semibold capitalize text-[color:var(--portal-text)]" title={item.value}>{item.value}</p>
             </div>
           ))}
         </section>
@@ -5514,7 +5525,7 @@ export default function LeadDetailPage({
         </div>
       </section>
 
-      <div className="sticky -top-4 z-30 overflow-hidden rounded-b-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-sm sm:-top-6 lg:-top-8">
+      <div className="sticky -top-4 z-30 overflow-hidden rounded-b-2xl bg-[color:var(--portal-card)] sm:-top-6 lg:-top-8">
         <LeadWorkspaceNav activeTab={activeLeadTab} onTabChange={(tab) => selectLeadTab({ id: tab as LeadDetailTab })} counts={{ activity: activityCounts.all, tasks: pendingTaskCount, proposals: clientProposals.length, documents: documents.length + signatureRequests.length }} />
       </div>
 
@@ -7485,6 +7496,7 @@ export default function LeadDetailPage({
                         { value: 'calls', label: 'Calls' },
                         { value: 'texts', label: 'Texts' },
                         { value: 'emails', label: 'Email' },
+                        { value: 'tasks', label: 'Tasks' },
                         { value: 'notes', label: 'Notes' },
                         { value: 'system', label: 'Status changes' },
                       ]}
@@ -7504,6 +7516,7 @@ export default function LeadDetailPage({
                 </PortalFilterBar>
               </section>
 
+              {(['all', 'comms', 'emails'] as const).some((tab) => tab === activeFeedTab) && <LeadCurrentWorkflowEmail inquiryId={id} refreshKey={workflowEmailRefreshKey} />}
               {callHistoryError || textHistoryError ? <p role="status" className="text-xs text-[color:var(--portal-muted)]">{callHistoryError && textHistoryError ? 'Calls and texts could not be loaded.' : callHistoryError ? 'Calls could not be loaded.' : 'Texts could not be loaded.'} History will retry automatically.</p> : null}
               {activityEntries.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-6 text-sm text-[color:var(--portal-muted)]">
@@ -7513,6 +7526,9 @@ export default function LeadDetailPage({
               ) : (
                 <div className="min-w-0 space-y-3">
                   {visibleActivityEntries.map((entry) => {
+                    if (entry.kind === 'task') {
+                      return <LeadTaskActivity key={entry.id} task={entry.task} timestamp={formatActivityDate(entry.createdAt)} onOpenTasks={() => setActiveLeadTab('tasks')} />
+                    }
                     if (entry.kind === 'call') {
                       const call = entry.call
                       const otherNumber = call.direction === 'inbound' ? call.caller_number : call.callee_number
@@ -7700,6 +7716,12 @@ export default function LeadDetailPage({
                 </button>
               </div>
             </div>
+
+            {hiddenOrderedDuplicateTaskCount > 0 ? (
+              <p className="mb-3 text-xs leading-5 text-[color:var(--portal-muted)]">
+                {hiddenOrderedDuplicateTaskCount} later brochure step{hiddenOrderedDuplicateTaskCount === 1 ? '' : 's'} stay queued in the database but are hidden here until the current call is completed.
+              </p>
+            ) : null}
 
             {!showTaskTools ? (
               <div className="rounded-xl bg-[color:var(--portal-soft)] px-4 py-4 text-sm leading-6 text-[color:var(--portal-muted)]">
@@ -10701,6 +10723,8 @@ function formatLeadAge(createdAt: string) {
 }
 
 function describeActivityEntry(entry: ActivityEntry) {
+  if (entry.kind === 'task') return entry.task.title
+
   if (entry.kind === 'email') {
     return entry.email.direction === 'outgoing' ? 'Email sent' : 'Email received'
   }

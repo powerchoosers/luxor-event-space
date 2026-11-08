@@ -341,7 +341,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={isSending || !recipientEmail.trim() || !subject.trim() || !body.trim()}
+                disabled={true}
                 className="portal-gold-button inline-flex items-center gap-2 rounded-xl bg-[#caa24c] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-all hover:bg-[#b58c39] disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
               >
                 {isSending ? (
@@ -352,7 +352,7 @@ export function ElenaEmailDraftCard({ draft, onSendSuccess, onRegenerateRequest 
                 ) : (
                   <>
                     <Send size={13} />
-                    <span>Send Email</span>
+                    <span>Send unavailable in Elena</span>
                   </>
                 )}
               </button>

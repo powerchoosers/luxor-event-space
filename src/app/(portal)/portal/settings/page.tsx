@@ -75,22 +75,22 @@ export default function SettingsPage() {
 
       <div className="space-y-3">
         <PortalSettingsSearch onSelect={selectSettingsTab} allowedTabs={isAgent ? AGENT_TABS : undefined} />
-        <div className="hidden items-center gap-x-5 gap-y-2 text-xs sm:flex">
-          <span className="border-r border-[color:var(--portal-border)] pr-5 font-semibold text-[color:var(--portal-muted)]">Common tasks</span>
+        <div className="hidden flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:flex">
+          <span className="text-[11px] font-medium text-[color:var(--portal-muted)]">Quick links</span>
           {isAgent ? (
             <>
-              <button type="button" onClick={() => selectSettingsTab('team')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update my profile</button>
-              <button type="button" onClick={() => selectSettingsTab('notifications')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage my alerts</button>
-              <button type="button" onClick={() => selectSettingsTab('branding')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Change appearance</button>
+              <button type="button" onClick={() => selectSettingsTab('team')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#e0bd67]">Update my profile</button>
+              <button type="button" onClick={() => selectSettingsTab('notifications')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#e0bd67]">Manage my alerts</button>
+              <button type="button" onClick={() => selectSettingsTab('branding')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#e0bd67]">Change appearance</button>
             </>
           ) : (
             <>
-              <button type="button" onClick={() => selectSettingsTab('business')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update venue details</button>
-              <button type="button" onClick={() => selectSettingsTab('hours')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update tour hours</button>
-              <button type="button" onClick={() => selectSettingsTab('pricing')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Update pricing</button>
-              <button type="button" onClick={() => selectSettingsTab('elena')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage Elena</button>
-              <button type="button" onClick={() => selectSettingsTab('notifications')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Manage alerts</button>
-              <button type="button" onClick={() => selectSettingsTab('integrations')} className="font-semibold text-[#a8792f] transition-colors hover:text-[#caa24c]">Email & calendar</button>
+              <button type="button" onClick={() => selectSettingsTab('business')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#e0bd67]">Venue details</button>
+              <button type="button" onClick={() => selectSettingsTab('hours')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#e0bd67]">Tour hours</button>
+              <button type="button" onClick={() => selectSettingsTab('pricing')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#e0bd67]">Pricing</button>
+              <button type="button" onClick={() => selectSettingsTab('elena')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#e0bd67]">Elena</button>
+              <button type="button" onClick={() => selectSettingsTab('notifications')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#e0bd67]">Alerts</button>
+              <button type="button" onClick={() => selectSettingsTab('integrations')} className="rounded-sm font-medium text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 dark:hover:text-[#e0bd67]">Email & calendar</button>
             </>
           )}
         </div>
@@ -200,12 +200,12 @@ export default function SettingsPage() {
                   <nav aria-label="Settings categories" className="space-y-5">
                     {settingsNavigation.map((group) => (
                       <section key={group.label}>
-                        <h3 className="mb-1 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.label}</h3>
-                        <div className="divide-y divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)]">
+                        <h3 className="mb-1 px-1 text-xs font-semibold text-[color:var(--portal-muted)]">{group.label}</h3>
+                        <div className="space-y-1">
                           {group.items.map((item) => {
                             const selected = activeTab === item.id
                             return (
-                              <button key={item.id} type="button" onClick={() => selectSettingsTab(item.id)} className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}>
+                              <button key={item.id} type="button" onClick={() => selectSettingsTab(item.id)} aria-current={selected ? 'page' : undefined} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}>
                                 <span className="shrink-0">{item.icon}</span>
                                 <span className="min-w-0 flex-1">
                                   <span className="block text-sm font-bold">{item.label}</span>

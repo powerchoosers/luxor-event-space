@@ -166,7 +166,7 @@ export function PortalViewportDiagnostics({
             type="button"
             onClick={onClose}
             aria-label="Close viewport diagnostics"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--portal-border)] text-[color:var(--portal-text)]"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
           >
             <X size={16} aria-hidden="true" />
           </button>

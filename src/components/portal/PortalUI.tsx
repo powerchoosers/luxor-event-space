@@ -343,9 +343,9 @@ export function PortalMobileTabPicker<T extends string>({
                     type="button"
                     onClick={() => setOpen(false)}
                     aria-label="Close views menu"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                   >
-                    <X size={18} />
+                    <X size={15} />
                   </button>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
@@ -685,7 +685,7 @@ export function PortalFilterBar({
                   type="button"
                   onClick={() => onSearchChange('')}
                   aria-label="Clear search"
-                  className="portal-inline-action inline-flex h-6 w-6 !min-w-0 !min-h-0 items-center justify-center rounded-md text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40 cursor-pointer"
+                  className="portal-inline-action inline-flex h-6 w-6 !min-w-0 !min-h-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
                 >
                   <X size={12} />
                 </button>
@@ -1016,11 +1016,11 @@ export function PortalCloseButton({
     <button
       type="button"
       onClick={onClick}
-      className={`portal-close-button relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 opacity-75 transition-all hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 cursor-pointer ${className}`}
+      className={`portal-close-button relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer ${className}`}
       aria-label={ariaLabel}
       {...props}
     >
-      <X size={14} />
+      <X size={15} />
     </button>
   )
 }

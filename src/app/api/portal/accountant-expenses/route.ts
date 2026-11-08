@@ -4,10 +4,12 @@ import { getVerifiedTestInquiryIds } from '@/lib/luxorBookingsServer'
 import { getLuxorBusinessFinanceRows } from '@/lib/luxorFinanceReporting'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from '@/lib/luxorTestLeadPolicy'
 import { supabaseRestCount, supabaseRestStrict } from '@/lib/supabaseRestServer'
-import { buildLuxorExpenseExport, buildLuxorExpensePaymentExport } from '@/lib/luxorAccountantExport'
+import { accountantExportPeriod, buildLuxorExpenseExport, buildLuxorExpensePaymentExport } from '@/lib/luxorAccountantExport'
 import type { LuxorBooking } from '@/lib/luxorInquiryTypes'
 
 export const dynamic = 'force-dynamic'
+// Hold this export until nullable-amount consumers are verified together.
+const EXPENSE_EXPORT_CONTRACT_VERIFIED = false
 
 async function loadBookings() {
   const path = 'luxor_bookings?select=*&order=id.asc'
@@ -25,15 +27,21 @@ async function loadBookings() {
 export async function GET(request: NextRequest) {
   try {
     await authorizeLuxorExpenseRequest()
+    if (!EXPENSE_EXPORT_CONTRACT_VERIFIED) {
+      return NextResponse.json({ error: 'Expense exports are temporarily unavailable while amounts are verified.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } })
+    }
     const kind = request.nextUrl.searchParams.get('file')
     if (kind !== 'expenses' && kind !== 'payments') return NextResponse.json({ error: 'Choose an export.' }, { status: 400 })
+    let period
+    try { period = accountantExportPeriod(request.nextUrl.searchParams.get('from'), request.nextUrl.searchParams.get('to')) }
+    catch { return NextResponse.json({ error: 'Choose a valid start and end date.' }, { status: 400, headers: { 'Cache-Control': 'no-store' } }) }
     const [data, bookings] = await Promise.all([loadLuxorExpenseManagementData({ generate: false }), loadBookings()])
     const bookingIds = new Set(bookings.map((row) => row.id.toLowerCase()))
     if (data.expenses.some((row) => row.booking_id && !bookingIds.has(row.booking_id.toLowerCase()))) throw new Error('An expense booking could not be verified')
     const testInquiryIds = await getVerifiedTestInquiryIds(bookings.map((row) => row.inquiry_id).filter((id): id is string => Boolean(id)))
     testInquiryIds.add(LUXOR_PERMANENT_TEST_LEAD_ID)
     const { expenses } = getLuxorBusinessFinanceRows({ invoices: [], bookings, expenses: data.expenses, testInquiryIds, testBookingIds: new Set() })
-    const content = kind === 'expenses' ? buildLuxorExpenseExport(expenses, data.receipts) : buildLuxorExpensePaymentExport(expenses)
+    const content = kind === 'expenses' ? buildLuxorExpenseExport(expenses, data.receipts, period) : buildLuxorExpensePaymentExport(expenses, period)
     return new NextResponse(content, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="luxor-expense-${kind}.csv"`, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } })
   } catch (error) {
     const result = toExpenseErrorResponse(error)

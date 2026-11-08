@@ -195,7 +195,7 @@ const PortalElenaChat = dynamic(
     loading: () => (
       <aside
         aria-hidden="true"
-        className="portal-elena-chat-panel pointer-events-none fixed right-0 top-0 z-50 flex h-full w-full translate-x-full flex-col border-l-0 border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] opacity-0 shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)]"
+        className="portal-elena-chat-panel pointer-events-none fixed right-0 top-0 z-50 flex h-full w-full lg:w-[420px] translate-x-full flex-col border-l-0 lg:border-l border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] opacity-0 shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)]"
       />
     ),
   }
@@ -312,6 +312,32 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed)
   const [elenaOpen, setElenaOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const accountContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!accountMenuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (accountContainerRef.current?.contains(target)) return
+      setAccountMenuOpen(false)
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setAccountMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [accountMenuOpen])
   const [accountHovered, setAccountHovered] = useState(false)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
@@ -920,7 +946,7 @@ function PortalShellContent({ children, session, initialProfile, initialTheme, i
           />
 
           <div className="mt-auto space-y-1.5 border-t border-[#caa24c]/10 pt-4">
-            <div className="relative">
+            <div ref={accountContainerRef} className="relative">
               <AnimatePresence initial={false}>
                 {accountMenuOpen ? (
                   <motion.div

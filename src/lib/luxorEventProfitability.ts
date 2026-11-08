@@ -91,7 +91,7 @@ export function getEventProfitability(input: EventProfitabilityInput): EventProf
     const ids = new Set(expenses.map((expense) => expense.id))
     const billIds = expenses.map((expense) => expense.source_bill_id).filter((id): id is string => Boolean(id))
     const duplicate = ids.size !== expenses.length || expenses.some((expense) => !expense.id) || new Set(billIds).size !== billIds.length
-    const unknown = expenses.filter((expense) => expense.amount_known === false || (Number(expense.amount) === 0 && expense.metadata?.amount_state === 'variable') || !Number.isFinite(Number(expense.amount)) || Number(expense.amount) < 0)
+    const unknown = expenses.filter((expense) => expense.amount_known === false || expense.metadata?.amount_state === 'variable' || expense.metadata?.amount_state === 'unknown' || !Number.isFinite(Number(expense.amount)) || Number(expense.amount) < 0)
     const paid = expenses.map(getLuxorPaidExpenseValue)
     // The shared loader includes legacy metadata in paid_amount. Neither that
     // metadata nor a paid status without transactions proves cash movement.

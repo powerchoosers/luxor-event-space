@@ -1,35 +1,116 @@
 # Luxor Event Space
 
-These instructions apply to this entire repository.
+These instructions apply to this entire repository. Cursor loads this file as standing workspace guidance on every turn.
+
+## Who this is for
+
+- Arianna Patterson is the Luxor owner and the primary day-to-day portal user. The owner login shown on `/portal/login` is `a.patterson@luxoratlaspalmas.com`.
+- Lewis directs implementation and makes the edits. Do not change portal access, sender allowlists, or permissions just because a name appears in content.
+- Lewis uses the connected Gmail tools to talk with Arianna about the work. That Gmail connection is for their conversation. It is not the venue mailbox, not portal login, and not the customer email system.
+- The business mailbox is `booking@luxoratlaspalmas.com`, with `hello@luxoratlaspalmas.com` as an allowed alias. The display name is `Luxor at Las Palmas Events`.
+- Marked test sends use `luxoratlaspalmas@gmail.com`. Do not treat that inbox as a customer or as Arianna's portal login.
 
 ## Repository
 
 - GitHub: `https://github.com/powerchoosers/luxor-event-space`
 - Git remote: `origin`
 - Default and deployment branch: `main`
-- This is the Luxor Event Space website. Do not commit or push its files to the Nodal Point CRM repository.
-- `AGENTS.md` is the highest-priority repo guidance. `README.md` is supporting context for humans and can help Codex, but it is not the authority if it conflicts with code or this file.
+- Production site: `https://www.luxoratlaspalmas.com` (the apex redirects to `www`)
+- This is the Luxor Event Space website and owner portal. Do not commit or push its files to the Nodal Point CRM repository.
+- `AGENTS.md` is the highest-priority repo guidance. `README.md` is the human overview. If they disagree, follow this file and the source.
 
-## Source Of Truth
+## Directory map
 
-- `src/app/(site)/layout.tsx` for public site shell, fonts, and shared site chrome.
-- `src/app/(portal)/layout.tsx` for portal protection and redirect behavior.
-- `src/lib/luxorPortalAuth.ts` for portal session rules and allowed email addresses.
-- `src/lib/zohoMailServer.ts` for Zoho config, sender restrictions, and message delivery.
-- `src/lib/luxorEmailJobsServer.ts` for email job queue processing and marketing updates.
-- `src/lib/luxorBookingsServer.ts` and `src/lib/luxorInquiryTypes.ts` for booking and inquiry data flow.
-- `src/lib/luxorTwilioServer.ts`, `src/lib/luxorPhoneNumbersServer.ts`, and `src/lib/luxorPhoneRoutingServer.ts` for Twilio credentials, the selected public number, call routing, and phone settings.
-- `src/lib/luxorCallsServer.ts`, `src/lib/luxorMessagesServer.ts`, and `src/lib/luxorTextAutomationsServer.ts` for communication history, SMS consent, and deduplicated text automations.
+```
+src/app/(site)          Public marketing site, Spanish pages under /es, payment result pages
+src/app/(portal)        Signed-in owner workspace at /portal
+src/app/(auth)          Portal login and activation, without the public header or Elena widget
+src/app/(proposal)      Tokenized client proposal review
+src/app/api             Route handlers: auth, bookings, mail, Twilio, Stripe, cron, portal data
+src/app/layout-review   Tokenized layout review
+src/app/planner-review  Tokenized planner review
+src/app/secure-portal   Tokenized agreement signing
+src/components          Public site components, plus src/components/portal for the owner UI
+src/lib                 Server helpers. Prefer these over new one-off data access
+src/hooks               Shared client hooks
+src/types               Shared types
+public                  Static images and icons
+supabase/migrations     Checked-in SQL. This is how schema changes ship
+tests                   Node test runner checks and disposable Postgres harnesses
+docs                    Design notes that are not standing agent policy
+scripts                 Local helper scripts
+```
+
+Do not treat `To Delete/`, `.next`, `tmp`, or generated `tsconfig*.tsbuildinfo` files as source.
+
+## Source of truth
+
+- `src/app/(site)/layout.tsx` for the public shell, fonts, and shared site chrome.
 - `src/components/Header.tsx` and `src/components/Footer.tsx` for public navigation.
-- `src/components/Reveal.tsx` for animation policy on the public site.
+- `src/components/Reveal.tsx` for public-site animation policy.
+- `src/app/(portal)/layout.tsx` for portal protection and redirect behavior.
+- `src/app/(auth)/portal/login/page.tsx` and `src/app/api/auth/portal-login/route.ts` for owner sign-in.
+- `src/lib/luxorPortalAuth.ts` for the `luxor_portal_session` cookie.
+- `src/lib/luxorPortalAccess.ts` and `src/lib/luxorSupabaseAuthServer.ts` for active `@luxoratlaspalmas.com` members and Supabase Auth.
+- `src/lib/luxorMailConfig.ts` for the mail provider switch, approved senders, and Resend configuration check.
+- `src/lib/luxorResendMailServer.ts` and `src/lib/luxorResendApiServer.ts` for Resend delivery.
+- `src/lib/luxorEmailJobsServer.ts` for the email job queue.
+- `src/lib/luxorBookingsServer.ts` and `src/lib/luxorInquiryTypes.ts` for booking and inquiry data.
+- `src/lib/luxorTwilioServer.ts`, `src/lib/luxorPhoneNumbersServer.ts`, and `src/lib/luxorPhoneRoutingServer.ts` for Twilio, the selected public number, and call routing.
+- `src/lib/luxorCallsServer.ts`, `src/lib/luxorMessagesServer.ts`, and `src/lib/luxorTextAutomationsServer.ts` for calls, SMS history, consent, and text automations.
+- Stripe routes under `src/app/api/stripe` and `src/app/api/payments` for card payments. Do not place paid charges during testing unless Lewis explicitly authorizes that action.
+
+## Identity and mail
+
+Zoho is no longer the portal identity provider and is no longer the intended mail system. Do not send new work back through Zoho, and do not document Zoho login as the current path.
+
+What is current:
+
+- Portal login is email and password at `/portal/login`, using the `(auth)` layout. `POST /api/auth/portal-login` checks an active `luxor_portal_members` row on `@luxoratlaspalmas.com`, signs in through Supabase Auth, then sets the signed `luxor_portal_session` cookie. Logout is `/api/auth/logout` and must clear that cookie before redirecting to `/portal/login`.
+- Magic-link activation lives at `/api/auth/portal-magic-link` and `/portal/activate`.
+- `LUXOR_MAIL_PROVIDER` defaults to `resend`. Approved senders still come from `LUXOR_MAIL_ALLOWED_SENDERS`, falling back to the older Zoho sender env names only so existing deployments keep working.
+- Automated and manual Luxor mail should go through `luxor_email_jobs` and the Resend sender so it can be scheduled, deduplicated, retried, and recorded. Do not bypass the queue for an automation.
+- Resend receiving, bounce handling, and the Zoho history import are in progress. Do not describe the Resend cutover as finished. Settings still expose an email-migration review. Legacy Zoho modules remain in the tree (`src/lib/zohoMailServer.ts`, `src/lib/zohoOAuthSetup.ts`, `/api/auth/zoho/login`, `/api/auth/callback/zoho`) for that unfinished migration and for historical mailbox data. Leave them in place until Lewis asks to remove them.
+
+Env var names may appear in docs. Never write real values into tracked files or chat summaries: `RESEND_API_KEY`, `LUXOR_EMAIL_CRON_SECRET`, `LUXOR_PORTAL_SESSION_SECRET`, `LUXOR_PORTAL_PASSWORD_HASH`, Supabase service keys, Stripe secrets, and Twilio secrets. Older Zoho names (`ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_ACCOUNT_ID`, `ZOHO_REFRESH_TOKEN`, `ZOHO_ACCOUNTS_SERVER`, `ZOHO_BASE_URL`, `LUXOR_ZOHO_LOGIN_EMAIL`, `LUXOR_ZOHO_ALLOWED_SENDERS`) may still exist in environments. Do not print their values.
+
+## Connected tools
+
+Lewis has these connections available while working in Cursor. Use them for the Luxor work they actually cover. Do not confuse a plugin with an in-repo integration.
+
+- Supabase plugin: production database for this repository. Lewis authorizes autonomous schema inspection, SQL, checked-in migrations, storage-related database configuration, and verification required by a requested Luxor feature. Confirm the target has Luxor tables before changing anything. Do not assume similarly named CRM tables are this project. Apply the checked-in migration, then verify columns, constraints, RLS, and relevant advisors. This does not allow exposing credentials, weakening RLS, deleting production data, resetting branches, or unrelated destructive edits.
+- Vercel plugin: deployments, runtime logs, environment variables, and domain checks for this Next.js app. A push is not proof that production is serving the new commit. Verify the deployment when a task includes release.
+- Gmail plugin: Lewis's channel for emailing Arianna about the product. Do not send venue, customer, invoice, or marketing mail through it.
+- Resend: the in-repo mail provider (`RESEND_API_KEY`, `src/app/api/webhooks/resend`). Setup is not complete. The Resend Cursor plugin can help with API questions; it does not replace the Luxor queue.
+- Stripe: customer payments and webhooks in the app. The Stripe plugin is for API and account questions, not for inventing charges.
+
+## Public site and portal
+
+- Public header links are `/events`, `/gallery`, `/visit`, and `/contact`, with Spanish copies under `/es`. Other real public routes include `/`, `/spaces`, `/tour`, `/terms`, `/privacy`, `/sms-signup`, and `/grand-opening-rsvp`. Point navigation at real pages. There is no `/pricing` route.
+- Do not put portal login inside the `(site)` group. That layout adds the public header, footer, and the public Elena concierge.
+- Desktop heroes use the centered Luxor axis lockup with centered headline, copy, and CTAs unless the page is an intentional split hero. Do not wrap above-the-fold hero content in scroll-triggered `Reveal`.
+- Use `Quinceañera` and `Quinceañeras` with `ñ` everywhere user-facing.
+- The gallery is a custom filtered grid and lightbox. Do not add a gallery dependency unless it clearly improves that implementation.
+- For frontend changes, use the `luxor-design` skill at `C:/Users/lewis/.codex/skills/luxor-design/SKILL.md` with this file.
+- The public site stays light, quiet, and warm, with restrained gold. Do not import portal dark surfaces onto public pages. Any retained dark editorial panel needs explicit light text and accessible contrast.
+- Every element has to earn its place. Prefer hierarchy, spacing, and type over extra cards, badges, pills, gradients, glows, blur, or decorative motion.
+- Do not add an assistant, suggestion panel, or automation affordance unless it solves a demonstrated user problem. The existing Elena surfaces are the exception already in the product: public Elena answers venue and tour questions; portal Elena is the signed-in internal assistant. Portal Elena may read business data. Any database write needs a clear user confirmation and must stay server-authorized.
+- The portal supports light and dark themes. Arianna prefers light mode, so QA light mode first, then confirm dark mode. Use `--portal-*` tokens and shared portal components. Portal dropdowns and calendars use `PortalSelect` and `PortalDatePicker` from `@/components/portal/PortalUI`. Pagination uses labeled previous/next arrow buttons and a visible current page.
+
+## Phone, cron, and workers
+
+- `LUXOR_EMAIL_CRON_SECRET` in Vercel and `luxor_email_jobs_cron_secret` in Supabase Vault are one shared credential. Never rotate only one side. After changing either side, update both, redeploy production, call `/api/cron/email-jobs?health=1` and `/api/cron/text-jobs?health=1` with the shared secret, verify both return HTTP 200 without sending, and confirm `luxor_worker_health` has fresh authenticated check-ins.
+- Email and text cron routes must keep recording those heartbeats. Preserve the no-send `health=1` path and the portal stale-worker warning.
+- Twilio credentials are server-only: `LUXOR_TWILIO_ACCOUNT_SID`, `LUXOR_TWILIO_AUTH_TOKEN`, `LUXOR_TWILIO_API_KEY_SID`, `LUXOR_TWILIO_API_KEY_SECRET`. Never prefix them with `NEXT_PUBLIC_`. Business verification details live in the Git-ignored `TWILIO_PRIVATE_CONTEXT.md`. Read that file only for an explicit Twilio setup task, and never copy it into tracked files, chat, logs, or commits.
+- The selected `luxor_phone_numbers` row is the public business number and outgoing caller ID. Activating a number must set voice, voice fallback, SMS, and SMS fallback webhooks together.
+- Voice has a persistent browser softphone and a PSTN bridge that rings the saved physical phone first. Incoming calls may ring both. Keep status callbacks and `luxor_calls` history for both legs.
+- Twilio webhooks must validate `X-Twilio-Signature`. Portal-only Twilio routes must validate `luxor_portal_session`. Normalize caller IDs, destinations, and webhook form values before trusting them.
+- Use `https://www.luxoratlaspalmas.com` as the Twilio webhook base. Never point Twilio at a URL that redirects.
+- Automated texts are opt-in in portal Settings and stay disabled by default. Missed-call and inbound-acknowledgment texts are deduplicated through `luxor_text_automation_events`, written to `luxor_messages`, and include Luxor identification and STOP instructions when appropriate.
+- An inbound STOP-family keyword records `opted_out` in `luxor_sms_consents` and blocks manual and automated CRM texts. Only START/UNSTOP may restore sending. Do not send a second application reply when Twilio already handled the keyword.
+- Do not place paid calls, send real texts, buy numbers, or activate a public number during testing unless Lewis explicitly authorizes that real-world action.
 
 ## Development
-
-### Test-file policy
-
-This repository intentionally contains no committed test files or test-only routes. The former mail/calendar regression fixtures and test scripts were removed during the Resend migration cleanup. Do not recreate or recommit them; use disposable files outside the repository for any future local verification, and remove any temporary test artifacts before finishing work.
-
-- This repository uses npm and `package-lock.json` as its dependency source of truth. Do not run pnpm for normal development or validation. If `pnpm-lock.yaml` or `pnpm-workspace.yaml` appears as an untracked file, delete those generated files before committing; do not add them to `.gitignore` or commit them.
 
 ```bash
 npm run dev
@@ -38,91 +119,28 @@ npm run lint
 npm run build
 ```
 
-The site uses Next.js, React, TypeScript, and Tailwind CSS. The local development URL is `http://localhost:3000`.
+The app uses npm and `package-lock.json`. Do not use pnpm. If `pnpm-lock.yaml` or `pnpm-workspace.yaml` appears untracked, delete those generated files before committing. Do not add them to `.gitignore`.
 
-Do not run `npm run build` after every small change. During normal iteration, prefer targeted checks such as `npm run typecheck`, `npm run lint -- --quiet`, and browser validation for the affected page. Run `npm run build` only before deployment/release, when the user explicitly asks for a build, or when a change is likely to affect production compilation.
+Local development is `http://localhost:3000`. The stack is Next.js 16 App Router, React 19, TypeScript, and Tailwind CSS v4. Keep new packages conservative. Prefer the Next.js, React, Tailwind, Framer Motion, and Lucide patterns already in the repo.
 
-## Browser Validation
+Do not run `npm run build` after every small change. During iteration, prefer `npm run typecheck`, `npm run lint -- --quiet`, and browser checks. Run `npm run build` before a deployment, when Lewis asks for a build, or when a change is likely to affect production compilation.
 
-- Use the Codex in-app browser first for portal and public-site visual QA, interaction testing, console inspection, screenshots, and flows that benefit from the existing signed-in session.
-- Do not use the Chrome extension browser for repository tasks unless Lewis explicitly requests it. If the Codex in-app browser cannot establish the required session, report the limitation and continue with non-browser checks; do not silently switch browsers.
-- Use another browser only when Lewis explicitly approves that switch.
+`tests/` is part of the repo. Use the npm scripts in `package.json` (`test:follow-ups`, `test:custom-workflows`, `test:payments-dashboard`, and the others) when a change touches those areas. Read `tests/README.md` before adding a harness. Do not add test-only routes under `src/app`. Disposable browser fixtures stay outside application source and must be removed before the work is finished. Do not commit `.env*`, credentials, `node_modules`, `.next`, local agent state, browser logs, or QA screenshots.
 
-## Current Site Conventions
+For visual QA, use Cursor's in-app browser first. Do not switch to another browser unless Lewis asks. If the in-app browser cannot hold the portal session, say so and continue with non-browser checks.
 
-- For frontend changes to the public site or owner portal, use the `luxor-design` skill at `C:/Users/lewis/.codex/skills/luxor-design/SKILL.md` alongside this repository guidance.
+## Git and deployment
 
-- Public site routes include `/`, `/events`, `/spaces`, `/gallery`, `/pricing`, `/visit`, and `/tour`. Header and footer navigation should point to these real pages, not homepage hash anchors, unless a section jump is intentional.
-- Portal routes live under `/portal` and are private owner-workspace routes. Do not place portal login screens inside the public `(site)` route group because that adds the public header, footer, and Elena concierge widget.
-- The portal login route is `/portal/login` and should use the dedicated `(auth)` layout. It signs users in through Zoho via `/api/auth/zoho/login` and returns through `/api/auth/callback/zoho`.
-- The owner portal is protected by the signed `luxor_portal_session` cookie. Logout uses `/api/auth/logout` and must clear that cookie before redirecting to `/portal/login`.
-- Zoho sender access is limited by `LUXOR_ZOHO_LOGIN_EMAIL` and `LUXOR_ZOHO_ALLOWED_SENDERS`. The intended Luxor mailbox is `booking@luxoratlaspalmas.com`, with `hello@luxoratlaspalmas.com` as an allowed alias.
-- Sensitive local business verification details for Twilio are kept in the Git-ignored `TWILIO_PRIVATE_CONTEXT.md`. Read it only when needed for an explicitly requested Twilio setup task; never copy its contents into tracked files, chat, logs, or commits.
-- Zoho mail env var names are allowed in docs, but never write real values into tracked files or chat summaries: `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_ACCOUNT_ID`, `ZOHO_REFRESH_TOKEN`, `ZOHO_ACCOUNTS_SERVER`, `ZOHO_BASE_URL`, `LUXOR_EMAIL_CRON_SECRET`, `LUXOR_PORTAL_SESSION_SECRET`.
-- `LUXOR_EMAIL_CRON_SECRET` in Vercel and `luxor_email_jobs_cron_secret` in Supabase Vault are one shared credential. Never rotate or replace only one side. After changing either side, update both, redeploy production, call `/api/cron/email-jobs?health=1` and `/api/cron/text-jobs?health=1` with the shared secret, verify both return HTTP 200 without sending, and confirm `luxor_worker_health` records fresh authenticated check-ins. A secret rotation is incomplete until these checks pass.
-- The email and text cron routes must record authenticated worker heartbeats in `luxor_worker_health`. Preserve the no-send `health=1` path and the portal stale-worker warning when changing cron routes, queue processing, or queue-health UI.
-- Twilio credentials are server-only. Never expose or commit `LUXOR_TWILIO_ACCOUNT_SID`, `LUXOR_TWILIO_AUTH_TOKEN`, `LUXOR_TWILIO_API_KEY_SID`, or `LUXOR_TWILIO_API_KEY_SECRET`, and never prefix them with `NEXT_PUBLIC_`.
-- The selected row in `luxor_phone_numbers` is the source of truth for the public business number and outgoing caller ID. Activating a number must configure its voice, voice fallback, SMS, and SMS fallback webhooks together.
-- Voice supports two outgoing modes: the persistent browser softphone and a PSTN bridge that rings the saved physical phone first. Incoming calls may ring the browser and physical phone simultaneously; preserve status callbacks and `luxor_calls` history for both legs.
-- Twilio webhook routes must validate `X-Twilio-Signature`. Portal-only Twilio routes must validate `luxor_portal_session`. Do not trust caller IDs, destinations, or webhook form values without normalization and validation.
-- Use `https://www.luxoratlaspalmas.com` as the canonical Twilio webhook base. The apex domain redirects to `www`; never configure Twilio with a URL that redirects because it can break the HTTP method or signature headers.
-- Automated texts are opt-in features configured in portal Settings and must remain disabled by default. Missed-call and inbound-acknowledgment texts must be deduplicated through `luxor_text_automation_events`, written to `luxor_messages`, and include clear Luxor identification and STOP instructions when appropriate.
-- Respect SMS consent. An inbound STOP-family keyword records `opted_out` in `luxor_sms_consents` and blocks manual and automated CRM texts; only a START/UNSTOP event may restore sending. Do not send a second application reply when Twilio has already handled an opt-out keyword.
-- Do not place paid calls, send real texts, purchase phone numbers, or activate a public number during testing unless Lewis explicitly authorizes that real-world action.
-- Desktop heroes should feel balanced as one composition. Use the centered Luxor axis lockup with centered headline, copy, and CTAs unless the page intentionally uses a split hero with a strong visual on the other side.
-- Do not wrap above-the-fold hero content in scroll-triggered `Reveal`; first viewport content must render immediately.
-- Use the correct Spanish spelling: `Quinceañera` and `Quinceañeras` with `ñ` everywhere user-facing.
-- The gallery page uses a custom filtered grid and lightbox. Do not add a gallery dependency unless it clearly improves the experience beyond the current custom implementation.
-- Keep new packages conservative. Prefer existing Next.js, React, Tailwind, Framer Motion, and Lucide patterns unless a package solves a real interaction or accessibility problem.
-- Make sure all dropdowns and calendars in the portal use React elements (e.g. PortalSelect and PortalDatePicker from '@/components/portal/PortalUI') instead of native browser elements.
-- Arianna Patterson is the Luxor owner and the primary day-to-day portal user; Lewis directs implementation. Do not treat this as a replacement for approved-Zoho-email access control, and do not change access just because a name appears in content.
-- The public website is intentionally light, quiet, and luxurious. Preserve its warm light-first visual language with restrained gold accents; do not import portal dark-theme treatments into public pages. Any retained dark editorial panels must keep explicit light text and accessible contrast.
-- Design restraint is a product requirement: every element must earn its place by improving understanding, action, or trust. Favor clear hierarchy, generous spacing, strong typography, and one deliberate focal treatment over extra cards, badges, pills, gradients, glows, blur, decorative motion, or “AI” motifs. The finished work should feel authored by a senior product designer/developer—calm, useful, elegant, and specific to Luxor—not like chatbot-generated UI.
-- Do not add an AI assistant, generated-content surface, suggestion panel, onboarding flourish, or automation affordance unless it solves a demonstrated user problem and its value is clear without explanation. When in doubt, remove it or simplify it.
-- The owner portal supports both themes, but Arianna prefers light mode. Treat light mode as the first visual QA pass and dark mode as equally required: use `--portal-*` tokens and shared portal components, avoid hard-coded black/white/zinc surfaces, and verify readable text, borders, hover, focus, selected, disabled, empty, and loading states in both.
-- Portal pagination must use accessible previous/next arrow icon buttons with labels and a visible current page. Do not introduce text-only “Next” or “Previous” pagination controls.
-- Keep the two Elena experiences separate: public-site Elena is a client-facing concierge for venue questions and tour inquiries; portal Elena is an authenticated internal executive assistant. Portal Elena may read business data automatically, but any database write requires a clear user confirmation and must stay server-authorized.
-- Supabase is the production source of truth for Luxor records and workflows. Use the repository server helpers and checked-in migrations; preserve linked IDs and metadata, verify the Luxor tables and RLS before database changes, and do not make destructive production edits without Lewis’s explicit request.
-- Zoho handles approved portal identity and Luxor mailbox delivery. Use the approved sender allowlist, and route automated mail through `luxor_email_jobs` so it can be scheduled, deduplicated, retried, and recorded; do not bypass the queue for an automation.
-- If README and AGENTS disagree, follow AGENTS and the source files.
+Only commit or push when Lewis explicitly asks.
 
-## Git Synchronization And Publication
-
-- Fetch `origin` before starting work that depends on branch history and before comparing the local branch with `main`. Fetch again around publication; do not treat a cached `origin/main` tracking ref as the current remote branch.
-- Keep three states distinct: uncommitted working-tree changes, local commits ahead of the remote, and remote commits ahead of the local branch. Use a successful fetch, current commit SHAs, and an explicit ahead/behind comparison to describe each accurately.
-- Before calling work unsynced or unpublished, verify that the fetch succeeded, record `HEAD` and the freshly fetched `origin/main` SHAs, and inspect the commits or changes in question. If fetching fails, say that the remote comparison is unverified.
-- Preserve unfinished and unrelated work, including commits from concurrent tasks. Never use a blind reset, overwrite, discard, or force push to erase divergence. A local branch named `work` is valid; do not rename or reset it just for its label.
-- After publishing by any route—including an API, cherry-pick, or another checkout—fetch `origin/main` and safely reconcile the current checkout. If the branches diverged, preserve both sides and report the divergence instead of destructively resetting. A newer concurrent commit on `main` is legitimate and should be kept.
-- Verify that the intended commit is present in freshly fetched `origin/main`. Report local `HEAD`, fresh `origin/main`, ahead/behind counts, and working-tree dirtiness separately. A successful push does not by itself verify the production deployment.
-
-## Commit And Push
-
-Only commit or push when the user explicitly requests it.
-
-1. Confirm the current branch and scope with `git status -sb`.
+1. Confirm the branch with `git status -sb`.
 2. Run `npm run typecheck` and `npm run lint -- --quiet`.
-3. Stage only the files belonging to the requested change.
-4. Commit with a concise message describing the user-facing result.
-5. Push the deployment branch with `git push origin main` when the user explicitly requests a direct main-branch push.
+3. Stage only the files in the requested change.
+4. Commit with a concise message about the user-facing result.
+5. Push with `git push origin main` only when he explicitly asks for a direct main-branch push.
 
-Lewis's preferred delivery flow is to make scoped edits, run applicable local checks, commit and push `main` without force when the task authorizes release, verify the exact production deployment, and then give Arianna straightforward user acceptance testing steps. A push alone does not prove live behavior. Report failing checks and access or safety blockers honestly. This preference does not bypass explicit task limits, required approvals, or security controls.
+Fetch `origin` before relying on branch history, and fetch again before describing publication. Keep uncommitted changes, local commits ahead of the remote, and remote commits ahead of the branch as three separate facts. If fetch fails, say the remote comparison is unverified. Never blind-reset, overwrite, or force-push to erase divergence. After a publish, fetch `origin/main`, confirm the intended commit is there, and report `HEAD`, `origin/main`, ahead/behind, and working-tree dirtiness separately.
 
-Never commit `.env*`, credentials, `node_modules`, `.next`, local Codex state, browser logs, or QA screenshots. The root `.gitignore` covers these files.
-Generated build folders such as `.next-build-qa` are disposable and must stay ignored. If they interfere with local linting or validation, remove the generated folder rather than changing source to accommodate it.
+Lewis's preferred release is scoped edits, local checks, a non-force push to `main` when the task authorizes it, verification of the Vercel deployment, then plain user-acceptance steps for Arianna. A push alone does not prove live behavior.
 
-## Deployment
-
-The GitHub repository is ready for a standard Vercel Next.js deployment:
-
-- Root directory: repository root
-- Build command: `npm run build`
-- Output/framework detection: Next.js defaults
-- The public website can run without secrets, but portal, Zoho mail, and Twilio features require their server-only env vars in Vercel. Do not expose them with `NEXT_PUBLIC_`.
-
-## Supabase Connection And Authority
-
-- The `Supabase` Codex plugin is connected to the production database used by this Luxor repository.
-- Lewis authorizes Codex to use that connected Supabase project autonomously for database work required by requested Luxor features, including inspecting schema, running SQL, applying migrations, managing storage-related database configuration, and verifying results.
-- Confirm that the target contains the Luxor tables before making changes. Do not assume that similarly named CRM tables are the intended target.
-- Apply checked-in migrations when they are required for the requested feature, then verify the resulting columns, constraints, RLS posture, and relevant advisors.
-- This standing authorization does not permit exposing credentials, weakening RLS, deleting production data, resetting branches, or performing unrelated destructive changes without Lewis explicitly requesting that specific action.
+Vercel builds this repo from the root with `npm run build`. The public site can run without secrets. Portal login, Resend, Stripe, Twilio, and cron need their server-only env vars in Vercel. `vercel.json` is currently empty, so do not assume a cron schedule from that file; check the Vercel project when cron timing matters.

@@ -127,7 +127,7 @@ function ToastItem({
           event.stopPropagation()
           onDismiss(toast.id)
         }}
-        className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex h-7 w-7 items-center justify-center rounded-lg text-[color:var(--portal-muted)] opacity-70 transition-all hover:text-[color:var(--portal-text)] hover:opacity-100 hover:bg-[color:var(--portal-soft)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 cursor-pointer"
+        className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex h-7 w-7 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
         aria-label="Close notification"
       >
         <X size={15} />

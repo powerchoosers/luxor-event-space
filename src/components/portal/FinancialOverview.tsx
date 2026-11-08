@@ -71,9 +71,9 @@ function allocationReason(reason: string | null) {
   return messages[reason] || 'The saved payment allocation details need owner verification.'
 }
 
-function Amount({ value, fallback = 0 }: { value: number | null | undefined; fallback?: number | null }) {
+function Amount({ value, fallback = null }: { value: number | null | undefined; fallback?: number | null }) {
   const resolved = value !== null && value !== undefined && Number.isFinite(value) ? value : fallback
-  return <span className="tabular-nums">{resolved === null || resolved === undefined ? '$0.00' : currency(resolved)}</span>
+  return <span className="tabular-nums">{resolved === null || resolved === undefined ? 'Unavailable' : currency(resolved)}</span>
 }
 
 function CategoryChart({ values, label }: { values: Array<{ category: string; amount: number }>; label: string }) {
@@ -143,7 +143,7 @@ export default function FinancialOverview({
   const [yearText, monthText] = month.split('-')
   const year = Number(yearText)
 
-  const period = overview ? getLuxorOverviewPeriod(overview, month) : { actual: 0, expected: 0, projected: 0, percent: 0 }
+  const period = overview ? getLuxorOverviewPeriod(overview, month) : { actual: null, expected: null, projected: null, percent: null }
   const chart = useMemo(() => (overview ? getLuxorOverviewChart(overview, year, grouping) : []), [overview, year, grouping])
   const max = Math.max(1, ...chart.map((item) => (item.actual || 0) + (item.expected || 0)))
 
@@ -154,7 +154,7 @@ export default function FinancialOverview({
         const key = date.toISOString().slice(0, 7)
         return {
           label: date.toLocaleString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
-          value: overview?.expectedByMonth ? overview.expectedByMonth[key] || 0 : 0,
+          value: overview?.expectedByMonth ? overview.expectedByMonth[key] || 0 : null,
         }
       }),
     [overview?.expectedByMonth, today],
@@ -180,17 +180,17 @@ export default function FinancialOverview({
   if (!years.includes(yearText)) years.push(yearText)
 
   // Real calculated metrics for the 4 KPI cards
-  const periodRevenue = period.actual ?? 0
+  const periodRevenue = period.actual
   const allTimeRevenue = useMemo(
-    () => (overview ? overview.reportingRows.eventPaymentRows.reduce((sum, row) => sum + row.amount, 0) : 0),
+    () => (overview?.actualByMonth ? overview.reportingRows.eventPaymentRows.reduce((sum, row) => sum + row.amount, 0) : null),
     [overview],
   )
-  const periodExpenses = expenses?.available ? expenses.byMonth?.[month] ?? 0 : 0
-  const allTimeExpenses = expenses?.available && expenses.total !== null ? expenses.total : 0
-  const periodNetProfit = periodRevenue - periodExpenses
-  const allTimeNetProfit = allTimeRevenue - allTimeExpenses
+  const periodExpenses = expenses?.available ? expenses.byMonth?.[month] ?? 0 : null
+  const allTimeExpenses = expenses?.available && expenses.total !== null ? expenses.total : null
+  const periodNetProfit = periodRevenue === null || periodExpenses === null ? null : periodRevenue - periodExpenses
+  const allTimeNetProfit = allTimeRevenue === null || allTimeExpenses === null ? null : allTimeRevenue - allTimeExpenses
   const outstandingBalance = useMemo(
-    () => (overview ? overview.reportingRows.acceptedInvoiceRows.reduce((sum, row) => sum + row.outstanding, 0) : 0),
+    () => (overview?.actualByMonth && overview.expectedByMonth ? overview.reportingRows.acceptedInvoiceRows.reduce((sum, row) => sum + row.outstanding, 0) : null),
     [overview],
   )
   const activeContractCount = overview?.reportingRows.acceptedInvoiceRows.length ?? 0
@@ -413,31 +413,31 @@ export default function FinancialOverview({
         </section>
       )}
 
-      {/* 4 KPI Cards: Exact matching containers, real dollar amounts, zero "Unavailable" */}
+      {/* Summary amounts remain unavailable when their source is unavailable. */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[
           {
-            title: 'Total revenue',
+            title: 'Event payments received',
             value: periodRevenue,
-            detail: `${monthName} · ${currency(allTimeRevenue)} collected all time`,
+            detail: `${monthName} · ${allTimeRevenue === null ? 'All-time collections unavailable' : `${currency(allTimeRevenue)} collected all time`}`,
             icon: CurrencyCircleDollar,
           },
           {
-            title: 'Total expenses',
+            title: 'Paid expenses',
             value: periodExpenses,
-            detail: `${monthName} · ${currency(allTimeExpenses)} paid all time`,
+            detail: `${monthName} · ${allTimeExpenses === null ? 'All-time expenses unavailable' : `${currency(allTimeExpenses)} paid all time`}`,
             icon: CreditCard,
           },
           {
-            title: 'Net profit',
+            title: 'Net cash flow',
             value: periodNetProfit,
-            detail: `${monthName} net cash flow · ${currency(allTimeNetProfit)} all time`,
+            detail: `${monthName} net cash flow · ${allTimeNetProfit === null ? 'All-time net unavailable' : `${currency(allTimeNetProfit)} all time`}`,
             icon: TrendUp,
           },
           {
             title: 'Outstanding balance',
             value: outstandingBalance,
-            detail: `${activeContractCount} active signed ${activeContractCount === 1 ? 'agreement' : 'agreements'} · ${currency(period.expected ?? 0)} due in ${monthShort}`,
+            detail: outstandingBalance !== null ? `${activeContractCount} active signed ${activeContractCount === 1 ? 'agreement' : 'agreements'} · ${period.expected === null ? 'Scheduled amount unavailable' : `${currency(period.expected)} due in ${monthShort}`}` : 'Agreement balances unavailable',
             icon: Wallet,
           },
         ].map(({ title, value, detail, icon: Icon }) => (
@@ -497,6 +497,8 @@ export default function FinancialOverview({
               </div>
             ))}
           </div>
+        ) : !overview || !overview.actualByMonth || !overview.expectedByMonth ? (
+          <p className={`${muted} mt-3`}>Payment schedules are unavailable until the records are verified.</p>
         ) : clientPaymentPlans.active.length === 0 && clientPaymentPlans.pending.length === 0 ? (
           <p className={`${muted} mt-3`}>No active client payment schedules recorded yet.</p>
         ) : (
@@ -568,13 +570,13 @@ export default function FinancialOverview({
                         <div>
                           <dt className="text-[color:var(--portal-muted)]">Next payment</dt>
                           <dd className="mt-0.5 font-semibold tabular-nums text-[color:var(--portal-text)]">
-                            {plan.nextAmount !== null ? currency(plan.nextAmount) : '$0.00'}
+                            {plan.nextAmount !== null ? currency(plan.nextAmount) : plan.remainingBalance <= 0.005 ? '$0.00' : 'Unavailable'}
                           </dd>
                         </div>
                         <div>
                           <dt className="text-[color:var(--portal-muted)]">Next due date</dt>
                           <dd className="mt-0.5 font-medium text-[color:var(--portal-text)]">
-                            {plan.nextDueDate ? formatShortDate(plan.nextDueDate) : 'All paid'}
+                            {plan.nextDueDate ? formatShortDate(plan.nextDueDate) : plan.nextAmount === null && plan.remainingBalance <= 0.005 ? 'All paid' : 'Date pending'}
                           </dd>
                         </div>
                       </dl>
@@ -705,7 +707,7 @@ export default function FinancialOverview({
             </div>
             <div>
               <strong className="flex min-h-[22px] items-center tabular-nums text-[color:var(--portal-text)]">
-                {loading ? <PortalSkeleton className="h-5 w-12 rounded" /> : `${period.percent ?? 0}%`}
+                {loading ? <PortalSkeleton className="h-5 w-12 rounded" /> : period.percent === null ? 'Unavailable' : `${period.percent}%`}
               </strong>
               <span className={muted}>Collected</span>
             </div>
@@ -734,6 +736,7 @@ export default function FinancialOverview({
             />
           </div>
           <p className="mt-2 text-xs text-[color:var(--portal-muted)]">Gold: collected · champagne: expected</p>
+          {!loading && !overview && <p role="status" className={`${muted} mt-3`}>Collections data is unavailable. Refresh to retry.</p>}
           <div className="mt-5 flex h-40 items-end gap-1 sm:gap-3">
             {loading
               ? Array.from({ length: 12 }, (_, idx) => {
@@ -753,16 +756,16 @@ export default function FinancialOverview({
                   <div key={item.label} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
                     <div
                       className="flex h-32 w-full items-end justify-center gap-0.5"
-                      title={`${item.label}: collected ${currency(item.actual ?? 0)}, expected ${currency(item.expected ?? 0)}`}
+                      title={`${item.label}: collected ${item.actual === null ? 'unavailable' : currency(item.actual)}, expected ${item.expected === null ? 'unavailable' : currency(item.expected)}`}
                     >
-                      <div className="w-2/5 max-w-8 rounded-t bg-[#b58b3e]" style={{ height: `${Math.max(0, ((item.actual || 0) / max) * 100)}%` }} />
-                      <div className="w-2/5 max-w-8 rounded-t bg-[#e6c99d]" style={{ height: `${Math.max(0, ((item.expected || 0) / max) * 100)}%` }} />
+                      {item.actual !== null && <div className="w-2/5 max-w-8 rounded-t bg-[#b58b3e]" style={{ height: `${Math.max(0, (item.actual / max) * 100)}%` }} />}
+                      {item.expected !== null && <div className="w-2/5 max-w-8 rounded-t bg-[#e6c99d]" style={{ height: `${Math.max(0, (item.expected / max) * 100)}%` }} />}
                     </div>
                     <span className="text-[10px] text-[color:var(--portal-muted)]">{item.label}</span>
                   </div>
                 ))}
           </div>
-          {!loading && (
+          {!loading && overview && (
             <details className="mt-3 text-xs text-[color:var(--portal-muted)]">
               <summary className="cursor-pointer">View amounts</summary>
               <div className="mt-2 space-y-1">
@@ -795,6 +798,8 @@ export default function FinancialOverview({
                 ))}
               </div>
             </div>
+          ) : !overview?.categoryByMonth ? (
+            <p className={`${muted} mt-3`}>Revenue categories are unavailable until the records are verified.</p>
           ) : revenueMonthCategories.length > 0 ? (
             <>
               <CategoryChart label="revenue" values={revenueMonthCategories} />
@@ -832,6 +837,8 @@ export default function FinancialOverview({
                 ))}
               </div>
             </div>
+          ) : !expenses?.available ? (
+            <p className={`${muted} mt-3`}>Paid expense details are unavailable until the records are verified.</p>
           ) : expenseMonthCategories.length > 0 ? (
             <>
               <CategoryChart label="expenses" values={expenseMonthCategories} />
@@ -884,9 +891,9 @@ export default function FinancialOverview({
                     <span>{item.label}</span>
                     <Amount value={item.value} />
                   </p>
-                  <div aria-hidden="true" className="mt-1 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-soft)]">
+                  {item.value !== null && <div aria-hidden="true" className="mt-1 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-soft)]">
                     <div className="h-full rounded-full bg-[#c59a4d]" style={{ width: `${((item.value || 0) / upcomingMax) * 100}%` }} />
-                  </div>
+                  </div>}
                 </div>
               ))}
             </div>
@@ -916,7 +923,7 @@ export default function FinancialOverview({
           ) : unpaid === undefined ? (
             <p className={`${muted} mt-3`}>Bills could not be loaded. Refresh to retry.</p>
           ) : unpaid.length === 0 ? (
-            <p className={`${muted} mt-3`}>No unpaid bills recorded.</p>
+            <p className={`${muted} mt-3`}>No bills are marked open in the loaded list. Paid bills may still need payment review.</p>
           ) : (
             <ul className="mt-3 divide-y divide-[color:var(--portal-border)]">
               {unpaid.map((bill) => (
@@ -968,7 +975,9 @@ export default function FinancialOverview({
                 </li>
               ))}
             </ul>
-          ) : activity && activity.length ? (
+          ) : !activity ? (
+            <p className={`${muted} mt-3`}>Recent activity is unavailable. Refresh to retry.</p>
+          ) : activity.length ? (
             <ul className="mt-3 divide-y divide-[color:var(--portal-border)]">
               {activity.slice(0, 5).map((item) => (
                 <li key={item.id} className="py-3 text-sm">
@@ -1000,14 +1009,14 @@ export default function FinancialOverview({
       <p className="text-sm text-[color:var(--portal-muted)]">
         Overdue scheduled collections:{' '}
         <strong className="inline-flex min-h-[20px] items-center text-[color:var(--portal-text)]">
-          {loading ? <PortalSkeleton className="inline-block h-4 w-20 rounded" /> : <Amount value={overview?.overdue ?? 0} />}
+          {loading ? <PortalSkeleton className="inline-block h-4 w-20 rounded" /> : <Amount value={overview?.overdue} />}
         </strong>
         . Overdue amounts are tracked separately from upcoming collections.
       </p>
       <p className="text-sm text-[color:var(--portal-muted)]">
         Recorded refundable security deposits held:{' '}
         <strong className="inline-flex min-h-[20px] items-center text-[color:var(--portal-text)]">
-          {loading ? <PortalSkeleton className="inline-block h-4 w-20 rounded" /> : <Amount value={overview?.securityDepositsHeld ?? 0} />}
+          {loading ? <PortalSkeleton className="inline-block h-4 w-20 rounded" /> : <Amount value={overview?.securityDepositsHeld} />}
         </strong>
         . Refundable security deposits are held separately from event revenue.
       </p>

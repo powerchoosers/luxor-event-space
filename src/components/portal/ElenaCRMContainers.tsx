@@ -17,7 +17,7 @@ import {
   Calendar,
   Users
 } from '@/lib/icons/phosphor-compat'
-import { PortalSelect } from './PortalUI'
+import { PortalDatePicker, PortalSelect } from './PortalUI'
 
 // --- 1. Lead Update Container ---
 export interface LeadUpdatePayload {
@@ -532,150 +532,95 @@ export interface TaskCardPayload {
   dueDate?: string
 }
 
-export function ElenaTaskCard({
-  payload,
-  onSuccess
-}: {
-  payload: TaskCardPayload
-  onSuccess?: (msg: string) => void
-}) {
+export function ElenaTaskCard({ payload, onSuccess }: { payload: TaskCardPayload; onSuccess?: (msg: string) => void }) {
   const [title, setTitle] = useState(payload.title || '')
   const [description, setDescription] = useState(payload.description || '')
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(payload.priority || 'medium')
   const [dueDate, setDueDate] = useState(payload.dueDate || '')
-
+  const [confirmation, setConfirmation] = useState<{ token: string; expiresAt: string; summary: string } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
+  const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSaveTask = async () => {
-    if (!title.trim() || isSaving || isSaved) return
+  const prepareTask = async () => {
+    if (!title.trim() || isSaving || isSaved || uncertain) return
     setIsSaving(true)
     setError(null)
-
     try {
-      const res = await fetch('/api/portal/elena-chat/actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'CREATE_TASK',
-          title: title.trim(),
-          description: description.trim() || undefined,
-          priority,
-          dueDate: dueDate || undefined,
-          inquiryId: payload.inquiryId
-        })
+      const response = await fetch('/api/portal/elena-chat/actions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'PREPARE_TASK', task: { inquiryId: payload.inquiryId, title: title.trim(), description: description.trim(), priority, dueDate: dueDate || null } }),
       })
-
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to create task')
-
-      setIsSaved(true)
-      if (onSuccess) {
-        onSuccess(`Created task **"${title.trim()}"** in your CRM! 📌`)
-      }
+      const data = await response.json()
+      if (!response.ok || typeof data.confirmation?.token !== 'string' || typeof data.confirmation?.expiresAt !== 'string' || typeof data.confirmation?.summary !== 'string') throw new Error('The task could not be prepared. Please try again.')
+      setConfirmation(data.confirmation)
     } catch (err) {
-      console.error(err)
-      setError(err instanceof Error ? err.message : 'Task creation failed')
-    } finally {
-      setIsSaving(false)
-    }
+      setError(err instanceof Error ? err.message : 'The task could not be prepared. Please try again.')
+    } finally { setIsSaving(false) }
+  }
+
+  const confirmTask = async () => {
+    if (!confirmation || isSaving || isSaved || uncertain) return
+    setIsSaving(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/portal/elena-chat/actions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'CONFIRM_TASK', token: confirmation.token }),
+      })
+      const data = await response.json()
+      if (!response.ok || data.success !== true || typeof data.result?.task_id !== 'string' || !data.result.task_id) throw new Error('Unverified result')
+      setConfirmation(null)
+      setIsSaved(true)
+      onSuccess?.('Task created in the CRM.')
+    } catch {
+      // A response may be lost after a commit; do not enable a blind retry.
+      setConfirmation(null)
+      setUncertain(true)
+      setError('The result could not be verified. Check the task list before requesting this task again.')
+    } finally { setIsSaving(false) }
   }
 
   return (
-    <div className="w-full mt-3 overflow-hidden rounded-2xl border border-[#caa24c]/30 bg-[#0a0807]/90 shadow-xl backdrop-blur-md">
-      <div className="flex items-center justify-between border-b border-[#caa24c]/15 bg-[#caa24c]/5 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#caa24c]/20 border border-[#caa24c]/30 text-[#f1d27a]">
-            <CheckSquare size={14} />
-          </div>
-          <div>
-            <h4 className="text-xs font-semibold text-zinc-200">Elena CRM Operational Task</h4>
-            <p className="text-[10px] text-zinc-400">Add to Owner Task Pipeline</p>
-          </div>
-        </div>
+    <div className="mt-3 w-full overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]">
+      <div className="flex items-center gap-2 border-b border-[color:var(--portal-border)] px-4 py-3">
+        <CheckSquare size={16} className="text-[#a8792f] dark:text-[#f1d27a]" />
+        <h4 className="font-sans text-sm font-bold text-[color:var(--portal-text)]">Create task</h4>
       </div>
-
-      <div className="p-4 space-y-3">
-        <div className="rounded-lg border border-[#caa24c]/20 bg-[#caa24c]/5 px-3 py-2 text-xs text-zinc-300">
-          Linked client: <span className="font-semibold text-zinc-100">{payload.clientName || 'Verified Luxor client'}</span>
-        </div>
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">Task Title</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Call caterer regarding Sarah's menu"
-            disabled={isSaved}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-200 outline-none focus:border-[#caa24c] font-medium disabled:opacity-60"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">Priority</label>
-            <PortalSelect
-              value={priority}
-              onChange={(value) => setPriority(value as 'low' | 'medium' | 'high')}
-              disabled={isSaved}
-              className="w-full"
-              buttonClassName="!h-8 !rounded-lg !px-2.5 !py-1.5 !text-left !text-xs"
-              options={[
-                { value: 'low', label: 'Low' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'high', label: 'High' },
-              ]}
-            />
+      <div className="space-y-3 p-4">
+        {confirmation ? (
+          <div aria-live="polite">
+            <p className="mb-2 text-xs font-semibold text-[color:var(--portal-text)]">Review this task before creating it</p>
+            <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-[color:var(--portal-text)]">{confirmation.summary}</p>
+            <p className="mt-2 text-xs text-[color:var(--portal-muted)]">This confirmation expires shortly.</p>
           </div>
-
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">Due Date</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              disabled={isSaved}
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-[#caa24c] disabled:opacity-60"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">Description / Notes</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            placeholder="Additional notes for this task..."
-            disabled={isSaved}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 text-xs text-zinc-300 outline-none placeholder:text-zinc-600 resize-none disabled:opacity-60"
-          />
-        </div>
-
-        {error && (
-          <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-400">
-            <AlertCircle size={14} className="shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <div className="flex justify-end pt-1">
-          {!isSaved ? (
-            <button
-              type="button"
-              onClick={handleSaveTask}
-              disabled={isSaving || !title.trim()}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#caa24c] hover:bg-[#f1d27a] text-white hover:text-white focus-visible:text-white disabled:text-white px-4 py-1.5 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
-            >
-              {isSaving ? <PortalConstellationLoader size={13} tone="white" /> : <CheckSquare size={13} />}
-              <span>Save Task to CRM</span>
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-green-500/40 bg-green-500/20 px-3 py-1.5 text-xs font-semibold text-green-400">
-              <Check size={13} /> Task Added
-            </span>
-          )}
+        ) : !isSaved && !uncertain ? (
+          <>
+            <p className="text-xs text-[color:var(--portal-muted)]">Linked client: <span className="font-semibold text-[color:var(--portal-text)]">{payload.clientName || 'Verified Luxor client'}</span></p>
+            <label className="block text-xs font-semibold text-[color:var(--portal-text)]">Task title
+              <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={isSaving} className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60" />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <div><span className="mb-1 block text-xs font-semibold text-[color:var(--portal-text)]">Priority</span>
+                <PortalSelect value={priority} onChange={(value) => setPriority(value as 'low' | 'medium' | 'high')} disabled={isSaving} className="w-full" buttonClassName="!h-9 !rounded-lg !text-left !text-xs" options={[{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }]} />
+              </div>
+              <div><span className="mb-1 block text-xs font-semibold text-[color:var(--portal-text)]">Due date</span>
+                <PortalDatePicker value={dueDate} onChange={setDueDate} placeholder="No due date" className="w-full" />
+              </div>
+            </div>
+            <label className="block text-xs font-semibold text-[color:var(--portal-text)]">Description
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} disabled={isSaving} className="mt-1 w-full resize-y rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-2.5 text-xs text-[color:var(--portal-text)] outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 disabled:opacity-60" />
+            </label>
+          </>
+        ) : null}
+        {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        <div className="flex justify-end gap-2">
+          {confirmation && !uncertain && <button type="button" onClick={() => setConfirmation(null)} disabled={isSaving} className="rounded-lg border border-[color:var(--portal-border)] px-3 py-2 text-xs font-semibold text-[color:var(--portal-text)] disabled:opacity-50">Edit</button>}
+          {!isSaved && !uncertain && <button type="button" onClick={confirmation ? confirmTask : prepareTask} disabled={isSaving || !title.trim()} className="luxor-gold-raised inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold !text-white disabled:opacity-50">
+            {isSaving && <PortalConstellationLoader size={13} tone="white" />}{confirmation ? 'Confirm task' : 'Review task'}
+          </button>}
+          {isSaved && <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400"><Check size={13} /> Task added</span>}
         </div>
       </div>
     </div>

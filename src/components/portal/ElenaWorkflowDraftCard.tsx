@@ -203,8 +203,8 @@ export function ElenaWorkflowDraftCard({ draft, onSaved }: ElenaWorkflowDraftCar
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--portal-border)] pt-3">
-          {!draft.canSave ? <p className="text-xs text-[color:var(--portal-muted)]">Workflow draft saving is disabled by the current Luxor controls.</p> : null}
-          <button type="button" onClick={() => void saveDraft()} disabled={saving || !draft.canSave} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition hover:bg-[#d6b45f] hover:text-white focus-visible:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none">
+          <p className="text-xs text-[color:var(--portal-muted)]">Saving from Elena is unavailable. Use the workflows workspace to create a draft.</p>
+          <button type="button" onClick={() => void saveDraft()} disabled={true} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-[#caa24c] px-4 text-xs font-bold text-white transition hover:bg-[#d6b45f] hover:text-white focus-visible:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none">
             {saving ? <LoaderCircle size={14} aria-hidden="true" className="animate-spin" /> : <Save size={14} aria-hidden="true" />}
             {saving ? 'Saving draft…' : 'Save draft'}
           </button>

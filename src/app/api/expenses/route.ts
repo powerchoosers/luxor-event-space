@@ -3,7 +3,8 @@ import { supabaseRest, supabaseRestCount, supabaseRestStrict } from '@/lib/supab
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
 import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { assertLuxorProductionSideEffectsAllowed } from '@/lib/luxorTestLeadServer'
-import { assertLuxorExpensePaymentHistoryReady, assertLuxorExpenseSchemaReady, isExpenseManagementNotReady, LuxorExpenseRequestError } from '@/lib/luxorExpensesServer'
+import { assertLuxorExpensePaymentHistoryReady, assertLuxorExpenseSchemaReady, isDateKey, isExpenseManagementNotReady, LuxorExpenseRequestError } from '@/lib/luxorExpensesServer'
+import { expenseAmountState } from '@/lib/luxorExpenseAmount'
 import type { LuxorExpensePayment } from '@/lib/luxorInquiryTypes'
 
 export type LuxorBookingExpense = {
@@ -14,7 +15,7 @@ export type LuxorBookingExpense = {
   category: string
   description: string | null
   vendor_name: string | null
-  amount: number
+  amount: number | null
   incurred_on: string
   status: string
   notes: string | null
@@ -28,10 +29,10 @@ export type LuxorBookingExpense = {
   recurring_template_id?: string | null
   billing_period_start?: string | null
   billing_period_end?: string | null
-  paid_amount?: number
+  paid_amount?: number | null
   remaining_balance?: number | null
   amount_known?: boolean
-  payment_status?: 'expected' | 'due_today' | 'overdue' | 'partially_paid' | 'paid' | 'cancelled'
+  payment_status?: 'expected' | 'due_today' | 'overdue' | 'partially_paid' | 'paid' | 'cancelled' | 'needs_review'
   payments?: LuxorExpensePayment[]
 }
 
@@ -67,29 +68,64 @@ function withExpensePayments(expenses: LuxorBookingExpense[], payments: ExpenseP
   const today = luxorToday()
   return expenses.map((expense) => {
     const history = byExpense.get(expense.id) || []
-    const legacyAmount = Number(expense.metadata?.legacy_paid_amount ?? (history.length === 0 && expense.status === 'paid' ? expense.amount : 0))
-    const transactionTotal = history.reduce((total, payment) => {
-      const amount = Number(payment.amount)
-      if (payment.transaction_type === 'payment') return total + amount
-      if (payment.transaction_type === 'refund' || payment.transaction_type === 'reversal') return total - amount
-      throw new Error('Expense payment records need reconciliation.')
-    }, 0)
-    const paidAmount = Math.round((legacyAmount + transactionTotal + Number.EPSILON) * 100) / 100
-    const amount = Number(expense.amount)
-    const amountKnown = !(expense.metadata?.amount_state === 'variable' && amount === 0)
-    if (!Number.isFinite(legacyAmount) || legacyAmount < 0 || !Number.isFinite(paidAmount) || !Number.isFinite(amount) || amount < 0) {
-      throw new Error('Expense amounts need reconciliation.')
+    const { amount, known: amountKnown } = expenseAmountState(expense.amount, expense.metadata)
+    if (!amountKnown || amount === null) {
+      return {
+        ...expense,
+        amount,
+        amount_known: false,
+        payments: history,
+        paid_amount: null,
+        remaining_balance: null,
+        payment_status: expense.status === 'cancelled' ? 'cancelled' as const : 'needs_review' as const,
+      }
     }
-    if (!amountKnown && paidAmount > 0) throw new Error('A variable expense with payment history needs a confirmed bill amount.')
-    const remainingBalance = amountKnown ? Math.round((Math.max(0, amount - paidAmount) + Number.EPSILON) * 100) / 100 : null
+    const metadata = expense.metadata ?? {}
+    const hasLegacy = Object.prototype.hasOwnProperty.call(metadata, 'legacy_paid_amount')
+    if (history.length === 0 && expense.status === 'paid' && !hasLegacy) {
+      return {
+        ...expense,
+        amount,
+        amount_known: amountKnown,
+        payments: history,
+        paid_amount: null,
+        remaining_balance: null,
+        payment_status: 'needs_review' as const,
+      }
+    }
+    const legacyAmount = hasLegacy ? Number(metadata.legacy_paid_amount) : 0
+    let transactionTotal = 0
+    let historyReady = Number.isFinite(legacyAmount) && legacyAmount >= 0 && Number.isFinite(amount) && amount >= 0
+    for (const payment of history) {
+      const paymentAmount = Number(payment.amount)
+      const paymentDay = payment.payment_date?.slice(0, 10)
+      if (!historyReady || !Number.isFinite(paymentAmount) || paymentAmount <= 0 || !isDateKey(paymentDay) || !['payment', 'refund', 'reversal'].includes(payment.transaction_type)) {
+        historyReady = false
+        break
+      }
+      transactionTotal += payment.transaction_type === 'payment' ? paymentAmount : -paymentAmount
+    }
+    const paidAmount = Math.round((legacyAmount + transactionTotal + Number.EPSILON) * 100) / 100
+    if (!historyReady || !Number.isFinite(paidAmount) || paidAmount < -0.005 || paidAmount - amount > 0.005) {
+      return {
+        ...expense,
+        amount,
+        amount_known: amountKnown,
+        payments: history,
+        paid_amount: null,
+        remaining_balance: null,
+        payment_status: expense.status === 'cancelled' ? 'cancelled' as const : 'needs_review' as const,
+      }
+    }
+    const remainingBalance = Math.round((amount - paidAmount + Number.EPSILON) * 100) / 100
     const paymentStatus = expense.status === 'cancelled' ? 'cancelled'
-      : !amountKnown ? 'expected'
-        : remainingBalance === 0 ? 'paid'
-          : expense.due_date && expense.due_date < today ? 'overdue'
-            : expense.due_date === today ? 'due_today'
+      : amount > 0 && remainingBalance === 0 ? 'paid'
+          : isDateKey(expense.due_date) && expense.due_date < today ? 'overdue'
+            : isDateKey(expense.due_date) && expense.due_date === today ? 'due_today'
               : paidAmount > 0 ? 'partially_paid' : 'expected'
     return {
       ...expense,
+      amount,
       amount_known: amountKnown,
       payments: history,
       paid_amount: paidAmount,

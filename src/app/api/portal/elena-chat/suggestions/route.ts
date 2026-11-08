@@ -1,4 +1,5 @@
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import { isLuxorBookingReceivableEligible } from '@/lib/luxorPaymentDashboardModel'
 import { NextResponse } from 'next/server'
@@ -131,6 +132,13 @@ function daysFromToday(value: string | null | undefined) {
   return Math.round((target - today.getTime()) / 86_400_000)
 }
 
+function vendorBillAmount(bill: VendorBillRecord) {
+  if (bill.amount_state === 'unknown') return 'An unknown amount'
+  if (bill.amount_state === 'variable') return 'A variable amount'
+  if (bill.amount_state !== 'known') return 'An unconfirmed amount'
+  return formatMoney(bill.amount)
+}
+
 function formatMoney(value: number | string | null) {
   const amount = Number(value)
   return Number.isFinite(amount)
@@ -147,6 +155,7 @@ interface VendorBillRecord {
   provider: string | null
   service: string | null
   amount: number | string | null
+  amount_state?: string | null
   status: string | null
   due_date: string | null
   source_type: string | null
@@ -195,19 +204,28 @@ export async function GET(request: Request) {
   try {
     const session = await getLuxorPortalSession()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const member = await getLuxorPortalMember(session.email)
+    if (!member || member.status !== 'active') return NextResponse.json({ error: 'Active portal access required.' }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
+    const canLeads = memberCan(member, 'leads')
+    const canEmails = memberCan(member, 'emails')
+    const canMessages = memberCan(member, 'messages')
+    const canCalendar = memberCan(member, 'calendar')
+    const canPlanner = memberCan(member, 'planner')
+    const canFinance = memberCan(member, 'finances')
+    const canOperations = memberCan(member, 'operations')
 
     const { searchParams } = new URL(request.url)
     const cycle = Math.max(0, Number.parseInt(searchParams.get('cycle') || '0', 10) || 0)
 
     const [inquiries, bookings, invoices, vendorBills, tasks, signatures, unreadMessages, recentEmails] = await Promise.all([
-      withFallbackTimeout(supabaseRest<InquiryRecord[]>('luxor_inquiries?select=id,full_name,email,event_type,status,pipeline_stage,campaign_key,created_at,updated_at&archived_at=is.null&is_test=is.false&order=created_at.desc&limit=40'), []),
-      withFallbackTimeout(supabaseRest<BookingRecord[]>('luxor_bookings?select=id,client_name,event_type,event_date,status,contract_status,contract_signed_at,final_payment_due_date&order=event_date.asc&limit=30'), []),
-      withFallbackTimeout(supabaseRest<InvoiceRecord[]>('luxor_invoices?select=id,booking_id,parent_invoice_id,invoice_kind,proposal_accepted_at,offer_status,client_name,total,status,due_date&status=neq.paid&order=due_date.asc&limit=30'), []),
-      withFallbackTimeout(supabaseRest<VendorBillRecord[]>('luxor_bills?select=id,provider,service,amount,status,due_date,source_type,extraction_status,extraction_confidence,arithmetic_status&status=neq.paid&order=due_date.asc,created_at.desc&limit=30'), []),
-      withFallbackTimeout(supabaseRest<TaskRecord[]>('luxor_tasks?select=id,title,priority,status,due_date&status=neq.completed&order=due_date.asc&limit=30'), []),
-      withFallbackTimeout(supabaseRest<SignatureRequestRecord[]>('luxor_signature_requests?select=id,client_name,status,expires_at,updated_at&status=neq.signed&order=updated_at.desc&limit=20'), []),
-      withFallbackTimeout(supabaseRest<MessageRecord[]>('luxor_messages?select=id,contact_name,body,created_at&direction=eq.inbound&is_read=eq.false&order=created_at.desc&limit=12'), []),
-      withFallbackTimeout(supabaseRest<MailMessageRecord[]>('luxor_mail_messages?select=id,direction,from_address,to_addresses,subject,text_body,occurred_at,read_at&direction=eq.incoming&order=occurred_at.desc&limit=15'), []),
+      canLeads ? withFallbackTimeout(supabaseRest<InquiryRecord[]>('luxor_inquiries?select=id,full_name,email,event_type,status,pipeline_stage,campaign_key,created_at,updated_at&archived_at=is.null&is_test=is.false&order=created_at.desc&limit=40'), []) : Promise.resolve([]),
+      canPlanner ? withFallbackTimeout(supabaseRest<BookingRecord[]>('luxor_bookings?select=id,client_name,event_type,event_date&order=event_date.asc&limit=30'), []) : Promise.resolve([]),
+      canFinance && canPlanner ? withFallbackTimeout(supabaseRest<InvoiceRecord[]>('luxor_invoices?select=id,booking_id,parent_invoice_id,invoice_kind,proposal_accepted_at,offer_status,client_name,total,status,due_date&status=neq.paid&order=due_date.asc&limit=30'), []) : Promise.resolve([]),
+      canFinance && canOperations ? withFallbackTimeout(supabaseRest<VendorBillRecord[]>('luxor_bills?select=id,provider,service,amount,amount_state,status,due_date,source_type,extraction_status,extraction_confidence,arithmetic_status&status=neq.paid&order=due_date.asc,created_at.desc&limit=30'), []) : Promise.resolve([]),
+      canLeads && canCalendar ? withFallbackTimeout(supabaseRest<TaskRecord[]>('luxor_tasks?select=id,title,priority,status,due_date&status=neq.completed&order=due_date.asc&limit=30'), []) : Promise.resolve([]),
+      canLeads && canPlanner ? withFallbackTimeout(supabaseRest<SignatureRequestRecord[]>('luxor_signature_requests?select=id,client_name,status,expires_at,updated_at&status=neq.signed&order=updated_at.desc&limit=20'), []) : Promise.resolve([]),
+      canMessages ? withFallbackTimeout(supabaseRest<MessageRecord[]>('luxor_messages?select=id,contact_name&direction=eq.inbound&is_read=eq.false&order=created_at.desc&limit=12'), []) : Promise.resolve([]),
+      canLeads && canEmails ? withFallbackTimeout(supabaseRest<MailMessageRecord[]>('luxor_mail_messages?select=id,from_address,subject,read_at&direction=eq.incoming&order=occurred_at.desc&limit=15'), []) : Promise.resolve([]),
     ])
 
     const invoiceBookingIds = [...new Set(invoices.map((invoice) => invoice.booking_id).filter((id): id is string => Boolean(id)))]
@@ -320,8 +338,8 @@ export async function GET(request: Request) {
           id: `vendor-bill-${bill.id}`,
           kind: 'money',
           label: review ? 'Vendor bill needs review' : 'Vendor bill due soon',
-          detail: `${formatMoney(bill.amount)} for ${provider} needs attention because ${reason}.`,
-          prompt: `Review the ${formatMoney(bill.amount)} vendor bill from ${provider}. Show its source, extracted evidence, arithmetic status, due date, and safest next action.`,
+          detail: `${vendorBillAmount(bill)} for ${provider} needs attention because ${reason}.`,
+          prompt: `Review the vendor bill from ${provider}. ${vendorBillAmount(bill)} is the recorded amount state. Show its source, extracted evidence, arithmetic status, due date, and safest next action.`,
           urgency: review || (days !== null && days < 0) ? 'urgent' : 'attention',
         })
       })
@@ -394,10 +412,17 @@ export async function GET(request: Request) {
     const unique = Array.from(new Map(candidates.map((candidate) => [candidate.id, candidate])).values())
       .sort((a, b) => urgencyWeight[a.urgency] - urgencyWeight[b.urgency])
 
-    const suggestions = chooseDiversePriorities(unique.length >= 4 ? unique : [...unique, ...DEFAULT_SUGGESTIONS], cycle)
-    return NextResponse.json({ suggestions, cycle, generatedAt: new Date().toISOString() })
+    // Fallback suggestions must obey the same domains as the source reads.
+    const defaults = DEFAULT_SUGGESTIONS.filter((item) =>
+      item.kind === 'lead' ? canLeads
+        : item.kind === 'money' ? canFinance && canPlanner
+          : item.kind === 'event' ? canPlanner
+            : item.kind === 'task' ? canLeads && canCalendar
+              : false)
+    const suggestions = chooseDiversePriorities(unique.length >= 4 ? unique : [...unique, ...defaults], cycle)
+    return NextResponse.json({ suggestions, cycle, generatedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     console.error('Failed to build Elena priorities:', error)
-    return NextResponse.json({ suggestions: DEFAULT_SUGGESTIONS })
+    return NextResponse.json({ error: 'Priorities are unavailable.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } })
   }
 }

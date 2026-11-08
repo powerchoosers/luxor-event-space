@@ -47,12 +47,32 @@ export async function GET(request: NextRequest) {
     const expenses = businessRows.expenses.filter((row) => row.metadata?.is_test_record !== true)
     for (const row of businessRows.expenses) if (row.metadata?.is_test_record === true && row.source_bill_id) removedBillIds.add(row.source_bill_id)
     const revenue = getLuxorFinanceOverview({ bookings: businessRows.bookings, invoices: businessRows.invoices, payments, installments, refunds, allocations: Array.isArray(source.allocations) ? source.allocations as LuxorFinanceAllocationRow[] : null, testInquiryIds: businessRows.testInquiryIds, testBookingIds: businessRows.testBookingIds, testInvoiceIds: businessRows.testInvoiceIds })
-    const path = `luxor_monthly_budgets?select=month,category,category_id,amount&month=eq.${month}-01&order=category.asc`
+    const year = month.slice(0, 4)
+    const path = `luxor_monthly_budgets?select=month,category,category_id,amount&month=gte.${year}-01-01&month=lte.${year}-12-01&order=month.asc,category.asc`
     const count = await supabaseRestCount(path)
     const targets = await supabaseRestStrict<Array<{ month: string; category: string; category_id: string; amount: number | string }>>(`${path}&limit=${count + 1}`)
     if (targets.length !== count || await supabaseRestCount(path) !== count) throw new Error('Budget targets changed while loading')
-    const report = getLuxorBudgetReport({ month, today: chicagoCalendarDate(new Date()), budgets: targets.map((row) => ({ month: row.month.slice(0, 7), category: management.categories.find((category) => category.id === row.category_id)?.name || row.category, amount: Number(row.amount) })), availableCategories: management.categories.filter((row) => row.is_active).map((row) => row.name), expenses, bills: management.bills.filter((row) => !removedBillIds.has(row.id)), revenue })
-    return NextResponse.json({ report }, { headers: { 'Cache-Control': 'no-store' } })
+    const revenueTargets = await supabaseRestStrict<Array<{ month: string; amount: number | string }>>(`luxor_monthly_revenue_targets?select=month,amount&month=gte.${year}-01-01&month=lte.${year}-12-01&order=month.asc&limit=13`).catch(() => null)
+    if (revenueTargets && (revenueTargets.length > 12 || revenueTargets.some((row) => !validMonth(row.month.slice(0, 7)) || !Number.isFinite(Number(row.amount)) || Number(row.amount) < 0))) throw new Error('Revenue targets could not be verified')
+    const today = chicagoCalendarDate(new Date())
+    const budgetRows = targets.map((row) => ({ month: row.month.slice(0, 7), category: management.categories.find((category) => category.id === row.category_id)?.name || row.category, amount: Number(row.amount) }))
+    const shared = { today, budgets: budgetRows, availableCategories: management.categories.filter((row) => row.is_active).map((row) => row.name), expenses, bills: management.bills.filter((row) => !removedBillIds.has(row.id)), revenue }
+    const report = getLuxorBudgetReport({ ...shared, month })
+    const months = Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, '0')}`)
+    const yearRows = months.map((key) => {
+      const value = key === month ? report : getLuxorBudgetReport({ ...shared, month: key })
+      const revenueTarget = revenueTargets?.find((row) => row.month.slice(0, 7) === key)
+      const expenseTargets = budgetRows.filter((row) => row.month === key)
+      return { month: key, revenueTarget: revenueTarget ? Number(revenueTarget.amount) : null, revenueActual: value.incomeActual, expenseTarget: expenseTargets.length ? Math.round(expenseTargets.reduce((sum, row) => sum + row.amount, 0) * 100) / 100 : null, expenseActual: value.expenseActual }
+    })
+    const [todayYear, todayMonth] = today.split('-').map(Number)
+    const forecastRows = Array.from({ length: 12 }, (_, index) => {
+      const date = new Date(Date.UTC(todayYear, todayMonth - 1 + index, 1))
+      const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+      const value = key === month ? report : getLuxorBudgetReport({ ...shared, month: key })
+      return { month: key, collections: value.incomeExpected, expenses: value.upcoming }
+    })
+    return NextResponse.json({ report, yearRows, forecastRows, revenueTargetsAvailable: revenueTargets !== null }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     console.error('Budget report unavailable:', error)
     return NextResponse.json({ error: 'The report could not be verified. Refresh to try again.' }, { status: 503 })
@@ -62,11 +82,15 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const session = await authorize()
   if (!session) return NextResponse.json({ error: 'Finance access required.' }, { status: 403 })
-  const body = await request.json().catch(() => null) as { month?: unknown; category?: unknown; amount?: unknown } | null
+  const body = await request.json().catch(() => null) as { month?: unknown; category?: unknown; amount?: unknown; kind?: unknown } | null
   const category = typeof body?.category === 'string' ? body.category.trim() : ''
   const amount = body?.amount
-  if (!validMonth(body?.month) || !category || category.length > 100 || typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount > 9999999999.99 || Math.abs(Math.round(amount * 100) - amount * 100) > 1e-6) return NextResponse.json({ error: 'Invalid budget target.' }, { status: 400 })
+  if (!validMonth(body?.month) || (body?.kind !== 'revenue' && (!category || category.length > 100)) || (body?.kind !== undefined && body.kind !== 'revenue' && body.kind !== 'expense') || typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount > 9999999999.99 || Math.abs(Math.round(amount * 100) - amount * 100) > 1e-6) return NextResponse.json({ error: 'Invalid budget target.' }, { status: 400 })
   try {
+    if (body.kind === 'revenue') {
+      await supabaseRestStrict('luxor_monthly_revenue_targets?on_conflict=month', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ month: `${body.month}-01`, amount, updated_by: session.email, updated_at: new Date().toISOString() }) })
+      return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
+    }
     const data = await loadLuxorExpenseManagementData({ generate: false })
     const categoryRow = data.categories.find((row) => row.is_active && row.name.toLocaleLowerCase() === category.toLocaleLowerCase())
     if (!categoryRow) return NextResponse.json({ error: 'Choose an active expense category.' }, { status: 400 })

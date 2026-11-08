@@ -26,6 +26,23 @@ function validDate(value: string | null | undefined): value is string {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
 
+/** An intentionally partial scenario based only on future recorded flows. */
+export function getLuxorMonthEndScenario(opening: number | null, collections: number | null, expenses: number | null, reserve: number | null) {
+  if (opening === null || !Number.isFinite(opening) || collections === null || !Number.isFinite(collections) || expenses === null || !Number.isFinite(expenses)) return { ending: null, belowZero: false, belowReserve: false }
+  const ending = round(opening + collections - expenses)
+  return { ending, belowZero: ending < 0, belowReserve: reserve !== null && Number.isFinite(reserve) && reserve >= 0 && ending < reserve }
+}
+
+/** Carry uncertainty forward; never substitute zero for unavailable flows. */
+export function getLuxorForecastScenario(opening: number | null, rows: Array<{ month: string; collections: number | null; expenses: number | null }>, reserve: number | null) {
+  let balance = opening
+  return rows.map((row) => {
+    const result = getLuxorMonthEndScenario(balance, row.collections, row.expenses, reserve)
+    balance = result.ending
+    return { ...row, ...result }
+  })
+}
+
 /**
  * Read-only reporting contract. Pass complete source snapshots; null means the
  * source could not be loaded, not an empty ledger. The caller must verify and
@@ -142,14 +159,15 @@ export function getLuxorBudgetReport(input: {
   }
   const categories = [...categoryNames.values()].sort((a, b) => a.localeCompare(b))
   return {
-    month: input.month, expenseActual, upcoming, overdue, incomeActual, incomeExpected,
+    month: input.month, today: input.today, expenseActual, upcoming, overdue, incomeActual, incomeExpected,
     // This is a change in recorded flows, not a bank balance. Overdue items are
     // shown separately because their eventual payment date is unknown.
     projectedFlow: expenseActual === null || upcoming === null || incomeActual === null || incomeExpected === null ? null : round(incomeActual + incomeExpected - expenseActual - upcoming),
     categories: categories.map((category) => {
       const target = budgetsValid ? budgets?.find((row) => row.category.toLocaleLowerCase() === category.toLocaleLowerCase())?.amount ?? null : null
       const actual = expenseComplete ? round(actualLines.filter((line) => line.category.toLocaleLowerCase() === category.toLocaleLowerCase()).reduce((sum, line) => sum + line.amount, 0)) : null
-      return { category, target, actual, remaining: target === null || actual === null ? null : round(target - actual) }
+      const canEdit = input.availableCategories === undefined || input.availableCategories.some((name) => name.trim().toLocaleLowerCase() === category.toLocaleLowerCase())
+      return { category, target, actual, remaining: target === null || actual === null ? null : round(target - actual), canEdit }
     }),
     lines, issues,
   }

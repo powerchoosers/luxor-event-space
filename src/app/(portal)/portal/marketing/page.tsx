@@ -924,7 +924,7 @@ function MarketingPageContent() {
         </div>
       </PortalModal>
       {!builderCanvasOpen ? (
-        <div className="shrink-0 space-y-5 pb-5">
+        <div className="shrink-0 space-y-4 pb-3">
           <PortalPageHeader
             mobileActionsInline
             icon={activeTab === 'overview' ? undefined : header.icon}
@@ -947,7 +947,7 @@ function MarketingPageContent() {
         </>
       ) : null}
 
-      <div className="mt-1 flex min-h-0 flex-grow flex-col overflow-visible">
+      <div className="flex min-h-0 flex-grow flex-col overflow-visible">
         <PortalTabTransition activeKey={activeTab} className="flex flex-1 min-h-0 flex-col overflow-visible mt-0">
             {activeTab === 'overview' && (
               <MarketingOverviewTab
@@ -1047,8 +1047,8 @@ function MarketingWorkspaceNav({ activeTab, onTabChange }: { activeTab: Marketin
   const selectedTab = primaryTabFor(activeTab)
   const reduceMotion = useReducedMotion()
   return (
-    <nav aria-label="Marketing sections" className="min-w-0 overflow-x-auto portal-scrollbar pb-1">
-      <div className="flex min-w-max items-center gap-1 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-1">
+    <nav aria-label="Marketing sections" className="min-w-0 overflow-x-auto portal-scrollbar border-b border-[color:var(--portal-border)]">
+      <div className="flex min-w-max items-center gap-5 px-1">
         {PRIMARY_MARKETING_TABS.map((tab) => {
           const isActive = selectedTab === tab.id
           return (
@@ -1057,17 +1057,17 @@ function MarketingWorkspaceNav({ activeTab, onTabChange }: { activeTab: Marketin
               type="button"
               onClick={() => onTabChange(tab.id)}
               aria-current={isActive ? 'page' : undefined}
-              className={`relative isolate inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 sm:px-4 sm:text-xs ${isActive ? 'text-[#8c6424] dark:text-[#f1d27a]' : 'text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]'}`}
+              className={`relative isolate inline-flex min-h-11 shrink-0 items-center gap-2 px-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 ${isActive ? 'text-[color:var(--portal-text)]' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}
             >
               {isActive ? (
                 <motion.span
                   layoutId="marketing-active-tab-indicator"
-                  className="absolute inset-0 -z-10 rounded-lg bg-[#caa24c]/15"
+                  className="absolute inset-x-0 bottom-0 -z-10 h-0.5 rounded-full bg-[#caa24c]"
                   transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
                   aria-hidden="true"
                 />
               ) : null}
-              {tab.icon}<span>{tab.label}</span>
+              <span className={isActive ? 'text-[#a8792f]' : ''} aria-hidden="true">{tab.icon}</span><span>{tab.label}</span>
             </button>
           )
         })}
@@ -1120,7 +1120,7 @@ function MarketingMobileViewPicker({
         <AnimatePresence initial={false}>
           {open ? (
             <motion.div
-              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-6"
+              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:items-center sm:p-6"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1152,12 +1152,12 @@ function MarketingMobileViewPicker({
                     <X size={15} />
                   </button>
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
-                  <nav aria-label="Marketing views" className="space-y-4">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-6 portal-scrollbar">
+                  <nav aria-label="Marketing views" className="space-y-5">
                     {MOBILE_MARKETING_VIEW_GROUPS.map((group) => (
                       <section key={group.title}>
-                        <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group.title}</h3>
-                        <div className="overflow-hidden rounded-xl border border-[color:var(--portal-border)] divide-y divide-[color:var(--portal-border)]">
+                        <h3 className="mb-1 px-1 text-xs font-bold text-[color:var(--portal-muted)]">{group.title}</h3>
+                        <div className="divide-y divide-[color:var(--portal-border)]/70">
                           {group.items.map((item) => {
                             const selected = activeTab === item.id
                             return (
@@ -1169,7 +1169,7 @@ function MarketingMobileViewPicker({
                                   onTabChange(item.id)
                                   onOpenChange(false)
                                 }}
-                                className={`flex min-h-16 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${selected ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}
+                                className={`flex min-h-14 w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${selected ? 'bg-[#caa24c]/8 text-[color:var(--portal-text)]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`}
                               >
                                 <span className="shrink-0">{item.icon}</span>
                                 <span className="min-w-0 flex-1">

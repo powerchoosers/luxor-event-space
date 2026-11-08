@@ -201,7 +201,7 @@ export function PortalSettingsSearch({ onSelect, allowedTabs }: { onSelect: (tab
           className="portal-input-transparent h-10.5 min-w-0 flex-1 bg-transparent text-xs font-medium text-[color:var(--portal-text)] outline-none placeholder:font-normal placeholder:text-[color:var(--portal-muted)] [&::-webkit-search-cancel-button]:hidden"
         />
         {query ? (
-          <button type="button" onClick={() => { setQuery(''); inputRef.current?.focus() }} aria-label="Clear settings search" className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)]">
+          <button type="button" onClick={() => { setQuery(''); inputRef.current?.focus() }} aria-label="Clear settings search" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
             <X size={14} />
           </button>
         ) : null}

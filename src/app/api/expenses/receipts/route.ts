@@ -26,7 +26,8 @@ function clean(value: unknown, max: number) {
 function optionalMoney(value: string, allowZero = false) {
   if (!value.trim()) return null
   const amount = Number(value)
-  return Number.isFinite(amount) && (allowZero ? amount >= 0 : amount > 0) && Math.round(amount * 100) === amount * 100 ? amount : Number.NaN
+  const cents = Math.round(amount * 100)
+  return Number.isFinite(amount) && (allowZero ? amount >= 0 : amount > 0) && Number.isSafeInteger(cents) && Math.abs(amount * 100 - cents) <= 1e-6 ? amount : Number.NaN
 }
 
 async function readReceiptForm(request: NextRequest) {

@@ -543,7 +543,7 @@ export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName
                   <h2 id="planner-view-menu-title" className="text-base font-bold text-[color:var(--portal-text)]">Browse views</h2>
                   <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Choose a planning view.</p>
                 </div>
-                <button type="button" onClick={() => setViewPickerOpen(false)} aria-label="Close views menu" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
+                <button type="button" onClick={() => setViewPickerOpen(false)} aria-label="Close views menu" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
                   <X size={18}/>
                 </button>
               </div>

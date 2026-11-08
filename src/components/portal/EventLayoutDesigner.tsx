@@ -571,7 +571,7 @@ function EventLayoutDesignerComponent({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:border-[#caa24c]/40 hover:text-[color:var(--portal-text)] transition-all cursor-pointer shadow-xs"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
             aria-label="Close layout designer"
             title="Close focus mode (Esc)"
           >
@@ -795,9 +795,9 @@ function EventLayoutDesignerComponent({
               <button
                 type="button"
                 onClick={() => setPlacementMessage(null)}
-                className="text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] cursor-pointer"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
               >
-                <X size={14} />
+                <X size={12} />
               </button>
             </div>
           ) : null}
@@ -1044,7 +1044,7 @@ function EventLayoutDesignerComponent({
                 <button
                   type="button"
                   onClick={() => setMobileDetailsOpen(false)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] cursor-pointer"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
                   aria-label="Close details"
                 >
                   <X size={16} />

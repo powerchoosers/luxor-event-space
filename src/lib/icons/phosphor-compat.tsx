@@ -298,6 +298,7 @@ export const ChevronLeft = adapt(P_CaretLeft)
 export const ChevronRight = adapt(P_CaretRight)
 export const ChevronUp = adapt(P_CaretUp)
 export const Circle = adapt(P_Circle)
+export const CircleAlert = adapt(P_WarningCircle)
 export const CircleDollarSign = adapt(P_CurrencyCircleDollar)
 export const CircleDot = adapt(P_CircleDashed)
 export const ClipboardCheck = adapt(P_ClipboardText)
@@ -523,6 +524,7 @@ export default {
   ChevronRight,
   ChevronUp,
   Circle,
+  CircleAlert,
   CircleDollarSign,
   CircleDot,
   ClipboardCheck,

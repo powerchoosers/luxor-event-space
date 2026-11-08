@@ -2,7 +2,7 @@
 
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Plus, Loader2 } from '@/lib/icons/phosphor-compat'
 import { LuxorEventTypeCombobox } from '@/components/LuxorEventTypeCombobox'
 import { PortalCloseButton, PortalDatePicker } from '@/components/portal/PortalUI'
@@ -41,6 +41,12 @@ export function NewLeadDrawer({
   const previouslyFocusedRef = useRef<HTMLElement | null>(null)
   const onCloseRef = useRef(onClose)
   const titleId = useId()
+  const shouldReduceMotion = useReducedMotion()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     onCloseRef.current = onClose
@@ -175,16 +181,31 @@ export function NewLeadDrawer({
     }
   }
 
-  if (typeof document === 'undefined') return null
+  if (!mounted || typeof document === 'undefined') return null
 
   return createPortal(
-    <AnimatePresence>
+    <AnimatePresence
+      onExitComplete={() => {
+        setName('')
+        setEmail('')
+        setPhone('')
+        setEventType('Wedding')
+        setGuestCount('')
+        setTargetDate('')
+        setMessage('')
+      }}
+    >
       {isOpen && (
         <motion.div
           className="fixed inset-0 z-[100] flex"
-          exit={{ opacity: 0 }}
+          key="new-lead-drawer-container"
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 1 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.32 }}
         >
           <motion.button
+            key="new-lead-drawer-backdrop"
             type="button"
             tabIndex={-1}
             aria-label="Close add client lead panel"
@@ -192,20 +213,21 @@ export function NewLeadDrawer({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: [0.23, 1, 0.32, 1] }}
             onClick={onClose}
           />
           <motion.aside
+            key="new-lead-drawer-panel"
             ref={drawerRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
             className="relative z-10 ml-auto flex h-full w-full max-w-[600px] flex-col overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+            initial={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
+            animate={shouldReduceMotion ? { opacity: 1 } : { x: 0 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { x: '100%' }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.32, ease: [0.23, 1, 0.32, 1] }}
           >
             <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-5 py-4 sm:px-6">
               <div className="min-w-0">

@@ -197,7 +197,7 @@ export function TodayPriorities({ items }: { items: Priority[] }) {
                   disabled={Boolean(busyId)}
                   aria-label={`Dismiss ${item.title}`}
                   title="Dismiss bounce review task"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-50"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-50"
                 >
                   <X size={13} />
                 </button>

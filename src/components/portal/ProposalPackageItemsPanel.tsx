@@ -344,7 +344,7 @@ export function ProposalPackageItemsPanel({
               <Search size={14} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
               <span className="sr-only">Search services</span>
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search services" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--portal-faint)]" />
-              {search ? <button type="button" onClick={() => setSearch('')} className="rounded p-1 text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]" aria-label="Clear service search"><X size={13} /></button> : null}
+              {search ? <button type="button" onClick={() => setSearch('')} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45" aria-label="Clear service search"><X size={13} /></button> : null}
             </label>
           </div>
 
@@ -488,7 +488,7 @@ export function ProposalPackageItemsPanel({
                   <p className="text-[10px] font-black uppercase tracking-[0.13em] text-[#8c6529] dark:text-[#f1d27a]">Owner-only custom item</p>
                   <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">This editor is owner-only. Use client-ready wording because a charged item appears in the final proposal.</p>
                 </div>
-                <button type="button" onClick={() => setCustomDraft(null)} className="rounded p-1 text-[color:var(--portal-muted)] transition hover:bg-[color:var(--portal-card)] hover:text-[color:var(--portal-text)]" aria-label="Cancel custom item"><X size={15} /></button>
+                <button type="button" onClick={() => setCustomDraft(null)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45" aria-label="Cancel custom item"><X size={15} /></button>
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-1.5"><span className="text-[9px] font-black uppercase tracking-[0.1em] text-[color:var(--portal-muted)]">Item name</span><input value={customDraft.description} onChange={(event) => setCustomDraft((current) => current ? { ...current, description: event.target.value } : current)} placeholder="Example: Ceremony draping" className="min-h-10 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm outline-none transition focus:border-[#caa24c]/55 focus:ring-2 focus:ring-[#caa24c]/12" /></label>

@@ -43,9 +43,7 @@ import { isLuxorBounceForCurrentAddress } from '@/lib/luxorEmailBounce'
 import { compareLuxorScheduledTours, formatLuxorTourDate, getLuxorTourSection, luxorTodayKey, type LuxorTourSection } from '@/lib/luxorTourMetrics'
 import { createLuxorTourAttendancePayload } from '@/lib/luxorTourOutcome'
 import { MagicCard } from '@/components/ui/magic-card'
-import { BorderBeam } from '@/components/ui/border-beam'
 import { EnrollInWorkflowModal } from '@/components/portal/EnrollInWorkflowModal'
-import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
 
 function bouncedAddressMatchesCurrentEmail(lead: LuxorInquiry) {
   const bounce = lead.metadata?.emailBounce
@@ -1151,15 +1149,7 @@ function LeadsDashboard({
   const depositsReceived = businessLeads.filter(l => l.status === 'booked').length
   const totalLeads = businessLeads.length
   const conversionRate = totalLeads > 0 ? ((depositsReceived / totalLeads) * 100).toFixed(1) : '0.0'
-  const conversionRateNum = parseFloat(conversionRate)
-
-  // Relative percentages for sparkbars
   const total = businessLeads.length || 1
-  const newInquiriesPct = totalLeads > 0 ? Math.min(100, Math.round((newInquiries / totalLeads) * 100)) : 0
-  const toursScheduledPct = totalLeads > 0 ? Math.min(100, Math.round((toursScheduled / totalLeads) * 100)) : 0
-  const toursCompletedPct = toursScheduled > 0 ? Math.min(100, Math.round((toursCompleted / (toursScheduled + toursCompleted)) * 100)) : (totalLeads > 0 ? Math.min(100, Math.round((toursCompleted / totalLeads) * 100)) : 0)
-  const proposalsSentPct = totalLeads > 0 ? Math.min(100, Math.round((proposalsSent / totalLeads) * 100)) : 0
-  const depositsReceivedPct = totalLeads > 0 ? Math.min(100, Math.round((depositsReceived / totalLeads) * 100)) : 0
 
   // Upcoming tours
   const upcomingTours = businessLeads
@@ -1185,71 +1175,58 @@ function LeadsDashboard({
   return (
     <div className="h-full max-md:h-auto overflow-y-auto max-md:overflow-visible portal-scrollbar pr-1 space-y-6 pb-8 max-md:pb-2">
       {/* Metrics Row */}
-      <PortalStaggerGroup className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+      <PortalStaggerGroup className="grid grid-cols-2 gap-x-5 gap-y-3 rounded-2xl bg-[color:var(--portal-soft)]/45 px-3 py-4 sm:grid-cols-3 sm:gap-x-6 sm:px-4 xl:grid-cols-6 xl:gap-x-5">
         <PortalStaggerCard>
           <StatsCard
-            label="New Inquiries"
+            label="New inquiries"
             value={newInquiries}
             subtitle="Awaiting response"
-            tone="blue"
             icon={<Users size={16} strokeWidth={1.75} />}
-            progress={newInquiriesPct}
             onClick={() => onSelectTab?.('pipeline')}
           />
         </PortalStaggerCard>
         <PortalStaggerCard>
           <StatsCard
-            label="Tours Scheduled"
+            label="Tours scheduled"
             value={toursScheduled}
             subtitle="Active bookings"
-            tone="gold"
             icon={<CalendarCheck2 size={16} strokeWidth={1.75} />}
-            progress={toursScheduledPct}
             onClick={() => onSelectTab?.('tours')}
           />
         </PortalStaggerCard>
         <PortalStaggerCard>
           <StatsCard
-            label="Tours Completed"
+            label="Tours completed"
             value={toursCompleted}
             subtitle="Tours held"
-            tone="green"
             icon={<CheckCircle2 size={16} strokeWidth={1.75} />}
-            progress={toursCompletedPct}
             onClick={() => onSelectTab?.('tours')}
           />
         </PortalStaggerCard>
         <PortalStaggerCard>
           <StatsCard
-            label="Proposals Sent"
+            label="Proposals sent"
             value={proposalsSent}
             subtitle="Out for signature"
-            tone="purple"
             icon={<FileText size={16} strokeWidth={1.75} />}
-            progress={proposalsSentPct}
             onClick={() => onSelectTab?.('proposals')}
           />
         </PortalStaggerCard>
         <PortalStaggerCard>
           <StatsCard
-            label="Deposits Received"
+            label="Deposits received"
             value={depositsReceived}
             subtitle="Booked clients"
-            tone="green"
             icon={<DollarSign size={16} strokeWidth={1.75} />}
-            progress={depositsReceivedPct}
             onClick={() => onSelectTab?.('clients')}
           />
         </PortalStaggerCard>
         <PortalStaggerCard>
           <StatsCard
-            label="Conversion Rate"
+            label="Conversion rate"
             value={`${conversionRate}%`}
-            subtitle="Lead-to-booking"
-            tone="gold"
+            subtitle="Lead to booking"
             icon={<TrendingUp size={16} strokeWidth={1.75} />}
-            gaugePercent={conversionRateNum}
-            highlight
           />
         </PortalStaggerCard>
       </PortalStaggerGroup>
@@ -1264,15 +1241,12 @@ function LeadsDashboard({
                 <div className="flex items-center gap-2.5">
                   <TrendingUp size={18} className="shrink-0 text-[#caa24c]" />
                   <div>
-                    <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">
+                    <h3 className="text-base font-bold text-[color:var(--portal-text)]">
                       Sales Funnel Analysis
                     </h3>
-                    <p className="text-[10px] text-[color:var(--portal-muted)]">Conversion progression & stage drop-off</p>
+                    <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Conversion progression and stage drop-off</p>
                   </div>
                 </div>
-                <span className="inline-flex items-center rounded-full bg-[#caa24c]/10 border border-[#caa24c]/25 px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-[#a37d2c] dark:text-[#f1d27a]">
-                  {conversionRate}% cvr
-                </span>
               </div>
 
               <div className="space-y-4">
@@ -1369,10 +1343,10 @@ function LeadsDashboard({
                 <div className="flex items-center gap-2.5">
                   <Calendar size={18} className="shrink-0 text-[#caa24c]" />
                   <div>
-                    <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">
+                    <h3 className="text-base font-bold text-[color:var(--portal-text)]">
                       Upcoming Scheduled Tours
                     </h3>
-                    <p className="text-[10px] text-[color:var(--portal-muted)]">Active bookings awaiting visit or outcome</p>
+                    <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Active bookings awaiting visit or outcome</p>
                   </div>
                 </div>
                 <Link
@@ -1445,11 +1419,11 @@ function LeadsDashboard({
             <div className="flex items-center gap-2.5">
               <Users size={18} className="shrink-0 text-[#caa24c]" />
               <div>
-                <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Recent Lead Submissions</h3>
-                <p className="text-[10px] text-[color:var(--portal-muted)]">Direct website inquiries & intake form submissions</p>
+                <h3 className="text-base font-bold text-[color:var(--portal-text)]">Recent Lead Submissions</h3>
+                <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">Direct website inquiries and intake form submissions</p>
               </div>
             </div>
-            <span className="rounded-full border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Last 5 entries</span>
+            <span className="text-xs text-[color:var(--portal-muted)]">Last 5 entries</span>
           </div>
         }
       >
@@ -1497,92 +1471,25 @@ function StatsCard({
   value,
   subtitle,
   icon,
-  tone = 'blue',
-  progress,
-  gaugePercent,
-  highlight = false,
   onClick,
 }: {
   label: string
   value: string | number
   subtitle: string
   icon?: React.ReactNode
-  tone?: 'blue' | 'purple' | 'gold' | 'green' | 'neutral'
-  progress?: number
-  gaugePercent?: number
-  highlight?: boolean
   onClick?: () => void
 }) {
-  const iconColors = {
-    blue: 'text-sky-600 dark:text-sky-400',
-    purple: 'text-violet-600 dark:text-violet-400',
-    gold: 'text-[#a37d2c] dark:text-[#f1d27a]',
-    green: 'text-emerald-600 dark:text-emerald-400',
-    neutral: 'text-[color:var(--portal-muted)]',
-  }
-
-  const barGradients = {
-    blue: 'from-sky-500 to-sky-400',
-    purple: 'from-violet-500 to-indigo-400',
-    gold: 'from-[#caa24c] to-[#f1d27a]',
-    green: 'from-emerald-600 to-emerald-400',
-    neutral: 'from-[color:var(--portal-border)] to-[color:var(--portal-muted)]',
-  }
-
   const content = (
-    <MagicCard
-      className={`relative flex h-full min-h-[148px] flex-col justify-between rounded-2xl p-4 sm:p-5 transition-all duration-200 ${
-        onClick ? 'cursor-pointer hover:-translate-y-0.5' : ''
-      }`}
-    >
-      {highlight ? <BorderBeam size={85} duration={12} borderWidth={1.2} /> : null}
-      <div className="w-full">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--portal-muted)] truncate">
-            {label}
-          </span>
-          {icon ? (
-            <span className={`shrink-0 ${iconColors[tone ?? 'neutral']}`}>
-              {icon}
-            </span>
-          ) : null}
-        </div>
-        <div className="mt-2.5 flex items-baseline justify-between gap-2">
-          <p className={`text-2xl sm:text-3xl font-extrabold tabular-nums tracking-tight ${highlight ? 'text-[#a37d2c] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)]'}`}>
-            {value}
-          </p>
-          {gaugePercent !== undefined ? (
-            <div className="ml-auto shrink-0">
-              <AnimatedCircularProgressBar
-                value={gaugePercent}
-                size={44}
-                strokeWidth={4.5}
-                gaugePrimaryColor="#caa24c"
-                subLabel="Rate"
-              />
-            </div>
-          ) : null}
-        </div>
-        {progress !== undefined ? (
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-            <motion.div
-              className={`h-full rounded-full bg-gradient-to-r ${barGradients[tone ?? 'neutral']}`}
-              initial={{ width: 0 }}
-              style={{ width: 0 }}
-              whileInView={{ width: `${Math.max(6, Math.min(100, progress))}%` }}
-              viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-              transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-            />
-          </div>
-        ) : null}
+    <div className={`flex h-full min-h-[88px] flex-col justify-between rounded-xl px-2 py-1.5 transition-colors ${onClick ? 'group-hover:bg-[color:var(--portal-card)]/70' : ''}`}>
+      <div className="flex min-w-0 items-center gap-2 text-[color:var(--portal-muted)]">
+        {icon ? <span className="shrink-0 text-[#a8792f] dark:text-[#f1d27a]">{icon}</span> : null}
+        <span className="truncate text-xs font-semibold">{label}</span>
       </div>
-      <div className="mt-3 flex items-center justify-between text-[11px] font-medium leading-none text-[color:var(--portal-muted)]">
-        <span className="truncate">{subtitle}</span>
-        {onClick ? (
-          <ChevronRight size={13} className="shrink-0 text-[color:var(--portal-faint)] transition-transform group-hover:translate-x-0.5 group-hover:text-[color:var(--portal-muted)]" />
-        ) : null}
-      </div>
-    </MagicCard>
+      <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-[color:var(--portal-text)]">
+        {value}
+      </p>
+      <p className="mt-0.5 truncate text-xs text-[color:var(--portal-muted)]">{subtitle}</p>
+    </div>
   )
 
   if (onClick) {
@@ -1590,7 +1497,7 @@ function StatsCard({
       <button
         type="button"
         onClick={onClick}
-        className="group block h-full w-full rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40"
+        className="group block h-full w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
       >
         {content}
       </button>

@@ -1,27 +1,15 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { BarChart3, Calendar, Download, RefreshCw, TrendingUp } from '@/lib/icons/phosphor-compat'
-import { PortalButton, PortalPageFrame, PortalPageHeader, PortalStaggerGroup, PortalStaggerCard } from '@/components/portal/PortalUI'
-import { MagicCard } from '@/components/ui/magic-card'
-import { BorderBeam } from '@/components/ui/border-beam'
-import { AnimatedCircularProgressBar } from '@/components/ui/animated-circular-progress-bar'
-import { type LuxorBooking, type LuxorBookingExpense, type LuxorInquiry, type LuxorInvoice, type LuxorPayment, type LuxorPaymentInstallment, type LuxorPaymentRefundView } from '@/lib/luxorInquiryTypes'
-import { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries, getLuxorInvoiceFinancialSummary, getLuxorPaidExpenseValue, getLuxorPaidFinanceExpenses, getLuxorPaymentCalendarDateKey } from '@/lib/luxorFinanceReporting'
+import { BarChart3, Calendar, Download, RefreshCw, Users } from '@/lib/icons/phosphor-compat'
+import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { type LuxorBooking, type LuxorInquiry } from '@/lib/luxorInquiryTypes'
+import { getLuxorBusinessFinanceRows, getLuxorBusinessInquiries } from '@/lib/luxorFinanceReporting'
 import { LUXOR_PERMANENT_TEST_LEAD_ID } from '@/lib/luxorTestLeadPolicy'
+import { buildLuxorLeadBookingCsv, downloadLuxorCsv } from '@/lib/luxorReportCsv'
 
-type ReportData = {
-  inquiries: LuxorInquiry[]
-  bookings: LuxorBooking[]
-  invoices: LuxorInvoice[]
-  payments: LuxorPayment[]
-  refunds: LuxorPaymentRefundView[]
-  expenses: LuxorBookingExpense[]
-  installments: LuxorPaymentInstallment[]
-}
-
-const EMPTY_DATA: ReportData = { inquiries: [], bookings: [], invoices: [], payments: [], refunds: [], expenses: [], installments: [] }
+type ReportData = { inquiries: LuxorInquiry[]; bookings: LuxorBooking[] }
+const EMPTY_DATA: ReportData = { inquiries: [], bookings: [] }
 
 export default function ReportsPage() {
   const [data, setData] = useState<ReportData>(EMPTY_DATA)
@@ -36,48 +24,49 @@ export default function ReportsPage() {
     setError(null)
     setClassificationVerified(false)
     try {
-      const responses = await Promise.all([
+      const [inquiriesResponse, bookingsResponse] = await Promise.all([
         fetch('/api/inquiries'),
         fetch('/api/bookings?strictMetrics=1&financeRowsOnly=1'),
-        fetch('/api/invoices?strictMetrics=1'),
-        fetch('/api/payments'),
-        fetch('/api/payments/refunds'),
-        fetch('/api/expenses?strictMetrics=1'),
-        fetch('/api/portal/payment-installments?strictMetrics=1'),
       ])
-      if (responses.some((response) => !response.ok)) throw new Error('Some business records could not be loaded.')
-      const [inquiries, bookings, invoices, payments, refunds, expenses, installments] = await Promise.all(responses.map((response) => response.json()))
-      if (![inquiries, bookings, invoices, payments, refunds, expenses, installments].every(Array.isArray)) throw new Error('Business records could not be verified.')
+      if (!inquiriesResponse.ok || !bookingsResponse.ok) throw new Error('Some lead or booking records could not be loaded.')
+      const [inquiries, bookings] = await Promise.all([inquiriesResponse.json(), bookingsResponse.json()])
+      if (!Array.isArray(inquiries) || !Array.isArray(bookings)) throw new Error('Lead and booking records could not be verified.')
+
       const inquiryRows = inquiries as LuxorInquiry[]
       const bookingRows = bookings as LuxorBooking[]
-      const invoiceRows = invoices as LuxorInvoice[]
-      const paymentRows = payments as LuxorPayment[]
-      const refundRows = refunds as LuxorPaymentRefundView[]
-      const expenseRows = expenses as LuxorBookingExpense[]
-      const installmentRows = installments as LuxorPaymentInstallment[]
-      const inquiryIds = [...new Set([...inquiryRows.map((inquiry) => inquiry.id), ...[...invoiceRows, ...bookingRows, ...paymentRows, ...refundRows].map((record) => record.inquiry_id).filter((id): id is string => typeof id === 'string' && Boolean(id))])]
-      const knownBookingIds = new Set(bookingRows.map((booking) => booking.id).filter((id): id is string => typeof id === 'string'))
-      const bookingIds = [...new Set([...invoiceRows, ...expenseRows, ...paymentRows, ...refundRows].map((record) => record.booking_id).filter((id): id is string => typeof id === 'string' && Boolean(id) && !knownBookingIds.has(id)))]
+      const inquiryIds = [...new Set([
+        ...inquiryRows.map((inquiry) => inquiry.id),
+        ...bookingRows.map((booking) => booking.inquiry_id).filter((id): id is string => typeof id === 'string' && Boolean(id)),
+      ])]
+      const bookingIds = [...new Set(bookingRows.map((booking) => booking.id).filter((id): id is string => typeof id === 'string'))]
       const testInquiryIds = new Set<string>()
       const testBookingIds = new Set<string>()
+
       for (let offset = 0; offset < Math.max(inquiryIds.length, bookingIds.length); offset += 1000) {
         const inquiryBatch = inquiryIds.slice(offset, offset + 1000)
         const bookingBatch = bookingIds.slice(offset, offset + 1000)
-        const classificationResponse = await fetch('/api/portal/test-inquiry-classification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inquiryIds: inquiryBatch, bookingIds: bookingBatch }) })
-        if (!classificationResponse.ok) throw new Error('Verified test classification is unavailable; reports are hidden.')
-        const classification = await classificationResponse.json() as { testInquiryIds?: unknown; testBookingIds?: unknown; unresolvedBookingIds?: unknown }
+        const response = await fetch('/api/portal/test-inquiry-classification', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inquiryIds: inquiryBatch, bookingIds: bookingBatch }),
+        })
+        if (!response.ok) throw new Error('Verified test-record classification is unavailable; reports are hidden.')
+        const classification = await response.json() as { testInquiryIds?: unknown; testBookingIds?: unknown; unresolvedBookingIds?: unknown }
         const requestedInquiries = new Set(inquiryBatch.map((id) => id.toLowerCase()))
         const requestedBookings = new Set(bookingBatch.map((id) => id.toLowerCase()))
-        if (!Array.isArray(classification.testInquiryIds) || !classification.testInquiryIds.every((id) => typeof id === 'string' && requestedInquiries.has(id.toLowerCase()))
-          || !Array.isArray(classification.testBookingIds) || !classification.testBookingIds.every((id) => typeof id === 'string' && requestedBookings.has(id.toLowerCase()))
-          || !Array.isArray(classification.unresolvedBookingIds) || classification.unresolvedBookingIds.length) throw new Error('Verified test classification is unavailable; reports are hidden.')
+        if (!Array.isArray(classification.testInquiryIds)
+          || !classification.testInquiryIds.every((id) => typeof id === 'string' && requestedInquiries.has(id.toLowerCase()))
+          || !Array.isArray(classification.testBookingIds)
+          || !classification.testBookingIds.every((id) => typeof id === 'string' && requestedBookings.has(id.toLowerCase()))
+          || !Array.isArray(classification.unresolvedBookingIds) || classification.unresolvedBookingIds.length) {
+          throw new Error('Verified test-record classification is unavailable; reports are hidden.')
+        }
         classification.testInquiryIds.forEach((id: string) => testInquiryIds.add(id.toLowerCase()))
         classification.testBookingIds.forEach((id: string) => testBookingIds.add(id.toLowerCase()))
       }
       for (const inquiry of inquiryRows) {
         if (inquiry.is_test === true || inquiry.metadata?.is_test_record === true) testInquiryIds.add(inquiry.id.toLowerCase())
       }
-      setData({ inquiries: inquiryRows, bookings: bookingRows, invoices: invoiceRows, payments: paymentRows, refunds: refundRows, expenses: expenseRows, installments: installmentRows })
+      setData({ inquiries: inquiryRows, bookings: bookingRows })
       setVerifiedTestInquiryIds(testInquiryIds)
       setVerifiedTestBookingIds(testBookingIds)
       setClassificationVerified(true)
@@ -90,299 +79,205 @@ export default function ReportsPage() {
 
   useEffect(() => { void loadReports() }, [loadReports])
 
-  const metrics = useMemo(() => buildMetrics(data, verifiedTestInquiryIds, verifiedTestBookingIds), [data, verifiedTestInquiryIds, verifiedTestBookingIds])
+  const report = useMemo(() => buildReport(data, verifiedTestInquiryIds, verifiedTestBookingIds), [data, verifiedTestInquiryIds, verifiedTestBookingIds])
 
   const downloadCsv = () => {
     if (!classificationVerified) return
-    const rows = [
-      ['Metric', 'Value'],
-      ['Total leads', String(metrics.totalLeads)],
-      ['Confirmed bookings', String(metrics.confirmedBookings.length)],
-      ['Lead-to-booking conversion', `${metrics.conversionRate.toFixed(1)}%`],
-      ['Known paid cash (paid-status rows only)', String(metrics.knownPaidCashTotal)],
-      ['Refund request and legacy refund-status count', String(metrics.refundRecordCount)],
-      ['Recorded confirmed refund amount plus legacy refund-status gross', String(metrics.refundRecordAmount)],
-      ['Event payments recorded', String(metrics.paidRevenue)],
-      ['Refundable security deposits held', String(metrics.securityDepositsHeld)],
-      ['Unallocated payments requiring review', String(metrics.unallocatedPayments)],
-      ['Paid expenses', String(metrics.paidExpenses)],
-      ['Event payments after paid expenses', String(metrics.netIncome)],
-      ['Accepted event balance outstanding', String(metrics.outstandingRevenue)],
-    ]
-    const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `luxor-business-summary-${new Date().toISOString().slice(0, 10)}.csv`
-    anchor.click()
-    URL.revokeObjectURL(url)
+    const csv = buildLuxorLeadBookingCsv({
+      generatedAt: new Date().toISOString(),
+      throughMonth: report.months.at(-1)?.label ?? '',
+      newLeads30Days: report.newLeads30Days,
+      bookings30Days: report.bookings30Days,
+      bookedLeadCount: report.bookedLeadCount,
+      totalLeads: report.totalLeads,
+      months: report.months,
+      pipeline: report.pipeline,
+      eventTypes: report.eventTypes,
+    })
+    downloadLuxorCsv(csv)
   }
 
   return (
-    <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6">
+    <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-5">
       <PortalPageHeader
         icon={<BarChart3 size={18} />}
-        title="Business Analytics & Reports"
-        actions={<div className="flex gap-2"><PortalButton onClick={() => void loadReports()}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh</PortalButton><PortalButton onClick={downloadCsv} disabled={!classificationVerified}><Download size={13} /> Export CSV</PortalButton></div>}
+        title="Reports"
+        description="See inquiry activity, booking patterns, and what is moving through the pipeline."
+        actions={<div className="flex flex-wrap gap-2">
+          <PortalButton onClick={() => void loadReports()} disabled={loading}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh</PortalButton>
+          <PortalButton onClick={downloadCsv} disabled={!classificationVerified}><Download size={13} /> Export CSV</PortalButton>
+        </div>}
       />
 
-      {error && <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-xs text-rose-700 dark:text-rose-300">{error}</div>}
-      {!classificationVerified && !loading && !error && <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs">Verified record coverage is unavailable; report totals are hidden.</div>}
-      {classificationVerified && metrics.refundReconciliationRequired && <div role="status" className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-xs leading-relaxed">{metrics.refundRecordCount} refund records are shown separately ({currency(metrics.refundRecordAmount)} confirmed outflow and any legacy refund-status rows). Only Stripe-confirmed refunds reduce known cash; pending or uncertain requests remain excluded until reconciled. Legacy refund-status payments still require manual source review.</div>}
+      {error && <div role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-300">{error}</div>}
+      {!classificationVerified && !loading && !error && <div role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm">Verified record coverage is unavailable; report totals are hidden.</div>}
 
-      {classificationVerified && <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-6">
-        <PortalStaggerGroup className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <PortalStaggerCard>
-            <StatsPanel
-              label="Average Booking Value"
-              value={currency(metrics.averageBookingValue)}
-              detail={`${metrics.confirmedBookings.length} confirmed or completed bookings`}
-              loading={loading}
-              progress={Math.min(100, (metrics.averageBookingValue / 10000) * 100)}
-            />
-          </PortalStaggerCard>
-          <PortalStaggerCard>
-            <StatsPanel
-              label="Lead-to-Booking Rate"
-              value={`${metrics.conversionRate.toFixed(1)}%`}
-              detail={`${metrics.bookedLeadIds.size} booked leads from ${metrics.totalLeads} total`}
-              loading={loading}
-              gaugePercent={metrics.conversionRate}
-            />
-          </PortalStaggerCard>
-          <PortalStaggerCard>
-            <StatsPanel
-              label="Average Days to Book"
-              value={metrics.averageDaysToBook === null ? 'Not enough data' : `${metrics.averageDaysToBook.toFixed(1)} days`}
-              detail="From inquiry creation to booking"
-              loading={loading}
-              progress={metrics.averageDaysToBook === null ? 0 : Math.min(100, Math.max(12, 100 - metrics.averageDaysToBook * 2))}
-            />
-          </PortalStaggerCard>
-          <PortalStaggerCard>
-            <StatsPanel
-              label="Event Payments After Paid Costs"
-              value={currency(metrics.netIncome)}
-              detail={`${currency(metrics.paidRevenue)} event payments less ${currency(metrics.paidExpenses)} paid costs`}
-              loading={loading}
-              highlight
-              progress={metrics.paidRevenue > 0 ? Math.max(0, Math.min(100, (metrics.netIncome / metrics.paidRevenue) * 100)) : 0}
-            />
-          </PortalStaggerCard>
-        </PortalStaggerGroup>
+      {classificationVerified && <div className="flex-1 min-h-0 overflow-y-auto portal-scrollbar pr-1 pb-8 space-y-5">
+        <section aria-label="Lead and booking summary" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <MetricCard icon={<Users size={17} />} label="New leads" value={String(report.newLeads30Days)} detail="In the last 30 days" loading={loading} />
+          <MetricCard icon={<Calendar size={17} />} label="Confirmed bookings" value={String(report.bookings30Days)} detail="In the last 30 days" loading={loading} />
+          <MetricCard icon={<BarChart3 size={17} />} label="Leads with a booking" value={String(report.bookedLeadCount)} detail={`Of ${report.totalLeads} recorded inquiries, all time`} loading={loading} />
+        </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ReportCard title="Event Payments Recorded by Month" icon={<TrendingUp size={16} />}>
-            {metrics.months.map((month) => <ProgressRow key={month.key} label={month.label} value={currency(month.revenue)} percent={metrics.maxMonthlyRevenue ? (month.revenue / metrics.maxMonthlyRevenue) * 100 : 0} />)}
-          </ReportCard>
-          <ReportCard title="Confirmed Bookings by Event Type" icon={<Calendar size={16} />}>
-            {metrics.eventTypes.length ? metrics.eventTypes.map((item) => <ProgressRow key={item.label} label={item.label} value={`${item.count} booking${item.count === 1 ? '' : 's'}`} percent={metrics.confirmedBookings.length ? (item.count / metrics.confirmedBookings.length) * 100 : 0} tone="emerald" />) : <EmptyState text="No confirmed bookings are recorded yet." />}
-          </ReportCard>
-        </div>
+        <section className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <ReportSection title="Inquiry and booking activity" description="Inquiries use creation date; bookings use booked date, falling back to record creation when missing.">
+            <div className="space-y-4">
+              {report.months.map((month) => {
+                const maxValue = Math.max(1, ...report.months.flatMap((item) => [item.inquiries, item.bookings]))
+                return <div key={month.key} className="grid grid-cols-[5rem_1fr] items-center gap-3">
+                  <span className="text-xs text-[color:var(--portal-muted)]">{month.label}</span>
+                  <div className="space-y-1.5">
+                    <ActivityBar label="Inquiries" count={month.inquiries} max={maxValue} tone="gold" />
+                    <ActivityBar label="Bookings" count={month.bookings} max={maxValue} tone="green" />
+                  </div>
+                </div>
+              })}
+              <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)]">
+                <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-[#caa24c]" /> Inquiries</span>
+                <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-600" /> Bookings</span>
+              </div>
+            </div>
+          </ReportSection>
 
-        <PortalStaggerGroup className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4" staggerDelay={0.06}>
-          <PortalStaggerCard>
-            <SummaryCard
-              label="Known Paid Cash"
-              value={currency(metrics.knownPaidCashTotal)}
-              detail="Paid-status transactions only"
-              tone="emerald"
-            />
-          </PortalStaggerCard>
-          <PortalStaggerCard>
-            <SummaryCard
-              label="Refundable Security Deposits Held"
-              value={currency(metrics.securityDepositsHeld)}
-              detail="Separate from event payments"
-              tone="gold"
-            />
-          </PortalStaggerCard>
-          <PortalStaggerCard>
-            <SummaryCard
-              label="Unallocated Payments"
-              value={currency(metrics.unallocatedPayments)}
-              detail={`${metrics.unallocatedPaymentCount} transaction${metrics.unallocatedPaymentCount === 1 ? '' : 's'} need reconciliation`}
-            />
-          </PortalStaggerCard>
-          <PortalStaggerCard>
-            <SummaryCard
-              label="Event Payments Recorded"
-              value={currency(metrics.paidRevenue)}
-              detail="From paid-status payment records"
-              progress={metrics.paidRevenue + metrics.outstandingRevenue > 0 ? (metrics.paidRevenue / (metrics.paidRevenue + metrics.outstandingRevenue)) * 100 : 100}
-              tone="emerald"
-            />
-          </PortalStaggerCard>
-          <PortalStaggerCard>
-            <SummaryCard
-              label="Signed, Confirmed Event Balance Outstanding"
-              value={currency(metrics.outstandingRevenue)}
-              detail="Signed, confirmed event obligations less recorded event payments"
-              progress={metrics.paidRevenue + metrics.outstandingRevenue > 0 ? (metrics.outstandingRevenue / (metrics.paidRevenue + metrics.outstandingRevenue)) * 100 : 0}
-              tone="gold"
-            />
-          </PortalStaggerCard>
-          <PortalStaggerCard>
-            <SummaryCard
-              label="Current-Month Event Days"
-              value={String(metrics.currentMonthEventDays)}
-              detail="Distinct confirmed or completed event dates"
-              gaugePercent={Math.min(100, (metrics.currentMonthEventDays / 12) * 100)}
-            />
-          </PortalStaggerCard>
-        </PortalStaggerGroup>
+          <ReportSection title="Lead pipeline" description="Current inquiry status across all recorded leads.">
+            {report.pipeline.length ? <div className="divide-y divide-[color:var(--portal-border)]">
+              {report.pipeline.map((row) => <div key={row.label} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span className="min-w-0 truncate text-sm font-semibold text-[color:var(--portal-text)]">{row.label}</span>
+                  <span className="h-1.5 min-w-2 flex-1 overflow-hidden rounded-full bg-[color:var(--portal-soft)]">
+                    <span className="block h-full rounded-full bg-[#caa24c]" style={{ width: `${Math.max(row.count ? 4 : 0, report.totalLeads ? row.count / report.totalLeads * 100 : 0)}%` }} />
+                  </span>
+                </div>
+                <span className="w-9 text-right text-sm font-bold tabular-nums text-[color:var(--portal-text)]">{row.count}</span>
+              </div>)}
+            </div> : <EmptyState text="No inquiry activity is recorded yet." />}
+          </ReportSection>
+        </section>
 
-        {metrics.unallocatedPaymentCount > 0 && (
-          <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] leading-relaxed text-[color:var(--portal-muted)]">
-            {metrics.unallocatedPaymentCount} paid-status transaction{metrics.unallocatedPaymentCount === 1 ? '' : 's'} totaling {currency(metrics.unallocatedPayments)} remain in known paid cash but are not assigned to event payments or refundable security deposits. Reconcile their invoice or allocation before relying on classified totals.
-          </p>
-        )}
+        <ReportSection title="Confirmed bookings by event type" description="Based on confirmed and completed bookings, all time.">
+          {report.eventTypes.length ? <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+            {report.eventTypes.map((row) => <div key={row.label} className="space-y-1.5">
+              <div className="flex justify-between gap-4 text-sm">
+                <span className="truncate font-medium text-[color:var(--portal-text)]">{row.label}</span>
+                <span className="shrink-0 tabular-nums text-[color:var(--portal-muted)]">{row.count}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-soft)]"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${report.confirmedBookings.length ? row.count / report.confirmedBookings.length * 100 : 0}%` }} /></div>
+            </div>)}
+          </div> : <EmptyState text="No confirmed bookings are recorded yet." />}
+        </ReportSection>
 
-        <p className="text-[10px] leading-relaxed text-[color:var(--portal-muted)]">These reports use signed, confirmed event obligations, paid-status receipts, and separately linked Stripe refunds. Expense totals use recorded payment and refund history; expected and unpaid costs are excluded. Older paid expenses without transaction history remain in all-time totals, but are not assigned to a month without a verified payment date. These are not bank reconciliation, tax advice, or payment-processor settlement reports.</p>
+        <p className="text-xs leading-relaxed text-[color:var(--portal-muted)]">A lead is counted here once it has at least one linked confirmed or completed booking. Recent leads are still in progress, so this is a count rather than a conversion rate. Balances, payment history, and budgets are in Finances.</p>
       </div>}
     </PortalPageFrame>
   )
 }
 
-function buildMetrics(data: ReportData, testInquiryIds: ReadonlySet<string>, testBookingIds: ReadonlySet<string>) {
-  const financeRows = getLuxorBusinessFinanceRows({ invoices: data.invoices, bookings: data.bookings, expenses: data.expenses, testInquiryIds, testBookingIds })
+function buildReport(data: ReportData, testInquiryIds: ReadonlySet<string>, testBookingIds: ReadonlySet<string>) {
+  const financeRows = getLuxorBusinessFinanceRows({ invoices: [], bookings: data.bookings, expenses: [], testInquiryIds, testBookingIds })
   const verifiedTestInquiryIds = new Set([...financeRows.testInquiryIds, LUXOR_PERMANENT_TEST_LEAD_ID.toLowerCase()])
-  const verifiedTestBookingIds = financeRows.testBookingIds
-  const businessInquiries = getLuxorBusinessInquiries(data.inquiries, verifiedTestInquiryIds)
-  const businessBookings = financeRows.bookings
-  const businessExpenses = financeRows.expenses
-  const confirmedBookings = businessBookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed')
-  const finance = getLuxorInvoiceFinancialSummary(data.invoices, data.payments, verifiedTestInquiryIds, verifiedTestBookingIds, data.installments, new Date(), financeRows.testInvoiceIds, data.refunds, businessBookings)
-  const paidRevenue = finance.eventPaymentsReceived
-  const outstandingRevenue = finance.outstandingEventReceivable
-  const paidExpenses = getLuxorPaidFinanceExpenses(businessExpenses).reduce((sum, expense) => sum + (getLuxorPaidExpenseValue(expense) ?? 0), 0)
-  const bookedLeadIds = new Set(confirmedBookings.map((booking) => booking.inquiry_id).filter((id): id is string => Boolean(id)))
-  const conversionRate = businessInquiries.length ? (bookedLeadIds.size / businessInquiries.length) * 100 : 0
-  const averageBookingValue = confirmedBookings.length ? confirmedBookings.reduce((sum, booking) => sum + Number(booking.contract_total || 0), 0) / confirmedBookings.length : 0
-  const inquiryCreatedAt = new Map(businessInquiries.map((inquiry) => [inquiry.id, new Date(inquiry.created_at).getTime()]))
-  const bookingDurations = confirmedBookings.flatMap((booking) => {
-    const start = booking.inquiry_id ? inquiryCreatedAt.get(booking.inquiry_id) : undefined
-    const end = new Date(booking.booked_at || booking.created_at).getTime()
-    return start && Number.isFinite(end) && end >= start ? [(end - start) / 86_400_000] : []
-  })
-  const averageDaysToBook = bookingDurations.length ? bookingDurations.reduce((sum, days) => sum + days, 0) / bookingDurations.length : null
-  const months = lastSixMonths().map((month) => ({ ...month, revenue: finance.eventPaymentRows.filter((payment) => getLuxorPaymentCalendarDateKey(payment).slice(0, 7) === month.key).reduce((sum, payment) => sum + payment.amount, 0) }))
-  const maxMonthlyRevenue = Math.max(0, ...months.map((month) => month.revenue))
+  const inquiries = getLuxorBusinessInquiries(data.inquiries, verifiedTestInquiryIds)
+  const confirmedBookings = financeRows.bookings.filter((booking) => booking.status === 'confirmed' || booking.status === 'completed')
+  const inquiryIds = new Set(inquiries.map((inquiry) => inquiry.id.toLowerCase()))
+  const bookedLeadIds = new Set(confirmedBookings.map((booking) => booking.inquiry_id?.toLowerCase()).filter((id): id is string => Boolean(id && inquiryIds.has(id))))
+  const totalLeads = inquiries.length
+  const now = new Date()
+  const cutoff = now.getTime() - 30 * 24 * 60 * 60 * 1000
+  const newLeads30Days = inquiries.filter((inquiry) => isWithin(inquiry.created_at, cutoff, now.getTime())).length
+  const datedBookings = confirmedBookings.map((booking) => ({ booking, bookedAt: booking.booked_at || booking.created_at }))
+  const bookings30Days = datedBookings.filter(({ bookedAt }) => isWithin(bookedAt, cutoff, now.getTime())).length
+
+  const months = lastSixMonths(now)
+  const monthIndex = new Map(months.map((month, index) => [month.key, index]))
+  for (const inquiry of inquiries) {
+    const index = monthIndex.get(monthKey(inquiry.created_at))
+    if (index !== undefined) months[index].inquiries += 1
+  }
+  for (const { bookedAt } of datedBookings) {
+    const index = monthIndex.get(monthKey(bookedAt))
+    if (index !== undefined) months[index].bookings += 1
+  }
+
+  const stageLabels: Record<string, string> = {
+    new: 'New', contacted: 'Contacted', tour_requested: 'Tour requested', tour_confirmed: 'Tour confirmed',
+    proposal_sent: 'Proposal sent', booked: 'Booked', closed_lost: 'Closed / not booked',
+  }
+  const stageOrder = ['new', 'contacted', 'tour_requested', 'tour_confirmed', 'proposal_sent', 'booked', 'closed_lost']
+  const stageCounts = new Map<string, number>()
+  for (const inquiry of inquiries) {
+    const stage = bookedLeadIds.has(inquiry.id.toLowerCase()) ? 'booked' : inquiry.status
+    stageCounts.set(stage, (stageCounts.get(stage) || 0) + 1)
+  }
+  const pipeline = stageOrder.map((key) => ({ label: stageLabels[key], count: stageCounts.get(key) || 0 })).filter((row) => row.count > 0)
   const eventTypeCounts = new Map<string, number>()
-  confirmedBookings.forEach((booking) => { const label = booking.event_type?.trim() || 'Other'; eventTypeCounts.set(label, (eventTypeCounts.get(label) || 0) + 1) })
-  const eventTypes = [...eventTypeCounts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
-  const currentMonth = monthKey(new Date().toISOString())
-  const currentMonthEventDays = new Set(confirmedBookings.map((booking) => booking.event_date).filter((date): date is string => typeof date === 'string' && monthKey(date) === currentMonth)).size
-  return { confirmedBookings, paidRevenue, outstandingRevenue, knownPaidCashTotal: finance.knownPaidCashTotal, refundRecordCount: finance.refundRecordCount, refundRecordAmount: finance.refundRecordAmount, refundReconciliationRequired: finance.refundReconciliationRequired, securityDepositsHeld: finance.securityDepositsHeld, unallocatedPayments: finance.unallocatedPayments, unallocatedPaymentCount: finance.unallocatedPaymentRows.length, paidExpenses, netIncome: paidRevenue - paidExpenses, bookedLeadIds, conversionRate, averageBookingValue, averageDaysToBook, months, maxMonthlyRevenue, eventTypes, currentMonthEventDays, totalLeads: businessInquiries.length }
+  for (const booking of confirmedBookings) {
+    const label = booking.event_type?.trim() || 'Not specified'
+    eventTypeCounts.set(label, (eventTypeCounts.get(label) || 0) + 1)
+  }
+  const eventTypes = [...eventTypeCounts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+  return {
+    totalLeads,
+    newLeads30Days,
+    bookings30Days,
+    confirmedBookings,
+    bookedLeadCount: bookedLeadIds.size,
+    months,
+    pipeline,
+    eventTypes,
+  }
 }
 
-function lastSixMonths() { const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }); return Array.from({ length: 6 }, (_, index) => { const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - (5 - index)); return { key: monthKey(date.toISOString()), label: formatter.format(date) } }) }
-function monthKey(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '' : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` }
-function currency(value: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value) }
-function csvCell(value: string) { return `"${value.replaceAll('"', '""')}"` }
-
-function StatsPanel({ label, value, detail, loading, gaugePercent, progress, highlight }: { label: string; value: string; detail: string; loading: boolean; gaugePercent?: number; progress?: number; highlight?: boolean }) {
-  return (
-    <MagicCard className="relative flex flex-row items-center justify-between gap-3 rounded-xl p-5 min-h-[126px] h-full">
-      {highlight ? <BorderBeam size={80} duration={10} borderWidth={1.2} /> : null}
-      <div className="min-w-0 flex-1 pr-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
-        <p className={`text-2xl font-extrabold tabular-nums tracking-tight mt-2 ${highlight ? 'text-[#a37d2c] dark:text-[#f1d27a]' : 'text-[color:var(--portal-text)]'}`}>
-          {loading ? 'Loading…' : value}
-        </p>
-        {progress !== undefined ? (
-          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-            <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-[#caa24c] to-[#f1d27a]"
-              initial={{ width: '0%' }}
-              whileInView={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
-              viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-              transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-            />
-          </div>
-        ) : null}
-        <p className="text-[11px] text-[color:var(--portal-muted)] mt-2">{detail}</p>
-      </div>
-      {gaugePercent !== undefined ? (
-        <div className="ml-auto shrink-0">
-          <AnimatedCircularProgressBar
-            value={gaugePercent}
-            size={52}
-            strokeWidth={5}
-            gaugePrimaryColor="#caa24c"
-            subLabel="Rate"
-          />
-        </div>
-      ) : null}
-    </MagicCard>
-  )
+function lastSixMonths(now: Date) {
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5 + index, 1))
+    const key = monthKey(date.toISOString())
+    return { key, label: new Intl.DateTimeFormat('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }).format(date), inquiries: 0, bookings: 0 }
+  })
 }
 
-function ReportCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <MagicCard className="rounded-2xl p-6 space-y-4">
-      <h3 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)] flex items-center gap-2">
-        <span className="text-[#caa24c]">{icon}</span>{title}
-      </h3>
-      <div className="space-y-4 pt-2 text-xs">{children}</div>
-    </MagicCard>
-  )
+function monthKey(value: string | null | undefined) {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
-function ProgressRow({ label, value, percent, tone = 'gold' }: { label: string; value: string; percent: number; tone?: 'gold' | 'emerald' }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between gap-4 font-bold">
-        <span className="text-[color:var(--portal-text)]">{label}</span>
-        <span className="tabular-nums font-bold text-[color:var(--portal-muted)]">{value}</span>
+function isWithin(value: string | null | undefined, start: number, end: number) {
+  const timestamp = value ? new Date(value).getTime() : Number.NaN
+  return Number.isFinite(timestamp) && timestamp >= start && timestamp <= end
+}
+
+function MetricCard({ icon, label, value, detail, loading }: { icon: React.ReactNode; label: string; value: string; detail: string; loading: boolean }) {
+  return <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-sm font-semibold text-[color:var(--portal-muted)]">{label}</p>
+        <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-[color:var(--portal-text)]">{loading ? '…' : value}</p>
       </div>
-      <div className="h-2 w-full rounded-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)]/60 overflow-hidden">
-        <motion.div
-          className={`h-full rounded-full ${tone === 'emerald' ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : 'bg-gradient-to-r from-[#b8892e] to-[#e2c16b]'}`}
-          initial={{ width: '0%' }}
-          whileInView={{ width: `${Math.max(0, Math.min(percent, 100))}%` }}
-          viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-        />
-      </div>
+      <span className="rounded-lg bg-[color:var(--portal-soft)] p-2 text-[#a37d2c] dark:text-[#f1d27a]">{icon}</span>
     </div>
-  )
+    <p className="mt-2 text-xs leading-relaxed text-[color:var(--portal-muted)]">{detail}</p>
+  </div>
 }
 
-function SummaryCard({ label, value, detail, progress, gaugePercent, tone = 'gold' }: { label: string; value: string; detail: string; progress?: number; gaugePercent?: number; tone?: 'gold' | 'emerald' }) {
-  return (
-    <MagicCard className="flex flex-row items-center justify-between gap-3 rounded-2xl p-5 h-full">
-      <div className="min-w-0 flex-1 pr-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--portal-muted)]">{label}</p>
-        <p className="mt-2 text-2xl font-extrabold tabular-nums tracking-tight text-[color:var(--portal-text)]">{value}</p>
-        {progress !== undefined ? (
-          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--portal-border)]/50">
-            <motion.div
-              className={`h-full rounded-full ${tone === 'emerald' ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' : 'bg-gradient-to-r from-[#caa24c] to-[#f1d27a]'}`}
-              initial={{ width: '0%' }}
-              whileInView={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
-              viewport={{ once: true, margin: '0px 0px -30px 0px' }}
-              transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-            />
-          </div>
-        ) : null}
-        <p className="mt-2 text-[11px] text-[color:var(--portal-muted)]">{detail}</p>
-      </div>
-      {gaugePercent !== undefined ? (
-        <div className="ml-auto shrink-0">
-          <AnimatedCircularProgressBar
-            value={gaugePercent}
-            size={48}
-            strokeWidth={4.5}
-            gaugePrimaryColor="#caa24c"
-            subLabel="Goal"
-          />
-        </div>
-      ) : null}
-    </MagicCard>
-  )
+function ReportSection({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return <section className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 sm:p-5">
+    <div className="mb-4">
+      <h2 className="text-base font-bold text-[color:var(--portal-text)]">{title}</h2>
+      <p className="mt-1 text-xs leading-relaxed text-[color:var(--portal-muted)]">{description}</p>
+    </div>
+    {children}
+  </section>
+}
+
+function ActivityBar({ label, count, max, tone }: { label: string; count: number; max: number; tone: 'gold' | 'green' }) {
+  return <div className="flex items-center gap-2">
+    <span className="w-[4.4rem] text-[10px] text-[color:var(--portal-muted)]">{label}</span>
+    <div className="h-2 flex-1 overflow-hidden rounded-full bg-[color:var(--portal-soft)]" aria-label={`${label}: ${count}`}>
+      <div className={`h-full rounded-full ${tone === 'gold' ? 'bg-[#caa24c]' : 'bg-emerald-600'}`} style={{ width: `${count ? Math.max(4, count / max * 100) : 0}%` }} />
+    </div>
+    <span className="w-6 text-right text-[10px] tabular-nums text-[color:var(--portal-muted)]">{count}</span>
+  </div>
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <p className="rounded-xl border border-dashed border-[color:var(--portal-border)] px-4 py-8 text-center text-xs text-[color:var(--portal-muted)]">{text}</p>
+  return <p className="rounded-lg bg-[color:var(--portal-soft)] px-4 py-5 text-sm text-[color:var(--portal-muted)]">{text}</p>
 }

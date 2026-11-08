@@ -220,7 +220,7 @@ export function PortalBulkActionDeck({
                   {action.label}
                 </button>
               ))}
-              <button type="button" onClick={onClear} disabled={Boolean(busyAction)} aria-label="Clear selection" className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] disabled:opacity-45">
+              <button type="button" onClick={onClear} disabled={Boolean(busyAction)} aria-label="Clear selection" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-45">
                 <X size={15} />
               </button>
             </div>

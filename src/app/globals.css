@@ -2506,11 +2506,6 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
 }
 
 @media (hover: none) and (pointer: coarse) {
-  body[data-portal-theme] .portal-elena-chat-panel {
-    width: 100%;
-    border-left-width: 0;
-  }
-
   body[data-portal-theme] button[aria-label]:not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox),
   body[data-portal-theme] button[title]:not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox),
   body[data-portal-theme] button:has(svg):not(:has(span)):not(.portal-header-action):not(.portal-inline-action):not([role="checkbox"]):not(.portal-checkbox) {
@@ -2562,10 +2557,19 @@ body[data-luxor-site] main.pricing-page > .pricing-section {
   }
 }
 
-@media (min-width: 1100px) and (hover: hover) and (pointer: fine) {
+@media (max-width: 1023px) {
+  body[data-portal-theme] .portal-elena-chat-panel {
+    width: 100%;
+    border-left-width: 0;
+  }
+}
+
+@media (min-width: 1024px) {
   body[data-portal-theme] .portal-elena-chat-panel {
     width: 420px;
     border-left-width: 1px;
+    bottom: 0;
+    height: 100%;
   }
 }
 

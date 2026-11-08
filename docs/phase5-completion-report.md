@@ -3,7 +3,7 @@
 **For:** Arianna Patterson  
 **From:** Luxor implementation (Lewis)  
 **Date:** November 8, 2026  
-**Status:** **Feature-complete in source with end-to-end UAT on prod data; release not done.** Payment, reminders, vendor profile, archive/restore API, and vendor PDF upload/download are verified at `localhost:3000` (Nov 8 evening). **Before ship:** merge `origin/main` (+7), scoped commit, push, Vercel verification, Arianna light-mode pass on production.
+**Status:** **Live on Vercel production (Nov 8).** Commits `6c04c938` (Phase 5), `6870e4fe` (merge), `9d254a03` (build fix). GitHub Vercel check: **success** on `9d254a03`. Arianna light-mode UAT on production still recommended.
 
 This report maps Arianna’s November 7, 2026 Financial Center brief (Gmail `1a1b90d31abc60a7`) to what is implemented, how it integrates, and what remains honestly limited.
 

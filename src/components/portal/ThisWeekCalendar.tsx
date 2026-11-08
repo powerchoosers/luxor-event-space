@@ -7,6 +7,14 @@ import Link from 'next/link'
 import { PortalCloseButton } from '@/components/portal/PortalUI'
 import { LuxorInquiry, LuxorBooking, LuxorBill, LuxorTask } from '@/lib/luxorInquiryTypes'
 
+function billAmountLabel(bill: LuxorBill) {
+  if (bill.amount_state === 'unknown') return 'Amount unknown'
+  if (bill.amount_state === 'variable') return 'Variable amount'
+  const amount = Number(bill.amount)
+  if (bill.amount_state !== 'known' || !Number.isFinite(amount) || amount < 0) return 'Amount pending'
+  return amount.toLocaleString('en-US', { style: 'currency', currency: bill.currency || 'USD' })
+}
+
 export type EnrichedCalendarTask = LuxorTask & {
   client_name?: string | null;
   event_type?: string | null;
@@ -334,7 +342,7 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
                         </p>
                       </div>
                       <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 shrink-0">
-                        ${Number(bill.amount || 0).toLocaleString()}
+                        {billAmountLabel(bill)}
                       </span>
                     </Link>
                   ))}
@@ -474,7 +482,7 @@ export function ThisWeekCalendar({ days }: ThisWeekCalendarProps) {
                     </p>
                   </div>
                   <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 shrink-0">
-                    ${Number(bill.amount || 0).toLocaleString()}
+                    {billAmountLabel(bill)}
                   </span>
                 </Link>
               ))}

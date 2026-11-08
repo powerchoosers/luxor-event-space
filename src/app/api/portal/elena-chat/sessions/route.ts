@@ -1,6 +1,23 @@
 import { NextResponse } from 'next/server'
 import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { getLuxorPortalMember, memberCan, type PortalPermission } from '@/lib/luxorPortalAccess'
 import { supabaseRest } from '@/lib/supabaseRestServer'
+
+// Legacy Elena data combines several domains. Until every read is scoped,
+// require all relevant permissions, including on previously saved responses.
+const ELENA_REQUIRED_PERMISSIONS: PortalPermission[] = ['leads', 'emails', 'calls', 'messages', 'calendar', 'planner', 'marketing', 'finances', 'operations', 'settings', 'phone_assignment']
+async function canAccessElenaData(email: string) {
+  const member = await getLuxorPortalMember(email)
+  return Boolean(member && member.status === 'active' && ELENA_REQUIRED_PERMISSIONS.every(permission => memberCan(member, permission)))
+}
+
+// Never persist or return confirmation bearer tokens from chat history. Old
+// confirmation cards cannot be verified after a reload and must be prepared again.
+function stripConfirmationSecrets(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripConfirmationSecrets)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'confirmation' && key !== 'token').map(([key, item]) => [key, stripConfirmationSecrets(item)]))
+}
 
 type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
 
@@ -30,10 +47,12 @@ export async function GET(request: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (!await canAccessElenaData(session.email)) return NextResponse.json({ error: 'Elena history is unavailable for this account.' }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
+    if (id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return NextResponse.json({ error: 'Invalid session ID.' }, { status: 400 })
     if (id) {
       const chats = await supabaseRest<ElenaChatSession[]>(
         `luxor_elena_chats?id=eq.${id}&user_email=eq.${encodeURIComponent(session.email)}&select=*`
@@ -54,7 +73,7 @@ export async function GET(request: Request) {
           return true
         })
       }
-      return NextResponse.json(chat)
+      return NextResponse.json(stripConfirmationSecrets(chat))
     }
 
     const chats = await supabaseRest<Omit<ElenaChatSession, 'messages'>[]>(
@@ -74,6 +93,7 @@ export async function POST() {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (!await canAccessElenaData(session.email)) return NextResponse.json({ error: 'Elena history is unavailable for this account.' }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
 
     const defaultMsg: ChatMessage[] = []
 
@@ -107,6 +127,7 @@ export async function PATCH(request: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (!await canAccessElenaData(session.email)) return NextResponse.json({ error: 'Elena history is unavailable for this account.' }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
 
     const { id, title, messages, appendVoiceTranscript } = (await request.json()) as {
       id?: string
@@ -115,8 +136,8 @@ export async function PATCH(request: Request) {
       appendVoiceTranscript?: ChatMessage
     }
 
-    if (!id) {
-      return NextResponse.json({ error: 'Session ID is required' }, { status: 400 })
+    if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      return NextResponse.json({ error: 'Invalid session ID.' }, { status: 400 })
     }
 
     if (appendVoiceTranscript !== undefined) {
@@ -134,7 +155,7 @@ export async function PATCH(request: Request) {
         if ((chat.messages || []).some(message => message.id === entry.id)) return NextResponse.json({ saved: true })
         const updated = await supabaseRest<ElenaChatSession[]>(
           `luxor_elena_chats?${filter}&updated_at=eq.${encodeURIComponent(chat.updated_at)}`,
-          { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ messages: [...(chat.messages || []), safeEntry], updated_at: new Date().toISOString() }) },
+          { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ messages: stripConfirmationSecrets([...(chat.messages || []), safeEntry]), updated_at: new Date().toISOString() }) },
         )
         if (updated?.length) return NextResponse.json({ saved: true })
       }
@@ -145,7 +166,7 @@ export async function PATCH(request: Request) {
       updated_at: new Date().toISOString()
     }
     if (title !== undefined) payload.title = title
-    if (messages !== undefined) payload.messages = messages
+    if (messages !== undefined) payload.messages = stripConfirmationSecrets(messages)
 
     const updated = await supabaseRest<ElenaChatSession[]>(
       `luxor_elena_chats?id=eq.${id}&user_email=eq.${encodeURIComponent(session.email)}`,
@@ -162,7 +183,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Session not found or unauthorized' }, { status: 404 })
     }
 
-    return NextResponse.json(updated[0])
+    return NextResponse.json(stripConfirmationSecrets(updated[0]))
   } catch (err: unknown) {
     console.error('Failed to update session:', err)
     const errMsg = err instanceof Error ? err.message : 'Internal Server Error'
@@ -176,12 +197,13 @@ export async function DELETE(request: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (!await canAccessElenaData(session.email)) return NextResponse.json({ error: 'Elena history is unavailable for this account.' }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
-    if (!id) {
-      return NextResponse.json({ error: 'Session ID is required' }, { status: 400 })
+    if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      return NextResponse.json({ error: 'Invalid session ID.' }, { status: 400 })
     }
 
     const deleted = await supabaseRest<ElenaChatSession[]>(

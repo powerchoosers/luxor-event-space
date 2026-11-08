@@ -24,7 +24,8 @@ function text(value: unknown, max: number) {
 function amount(value: unknown) {
   if (value === null || value === undefined || value === '') return null
   const parsed = typeof value === 'number' || typeof value === 'string' ? Number(value) : Number.NaN
-  return Number.isFinite(parsed) && parsed > 0 && Math.round(parsed * 100) === parsed * 100 ? parsed : null
+  const cents = Math.round(parsed * 100)
+  return Number.isFinite(parsed) && parsed > 0 && Number.isSafeInteger(cents) && Math.abs(parsed * 100 - cents) <= 1e-6 ? parsed : null
 }
 
 function validation(input: Record<string, unknown>) {

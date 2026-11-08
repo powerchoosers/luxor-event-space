@@ -8,8 +8,9 @@ import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
 import { startLuxorBrowserCall } from '@/lib/luxorVoiceClient'
 import { useToast } from '@/components/portal/ToastProvider'
 import { WorkflowBadge } from '@/components/portal/WorkflowBadge'
+import { selectNextFollowUpDisplay, type ScheduledFollowUpSummary, type WorkflowPreviewResponse } from '@/lib/luxorNextFollowUpDisplay'
+import { recordCallWithoutWorkflowAdvance } from '@/lib/luxorCallStopIntent'
 import {
-  formatFollowUpDateLabel,
   localLuxorIso,
   luxorDate,
   luxorTimeInput,
@@ -37,13 +38,19 @@ export type LogCallOutcomeModalProps = {
   onComposeEmail?: (lead: MinimalLead | LuxorInquiry) => void
 }
 
-type ScheduledFollowUpSummary = {
-  id: string
-  title: string
-  dueAt: string | null
-  dueDate: string | null
-  task?: LuxorTask
-  automated?: boolean
+function modalDateLabel(dueAt: string | null, dueDate: string | null): string {
+  if (dueAt) {
+    const value = new Date(dueAt)
+    if (!Number.isFinite(value.getTime())) return 'Date unavailable'
+    const date = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Chicago' }).format(value)
+    const time = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }).format(value)
+    return `${date} at ${time} Central`
+  }
+  if (!dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate.slice(0, 10))) return 'Date unavailable'
+  const value = new Date(`${dueDate.slice(0, 10)}T12:00:00Z`)
+  return Number.isFinite(value.getTime())
+    ? new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(value)
+    : 'Date unavailable'
 }
 
 export function LogCallOutcomeModal({
@@ -65,10 +72,13 @@ export function LogCallOutcomeModal({
   const [nextTime, setNextTime] = useState('10:00')
   const [nextChannel, setNextChannel] = useState<FollowUpChannel>('phone')
   const [saving, setSaving] = useState(false)
+  const [stopIntentAttempted, setStopIntentAttempted] = useState(false)
   const savingRef = useRef(false)
+  const continueRequestId = useRef<string | null>(null)
 
   // Next scheduled task state & inline editing
   const [nextScheduledTask, setNextScheduledTask] = useState<ScheduledFollowUpSummary | null>(null)
+  const [previewNotice, setPreviewNotice] = useState<string | null>(null)
   const [loadingNext, setLoadingNext] = useState(false)
   const [editingNextTask, setEditingNextTask] = useState<LuxorTask | null>(null)
   const [editNextDate, setEditNextDate] = useState('')
@@ -86,6 +96,9 @@ export function LogCallOutcomeModal({
       setNextChannel('phone')
       setEditingNextTask(null)
       setNextScheduledTask(null)
+      setPreviewNotice(null)
+      setStopIntentAttempted(false)
+      continueRequestId.current = null
       return
     }
 
@@ -93,30 +106,21 @@ export function LogCallOutcomeModal({
     let active = true
     setLoadingNext(true)
 
-    fetch(`/api/tasks?inquiryId=${encodeURIComponent(lead.id)}`, { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((tasks: LuxorTask[]) => {
+    const taskRequest = fetch(`/api/tasks?inquiryId=${encodeURIComponent(lead.id)}`, { cache: 'no-store' })
+      .then((res) => { if (!res.ok) throw new Error('Tasks unavailable'); return res.json() as Promise<LuxorTask[]> })
+    const previewRequest = task
+      ? fetch(`/api/workflow-next-preview?inquiryId=${encodeURIComponent(lead.id)}&taskId=${encodeURIComponent(task.id)}`, { cache: 'no-store' })
+        .then((res) => { if (!res.ok) throw new Error('Preview unavailable'); return res.json() as Promise<WorkflowPreviewResponse> })
+      : Promise.resolve<WorkflowPreviewResponse>({ mode: 'legacy' })
+    Promise.allSettled([taskRequest, previewRequest])
+      .then(([tasksResult, previewResult]) => {
         if (!active) return
-        const pendingOtherTasks = tasks
-          .filter((t) => t.status === 'pending' && t.id !== task?.id)
-          .sort((a, b) => (a.due_at ?? a.due_date ?? '\uffff').localeCompare(b.due_at ?? b.due_date ?? '\uffff'))
-
-        if (pendingOtherTasks[0]) {
-          const t = pendingOtherTasks[0]
-          setNextScheduledTask({
-            id: t.id,
-            title: t.title,
-            dueAt: t.due_at ?? null,
-            dueDate: t.due_date ?? null,
-            task: t,
-            automated: Boolean(t.automation_enrollment_id),
-          })
-        } else {
-          setNextScheduledTask(null)
-        }
+        const display = selectNextFollowUpDisplay(tasksResult, previewResult, task?.id)
+        setNextScheduledTask(display.summary)
+        setPreviewNotice(display.notice)
       })
       .catch(() => {
-        if (active) setNextScheduledTask(null)
+        if (active) { setNextScheduledTask(null); setPreviewNotice('The next follow-up could not be loaded.') }
       })
       .finally(() => {
         if (active) setLoadingNext(false)
@@ -150,7 +154,7 @@ export function LogCallOutcomeModal({
       const updated = await response.json() as LuxorTask
       setNextScheduledTask((prev) => (prev ? { ...prev, dueAt: updated.due_at ?? null, dueDate: updated.due_date ?? null, task: updated } : null))
       setEditingNextTask(null)
-      notify({ title: 'Follow-up rescheduled', description: `${editNextDate} at ${editNextTime} Central`, variant: 'success' })
+      notify({ title: 'Follow-up rescheduled', description: modalDateLabel(localLuxorIso(editNextDate, editNextTime), null), variant: 'success' })
     } catch (error) {
       notify({ title: 'Follow-up could not be rescheduled', description: error instanceof Error ? error.message : 'Try again.', variant: 'error' })
     } finally {
@@ -160,48 +164,159 @@ export function LogCallOutcomeModal({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!lead || !callOutcome || savingRef.current) return
+    if (!lead || !callOutcome || savingRef.current || stopIntentAttempted) return
     savingRef.current = true
     setSaving(true)
 
     let callOutcomeSaved = false
-    let declineSaved = false
+    let taskCompleted = false
+    let atomicRequestAttempted = false
+    let workflowOutcomeRecorded = false
+    let workflowActivationConfirmed = false
+    const atomicAdoptedAttempt = Boolean(task?.id && task.adoption_designation === 'current' && nextStep === 'none')
 
     try {
-      // 1. If not interested, update sequence disposition
-      if (callOutcome === 'not_interested') {
-        const decline = await fetch('/api/follow-ups', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            inquiryId: lead.id,
-            action: 'disposition',
-            disposition: 'not_interested',
-            reason: 'Manual call outcome',
-          }),
+      // Completing a task can immediately advance either a system or custom
+      // workflow. The brochure-only stop endpoint is not an atomic stop for
+      // the task's owning workflow, so never complete before a verified stop.
+      if (nextStep === 'stop' || nextStep === 'nurture' || callOutcome === 'not_interested') {
+        setStopIntentAttempted(true)
+        // This path is separately gated off by default on both client and
+        // server. A lost/invalid response may follow a committed transaction:
+        // do not fall back to another note or retry from this modal.
+        if (process.env.NEXT_PUBLIC_LUXOR_ATOMIC_CALL_INTENT_ENABLED === 'true'
+          && callOutcome !== 'not_interested' && task?.id) {
+          const intent = nextStep === 'nurture' ? 'nurture' : 'stop'
+          const outcome = callOutcome === 'no_answer' ? 'no_answer' : callOutcome === 'voicemail_left' ? 'voicemail_left' : 'reached'
+          const requestId = crypto.randomUUID()
+          atomicRequestAttempted = true
+          const response = await fetch('/api/workflow-call-intent', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId, inquiryId: lead.id, taskId: task.id, intent, outcome, note: callNote }),
+          }).catch(() => { throw new Error('The call outcome could not be confirmed. Refresh the lead and review the task and workflow before retrying.') })
+          const result: unknown = await response.json().catch(() => null)
+          if (!response.ok || !result || typeof result !== 'object' || !('status' in result) || result.status !== 'stopped'
+            || !('intent' in result) || result.intent !== intent || !('taskId' in result) || result.taskId !== task.id
+            || !('noteId' in result) || typeof result.noteId !== 'string' || !result.noteId) {
+            throw new Error('The call outcome could not be confirmed. Refresh the lead and review the task and workflow before retrying.')
+          }
+          atomicRequestAttempted = false
+          callOutcomeSaved = true
+          taskCompleted = true
+          notify({ title: intent === 'nurture' ? 'Call saved; lead moved to nurture' : 'Call saved; workflow stopped', variant: 'success' })
+          const savedLead = lead
+          onClose()
+          if (onSaved) await onSaved({ outcome: callOutcome, nextStep, lead: savedLead })
+          return
+        }
+        const result = await recordCallWithoutWorkflowAdvance({ inquiryId: lead.id, taskId: task?.id, outcome: callOutcome, note: callNote, intent: nextStep === 'nurture' ? 'nurture' : 'stop' })
+        const description = nextStep === 'nurture'
+          ? `${result.noteConfirmed ? 'The call note was saved.' : 'The call note could not be confirmed; check the timeline before retrying.'} This form did not complete the task or move the lead to nurture. Review the task and workflow before continuing.`
+          : result.failure === 'decline_unconfirmed'
+          ? `The decline could not be confirmed. ${result.noteConfirmed ? 'The call note was saved. ' : 'The call note could not be confirmed. '}Check the lead before retrying. This form did not complete the task or confirm the workflow stopped.`
+          : result.failure === 'note_unconfirmed'
+            ? `${result.declineConfirmed ? 'Decline recorded. ' : ''}The call note could not be confirmed. Check the timeline before retrying. The task was not completed and workflow stopping was not confirmed.`
+            : `The call note was saved.${result.declineConfirmed ? ' The decline was recorded.' : ''} This form did not complete the task or confirm the workflow stopped. Check the task and workflow before continuing.`
+        notify({ title: result.noteConfirmed ? 'Call note saved; follow-up needs review' : 'Call outcome needs review', description, variant: 'error' })
+        return
+      }
+
+      // An uncertain response may have committed; never issue a fallback.
+      if (process.env.NEXT_PUBLIC_LUXOR_ATOMIC_CALL_CONTINUE_ENABLED === 'true'
+        && task?.id && !atomicAdoptedAttempt && nextStep === 'none') {
+        const outcome = callOutcome === 'no_answer' ? 'no_answer' : callOutcome === 'voicemail_left' ? 'voicemail_left' : 'reached'
+        continueRequestId.current ??= crypto.randomUUID()
+        setStopIntentAttempted(true)
+        atomicRequestAttempted = true
+        const response = await fetch('/api/workflow-call-continue', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId: continueRequestId.current, inquiryId: lead.id, taskId: task.id, outcome, label: callOutcome, note: callNote }),
+        }).catch(() => { throw new Error('The call outcome could not be confirmed. Refresh and review before retrying.') })
+        const result: unknown = await response.json().catch(() => null)
+        if (!response.ok || !result || typeof result !== 'object' || !('status' in result) || result.status !== 'completed'
+          || !('taskId' in result) || result.taskId !== task.id || !('noteId' in result) || typeof result.noteId !== 'string' || !result.noteId
+          || !('workflowKind' in result) || (result.workflowKind !== 'system' && result.workflowKind !== 'custom')) {
+          throw new Error('The call outcome could not be confirmed. Refresh and review before retrying.')
+        }
+        atomicRequestAttempted = false
+        callOutcomeSaved = true
+        taskCompleted = true
+        notify({ title: 'Call outcome saved', description: 'Check follow-up activity for the next action.', variant: 'success' })
+        const savedLead = lead
+        onClose()
+        if (onSaved) await onSaved({ outcome: callOutcome, nextStep, lead: savedLead })
+        return
+      }
+
+      // A reached outcome must be recorded against the actual workflow, and a
+      // manual next step must not race an automatic successor. Until one atomic
+      // owner-aware operation exists, preserve the note without completing work.
+      if (nextStep === 'later' || (!atomicAdoptedAttempt && !['no_answer', 'voicemail_left'].includes(callOutcome))) {
+        setStopIntentAttempted(true)
+        const isManual = nextStep === 'later'
+        const result = await recordCallWithoutWorkflowAdvance({
+          inquiryId: lead.id, taskId: task?.id, outcome: callOutcome, note: callNote,
+          intent: isManual ? 'review_manual' : 'review_reached',
+          requestedNext: isManual && nextDate ? `${nextChannel === 'email' ? 'Email' : 'Call'} — ${modalDateLabel(localLuxorIso(nextDate, nextTime), null)}` : undefined,
         })
-        if (!decline.ok) throw new Error('The lead’s decline could not be saved; no call outcome was recorded.')
-        declineSaved = true
+        notify({
+          title: result.noteConfirmed ? 'Call note saved; follow-up needs review' : 'Call outcome needs review',
+          description: result.noteConfirmed
+            ? `The call note was saved. ${isManual ? 'This form did not schedule the requested follow-up. ' : ''}${!['no_answer', 'voicemail_left'].includes(callOutcome) ? 'This form did not record a workflow response. ' : ''}${task ? 'This form left the task open.' : 'No task was completed.'} Review the workflow before continuing.`
+            : `The call note could not be confirmed. Check the timeline before retrying. ${task ? 'The task remains open.' : 'No task was completed.'} No follow-up was scheduled.`,
+          variant: 'error',
+        })
+        return
       }
 
       // 2. Complete task if linked
       const mappedOutcome = callOutcome === 'no_answer' ? 'no_answer' : callOutcome === 'voicemail_left' ? 'voicemail_left' : 'reached'
       if (task) {
+        if (atomicAdoptedAttempt) {
+          // A lost response can follow a commit. Keep the modal open and do not
+          // issue fallback writes until the saved state has been reviewed.
+          setStopIntentAttempted(true)
+          atomicRequestAttempted = true
+        }
         const response = await fetch('/api/tasks', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: task.id,
             status: 'completed',
-            completed_at: new Date().toISOString(),
+            ...(atomicAdoptedAttempt ? { atomicAdoptedOnly: true, nextStep: 'none', callLabel: callOutcome, callNote }
+              : { completed_at: new Date().toISOString() }),
             call_outcome: mappedOutcome,
           }),
+        }).catch((error: unknown) => {
+          if (atomicAdoptedAttempt) throw new Error('The call outcome could not be confirmed. Refresh the lead and review the task and workflow before retrying.')
+          throw error
         })
-        if (!response.ok) throw new Error('The task could not be updated.')
+        if (!response.ok) {
+          if (atomicAdoptedAttempt) throw new Error('The call outcome could not be confirmed. Refresh the lead and review the task and workflow before retrying.')
+          const payload = await response.json().catch(() => ({}))
+          throw new Error(typeof payload.error === 'string' ? payload.error : 'The task could not be updated.')
+        }
+        if (atomicAdoptedAttempt) {
+          const result: unknown = await response.json().catch(() => null)
+          if (!result || typeof result !== 'object' || !('id' in result) || result.id !== task.id
+            || !('status' in result) || result.status !== 'completed'
+            || !('workflow_outcome_recorded' in result) || result.workflow_outcome_recorded !== true) {
+            throw new Error('The call outcome could not be confirmed. Refresh the lead and review the task and workflow before retrying.')
+          }
+          workflowOutcomeRecorded = true
+          const activation = 'workflow_activation' in result && result.workflow_activation && typeof result.workflow_activation === 'object'
+            ? result.workflow_activation : null
+          workflowActivationConfirmed = Boolean(activation && 'status' in activation && activation.status === 'armed'
+            && 'effectiveDueAt' in activation && typeof activation.effectiveDueAt === 'string'
+            && Number.isFinite(Date.parse(activation.effectiveDueAt)))
+          atomicRequestAttempted = false
+        }
+        taskCompleted = true
       }
 
       // 3. If reached, record response
-      if (mappedOutcome === 'reached' && callOutcome !== 'not_interested') {
+      if (!workflowOutcomeRecorded && mappedOutcome === 'reached' && callOutcome !== 'not_interested') {
         await fetch('/api/follow-ups', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -210,27 +325,18 @@ export function LogCallOutcomeModal({
       }
 
       // 4. Save note to lead timeline
-      await fetch('/api/notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inquiryId: lead.id,
-          content: `Manual call outcome: ${callOutcome.replaceAll('_', ' ')}.${callNote.trim() ? ` ${callNote.trim()}` : ''}`,
-          noteType: 'status_change',
-          taskId: task?.id,
-        }),
-      })
-
-      if (callOutcome === 'not_interested') {
-        await fetch('/api/notes', {
+      if (!workflowOutcomeRecorded) {
+        const noteResponse = await fetch('/api/notes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             inquiryId: lead.id,
-            content: 'Lead declined further contact after a manual call. Active brochure sequence was stopped.',
+            content: `Manual call outcome: ${callOutcome.replaceAll('_', ' ')}.${callNote.trim() ? ` ${callNote.trim()}` : ''}`,
             noteType: 'status_change',
+            taskId: task?.id,
           }),
-        }).catch(() => {})
+        })
+        if (!noteResponse.ok) throw new Error('The call note could not be confirmed. Check the timeline before retrying.')
       }
 
       callOutcomeSaved = true
@@ -253,29 +359,18 @@ export function LogCallOutcomeModal({
         if (!followUp.ok) throw new Error('Call note saved, but the next follow-up could not be scheduled.')
       }
 
-      // 6. Handle Next Step: Stop follow-up sequence
-      if (callOutcome !== 'not_interested' && nextStep === 'stop') {
-        await fetch('/api/follow-ups', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ inquiryId: lead.id, action: 'stop', stopReason: 'manual_stop' }),
-        }).catch(() => {})
-      }
-
-      // 7. Handle Next Step: Move to nurture
-      if (callOutcome !== 'not_interested' && nextStep === 'nurture') {
-        await fetch('/api/inquiries', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: lead.id, follow_up_disposition: 'nurture' }),
-        }).catch(() => {})
-      }
-
-      notify({
-        title: 'Call outcome saved',
-        description: nextStep === 'later' ? 'The dated manual follow-up was scheduled.' : 'The call outcome was saved to this lead’s timeline.',
-        variant: 'success',
-      })
+      notify(workflowOutcomeRecorded && !workflowActivationConfirmed
+        ? {
+          title: 'Call saved; follow-up needs review',
+          description: 'The call and note were saved. Follow-up scheduling could not be confirmed; review the workflow before continuing.',
+          variant: 'error',
+        }
+        : {
+          title: 'Call outcome saved',
+          description: workflowOutcomeRecorded ? 'The call and note were saved. The next workflow email is scheduled.'
+            : nextStep === 'later' ? 'The dated manual follow-up was scheduled.' : "The call outcome was saved to this lead's timeline.",
+          variant: 'success',
+        })
 
       const completedLead = lead
       const chosenStep = nextStep
@@ -297,7 +392,7 @@ export function LogCallOutcomeModal({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Try again in a moment.'
       notify({
-        title: callOutcomeSaved && nextStep === 'stop' ? 'Call outcome saved; sequence status unknown' : declineSaved ? 'Decline saved; call outcome needs retry' : 'Call outcome was not fully saved',
+        title: atomicRequestAttempted ? 'Call outcome needs review' : callOutcomeSaved ? 'Call outcome saved; next step needs review' : taskCompleted ? 'Task completed; call note needs review' : 'Call outcome was not fully saved',
         description: message,
         variant: 'error',
       })
@@ -309,9 +404,9 @@ export function LogCallOutcomeModal({
 
   if (!lead) return null
 
-  const isPrecedingOverdue = nextScheduledTask
-    ? (nextScheduledTask.dueAt ? luxorDate(nextScheduledTask.dueAt) : nextScheduledTask.dueDate?.slice(0, 10) ?? '') < today
-    : false
+  const nextDueDay = nextScheduledTask?.dueAt && Number.isFinite(Date.parse(nextScheduledTask.dueAt))
+    ? luxorDate(nextScheduledTask.dueAt) : nextScheduledTask?.dueDate?.slice(0, 10)
+  const isPrecedingOverdue = Boolean(nextScheduledTask && !nextScheduledTask.tentative && nextDueDay && nextDueDay < today)
 
   return (
     <PortalModal
@@ -329,7 +424,7 @@ export function LogCallOutcomeModal({
           <PortalButton
             type="submit"
             form="portal-log-call-outcome-form"
-            disabled={!callOutcome || saving || Boolean(editingNextTask) || (nextStep === 'later' && !nextDate)}
+            disabled={!callOutcome || saving || stopIntentAttempted || Boolean(editingNextTask) || (nextStep === 'later' && !nextDate)}
           >
             <Check size={14} />{' '}
             {nextStep === 'later'
@@ -369,14 +464,15 @@ export function LogCallOutcomeModal({
                 <>
                   <p className="mt-1 text-sm font-semibold text-[color:var(--portal-text)]">{nextScheduledTask.title}</p>
                   <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
-                    {formatFollowUpDateLabel(nextScheduledTask.dueAt, nextScheduledTask.dueDate)}
-                    {nextScheduledTask.dueAt ? ' Central' : ''}
+                    {nextScheduledTask.tentative ? 'Tentative: ' : ''}{modalDateLabel(nextScheduledTask.dueAt, nextScheduledTask.dueDate)}
                     {isPrecedingOverdue ? ' · Overdue' : ''}
                     {nextScheduledTask.automated ? ' · Automated' : ''}
                   </p>
+                  {nextScheduledTask.tentative && <p className="mt-1 text-xs text-[color:var(--portal-muted)]">If completed now. The date adjusts when this task is completed.</p>}
+                  {nextScheduledTask.requiresReview && <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Requires review before it can proceed.</p>}
                 </>
               ) : (
-                <p className="mt-1 text-sm text-[color:var(--portal-muted)]">No other follow-up is currently scheduled.</p>
+                <p className="mt-1 text-sm text-[color:var(--portal-muted)]">{previewNotice || 'No other follow-up is currently scheduled.'}</p>
               )}
             </div>
 
@@ -482,6 +578,7 @@ export function LogCallOutcomeModal({
             className="mt-1 w-full rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#caa24c]/40"
           />
         </label>
+        {stopIntentAttempted && <p role="status" className="text-xs text-[color:var(--portal-muted)]">Check the lead timeline and workflow before taking another action. Close this window to refresh.</p>}
 
         {/* Next step dropdown */}
         <label className="block text-sm">
@@ -506,7 +603,7 @@ export function LogCallOutcomeModal({
 
         {nextStep === 'nurture' && (
           <p className="text-xs text-[color:var(--portal-muted)]">
-            This changes the lead&apos;s stage to Nurture on their profile.
+            The call note can be saved here. Moving this lead to nurture requires workflow review.
           </p>
         )}
 

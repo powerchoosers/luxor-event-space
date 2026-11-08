@@ -434,7 +434,7 @@ export default function CalendarPage() {
 
       <PortalAnimatedTabs
         ariaLabel="Calendar sections"
-        tabs={[{ id: 'tours', label: 'Tours + Tasks' }, { id: 'events', label: 'Booked Events' }] as const}
+        tabs={[{ id: 'tours', label: 'Tours & tasks' }, { id: 'events', label: 'Booked events' }] as const}
         activeTab={activeCalendar}
         onTabChange={setActiveCalendar}
         className="min-w-0"
@@ -450,7 +450,7 @@ export default function CalendarPage() {
         {activeCalendar === 'tours' ? (
           <div className="flex-1 min-h-0 flex flex-col space-y-4">
             <div>
-              <div className="grid grid-cols-3 divide-x divide-[color:var(--portal-border)] rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]" aria-label="Calendar at a glance">
+              <div className="grid grid-cols-3 divide-x divide-[color:var(--portal-border)] rounded-xl bg-[color:var(--portal-soft)]" aria-label="Calendar at a glance">
                 <GlanceStat label="Tours today" value={todayStats.tours} loading={loading} />
                 <GlanceStat label="Tasks due today" value={todayStats.tasks} loading={loading} />
                 <GlanceStat label="Available tour times" value={todayStats.openTimes} loading={loading} />
@@ -474,8 +474,8 @@ export default function CalendarPage() {
             <PortalStaggerCard className="flex-1 min-h-0 flex flex-col">
               {view === 'month' ? (
                 <section className="portal-card-surface portal-surface min-h-0 flex-1 overflow-y-auto">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] p-4">
-            <div><p className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--portal-muted)]">Booked events</p><h2 className="mt-1 text-xl sm:text-2xl font-bold text-[color:var(--portal-text)]">Event availability</h2></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--portal-border)] p-4 sm:p-5">
+            <h2 className="text-lg font-bold text-[color:var(--portal-text)] sm:text-xl">Availability</h2>
             <PortalAnimatedTabs ariaLabel="Booked events calendar view" tabs={[{ id: 'month', label: 'Month' }, { id: 'week', label: 'Week' }, { id: 'day', label: 'Day' }, { id: 'schedule', label: 'Schedule' }] as const} activeTab={view} onTabChange={setView} className="!w-auto max-w-full overflow-x-auto" buttonClassName="!px-3" />
           </div>
 
@@ -490,7 +490,7 @@ export default function CalendarPage() {
               <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Bookings and holds affect availability. Proposals are shown separately.</p>
 
               <div className="mt-5 space-y-3">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f]">Confirmed bookings</h3>
+                <h3 className="text-sm font-bold text-[color:var(--portal-text)]">Confirmed bookings</h3>
                 {confirmedDateBookings.length ? confirmedDateBookings.map((booking) => (
                   <article key={booking.id} className="min-w-0 border-b border-[color:var(--portal-border)] pb-4 last:border-b-0">
                     <div className="flex flex-wrap items-start justify-between gap-2">
@@ -501,7 +501,7 @@ export default function CalendarPage() {
                       </div>
                       {booking.inquiry_id ? <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking&from=/portal/calendar`} className="shrink-0 text-xs font-semibold text-[#8c6529] hover:text-[#a8792f] dark:text-[#f1d27a]">Open booking <ExternalLink size={12} className="ml-1 inline" /></Link> : null}
                     </div>
-                    <div className="mt-3 border-t border-[color:var(--portal-border)] pt-3">
+                    <div className="mt-3">
                       <EventControls booking={booking} busyId={busyId} onSendContract={sendContract} onContractAction={updateContractRequest} />
                     </div>
                   </article>
@@ -509,13 +509,13 @@ export default function CalendarPage() {
               </div>
 
               {holdDateBookings.length ? <div className="mt-5 space-y-2">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-muted)]">Active holds</h3>
+                <h3 className="text-sm font-bold text-[color:var(--portal-text)]">Active holds</h3>
                 {holdDateBookings.map((booking) => <p key={booking.id} className="text-xs text-[color:var(--portal-text)]"><span className="font-semibold">{booking.event_type || 'Event hold'}</span>{booking.start_time && booking.end_time ? ` · ${timeLabel(booking.start_time)} – ${timeLabel(booking.end_time)}` : ''} <PortalStatusBadge status="tentative" /></p>)}
               </div> : null}
 
               <div className="mt-5 space-y-3 border-t border-[color:var(--portal-border)] pt-4">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a8792f]">Pending proposals</h3>
+                  <h3 className="text-sm font-bold text-[color:var(--portal-text)]">Pending proposals</h3>
                   {pendingDateProposals.length ? <span className="text-xs font-semibold text-[color:var(--portal-muted)]">{pendingDateProposals.length} pending</span> : null}
                 </div>
                 {data.pendingProposalsError ? <p role="status" className="rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-4 text-xs text-amber-900 dark:border-amber-300/25 dark:bg-amber-500/10 dark:text-amber-200">Pending proposal details could not be loaded.</p> : pendingDateProposals.length ? pendingDateProposals.map((proposal) => (
@@ -574,7 +574,7 @@ export default function CalendarPage() {
 
 function GlanceStat({ label, value, loading }: { label: string; value: number; loading: boolean }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4">
+    <div className="flex min-w-0 items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
       <PortalSkeletonTransition
         loading={loading}
         overlap
@@ -583,7 +583,7 @@ function GlanceStat({ label, value, loading }: { label: string; value: number; l
       >
         <p className="whitespace-nowrap text-lg font-semibold tabular-nums leading-6 text-[color:var(--portal-text)]">{value}</p>
       </PortalSkeletonTransition>
-      <p className="min-w-0 text-[10px] font-semibold leading-tight text-[color:var(--portal-muted)] sm:text-xs">{label}</p>
+      <p className="min-w-0 text-[10px] font-medium leading-tight text-[color:var(--portal-muted)] sm:text-xs">{label}</p>
     </div>
   )
 }
@@ -611,7 +611,7 @@ function TourControls({
       </div>
       <div className="flex items-center justify-between">
         <PortalStatusBadge status={presentation.label} tone={presentation.tone} warning={presentation.label === 'Needs Outcome'} />
-        <Link href={`/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}&from=/portal/calendar`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
+        <Link href={`/portal/leads/${tour.id}?tab=overview&stage=${tour.tour_attendance_status === 'attended' ? 'proposal' : 'tour'}&from=/portal/calendar`} className="text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
           Open <ExternalLink size={10} className="inline" />
         </Link>
       </div>
@@ -652,7 +652,7 @@ function EventControls({
         ) : null}
       </div>
       {booking.inquiry_id ? (
-        <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking&from=/portal/calendar`} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
+        <Link href={`/portal/leads/${booking.inquiry_id}?tab=documents&section=lead-booking&from=/portal/calendar`} className="text-xs font-semibold text-[color:var(--portal-muted)] transition-colors hover:text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
           Client record <ExternalLink size={10} className="inline" />
         </Link>
       ) : null}
@@ -676,7 +676,7 @@ function ActionButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex items-center gap-1 rounded border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] disabled:opacity-45"
+      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 py-1.5 text-[11px] font-semibold tracking-normal text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:cursor-not-allowed disabled:opacity-45"
     >
       {icon}
       {label}

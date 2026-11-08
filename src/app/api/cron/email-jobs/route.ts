@@ -6,6 +6,7 @@ import { isLuxorZohoAuthorizationError, verifyLuxorMailConnection } from '@/lib/
 import { processPendingLuxorResendEvents } from '@/lib/luxorResendWebhookServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { processPendingLuxorBillIntakes } from '@/lib/luxorBillIntakeServer'
+import { processPendingManualBillAnalyses } from '@/lib/luxorManualBillAnalysisServer'
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { generateLuxorExpenseOccurrences } from '@/lib/luxorExpensesServer'
 
@@ -79,15 +80,38 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Independent read-only Zoho sync; health=1 above still performs no queue processing.
-  // Durable event metadata tracks retries and leases if this invocation is interrupted.
+  // Each recovery task retains its own durable retry state. A failure in one
+  // must not prevent the other tasks from being attempted on this invocation.
   after(async () => {
     try {
       if (process.env.RESEND_WEBHOOK_SECRET && process.env.RESEND_API_KEY) await processPendingLuxorResendEvents(3)
+    } catch { console.warn('[resend-events] background recovery failed; pending records retained') }
+    try {
       if (process.env.OPEN_ROUTER_API_KEY) await processPendingLuxorBillIntakes(1)
+    } catch { console.warn('[bill-intake] background recovery failed; pending records retained') }
+    try {
       if (luxorMailProvider() === 'zoho') await syncPendingLuxorEmailBodies(3)
+    } catch { console.warn('[email-archive] background sync failed; pending records retained') }
+  })
+
+  // Keep manual analysis independent from mail sync and the delivery budget.
+  // The health-only response above never schedules this work.
+  after(async () => {
+    try {
+      if (!process.env.OPEN_ROUTER_API_KEY) throw new Error('Manual bill analysis is not configured.')
+      const result = await processPendingManualBillAnalyses(1)
+      await safelyRecordLuxorWorkerHealth('manual_bill_analysis', {
+        status: result.failed ? 'error' : result.pending ? 'healthy' : 'idle',
+        processed: result.processed,
+        metadata: { pending: result.pending, failed: result.failed, checked: result.checked },
+        ...(result.failed ? { error: 'Some manual bill analyses need a retry.' } : {}),
+      })
+    } catch {
+      console.warn('Manual bill analysis recovery could not run; queued records retained.')
+      await safelyRecordLuxorWorkerHealth('manual_bill_analysis', {
+        status: 'error', error: 'Manual bill analysis recovery could not run.',
+      })
     }
-    catch { console.warn('[email-archive] background sync could not run; pending records retained') }
   })
 
   const centralHour = Number(

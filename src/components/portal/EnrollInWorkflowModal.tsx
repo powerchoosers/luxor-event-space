@@ -116,7 +116,7 @@ export function EnrollInWorkflowModal({ isOpen, onClose, inquiryIds = [], leadNa
     <div className="border-b border-[color:var(--portal-border)] px-5 py-4 sm:px-6">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3"><Workflow size={20} className="shrink-0 text-[#a8792f]" /><div><h2 className="font-serif text-lg font-semibold text-[color:var(--portal-text)]">Enroll in a workflow</h2><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Choose an active workflow, or prepare a starter as a draft.</p></div></div>
-        <button type="button" onClick={onClose} disabled={enrolling} aria-label="Close workflow enrollment" className="grid size-10 shrink-0 place-items-center rounded-lg text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] disabled:opacity-40"><X size={18} /></button>
+        <button type="button" onClick={onClose} disabled={enrolling} aria-label="Close workflow enrollment" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 disabled:opacity-40"><X size={15} /></button>
       </div>
       <nav aria-label="Workflow types" className="portal-scrollbar mt-4 min-w-0 overflow-x-auto">
         <div className="flex min-w-max items-center gap-1 rounded-xl border border-[color:var(--portal-border)]/70 bg-[color:var(--portal-soft)] p-1">

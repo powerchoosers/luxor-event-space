@@ -428,7 +428,7 @@ export function LuxorDraggableTextModal({
             onClick={handleClose}
             aria-label="Close conversation"
             title="Close"
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-[color:var(--portal-muted)] transition-colors hover:bg-rose-500/10 hover:text-rose-500"
+            className="flex h-7 w-7 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
           >
             <X size={14} />
           </button>

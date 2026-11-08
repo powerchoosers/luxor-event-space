@@ -39,10 +39,9 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion'
-import { PortalCloseButton, PortalContactAvatar, PortalDatePicker, PortalSelect, PortalConstellationLoader } from './PortalUI'
+import { PortalCloseButton, PortalContactAvatar, PortalSelect, PortalConstellationLoader } from './PortalUI'
 import { ElenaLiveVoiceClient, type ElenaVoiceState } from '@/lib/elenaLiveVoiceClient'
 import { ElenaSilkOrb } from './ElenaSilkOrb'
-import { LUXOR_TIME_DROPDOWN_OPTIONS, normalizeLuxorTimeDropdownValue } from '@/lib/luxorTimeOptions'
 import { ElenaEmailDraftCard, EmailDraftPayload } from './ElenaEmailDraftCard'
 import { ElenaWorkflowDraftCard, type ElenaWorkflowDraftPayload } from './ElenaWorkflowDraftCard'
 import {
@@ -61,6 +60,16 @@ type ExecutedQuery = {
   result: unknown
 }
 
+type ElenaConfirmation = { summary: string; token?: string; expiresAt?: string; query?: string; kind?: string }
+
+function confirmationEndpoint(confirmation: ElenaConfirmation) {
+  if (confirmation.query !== undefined) return null
+  if (confirmation.kind === undefined || confirmation.kind === 'create_note') return '/api/portal/elena-confirmation'
+  if (confirmation.kind === 'close_tour_days') return '/api/portal/elena-tour-confirmation'
+  if (confirmation.kind === 'record_cleaning_completion') return '/api/portal/elena-cleaning-confirmation'
+  return null
+}
+
 type Message = {
   id?: string
   role: 'user' | 'assistant'
@@ -68,10 +77,8 @@ type Message = {
   executedQueries?: ExecutedQuery[]
   toolActivity?: string[]
   toolActivityFailed?: boolean
-  confirmation?: {
-    query: string
-    summary: string
-  }
+  confirmation?: ElenaConfirmation
+  confirmationError?: string
   isConfirmed?: boolean
   isCancelled?: boolean
   emailDraft?: EmailDraftPayload
@@ -91,7 +98,7 @@ type ElenaChatResponse = {
   reply: string
   executedQueries: ExecutedQuery[]
   toolActivity?: string[]
-  confirmation?: { query: string; summary: string }
+  confirmation?: ElenaConfirmation
   textCampaignDraft?: { name: string; bodyTemplate: string; campaignType: string }
   emailDraft?: EmailDraftPayload
   crmUpdateCard?: LeadUpdatePayload
@@ -413,6 +420,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
   // Sessions History States
   const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [historyUnavailable, setHistoryUnavailable] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null)
   const activeSessionRef = useRef<string | null>(null)
@@ -600,39 +608,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           return
         }
         if (pendingEmail && isVoiceEmailSendConfirmation(request)) {
-          try {
-            const response = await fetch('/api/email/send', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                to: pendingEmail.draft.recipientEmail,
-                recipientName: pendingEmail.draft.recipientName,
-                subject: pendingEmail.draft.subject,
-                content: pendingEmail.draft.body,
-                from: pendingEmail.draft.senderProfile?.email || 'booking@luxoratlaspalmas.com',
-                format: 'conversational',
-                track: true,
-                inquiryId: pendingEmail.draft.inquiryId,
-                idempotencyKey: pendingEmail.idempotencyKey,
-              }),
-            })
-            const result = await response.json() as { success?: boolean; error?: string }
-            if (!response.ok || !result.success) throw new Error(result.error || 'The email could not be sent.')
-            pendingVoiceEmailDraftRef.current = null
-            const recipientLabel = pendingEmail.draft.recipientName || pendingEmail.draft.recipientEmail
-            const sentReply = `The email to ${recipientLabel} was sent.`
-            setMessages(prev => [
-              ...prev,
-              {
-                role: 'assistant',
-                content: `Done! I sent the email to **${recipientLabel}** with subject *"${pendingEmail.draft.subject}"*.`,
-              },
-            ])
-            client.sendCommentary(sentReply, delegationId)
-          } catch (error) {
-            const failedReply = error instanceof Error ? error.message : 'The email could not be sent.'
-            client.sendCommentary(failedReply, delegationId)
-          }
+          client.sendCommentary('Sending by voice is unavailable. Please use the email workspace to review and send the draft.', delegationId)
           return
         }
         const result = await voiceSendRef.current?.(request, (reply) => {
@@ -757,9 +733,21 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     const requestId = ++sessionRequestRef.current
     try {
       const response = await fetch('/api/portal/elena-chat/sessions')
+      if (response.status === 403) {
+        if (requestId !== sessionRequestRef.current) return
+        setHistoryUnavailable(true)
+        setSessions([])
+        setShowSessionsList(false)
+        if (currentSessionId) setMessages([])
+        setCurrentSessionId(null)
+        setLoadedSessionId(null)
+        setIsLoading(false)
+        return
+      }
       if (!response.ok) throw new Error('Failed to load sessions list')
       const data = (await response.json()) as ChatSession[]
       if (requestId !== sessionRequestRef.current) return
+      setHistoryUnavailable(false)
       setSessions(data)
 
       if (data.length > 0) {
@@ -770,7 +758,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           await loadSessionMessages(targetId)
         }
       } else {
-        await handleCreateSession()
+        await handleCreateSession(true)
       }
     } catch (err) {
       console.error(err)
@@ -809,7 +797,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     }
   }
 
-  const handleCreateSession = async () => {
+  const handleCreateSession = async (forcePersistent = false) => {
     sessionRequestRef.current += 1
     const requestId = ++messageRequestRef.current
     setCurrentSessionId(null)
@@ -817,11 +805,16 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     setMessages([])
     setInput('')
     setAttachments([])
+    if (historyUnavailable && !forcePersistent) { setShowSessionsList(false); setIsLoading(false); return }
     setIsLoading(true)
     try {
       const response = await fetch('/api/portal/elena-chat/sessions', {
         method: 'POST'
       })
+      if (response.status === 403) {
+        if (requestId === messageRequestRef.current) { setHistoryUnavailable(true); setSessions([]); setShowSessionsList(false) }
+        return
+      }
       if (!response.ok) throw new Error('Failed to create session')
       const newSession = (await response.json()) as { id: string; title: string; messages: Message[] }
       if (requestId !== messageRequestRef.current) return
@@ -915,7 +908,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
 
     try {
       // Keep cards in saved chat history; the server sends only role and text to the model.
-      const apiMessages = updatedMessages
+      const apiMessages = updatedMessages.map(({ confirmation: _confirmation, ...message }) => message)
 
       const response = await fetch('/api/portal/elena-chat', {
         method: 'POST',
@@ -1021,7 +1014,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       void fetch('/api/portal/elena-chat/sessions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: currentSessionId, messages: updatedMessages }),
+        body: JSON.stringify({ id: currentSessionId, messages: updatedMessages.map(({ confirmation: _confirmation, ...message }) => message) }),
       }).then((response) => {
         if (!response.ok) throw new Error('Could not save the workflow draft status in chat history.')
         void refreshSessionsMetadata()
@@ -1029,74 +1022,45 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
     }
   }
 
-  const handleConfirmAction = async (msgIndex: number, confirmation: { query: string; summary: string }) => {
+  const handleConfirmAction = async (msgIndex: number, confirmation: ElenaConfirmation) => {
+    // Old chat history may contain a query and summary. These are never proof
+    // of an action authorized by the server and must not be submitted.
+    const endpoint = confirmationEndpoint(confirmation)
+    if (!endpoint || !confirmation.token || !confirmation.expiresAt || isLoading) return
     const requestId = ++messageRequestRef.current
-    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isConfirmed: true } : m))
     setIsLoading(true)
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, confirmationError: undefined } : m))
 
     try {
-      const apiMessages = messages.map((msg, index) => index === msgIndex ? { ...msg, isConfirmed: true } : msg)
-
-      const response = await fetch('/api/portal/elena-chat', {
+      const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: apiMessages,
-          activePath,
-          confirmQuery: confirmation.query,
-          confirmSummary: confirmation.summary,
-          chatId: currentSessionId || undefined
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: confirmation.token }),
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to execute confirm query')
-      }
-
-      const data = (await response.json()) as {
-        reply: string
-        executedQueries: ExecutedQuery[]
-      }
+      if (!response.ok) throw new Error('Confirmation unavailable')
       if (requestId !== messageRequestRef.current) return
-
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.reply,
-          executedQueries: data.executedQueries
-        }
-      ])
-
-      if (currentSessionId) {
-        void refreshSessionsMetadata()
-      }
-    } catch (err) {
+      setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, confirmation: { summary: confirmation.summary }, isConfirmed: true } : m))
+      if (currentSessionId) void refreshSessionsMetadata()
+    } catch {
       if (requestId !== messageRequestRef.current) return
-      console.error(err)
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'I ran into an issue executing the action bestie! Please double-check lead/booking locks or database logs.'
-        }
-      ])
+      // A network failure can occur after the server commits. Do not say the
+      // action failed or offer a blind retry; ask the user to check the record.
+      setMessages(prev => prev.map((m, idx) => idx === msgIndex ? {
+        ...m,
+        confirmation: { summary: confirmation.summary },
+        confirmationError: confirmation.kind === 'close_tour_days'
+          ? 'The result could not be verified. Check the calendar before requesting this action again.'
+          : confirmation.kind === 'record_cleaning_completion'
+            ? 'The result could not be verified. Check the cleaning log before requesting this action again.'
+          : "The result could not be verified. Check the lead's notes before requesting this action again.",
+      } : m))
     } finally {
       if (requestId === messageRequestRef.current) setIsLoading(false)
     }
   }
 
   const handleCancelAction = (msgIndex: number) => {
-    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, isCancelled: true } : m))
-    setMessages(prev => [
-      ...prev,
-      {
-        role: 'assistant',
-        content: 'No worries bestie! 💁‍♀️ I cancelled the action. Nothing was modified!'
-      }
-    ])
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, confirmation: m.confirmation ? { summary: m.confirmation.summary } : undefined, isCancelled: true } : m))
   }
 
   const pathSuggestions = getSuggestionsForPath(activePath)
@@ -1115,7 +1079,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
       initial={{ x: '100%' }}
       animate={{ x: isOpen ? 0 : '100%' }}
       transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-      className="portal-elena-chat-panel fixed right-0 top-0 z-[65] flex w-full flex-col border-l-0 border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] max-lg:bottom-[var(--portal-mobile-nav-height)] max-lg:h-[calc(100dvh-var(--portal-mobile-nav-height))] lg:bottom-0 lg:h-full"
+      className="portal-elena-chat-panel fixed right-0 top-0 z-[65] flex w-full flex-col border-l-0 border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] text-[color:var(--portal-text)] shadow-[-24px_0_60px_-36px_rgba(0,0,0,0.85)] max-lg:bottom-[var(--portal-mobile-nav-height)] max-lg:h-[calc(100dvh-var(--portal-mobile-nav-height))] lg:bottom-0 lg:h-full lg:w-[420px] lg:border-l"
       aria-hidden={!isOpen}
       inert={!isOpen}
     >
@@ -1140,7 +1104,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!voiceActive && <button
+          {!voiceActive && !historyUnavailable && <button
             type="button"
             onClick={() => setShowSessionsList(curr => !curr)}
             className={`inline-flex h-9 w-9 items-center justify-center rounded-lg p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer ${
@@ -1155,7 +1119,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           </button>}
           {!voiceActive && <button
             type="button"
-            onClick={handleCreateSession}
+            onClick={() => void handleCreateSession()}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg p-0 text-zinc-500 opacity-80 transition-colors hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 cursor-pointer"
             title="Start New Chat Session"
             aria-label="Start New Chat Session"
@@ -1166,6 +1130,8 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
           <PortalCloseButton onClick={onClose} aria-label="Close Elena Chat" />
         </div>
       </div>
+
+      {historyUnavailable && <p className="border-b border-[color:var(--portal-border)] px-4 py-2 text-xs text-[color:var(--portal-muted)]">This chat is temporary and will not be saved.</p>}
 
       {/* Main Drawer Shell / Overlay List */}
       <div className="relative flex-1 min-h-0 flex flex-col">
@@ -1182,7 +1148,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                 <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-550">Chat Sessions</h4>
                 <button
                   type="button"
-                  onClick={handleCreateSession}
+                  onClick={() => void handleCreateSession()}
                   className="inline-flex items-center gap-1.5 rounded bg-[#caa24c] hover:bg-[#f1d27a] text-white px-2.5 py-1 text-[10px] font-black uppercase cursor-pointer transition-all"
                 >
                   <Plus size={11} strokeWidth={3} /> New Session
@@ -1581,31 +1547,39 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                           </div>
                         )}
 
-                        {/* Render Direct Action Confirmation Cards */}
+                        {/* Only server-issued confirmations may be submitted. */}
                         {msg.confirmation && !msg.isConfirmed && !msg.isCancelled && (
                           <div className="w-[88%] mt-3 pl-8">
-                            <div className="rounded-xl border border-[#caa24c]/30 bg-[#caa24c]/5 p-3.5 space-y-3">
+                            <div className="space-y-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3.5">
                               <div className="flex items-start gap-2.5">
-                                <Info size={14} className="text-[#caa24c] shrink-0 mt-0.5" />
+                                <Info size={14} className="mt-0.5 shrink-0 text-[#caa24c]" />
                                 <div>
-                                  <p className="text-xs font-semibold text-zinc-300">Action Confirmation Required</p>
-                                  <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{msg.confirmation.summary}</p>
+                                  <p className="text-xs font-semibold text-[color:var(--portal-text)]">Review action</p>
+                                  <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-[color:var(--portal-muted)]">{msg.confirmation.summary}</p>
+                                  {(!msg.confirmation.token || !msg.confirmation.expiresAt || !confirmationEndpoint(msg.confirmation)) && (
+                                    <p className="mt-2 text-xs text-[color:var(--portal-muted)]">This confirmation is unavailable. Request the action again.</p>
+                                  )}
+                                  {msg.confirmationError && <p role="alert" className="mt-2 text-xs text-[color:var(--portal-text)]">{msg.confirmationError}</p>}
                                 </div>
                               </div>
-                              <div className="flex gap-2 justify-end pt-1">
+                              <div className="flex justify-end gap-2 pt-1">
+                                {msg.confirmation.token && msg.confirmation.expiresAt && confirmationEndpoint(msg.confirmation) && !msg.confirmationError && (
+                                  <button
+                                    type="button"
+                                    disabled={isLoading}
+                                    onClick={() => handleConfirmAction(index, msg.confirmation!)}
+                                    className="luxor-gold-raised rounded px-3 py-1.5 text-xs font-bold !text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    Confirm action
+                                  </button>
+                                )}
                                 <button
                                   type="button"
-                                  onClick={() => handleConfirmAction(index, msg.confirmation!)}
-                                  className="rounded bg-[#caa24c] hover:bg-[#f1d27a] text-white px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
-                                >
-                                  Confirm Action
-                                </button>
-                                <button
-                                  type="button"
+                                  disabled={isLoading}
                                   onClick={() => handleCancelAction(index)}
-                                  className="rounded border border-zinc-850 hover:bg-zinc-900 text-zinc-450 hover:text-white px-3 py-1.5 text-[10px] font-bold transition-colors cursor-pointer"
+                                  className="rounded border border-[color:var(--portal-border)] px-3 py-1.5 text-xs font-bold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  Cancel
+                                  Dismiss
                                 </button>
                               </div>
                             </div>
@@ -1613,16 +1587,14 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                         )}
 
                         {msg.confirmation && msg.isConfirmed && (
-                          <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-green-500 font-medium flex items-center gap-1.5">
-                            <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                            Action Confirmed & Executed
+                          <div className="w-[88%] mt-2.5 pl-8 text-xs font-medium text-[color:var(--portal-text)]">
+                            Action completed
                           </div>
                         )}
 
                         {msg.confirmation && msg.isCancelled && (
-                          <div className="w-[88%] mt-2.5 pl-8 text-[10px] text-zinc-550 font-medium flex items-center gap-1.5">
-                            <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-                            Action Cancelled
+                          <div className="w-[88%] mt-2.5 pl-8 text-xs font-medium text-[color:var(--portal-muted)]">
+                            Confirmation dismissed
                           </div>
                         )}
 
@@ -1768,7 +1740,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                       setVoiceError('')
                       voiceStartButtonRef.current?.focus()
                     }}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-rose-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
                   >
                     <X size={14} aria-hidden="true" />
                   </button>
@@ -2078,126 +2050,9 @@ function ElenaContactField({ label, value, onChange, placeholder, type = 'text',
   )
 }
 
-function ElenaTourInviteCard({ payload, onSuccess }: { payload: TourInviteCardPayload; onSuccess: (message: string) => void }) {
-  const [tourDate, setTourDate] = useState(payload.tourDate)
-  const [tourTime, setTourTime] = useState(normalizeLuxorTimeDropdownValue(payload.tourTime))
-  const [meetingType, setMeetingType] = useState(payload.meetingType || 'Private Venue Tour')
-  const [durationMinutes, setDurationMinutes] = useState(String(payload.durationMinutes || 30))
-  const [clientFacingNotes, setClientFacingNotes] = useState(payload.clientFacingNotes)
-  const [visitIntent, setVisitIntent] = useState<'new_visit' | 'reschedule' | ''>('')
-  const scheduleAttempt = useRef<{ signature: string; id: string } | null>(null)
-  const [visitId, setVisitId] = useState(() => crypto.randomUUID())
-  const [isSending, setIsSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const missingItems = [
-    !payload.clientEmail ? 'client email' : null,
-    !tourDate ? 'tour date' : null,
-    !tourTime ? 'start time' : null,
-    !visitIntent ? 'whether this is a new visit or a reschedule' : null,
-  ].filter(Boolean) as string[]
-
-  const handleSend = async () => {
-    if (missingItems.length > 0 || isSending) return
-    setIsSending(true)
-    setError(null)
-
-    try {
-      const scheduleBody = {
-        inquiryId: payload.inquiryId,
-        action: 'schedule-tour',
-        visitIntent,
-        visitId,
-        expectedVisitId: payload.currentVisitId,
-        expectedVisitVersion: payload.currentVisitVersion,
-        tourDate,
-        tourTime,
-        meetingType,
-        durationMinutes: Number(durationMinutes),
-        clientFacingNotes,
-      }
-      const signature = JSON.stringify(scheduleBody)
-      if (scheduleAttempt.current?.signature !== signature) {
-        scheduleAttempt.current = { signature, id: crypto.randomUUID() }
-      }
-      const response = await fetch('/api/tour-actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...scheduleBody, scheduleRequestId: scheduleAttempt.current.id }),
-      })
-      const result = await response.json().catch(() => ({})) as { error?: string; reminderJobs?: unknown[] }
-      if (!response.ok) throw new Error(result.error || 'The invite could not be sent.')
-      onSuccess(`Tour invite sent to ${payload.clientName}. One branded calendar email is on its way${result.reminderJobs?.length ? `, with ${result.reminderJobs.length} reminder${result.reminderJobs.length === 1 ? '' : 's'} queued for later` : ''}.`)
-    } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : 'The invite could not be sent.')
-    } finally {
-      setIsSending(false)
-    }
-  }
-
-  return (
-    <div className="ml-8 mt-3 w-[calc(88%-2rem)] overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-lg shadow-black/10">
-      <div className="flex items-start gap-2.5 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3">
-        <CalendarDays size={15} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#f1d27a]" />
-        <div className="min-w-0">
-          <h4 className="text-xs font-semibold text-[color:var(--portal-text)]">Send tour invite</h4>
-          <p className="mt-0.5 truncate text-[10px] text-[color:var(--portal-muted)]">{payload.clientName}{payload.clientEmail ? ` · ${payload.clientEmail}` : ' · email needed first'}</p>
-        </div>
-      </div>
-
-      <div className="space-y-3 p-3.5">
-        <div>
-          <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Visit action</label>
-          <PortalSelect value={visitIntent} onChange={(value) => {
-            const intent = value as 'new_visit' | 'reschedule' | ''
-            setVisitIntent(intent)
-            setVisitId(intent === 'reschedule' && payload.currentVisitId ? payload.currentVisitId : crypto.randomUUID())
-          }} options={[
-            { value: 'new_visit', label: 'Schedule a separate visit' },
-            { value: 'reschedule', label: 'Reschedule the current visit' },
-          ]} className="w-full" buttonClassName="min-h-9" placeholder="Choose visit action" />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Date</label>
-            <PortalDatePicker value={tourDate} onChange={setTourDate} className="!min-w-0 w-full [&>button]:min-h-9 [&>button]:px-2.5 [&>button]:py-1.5 [&>button]:text-[10px]" placeholder="Choose date" maxMonths={36} />
-          </div>
-          <div>
-            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Time</label>
-            <PortalSelect value={tourTime} onChange={setTourTime} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" placeholder="Choose time" options={LUXOR_TIME_DROPDOWN_OPTIONS} />
-          </div>
-          <div>
-            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Meeting</label>
-            <PortalSelect value={meetingType} onChange={setMeetingType} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" options={TOUR_MEETING_TYPE_OPTIONS} />
-          </div>
-          <div>
-            <label className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-[color:var(--portal-muted)]">Length</label>
-            <PortalSelect value={durationMinutes} onChange={setDurationMinutes} className="!min-w-0 w-full" buttonClassName="min-h-9 px-2.5 py-1.5 text-[10px]" options={TOUR_DURATION_OPTIONS} />
-          </div>
-        </div>
-
-        <textarea value={clientFacingNotes} onChange={(event) => setClientFacingNotes(event.target.value)} rows={2} maxLength={2000} placeholder="Client-safe tour details (optional)" className="w-full resize-none rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-3 py-2 text-[10px] leading-4 text-[color:var(--portal-text)] outline-none placeholder:text-[color:var(--portal-faint)] focus:border-[#caa24c]/50" />
-
-        {missingItems.length > 0 ? (
-          <p className="rounded-lg bg-amber-500/10 px-2.5 py-2 text-[10px] leading-4 text-amber-800 dark:text-amber-200">Still needed: {missingItems.join(', ')}.</p>
-        ) : null}
-        {error ? <p className="rounded-lg bg-rose-500/10 px-2.5 py-2 text-[10px] leading-4 text-rose-700 dark:text-rose-200">{error}</p> : null}
-
-        <button type="button" onClick={handleSend} disabled={isSending || missingItems.length > 0} className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-[#caa24c] px-3 text-[10px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#dfbd68] disabled:cursor-not-allowed disabled:bg-[color:var(--portal-soft)] disabled:text-[color:var(--portal-muted)]">
-          {isSending ? <PortalConstellationLoader size={14} tone="white" /> : <Send size={12} />} {isSending ? 'Sending invite…' : 'Send invite'}
-        </button>
-      </div>
-    </div>
-  )
+function ElenaTourInviteCard({ payload }: { payload: TourInviteCardPayload; onSuccess: (message: string) => void }) {
+  return <div className="ml-8 mt-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-3 text-xs text-[color:var(--portal-text)]">Tour invites for {payload.clientName} are unavailable in Elena. Use the lead or calendar workspace to review and send the invite.</div>
 }
-
-const TOUR_MEETING_TYPE_OPTIONS = [
-  { value: 'Private Venue Tour', label: 'Private Venue Tour' },
-  { value: 'Wedding Walkthrough', label: 'Wedding Walkthrough' },
-  { value: 'Quinceañera Walkthrough', label: 'Quinceañera Walkthrough' },
-  { value: 'Event Planning Consultation', label: 'Event Planning Consultation' },
-  { value: 'Vendor Walkthrough', label: 'Vendor Walkthrough' },
-]
 
 const ELENA_CONTACT_SOURCE_OPTIONS = [
   { value: 'Manual Entry', label: 'Manual entry' },
@@ -2208,13 +2063,6 @@ const ELENA_CONTACT_SOURCE_OPTIONS = [
   { value: 'Facebook', label: 'Facebook' },
   { value: 'The Knot', label: 'The Knot' },
   { value: 'Vendor / Partner', label: 'Vendor / partner' },
-]
-
-const TOUR_DURATION_OPTIONS = [
-  { value: '30', label: '30 minutes' },
-  { value: '45', label: '45 minutes' },
-  { value: '60', label: '60 minutes' },
-  { value: '90', label: '90 minutes' },
 ]
 
 /* Local formatting helper function */

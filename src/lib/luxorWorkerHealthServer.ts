@@ -2,7 +2,7 @@ import 'server-only'
 
 import { supabaseRest } from './supabaseRestServer'
 
-export type LuxorWorkerName = 'email_jobs' | 'text_jobs' | 'daily_priorities'
+export type LuxorWorkerName = 'email_jobs' | 'text_jobs' | 'daily_priorities' | 'manual_bill_analysis'
 
 export type LuxorWorkerHealth = {
   worker_name: LuxorWorkerName
