@@ -619,7 +619,7 @@ export function PortalSettingsManager({
                                   {asset.category}
                                 </span>
                                 <span className="text-[8px] text-[color:var(--portal-faint)] font-mono">
-                                  {new Date(asset.created_at).toLocaleDateString()}
+                                  {new Date(asset.created_at).toLocaleDateString('en-US', { dateStyle: 'long' })}
                                 </span>
                               </div>
                             </div>
