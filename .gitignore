@@ -42,6 +42,7 @@ yarn-error.log*
 next-env.d.ts
 
 # local development tooling and QA artifacts
+/.cursor/
 /.agents/
 /.codex/
 /.codex-remote-attachments/
