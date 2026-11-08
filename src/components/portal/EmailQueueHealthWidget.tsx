@@ -159,7 +159,7 @@ export function EmailQueueHealthWidget() {
 
       {warningMessage ? <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-xs leading-5 text-amber-800 dark:text-amber-200"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>{warningMessage}</span></p> : null}
       {error ? <p role="alert" className="mt-4 rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2.5 text-xs leading-5 text-rose-700 dark:text-rose-200">{data ? `Refresh failed; showing the last successful status. ${error}` : error}</p> : null}
-      {data?.lastActivityAt ? <p className="mt-3 text-[10px] text-[color:var(--portal-muted)]">Latest queue update: {new Date(data.lastActivityAt).toLocaleString()}</p> : null}
+      {data?.lastActivityAt ? <p className="mt-3 text-[10px] text-[color:var(--portal-muted)]">Latest queue update: {new Date(data.lastActivityAt).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })}</p> : null}
     </section>
   )
 }

@@ -54,12 +54,12 @@ export function MailProviderSettings() {
           <SettingRow title="Resend API key" value={settings.resend.apiKeyPresent ? 'Present — credentials not verified' : 'Not configured'} />
           <SettingRow title="Resend webhook signing secret" value={settings.resend.webhookSecretPresent ? 'Present — endpoint not verified' : 'Not configured'} />
           <SettingRow title="Latest saved Resend webhook" value={!settings.resend.activityAvailable ? 'Activity could not be checked' : settings.resend.lastWebhookAt
-            ? new Date(settings.resend.lastWebhookAt).toLocaleString() + (settings.resend.lastWebhookProcessedAt ? ' · processed' : ' · awaiting processing') : 'No event recorded'} />
+            ? new Date(settings.resend.lastWebhookAt).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' }) + (settings.resend.lastWebhookProcessedAt ? ' · processed' : ' · awaiting processing') : 'No event recorded'} />
           <SettingRow title="Legacy Zoho archive" value={settings.zoho.credentialsPresent ? 'Retained temporarily for the protected history archive' : 'Not configured'} />
           <SettingRow title="Portal sign-in" value="Luxor email and password" />
         </dl>
         <div className="space-y-2 text-xs text-[color:var(--portal-muted)]">
-          <p>Checked {new Date(settings.checkedAt).toLocaleString()} · this deployment only</p>
+          <p>Checked {new Date(settings.checkedAt).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })} · this deployment only</p>
           <p className="font-semibold text-[color:var(--portal-text)]">Resend webhook endpoint</p>
           <p className="break-all select-text">{settings.resend.webhookUrl}</p>
           <PortalButton variant="secondary" onClick={() => void copy(settings.resend.webhookUrl, 'Resend endpoint')}>Copy Resend endpoint</PortalButton>

@@ -200,7 +200,7 @@ export function MailMigrationSettings() {
               {report.foldersChangedDuringScan || report.foldersChangedSincePrevious ? <p className="mt-2">The folder list changed. Review folder mapping and run another comparison.</p> : null}
               <p className="mt-2">{report.matchesPrevious ? 'Two consecutive source inventories match. Inventory agreement alone does not verify contents or approve cutover.'
                 : 'Source stability is not established. Another comparison is needed before migration review.'}</p>
-              {comparison.completedAt ? <p className="mt-2">Last compared {new Date(comparison.completedAt).toLocaleString()}.</p> : null}
+              {comparison.completedAt ? <p className="mt-2">Last compared {new Date(comparison.completedAt).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })}.</p> : null}
             </> : null}
           </div> : null}
           {content?.counts ? <div className="mt-4 border-t border-[color:var(--portal-border)] pt-4 text-xs leading-relaxed text-[color:var(--portal-muted)]">
@@ -214,11 +214,11 @@ export function MailMigrationSettings() {
             {content.counts.different || content.counts.unarchived || content.counts.unavailable ? <p className="mt-2">Some originals need review. Different content is not overwritten; unavailable means the source could not be read, not that it was deleted.</p> : null}
             {content.counts.different > 0 ? <p className="mt-2 font-semibold text-[color:var(--portal-text)]">{(content.counts.versioned ?? 0).toLocaleString()} of {content.counts.different.toLocaleString()} changed originals archived as separate verified versions. Earlier copies and this comparison remain preserved.</p> : null}
             <p className="mt-2">This check does not release the archive or switch delivery. To recheck results after corrections, run a fresh source comparison.</p>
-            {content.completedAt ? <p className="mt-2">Content checked {new Date(content.completedAt).toLocaleString()}.</p> : null}
+            {content.completedAt ? <p className="mt-2">Content checked {new Date(content.completedAt).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })}.</p> : null}
           </div> : null}
           {releaseReview ? <div className="mt-4 border-t border-[color:var(--portal-border)] pt-4 text-xs leading-relaxed text-[color:var(--portal-muted)]">
             <p className="font-semibold text-[color:var(--portal-text)]">Mailbox release</p>
-            {releaseReview.releasedAt ? <p className="mt-1">This snapshot was released {new Date(releaseReview.releasedAt).toLocaleString()}. Delivery has not been switched.</p>
+            {releaseReview.releasedAt ? <p className="mt-1">This snapshot was released {new Date(releaseReview.releasedAt).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })}. Delivery has not been switched.</p>
               : releaseReview.ready ? <p className="mt-1">{releaseReview.messageCount.toLocaleString()} verified messages are ready for your review. {releaseReview.retainedCount > 0 ? `${releaseReview.retainedCount.toLocaleString()} are no longer in the latest Zoho inventory and will be kept in Retained history.` : 'Folder placement and read/unread state come from the reviewed source snapshot.'}</p>
                 : <p className="mt-1">{releaseReview.blockers.join(' ')}</p>}
           </div> : null}
@@ -257,7 +257,7 @@ export function MailMigrationSettings() {
       </PortalModal>
       <PortalModal isOpen={Boolean(releaseToConfirm)} onClose={() => { if (!processing) setReleaseToConfirm(null) }} title="Release reviewed mail history?" description="Make this verified snapshot available in the Luxor mailbox.">
         <div className="space-y-4 text-sm leading-relaxed text-[color:var(--portal-muted)]">
-          <p>{releaseToConfirm?.messageCount.toLocaleString()} messages from source pass {releaseToConfirm?.generation}. {releaseToConfirm?.snapshotAt ? `Inventory checked ${new Date(releaseToConfirm.snapshotAt).toLocaleString()}.` : ''}</p>
+          <p>{releaseToConfirm?.messageCount.toLocaleString()} messages from source pass {releaseToConfirm?.generation}. {releaseToConfirm?.snapshotAt ? `Inventory checked ${new Date(releaseToConfirm.snapshotAt).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })}.` : ''}</p>
           <p>New mail or changes made in Zoho after this snapshot may still need another comparison. This does not switch delivery, DNS, or sign-in, and nothing is sent or deleted.</p>
           {releaseToConfirm && releaseToConfirm.retainedCount > 0 ? <PortalCheckbox
             checked={retainMissing} onChange={setRetainMissing} disabled={processing}

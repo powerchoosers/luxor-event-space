@@ -362,7 +362,7 @@ export function EmailPreview({ isOpen, blocks, subject, preheader = '', theme, i
       setSendStatus('success')
       setSendMessage(
         isScheduled
-          ? `Campaign scheduled for ${new Date(scheduledFor).toLocaleString()} with ${emails.length} recipient${emails.length !== 1 ? 's' : ''}.`
+          ? `Campaign scheduled for ${new Date(scheduledFor).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'medium' })} with ${emails.length} recipient${emails.length !== 1 ? 's' : ''}.`
           : `Send started for ${emails.length} recipient${emails.length !== 1 ? 's' : ''}. Refresh the overview to see sent, failed, open, and click results.`,
       )
     } catch (error) {
