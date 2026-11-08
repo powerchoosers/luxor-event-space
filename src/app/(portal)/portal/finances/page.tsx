@@ -172,7 +172,7 @@ type LuxorBookingExpense = {
   useEffect(() => {
     const syncViewFromUrl = () => {
       const view = new URLSearchParams(window.location.search).get('view')
-      if (view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'reports') setActiveTab(view)
+      setActiveTab(view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'reports' ? view : 'dashboard')
     }
     syncViewFromUrl()
     window.addEventListener('popstate', syncViewFromUrl)
