@@ -61,14 +61,9 @@ function formatMoney(value: number | null) {
   return value.toFixed(2)
 }
 
-/** Month summary for Arianna's Monthly plan page. */
-export function buildLuxorBudgetMonthCsv(input: LuxorBudgetMonthCsvInput) {
-  const rows: string[][] = [
-    ['Luxor monthly plan export', ''],
+function budgetMonthCsvSection(input: LuxorBudgetMonthCsvInput) {
+  return [
     ['Month', input.month],
-    ['Generated', input.generatedAt],
-    [],
-    ['Summary', 'Amount'],
     ['Collection target', formatMoney(input.summary.revenueTarget)],
     ['Collected', formatMoney(input.summary.revenueActual)],
     ['Expense targets (sum)', formatMoney(input.summary.expenseTargetTotal)],
@@ -83,6 +78,38 @@ export function buildLuxorBudgetMonthCsv(input: LuxorBudgetMonthCsvInput) {
       formatMoney(row.actual),
       formatMoney(row.remaining),
     ]),
+    [],
+  ]
+}
+
+/** Month summary for Arianna's Monthly plan page. */
+export function buildLuxorBudgetMonthCsv(input: LuxorBudgetMonthCsvInput) {
+  const rows: string[][] = [
+    ['Luxor monthly plan export', ''],
+    ['Generated', input.generatedAt],
+    [],
+    ...budgetMonthCsvSection(input),
+  ]
+  return `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`
+}
+
+export type LuxorBudgetRangeCsvInput = {
+  from: string
+  to: string
+  generatedAt: string
+  months: LuxorBudgetMonthCsvInput[]
+}
+
+/** Multi-month plan export (max 24 months). */
+export function buildLuxorBudgetRangeCsv(input: LuxorBudgetRangeCsvInput) {
+  const rows: string[][] = [
+    ['Luxor monthly plan export', ''],
+    ['From', input.from],
+    ['To', input.to],
+    ['Generated', input.generatedAt],
+    ['Months included', String(input.months.length)],
+    [],
+    ...input.months.flatMap((month) => budgetMonthCsvSection({ ...month, generatedAt: input.generatedAt })),
   ]
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`
 }

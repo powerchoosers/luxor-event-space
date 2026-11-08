@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Download } from '@/lib/icons/phosphor-compat'
-import { PortalButton } from '@/components/portal/PortalUI'
+import { PortalButton, PortalSelect } from '@/components/portal/PortalUI'
+import { resolveBudgetExportRange, validBudgetMonth, type BudgetExportPreset } from '@/lib/luxorBudgetMonthRange'
 import { getLuxorForecastScenario, type getLuxorBudgetReport } from '@/lib/luxorBudgetReporting'
-import { buildLuxorBudgetMonthCsv, downloadLuxorCsv } from '@/lib/luxorReportCsv'
+import { buildLuxorBudgetRangeCsv, downloadLuxorCsv } from '@/lib/luxorReportCsv'
 
 type Report = ReturnType<typeof getLuxorBudgetReport>
 export type BudgetYearRow = { month: string; revenueTarget: number | null; revenueActual: number | null; expenseTarget: number | null; expenseActual: number | null }
@@ -36,6 +37,11 @@ export function BudgetReports({ report, yearRows, forecastRows, revenueTargetsAv
   const [showYear, setShowYear] = useState(false)
   const [opening, setOpening] = useState('')
   const [reserve, setReserve] = useState('')
+  const [exportPreset, setExportPreset] = useState<BudgetExportPreset>('viewed_month')
+  const [customFrom, setCustomFrom] = useState(report.month)
+  const [customTo, setCustomTo] = useState(report.month)
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const summary = report.summary
   const selectedYearRow = yearRows.find((row) => row.month === report.month)
   const currentMonth = report.today.slice(0, 7)
@@ -73,27 +79,57 @@ export function BudgetReports({ report, yearRows, forecastRows, revenueTargetsAv
     finally { setSaving(false) }
   }
 
-  function downloadMonthCsv() {
-    const csv = buildLuxorBudgetMonthCsv({
-      month: report.month,
-      generatedAt: new Date().toISOString(),
-      summary: {
-        revenueTarget: summary.revenueTarget,
-        revenueActual: summary.revenueActual,
-        expenseTargetTotal: summary.expenseTargetTotal,
-        expenseActual: summary.expenseActual,
-        operationalMargin: summary.operationalMargin,
-        statusMessage: summary.statusMessage,
-      },
-      categories: report.categories.map((row) => ({
-        category: row.category,
-        target: row.target,
-        actual: row.actual,
-        remaining: row.remaining,
-      })),
-    })
-    downloadLuxorCsv(csv, `luxor-monthly-plan-${report.month}`)
+  useEffect(() => {
+    setCustomFrom(report.month)
+    setCustomTo(report.month)
+  }, [report.month])
+
+  async function downloadPlanCsv() {
+    let from: string
+    let to: string
+    try {
+      const range = resolveBudgetExportRange(exportPreset, report.month, customFrom, customTo)
+      from = range.from
+      to = range.to
+      if (!validBudgetMonth(from) || !validBudgetMonth(to) || from > to) throw new Error('Choose a valid range.')
+    } catch {
+      setExportError('Choose a valid month range (up to 24 months).')
+      return
+    }
+    setExportBusy(true)
+    setExportError(null)
+    try {
+      const response = await fetch(`/api/portal/budget-reports/export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { cache: 'no-store' })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Export failed.')
+      const csv = buildLuxorBudgetRangeCsv({
+        from: data.from,
+        to: data.to,
+        generatedAt: data.generatedAt,
+        months: (data.months as Array<{ month: string; summary: Report['summary']; categories: Report['categories'] }>).map((row) => ({
+          month: row.month,
+          generatedAt: data.generatedAt,
+          summary: row.summary,
+          categories: row.categories,
+        })),
+      })
+      downloadLuxorCsv(csv, `luxor-monthly-plan-${from}-to-${to}`)
+    } catch (cause) {
+      setExportError(cause instanceof Error ? cause.message : 'Export failed.')
+    } finally {
+      setExportBusy(false)
+    }
   }
+
+  const exportOptions: { value: BudgetExportPreset; label: string }[] = [
+    { value: 'viewed_month', label: 'Month on screen' },
+    { value: 'last_3', label: 'Last 3 months' },
+    { value: 'last_6', label: 'Last 6 months' },
+    { value: 'calendar_year', label: `Calendar year ${report.month.slice(0, 4)}` },
+    { value: 'last_12', label: 'Last 12 months' },
+    { value: 'last_24', label: 'Last 24 months (max)' },
+    { value: 'custom', label: 'Custom range' },
+  ]
 
   const kpis = [
     { label: 'Collection target', value: !revenueTargetsAvailable ? null : selectedYearRow?.revenueTarget ?? null, href: '#collection-target' },
@@ -115,13 +151,33 @@ export function BudgetReports({ report, yearRows, forecastRows, revenueTargetsAv
         </Link>)}
       </div>
       <p className="mt-4 text-sm text-[color:var(--portal-muted)]">Month cash margin (operational): <strong className="tabular-nums text-[color:var(--portal-text)]">{currency(summary.operationalMargin)}</strong> — collected minus paid expenses; not tax net income.</p>
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <PortalButton type="button" variant="secondary" className="gap-2" onClick={() => downloadMonthCsv()}>
-          <Download size={18} aria-hidden />
-          Download month summary (CSV)
-        </PortalButton>
-        <Link href="/portal/finances/profitability" className="text-sm font-semibold underline underline-offset-4">Event profitability</Link>
-        <Link href="/portal/finances/accountant" className="text-sm font-semibold underline underline-offset-4">Accountant exports</Link>
+      <div className="mt-4 space-y-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-[12rem] text-sm">
+            <span className="text-[color:var(--portal-muted)]">CSV includes</span>
+            <PortalSelect
+              className="mt-1 block w-full min-w-[12rem]"
+              aria-label="Export range"
+              value={exportPreset}
+              onChange={(value) => setExportPreset(value as BudgetExportPreset)}
+              options={exportOptions}
+            />
+          </label>
+          {exportPreset === 'custom' ? <>
+            <label className="text-sm">From<input type="month" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} className="portal-input mt-1 block tabular-nums" /></label>
+            <label className="text-sm">To<input type="month" value={customTo} onChange={(event) => setCustomTo(event.target.value)} className="portal-input mt-1 block tabular-nums" /></label>
+          </> : null}
+          <PortalButton type="button" variant="secondary" className="gap-2" disabled={exportBusy} onClick={() => void downloadPlanCsv()}>
+            <Download size={18} aria-hidden />
+            {exportBusy ? 'Preparing…' : 'Download CSV'}
+          </PortalButton>
+        </div>
+        <p className="text-xs text-[color:var(--portal-muted)]">Up to 24 months per file. Each month includes targets, actuals, and categories.</p>
+        {exportError ? <p role="alert" className="text-sm">{exportError}</p> : null}
+        <div className="flex flex-wrap gap-3">
+          <Link href="/portal/finances/profitability" className="text-sm font-semibold underline underline-offset-4">Event profitability</Link>
+          <Link href="/portal/finances/accountant" className="text-sm font-semibold underline underline-offset-4">Accountant exports</Link>
+        </div>
       </div>
     </section>
 

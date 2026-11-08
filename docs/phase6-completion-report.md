@@ -15,7 +15,7 @@ This maps Arianna’s **Phase 6: Budgeting & Financial Reports** brief (New Fina
 2. **Month summary** — Four KPIs, plain status sentence, **month cash margin (operational)** = collected minus paid expenses (not tax net income).
 3. **Full year** — Collapsed by default; tap months to jump and edit seasonal targets.
 4. **Next 90 days** — Known scheduled collections and unpaid expenses; optional opening amount (not saved; not a bank balance).
-5. **CSV export** — Download month summary from the page.
+5. **CSV export** — Pick a range (single month through 24 months) and download plan vs actuals.
 6. **Deeper exports** — Links to Event profitability and Accountant exports (unchanged).
 
 ---
@@ -42,7 +42,7 @@ This maps Arianna’s **Phase 6: Budgeting & Financial Reports** brief (New Fina
 1. Open **Financial Center → Monthly plan**.
 2. Set **collection target** for the current month; refresh — target persists.
 3. Set one **category spending target**; confirm **Paid** reflects expense payment lines.
-4. **Download month summary (CSV)** and open in Excel or Sheets.
+4. **Download CSV** — try “Last 12 months” or a custom range (max 24 months).
 5. Expand **Show full year**; pick another month; confirm seasonal targets can differ.
 6. On the current month, enter an optional opening amount under **Known scheduled flows**; confirm it is **not** saved after refresh.
 

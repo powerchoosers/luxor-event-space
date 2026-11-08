@@ -61,3 +61,23 @@ test('under when collections exceed target and spending stays below plan', () =>
   })
   assert.equal(summary.status, 'under')
 })
+
+const rangeSource = require('fs').readFileSync(path.join(root, 'src/lib/luxorBudgetMonthRange.ts'), 'utf8')
+const rangeJs = ts.transpileModule(rangeSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+const rangeMod = new Module(path.join(root, 'luxor-budget-month-range.synthetic.cjs'), module)
+rangeMod.filename = path.join(root, 'luxor-budget-month-range.synthetic.cjs')
+rangeMod.paths = module.paths
+rangeMod._compile(rangeJs, rangeMod.filename)
+const { enumerateBudgetMonths, resolveBudgetExportRange } = rangeMod.exports
+
+test('enumerateBudgetMonths caps at 24', () => {
+  assert.throws(() => enumerateBudgetMonths('2024-01', '2027-01', 24))
+  const list = enumerateBudgetMonths('2024-01', '2025-12', 24)
+  assert.equal(list.length, 24)
+})
+
+test('resolveBudgetExportRange last 12', () => {
+  const { from, to } = resolveBudgetExportRange('last_12', '2026-06', '', '')
+  assert.equal(to, '2026-06')
+  assert.equal(from, '2025-07')
+})
