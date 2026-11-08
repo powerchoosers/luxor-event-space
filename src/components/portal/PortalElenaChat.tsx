@@ -20,7 +20,7 @@ import {
   CalendarClock,
   MessageCircleMore,
   ListTodo,
-  Loader2,
+
   Mic,
   MicOff,
   PhoneOff,
@@ -1335,7 +1335,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
             >
               {isSessionHydrating ? (
                 <div className="flex flex-col items-center justify-center gap-3 text-center text-zinc-500" role="status" aria-live="polite">
-                  <Loader2 size={20} className="animate-spin text-[#caa24c]" />
+                  <PortalConstellationLoader size={20} tone="gold" />
                   <p className="text-xs">Opening Elena’s conversation…</p>
                 </div>
               ) : voiceActive && !voiceHasResults ? isLoading ? (
@@ -1349,9 +1349,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                   role="status"
                   aria-live="polite"
                 >
-                  <span aria-hidden="true" className="flex shrink-0 items-center gap-1 text-[#caa24c]">
-                    {[0, 1, 2].map((dot) => <span key={dot} className="h-1 w-1 rounded-full bg-current motion-safe:animate-pulse" style={{ animationDelay: `${dot * 140}ms` }} />)}
-                  </span>
+                  <PortalConstellationLoader size={14} tone="gold" />
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.span
                       key={loadingActivities.at(-1) || 'working'}
@@ -1388,7 +1386,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                       <div className="flex items-center gap-2">
                         {isLoadingSuggestions ? (
                           <span className="flex items-center gap-1 text-[9px] text-[#caa24c]">
-                            <Loader2 size={10} className="animate-spin" /> Querying CRM...
+                            <PortalConstellationLoader size={10} tone="gold" /> Querying CRM...
                           </span>
                         ) : (
                           <button
@@ -1722,9 +1720,7 @@ export function PortalElenaChat({ isOpen, onClose, activePath }: PortalElenaChat
                         transition={{ duration: reduceVoiceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
                         className="flex min-h-8 flex-wrap items-center gap-x-2 gap-y-0.5 pl-8 text-xs text-[color:var(--portal-muted)]"
                       >
-                        <span aria-hidden="true" className="flex shrink-0 items-center gap-1 text-[#caa24c]">
-                          {[0, 1, 2].map((dot) => <span key={dot} className="h-1 w-1 rounded-full bg-current motion-safe:animate-pulse" style={{ animationDelay: `${dot * 140}ms` }} />)}
-                        </span>
+                        <PortalConstellationLoader size={14} tone="gold" />
                         <AnimatePresence mode="wait" initial={false}>
                           <motion.span
                             key={loadingActivities.at(-1) || 'working'}

@@ -44,6 +44,7 @@ import {
   PortalModal,
   PortalSkeleton,
   PortalSkeletonTransition,
+  PortalConstellationLoader,
 } from '@/components/portal/PortalUI'
 import { EmailRichTextEditor } from '@/components/portal/EmailRichTextEditor'
 import { ComposerAiActions } from '@/components/portal/ComposerAiActions'
@@ -562,6 +563,22 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
       // Keep the in-memory draft available if browser storage is unavailable.
     }
   }, [replyDraftStorageKey, replyDraftLoadedKey, replyText, replyInstruction])
+
+  // Reset animation state when text is manually cleared
+  useEffect(() => {
+    if (!replyText.trim()) {
+      setAnimatingDraft(false)
+      setAnimatingDraftText('')
+      setReplyStatus(null)
+    }
+  }, [replyText])
+
+  // Reset animation state when switching to a different email
+  useEffect(() => {
+    setAnimatingDraft(false)
+    setAnimatingDraftText('')
+    setReplyStatus(null)
+  }, [selectedId])
 
   // Reader pane controls
   const [viewMode, setViewMode] = useState<'html' | 'text'>('html')
@@ -1692,7 +1709,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                       title="Generate reply"
                       className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#caa24c] text-white transition-colors hover:bg-[#b98a3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--portal-bg)] disabled:cursor-wait disabled:opacity-50"
                     >
-                      {draftingReply ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
+                      {draftingReply ? <PortalConstellationLoader size={17} tone="gold" /> : <ArrowUp size={18} strokeWidth={2.5} />}
                     </button>
                   </div>
                 </div>
@@ -1701,21 +1718,29 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           </AnimatePresence>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <ComposerAiActions channel="email" value={replyText} setValue={setReplyText} contextKey={selectedId || ''} polishOnly disabled={draftingReply || sendingReply || polishingReply} requestLock={replyGenerationInFlight} onBusyChange={(busy) => { setPolishingReply(busy); if (busy) setReplyStatus(null) }} />
-            {replyStatus && (
-              <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-                <p role="status" aria-live="polite" className="truncate text-[11px] leading-tight text-[color:var(--portal-muted)]">
-                  {replyStatus}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setReplyStatus(null)}
-                  className="shrink-0 p-0.5 text-[color:var(--portal-faint)] hover:text-[color:var(--portal-text)]"
-                  aria-label="Dismiss status message"
+            <AnimatePresence>
+              {replyStatus && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="flex min-w-0 flex-1 items-center justify-end gap-1.5"
                 >
-                  <X size={12} />
-                </button>
-              </div>
-            )}
+                  <p role="status" aria-live="polite" className="truncate text-[11px] leading-tight text-[color:var(--portal-muted)]">
+                    {replyStatus}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setReplyStatus(null)}
+                    className="shrink-0 p-0.5 text-[color:var(--portal-faint)] hover:text-[color:var(--portal-text)]"
+                    aria-label="Dismiss status message"
+                  >
+                    <X size={12} />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </motion.div>
       )}
@@ -1779,7 +1804,23 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
           />
         )}
         <div className={mobile ? "sticky bottom-0 -mx-3 -mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[color:var(--portal-border)] bg-[color:var(--portal-card)]/95 px-3 py-2 backdrop-blur" : "flex shrink-0 flex-wrap items-center justify-between gap-3"}>
-          <p role={replyStatus ? 'status' : undefined} className="min-h-4 min-w-0 flex-1 text-[10px] text-[color:var(--portal-muted)]">{replyStatus}</p>
+          <AnimatePresence>
+            {replyStatus ? (
+              <motion.p
+                role="status"
+                aria-live="polite"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="min-h-4 min-w-0 flex-1 text-[10px] text-[color:var(--portal-muted)]"
+              >
+                {replyStatus}
+              </motion.p>
+            ) : (
+              <p className="min-h-4 min-w-0 flex-1" />
+            )}
+          </AnimatePresence>
           <div className="flex shrink-0 items-center gap-2">
             <button type="button" onClick={() => setReplyPreviewOpen((open) => !open)} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-medium text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/40">
               <Eye size={14} /> {replyPreviewOpen ? 'Back to editor' : 'Preview'}
@@ -1834,7 +1875,7 @@ export function AllEmailsTab({ inquiries = [], initialMessageId, mailboxEmail, m
                     </motion.span>
                   ) : (
                     <motion.span key="elena-mode" initial={{ opacity: 0, filter: 'blur(4px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, filter: 'blur(4px)' }} transition={{ duration: 0.18, ease: 'easeOut' }} className="absolute inset-0 flex items-center justify-center gap-1.5">
-                      {draftingReply ? <Loader2 size={13} className="animate-spin text-[#caa24c]" /> : (
+                      {draftingReply ? <PortalConstellationLoader size={13} tone="gold" /> : (
                         <span className="relative flex h-5 w-5 shrink-0 overflow-hidden rounded-full ring-1 ring-[#caa24c]/40">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src="/luxor-concierge.png" alt="" className="h-full w-full object-cover" />
@@ -2890,10 +2931,7 @@ export function ElenaAiDraftingState({ mobile = false }: { mobile?: boolean }) {
   return (
     <div className={`flex min-h-0 flex-1 flex-col items-center justify-center text-center ${mobile ? 'px-4 py-6' : 'p-8'} space-y-3.5`}>
       <div className="relative flex items-center justify-center">
-        <span className="absolute h-10 w-10 animate-ping rounded-full bg-[#caa24c]/20" />
-        <div className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[#caa24c]/40 bg-[#caa24c]/10 text-[#caa24c] shadow-sm">
-          <Sparkles size={20} className="animate-spin" style={{ animationDuration: '4s' }} />
-        </div>
+        <PortalConstellationLoader size={24} tone="gold" />
       </div>
       <div className="space-y-1 max-w-sm px-2">
         <p className="elena-working-shimmer text-xs font-semibold uppercase tracking-wider">

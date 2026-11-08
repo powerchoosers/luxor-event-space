@@ -13,6 +13,7 @@ import {
   Maximize2,
   Sparkles,
 } from '@/lib/icons/phosphor-compat'
+import { PortalConstellationLoader } from './PortalConstellationLoader'
 import Link from 'next/link'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
 import { formatPhoneDisplay } from '@/lib/luxorPhoneClient'
@@ -541,10 +542,7 @@ export function LuxorDraggableTextModal({
                   </div>
                   {draftingWithElena ? (
                     <div className="flex h-5 items-center gap-2 px-1">
-                      <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-                        <span className="absolute h-full w-full animate-ping rounded-full bg-[#caa24c]/30" />
-                        <Sparkles size={11} className="animate-spin text-[#caa24c]" style={{ animationDuration: '3s' }} />
-                      </span>
+                      <PortalConstellationLoader size={11} tone="gold" />
                       <p className="elena-working-shimmer truncate text-[11px] font-semibold text-[color:var(--portal-text)]">
                         Elena is drafting a reply…
                       </p>
@@ -657,7 +655,7 @@ export function LuxorDraggableTextModal({
                       className="absolute inset-0 flex items-center justify-center gap-1.5"
                     >
                       {draftingWithElena ? (
-                        <Loader2 size={12} className="animate-spin text-[#caa24c]" />
+                        <PortalConstellationLoader size={12} tone="gold" />
                       ) : (
                         <span className="relative flex h-4 w-4 shrink-0 overflow-hidden rounded-full ring-1 ring-[#caa24c]/40">
                           {/* eslint-disable-next-line @next/next/no-img-element */}

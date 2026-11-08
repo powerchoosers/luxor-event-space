@@ -1,6 +1,7 @@
 'use client'
 
 import { CheckCheck, Loader2, Send, MessageSquare, Sparkles } from '@/lib/icons/phosphor-compat'
+import { PortalConstellationLoader } from './PortalConstellationLoader'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { LuxorMessage } from '@/lib/luxorMessageTypes'
@@ -262,10 +263,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
               </div>
               {draftingWithElena ? (
                 <div className="flex h-6 items-center gap-2">
-                  <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
-                    <span className="absolute h-full w-full animate-ping rounded-full bg-[#caa24c]/30" />
-                    <Sparkles size={13} className="animate-spin text-[#caa24c]" style={{ animationDuration: '3s' }} />
-                  </span>
+                  <PortalConstellationLoader size={13} tone="gold" />
                   <div className="min-w-0 flex-1">
                     <p className="elena-working-shimmer truncate text-xs font-semibold leading-6 tracking-wide text-[color:var(--portal-text)]">
                       Elena is drafting a reply for {contactName || 'client'}…
@@ -404,7 +402,7 @@ export function LuxorTextThread({ inquiryId, phone, contactName }: { inquiryId?:
                   className="absolute inset-0 flex items-center justify-center gap-1.5"
                 >
                   {draftingWithElena ? (
-                    <Loader2 size={13} className="animate-spin text-[#caa24c]" />
+                    <PortalConstellationLoader size={13} tone="gold" />
                   ) : (
                     <span className="relative flex h-4.5 w-4.5 shrink-0 overflow-hidden rounded-full ring-1 ring-[#caa24c]/40">
                       {/* eslint-disable-next-line @next/next/no-img-element */}

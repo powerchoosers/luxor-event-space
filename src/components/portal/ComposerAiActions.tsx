@@ -113,7 +113,7 @@ export function ComposerAiActions({ channel, value, setValue, contextKey, contex
             />
           </label>
           <button type="button" className={buttonClass} disabled={disabled || Boolean(busy)} onClick={() => void run('write')}>
-            {busy === 'write' ? <Loader2 size={13} className="animate-spin text-[#caa24c]" /> : <Sparkles size={13} className="text-[#caa24c]" />}
+            {busy === 'write' ? <PortalConstellationLoader size={13} tone="gold" /> : <Sparkles size={13} className="text-[#caa24c]" />}
             <span>{busy === 'write' ? 'Drafting…' : 'Draft'}</span>
           </button>
           <button type="button" className={buttonClass} onClick={() => setPromptOpen(false)}>
@@ -137,7 +137,7 @@ export function ComposerAiActions({ channel, value, setValue, contextKey, contex
             }}
           >
             {busy === 'write' ? (
-              <Loader2 size={13} className="animate-spin text-[#caa24c]" />
+              <PortalConstellationLoader size={13} tone="gold" />
             ) : (
               <Sparkles size={13} className="text-[#caa24c] transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
             )}
@@ -157,7 +157,7 @@ export function ComposerAiActions({ channel, value, setValue, contextKey, contex
               onClick={() => void run('polish')}
             >
               {busy === 'polish' ? (
-                <Loader2 size={13} className="animate-spin text-[#caa24c]" />
+                <PortalConstellationLoader size={13} tone="gold" />
               ) : (
                 <Sparkles size={13} className="text-[#caa24c] transition-transform duration-300 group-hover:scale-110" />
               )}
