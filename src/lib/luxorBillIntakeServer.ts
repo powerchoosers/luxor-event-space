@@ -242,11 +242,11 @@ export async function extractLuxorExpenseReceiptCandidateFacts(input: {
 
 export async function enqueueLuxorInvoiceAttachments(message: LuxorMailRow, attachments: LuxorMailAttachmentRow[]) {
   const recipients = message.to_addresses.map(normalizedAddress)
-  if (!recipients.includes(LUXOR_INVOICES_MAILBOX.address)) return 0
+  if (!recipients.includes(LUXOR_INVOICES_MAILBOX.address)) return null
   const candidates = attachments.filter((attachment) => attachment.source_key !== 'raw-message'
     && !attachment.content_id && SUPPORTED_CONTENT_TYPES.has(attachment.content_type.toLowerCase())
     && attachment.size_bytes > 0 && attachment.size_bytes <= MAX_INVOICE_BYTES)
-  if (!candidates.length) return 0
+  if (!candidates.length) return null
   await supabaseRest('luxor_bill_intakes?on_conflict=attachment_id', {
     method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' },
     body: JSON.stringify(candidates.map((attachment) => ({
@@ -258,7 +258,15 @@ export async function enqueueLuxorInvoiceAttachments(message: LuxorMailRow, atta
     }))),
   })
   await broadcastLuxorPortalNotification('bill-intake-updated', { messageId: message.id, status: 'received' }).catch((error) => console.warn('Bill intake realtime notice failed:', error))
-  return candidates.length
+  return message.id
+}
+
+export async function processLuxorBillIntakesForMessage(messageId: string) {
+  const intakes = await supabaseRestStrict<Array<{ id: string }>>(`luxor_bill_intakes?select=id&message_id=eq.${encodeURIComponent(messageId)}&status=eq.received`)
+  for (let i = 0; i < intakes.length; i += 3) {
+    await Promise.all(intakes.slice(i, i + 3).map(({ id }) => processPendingLuxorBillIntakes(1, id)
+      .catch((error) => console.error('Email bill intake worker start failed:', error))))
+  }
 }
 
 async function processIntake(intake: LuxorBillIntake) {
@@ -338,9 +346,10 @@ async function processIntake(intake: LuxorBillIntake) {
   await broadcastLuxorPortalNotification('bill-intake-updated', { intakeId: intake.id, status }).catch((error) => console.warn('Bill intake realtime notice failed:', error))
 }
 
-export async function processPendingLuxorBillIntakes(limit = 1) {
+export async function processPendingLuxorBillIntakes(limit = 1, intakeId?: string) {
   const now = new Date().toISOString()
-  const rows = await supabaseRest<LuxorBillIntake[]>(`luxor_bill_intakes?select=*&status=in.(received,failed,processing)&next_attempt_at=lte.${encodeURIComponent(now)}&or=(and(status.in.(received,failed),lease_until.is.null),and(status.eq.processing,lease_until.lt.${encodeURIComponent(now)}))&order=created_at.asc&limit=${Math.max(1, Math.min(limit, 3))}`)
+  const target = intakeId ? `&id=eq.${encodeURIComponent(intakeId)}` : ''
+  const rows = await supabaseRest<LuxorBillIntake[]>(`luxor_bill_intakes?select=*${target}&status=in.(received,failed,processing)&next_attempt_at=lte.${encodeURIComponent(now)}&or=(and(status.in.(received,failed),lease_until.is.null),and(status.eq.processing,lease_until.lt.${encodeURIComponent(now)}))&order=created_at.asc&limit=${Math.max(1, Math.min(limit, 3))}`)
   const results: Array<{ id: string; status: 'processed' | 'failed' }> = []
   for (const intake of rows) {
     const leaseGuard = intake.status === 'processing' ? `&lease_until=lt.${encodeURIComponent(now)}` : '&lease_until=is.null'

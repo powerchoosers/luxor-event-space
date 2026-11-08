@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { getOperationsSession } from '@/lib/luxorOperationsAccess'
 import { LUXOR_INVOICES_MAILBOX } from '@/lib/luxorSharedMailboxes'
 import { saveLuxorMailAttachment } from '@/lib/luxorMailboxServer'
@@ -8,6 +8,7 @@ import { supabaseRest } from '@/lib/supabaseRestServer'
 
 const MAX_INVOICE_BYTES = 20 * 1024 * 1024
 const SUPPORTED_CONTENT_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png'])
+export const maxDuration = 60
 
 function safeFilename(value: string) {
   return value.replace(/[\r\n\u0000]/g, '').trim().slice(0, 255) || 'uploaded-bill'
@@ -77,8 +78,11 @@ export async function POST(request: NextRequest) {
     })
     if (!intake) throw new Error('Bill intake could not be queued.')
 
-    // Start work opportunistically; the authenticated email worker remains the durable retry path.
-    void processPendingLuxorBillIntakes(1).catch((error) => console.error('Manual bill intake worker start failed:', error))
+    // Process this upload immediately within the request's extended lifetime.
+    // The authenticated email worker remains the durable retry path if it fails.
+    after(async () => {
+      await processPendingLuxorBillIntakes(1, intake.id).catch((error) => console.error('Manual bill intake worker start failed:', error))
+    })
     return NextResponse.json({ intake }, { status: 202 })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Bill upload could not be queued.' }, { status: 500 })

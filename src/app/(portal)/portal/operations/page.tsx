@@ -423,6 +423,8 @@ function OperationsPageContent() {
         dismiss(toastId)
         if (intake.status === 'failed') {
           notify({ title: 'Bill needs attention', description: 'AI intake could not finish. The upload is retained so it can be retried from the invoice queue.', variant: 'error' })
+        } else if (intake.status === 'ignored') {
+          notify({ title: 'Bill analysis stopped', description: 'The upload is retained. Open the invoice queue to review or retry it.', variant: 'warning' })
         } else if (intake.status === 'needs_review') {
           notify({ title: 'Bill ready for review', description: 'AI extracted the bill and flagged it for owner review before payment.', variant: 'warning' })
         } else if (intake.status === 'duplicate') {
@@ -1156,6 +1158,7 @@ function OperationsPageContent() {
               {billUploadBusy ? 'Queuing bill…' : 'Upload & start AI intake'}
             </button>
             <div className="my-4 flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--portal-faint)]"><span className="h-px flex-1 bg-[color:var(--portal-border)]" />Or enter it manually<span className="h-px flex-1 bg-[color:var(--portal-border)]" /></div>
+            <p className="text-xs leading-5 text-[color:var(--portal-muted)]">AI will review the details you enter. Upload the bill above if you also want it to extract details from the original document.</p>
           </section>
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-bold text-zinc-500">Service Name</label>

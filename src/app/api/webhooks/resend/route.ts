@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { verifyLuxorResendSignature } from '@/lib/luxorResendSignature'
 import { processLuxorResendEvent, storeLuxorResendEvent, type ResendEvent } from '@/lib/luxorResendWebhookServer'
+import { processLuxorBillIntakesForMessage } from '@/lib/luxorBillIntakeServer'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -24,7 +25,12 @@ export async function POST(request: NextRequest) {
     // portal Realtime receives inbound, open, and click activity immediately.
     // If processing fails, the event stays durable for the worker and Resend retries
     // this non-2xx response as an additional recovery path.
-    if (stored) await processLuxorResendEvent(eventId)
+    const billMessageId = stored ? await processLuxorResendEvent(eventId) : null
+    if (billMessageId) {
+      try {
+        after(async () => { await processLuxorBillIntakesForMessage(billMessageId).catch((error) => console.error('Email bill intake worker start failed:', error)) })
+      } catch (error) { console.error('Email bill intake scheduling failed:', error) }
+    }
     return NextResponse.json({ received: true })
   } catch {
     return NextResponse.json({ error: 'Could not save email event.' }, { status: 500 })

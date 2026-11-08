@@ -34,6 +34,10 @@ export type FinanceBrowseView =
   | 'monthly'
   | 'receivables'
   | 'history'
+  | 'profitability'
+  | 'accountant'
+  | 'budgets'
+  | 'bills'
 
 type BrowseItem = {
   id: FinanceBrowseView
@@ -52,6 +56,14 @@ const links: BrowseItem[] = [
     href: '/portal/finances',
     group: 'Overview',
     icon: <TrendUp size={16} weight="regular" />,
+  },
+  {
+    id: 'profitability',
+    label: 'Event profitability',
+    description: 'Compare accepted event obligations and collections with direct costs',
+    href: '/portal/finances/profitability',
+    group: 'Overview',
+    icon: <CalendarDots size={16} weight="regular" />,
   },
   {
     id: 'schedules',
@@ -110,14 +122,6 @@ const links: BrowseItem[] = [
     icon: <Receipt size={16} weight="regular" />,
   },
   {
-    id: 'expenses',
-    label: 'Expenses Tracking',
-    description: 'Operational and event-linked venue expenses',
-    href: '/portal/finances/expenses',
-    group: 'Ledgers & Reports',
-    icon: <TrendDown size={16} weight="regular" />,
-  },
-  {
     id: 'expense-dashboard',
     label: 'Expense Dashboard',
     description: 'Paid spending, upcoming obligations, and expense trends',
@@ -165,6 +169,22 @@ const links: BrowseItem[] = [
     group: 'Ledgers & Reports',
     icon: <Eye size={16} weight="regular" />,
   },
+  {
+    id: 'accountant',
+    label: 'Accountant exports',
+    description: 'Download expense records and payment history for review',
+    href: '/portal/finances/accountant',
+    group: 'Ledgers & Reports',
+    icon: <FileText size={16} weight="regular" />,
+  },
+  {
+    id: 'budgets',
+    label: 'Budgets and reports',
+    description: 'Compare monthly spending targets with recorded payments',
+    href: '/portal/finances/budgets',
+    group: 'Ledgers & Reports',
+    icon: <Wallet size={16} weight="regular" />,
+  },
 ]
 
 const groups = ['Overview', 'Revenue & Collections', 'Ledgers & Reports', 'Expense Management']
@@ -185,6 +205,10 @@ export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
   'event-expenses': 'Event Expenses',
   'expense-receipts': 'Receipts & Records',
   reports: 'Financial Reports',
+  profitability: 'Event profitability',
+  accountant: 'Accountant exports',
+  budgets: 'Budgets and reports',
+  bills: 'Bills and vendors',
 }
 
 export function FinanceBrowseViews({
@@ -332,7 +356,7 @@ export function FinanceBrowseViews({
                   </h3>
                   <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
                     <Link
-                      href="/portal/operations?tab=bills"
+                      href="/portal/finances/bills"
                       onClick={close}
                       className="flex w-full items-center gap-3 px-3.5 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45"
                     >
@@ -340,9 +364,9 @@ export function FinanceBrowseViews({
                         <FileText size={16} weight="regular" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-bold">Operations Bills</span>
+                        <span className="block text-sm font-bold">Bills and vendors</span>
                         <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">
-                          Recurring utility bills, vendor invoices, and due dates in Operations
+                          Review bills, linked expenses, and vendors
                         </span>
                       </span>
                       <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />

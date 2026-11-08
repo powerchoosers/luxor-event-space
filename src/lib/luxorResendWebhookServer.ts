@@ -109,7 +109,7 @@ async function downloadProviderAttachment(urlValue: string, raw = false) {
 
 async function receiveEmail(providerId: string) {
   const email = await luxorResendApi<ReceivedEmail>(`/emails/receiving/${encodeURIComponent(providerId)}?html_format=cid`)
-  if (!email.to.some(isLuxorMailboxRecipient)) return
+  if (!email.to.some(isLuxorMailboxRecipient)) return null
   const headers = Object.fromEntries(Object.entries(email.headers || {}).map(([key, value]) => [key.toLowerCase(), value]))
   const references = `${headers.references || ''} ${headers['in-reply-to'] || ''}`.match(/<[^<>\s]+>/g) || []
   let threadKey = ''
@@ -166,7 +166,7 @@ async function receiveEmail(providerId: string) {
       filename: attachment.filename || 'attachment', contentType: attachment.content_type || 'application/octet-stream',
       contentId: attachment.content_id, bytes }))
   }
-  await enqueueLuxorInvoiceAttachments(row, archived)
+  const billMessageId = await enqueueLuxorInvoiceAttachments(row, archived)
   // Keep the original MIME for calendar parts that clients place inline, and
   // verify DKIM ourselves instead of trusting caller-supplied auth headers.
   if (email.raw?.download_url) {
@@ -176,6 +176,7 @@ async function receiveEmail(providerId: string) {
     if (!savedRaw) await saveLuxorMailAttachment({ messageId: row.id, sourceKey: 'raw-message', filename: 'original-message.eml', contentType: 'message/rfc822', bytes: raw })
     await recordLuxorCalendarReplies(row.id, raw, row.from_address)
   }
+  return billMessageId
 }
 
 async function recordExternalSentEmail(providerId: string, event: ResendEvent) {
@@ -347,18 +348,20 @@ export async function processLuxorResendEvent(eventId: string) {
   const filter = `event_id=eq.${encodeURIComponent(eventId)}`
   const rows = await supabaseRest<EventRow[]>(`luxor_resend_events?select=*&${filter}&limit=1`)
   const row = rows[0]
-  if (!row || row.processed_at) return
+  if (!row || row.processed_at) return null
   const now = new Date().toISOString()
   const claimed = await supabaseRest<EventRow[]>(`luxor_resend_events?${filter}&processed_at=is.null&or=(lease_until.is.null,lease_until.lt.${encodeURIComponent(now)})&select=*`, {
     method: 'PATCH', headers: { Prefer: 'return=representation' },
     body: JSON.stringify({ lease_until: new Date(Date.now() + 120_000).toISOString(), attempts: row.attempts + 1 }),
   })
-  if (!claimed?.length) return
+  if (!claimed?.length) return null
   try {
-    if (row.payload.type === 'email.received' && row.payload.data.email_id) await receiveEmail(row.payload.data.email_id)
+    let billMessageId: string | null = null
+    if (row.payload.type === 'email.received' && row.payload.data.email_id) billMessageId = await receiveEmail(row.payload.data.email_id)
     else if (row.payload.type.startsWith('email.')) await processDelivery(row.payload, eventId)
     await supabaseRest(`luxor_resend_events?${filter}`, { method: 'PATCH',
       body: JSON.stringify({ processed_at: new Date().toISOString(), lease_until: null, last_error: null }) })
+    return billMessageId
   } catch (error) {
     await supabaseRest(`luxor_resend_events?${filter}`, { method: 'PATCH', body: JSON.stringify({
       lease_until: null, next_attempt_at: new Date(Date.now() + Math.min(3600_000, 30_000 * 2 ** Math.min(row.attempts, 7))).toISOString(),

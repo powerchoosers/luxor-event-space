@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { getOperationsSession } from '@/lib/luxorOperationsAccess'
 import { isLuxorBillCategory } from '@/lib/luxorBillCategories'
+import { analyzeManualBill } from '@/lib/luxorManualBillAnalysisServer'
 import { LuxorBill, LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 export type { LuxorBill, LuxorBillIntake }
+export const maxDuration = 60
 
 export type LuxorInventoryItem = {
   id: string
@@ -127,6 +129,7 @@ export async function POST(request: NextRequest) {
           due_date: data.due_date || null,
           source_type: 'manual',
           extraction_status: 'needs_review',
+          extracted_fields: { manual_analysis: { status: 'queued', queued_at: new Date().toISOString() } },
           arithmetic_status: 'not_checked',
           currency: 'USD',
         }),
@@ -188,6 +191,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid operation type.' }, { status: 400 })
     }
 
+    if (type === 'bill' && created) {
+      const id = created.id
+      try { after(async () => { await analyzeManualBill(id).catch((error) => console.error('Manual bill analysis failed:', error)) }) }
+      catch (error) { console.error('Manual bill analysis scheduling failed:', error) }
+    }
     return NextResponse.json(created, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create operation entry.'

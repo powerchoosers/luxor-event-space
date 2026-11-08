@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { getOperationsSession } from '@/lib/luxorOperationsAccess'
 import { broadcastLuxorPortalNotification } from '@/lib/luxorZohoWebhookServer'
 import { supabaseRest } from '@/lib/supabaseRestServer'
 import type { LuxorBillIntake } from '@/lib/luxorInquiryTypes'
+import { processPendingLuxorBillIntakes } from '@/lib/luxorBillIntakeServer'
+
+export const maxDuration = 60
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -14,13 +17,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (body.action !== 'retry' && body.action !== 'ignore') return NextResponse.json({ error: 'Choose retry or ignore.' }, { status: 400 })
     const now = new Date().toISOString()
     const updates = body.action === 'retry'
-      ? { status: 'received', lease_until: null, next_attempt_at: now, last_error_code: null, last_error_message: null, updated_at: now }
+      ? { status: 'received', attempts: 0, lease_until: null, next_attempt_at: now, last_error_code: null, last_error_message: null, updated_at: now }
       : { status: 'ignored', lease_until: null, updated_at: now }
-    const [intake] = await supabaseRest<LuxorBillIntake[]>(`luxor_bill_intakes?id=eq.${id}&select=*`, {
+    const allowed = body.action === 'retry' ? 'failed,ignored' : 'received,failed'
+    const [intake] = await supabaseRest<LuxorBillIntake[]>(`luxor_bill_intakes?id=eq.${id}&status=in.(${allowed})&lease_until=is.null&select=*`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(updates),
     })
-    if (!intake) return NextResponse.json({ error: 'Bill intake not found.' }, { status: 404 })
+    if (!intake) return NextResponse.json({ error: 'This intake changed or is already processing. Refresh and try again.' }, { status: 409 })
     await broadcastLuxorPortalNotification('bill-intake-updated', { intakeId: id, status: intake.status }).catch(() => {})
+    if (body.action === 'retry') after(async () => {
+      await processPendingLuxorBillIntakes(1, id).catch((error) => console.error('Bill intake retry start failed:', error))
+    })
     return NextResponse.json(intake)
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Bill intake action failed.' }, { status: 400 })
