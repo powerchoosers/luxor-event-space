@@ -8,8 +8,7 @@ import { accountantExportPeriod, buildLuxorExpenseExport, buildLuxorExpensePayme
 import type { LuxorBooking } from '@/lib/luxorInquiryTypes'
 
 export const dynamic = 'force-dynamic'
-// Hold this export until nullable-amount consumers are verified together.
-const EXPENSE_EXPORT_CONTRACT_VERIFIED = false
+import { LUXOR_EXPENSE_EXPORT_CONTRACT_VERIFIED as EXPENSE_EXPORT_CONTRACT_VERIFIED } from '@/lib/luxorAccountantExportGate'
 
 async function loadBookings() {
   const path = 'luxor_bookings?select=*&order=id.asc'

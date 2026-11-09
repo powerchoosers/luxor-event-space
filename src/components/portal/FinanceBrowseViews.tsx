@@ -36,6 +36,7 @@ export type FinanceBrowseView =
   | 'history'
   | 'profitability'
   | 'accountant'
+  | 'books'
   | 'budgets'
   | 'bills'
 
@@ -170,16 +171,24 @@ const links: BrowseItem[] = [
     icon: <Eye size={16} weight="regular" />,
   },
   {
+    id: 'books',
+    label: 'Books & records',
+    description: 'Review reconciliation items and download accountant records',
+    href: '/portal/finances/books',
+    group: 'Ledgers & Reports',
+    icon: <Receipt size={16} weight="regular" />,
+  },
+  {
     id: 'accountant',
     label: 'Accountant exports',
-    description: 'Download expense records and payment history for review',
-    href: '/portal/finances/accountant',
+    description: 'Opens Books & records export section',
+    href: '/portal/finances/books#exports',
     group: 'Ledgers & Reports',
     icon: <FileText size={16} weight="regular" />,
   },
   {
     id: 'budgets',
-    label: 'Budgets and reports',
+    label: 'Monthly plan',
     description: 'Compare monthly spending targets with recorded payments',
     href: '/portal/finances/budgets',
     group: 'Ledgers & Reports',
@@ -213,7 +222,8 @@ export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
   reports: 'Financial Reports',
   profitability: 'Event profitability',
   accountant: 'Accountant exports',
-  budgets: 'Budgets and reports',
+  books: 'Books & records',
+  budgets: 'Monthly plan',
   bills: 'Bills and vendors',
 }
 

@@ -19,7 +19,6 @@ import {
   PortalSkeleton
 } from '@/components/portal/PortalUI'
 import FinancialOverview from '@/components/portal/FinancialOverview'
-import { AccountingReviewSection } from '@/components/portal/AccountingReviewSection'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView, LuxorBill } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
@@ -53,7 +52,6 @@ export default function FinancesPage() {
   const reduceMotion = useReducedMotion()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
-  const [showAccountingReview, setShowAccountingReview] = useState(false)
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
@@ -770,7 +768,7 @@ type LuxorBookingExpense = {
                   { href: '/portal/finances/monthly', label: 'Monthly collections', description: 'Recorded and scheduled client payments by month.' },
                   { href: '/portal/finances/budgets', label: 'Monthly plan', description: 'Set collection and spending targets; compare to recorded payments.' },
                   { href: '/portal/finances/history', label: 'Payment history', description: 'Review incoming payments and refunds.' },
-                  { href: '/portal/finances/accountant', label: 'Accountant export', description: 'Download expense and payment history for review.' },
+                  { href: '/portal/finances/books', label: 'Books & records', description: 'Review issues, export records, and preview statement matching.' },
                 ].map((item) => <Link key={item.href} href={item.href} className="block rounded px-1 py-4 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
                   <span className="block text-sm font-semibold text-[color:var(--portal-text)]">{item.label}</span>
                   <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{item.description}</span>
@@ -778,18 +776,9 @@ type LuxorBookingExpense = {
               </div>
             </section>
             <section className="max-w-3xl rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold text-[color:var(--portal-text)]">Accounting review</h2>
-                  <p className="mt-1 text-sm leading-relaxed text-[color:var(--portal-muted)]">Open to check accounting setup and statement history. Saving changes and importing statements are unavailable.</p>
-                </div>
-                <PortalButton type="button" aria-expanded={showAccountingReview} aria-controls="accounting-review-content" onClick={() => setShowAccountingReview((open) => !open)}>
-                  {showAccountingReview ? 'Close review' : 'Open review'}
-                </PortalButton>
-              </div>
-              <div id="accounting-review-content" hidden={!showAccountingReview} className="mt-5">
-                {showAccountingReview && <AccountingReviewSection canEdit={false} />}
-              </div>
+              <h2 className="text-base font-semibold text-[color:var(--portal-text)]">Books & records</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[color:var(--portal-muted)]">Review reconciliation items, download accountant CSVs, and preview bank statement matching in one place.</p>
+              <Link href="/portal/finances/books" className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-[color:var(--portal-border)] px-4 text-sm font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]">Open Books & records</Link>
             </section>
           </div>
         )}
