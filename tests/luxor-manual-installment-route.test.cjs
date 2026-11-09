@@ -30,6 +30,7 @@ function loadRoute() {
   const mocks = {
     'next/server': { NextResponse: mockResponse() },
     '@/lib/luxorPortalAuth': { getLuxorPortalSession: async () => ({ email: 'owner@example.invalid' }) },
+    '@/lib/luxorPortalAccess': { getLuxorPortalMember: async () => ({ status: 'active' }), memberCan: () => true },
     '@/lib/luxorBookingsServer': { getLuxorBooking: async () => booking },
     '@/lib/luxorInvoicesServer': {
       getInvoice: async () => ({ id: 'master', invoice_kind: 'event' }),
@@ -55,7 +56,7 @@ function loadRoute() {
       }
       return result
     } },
-    '@/lib/supabaseRestServer': { supabaseRest: async (path, init) => { calls.push({ path, init }); return path.includes('luxor_lookup_manual_installment_payment_replay') ? replayResult : rpcResult } },
+    '@/lib/supabaseRestServer': { SupabaseRestError: class SupabaseRestError extends Error {}, supabaseRestStrict: async (path, init) => { calls.push({ path, init }); return path.includes('luxor_lookup_manual_installment_payment_replay') ? replayResult : rpcResult } },
   }
   const loaded = new Module(routePath, module)
   loaded.filename = routePath
@@ -127,7 +128,8 @@ test('keeps the workflow disabled until the reviewed allocation migration is ena
   process.env.LUXOR_PAYMENT_INSTALLMENT_ALLOCATIONS_READY = 'false'
   const response = await route.POST(request(baseBody))
   assert.equal(response.status, 503)
-  assert.equal(calls.length, 0)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].path, /luxor_lookup_manual_installment_payment_replay/)
 })
 
 test('replays a completed full payment before mutable booking checks', async () => {
@@ -139,4 +141,13 @@ test('replays a completed full payment before mutable booking checks', async () 
   assert.equal(response.body.payment.id, 'payment-already-recorded')
   assert.equal(calls.length, 1)
   assert.match(calls[0].path, /luxor_lookup_manual_installment_payment_replay/)
+})
+
+
+test('a retry cannot report a corrected receipt as paid', async () => {
+  replayResult = { payment: { id: 'corrected-payment', status: 'void' }, allocations: [], replayed: true }
+  const response = await route.POST(request(baseBody))
+  assert.equal(response.status, 409)
+  assert.equal(response.body.paymentOutcome, 'not_recorded')
+  assert.match(response.body.error, /corrected/)
 })

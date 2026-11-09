@@ -1,7 +1,5 @@
-import { RevenueCollectionsView } from '@/components/portal/RevenueCollectionsView'
-import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { redirect } from 'next/navigation'
 
-export default async function PaymentHistoryPage() {
-  const session = await getLuxorPortalSession()
-  return <RevenueCollectionsView view="history" actorEmail={session?.email || null} />
+export default function PaymentHistoryPage() {
+  redirect('/portal/finances?view=payments')
 }

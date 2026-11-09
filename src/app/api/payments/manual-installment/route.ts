@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
     )
     replayLookupCompleted = true
     if (replay?.replayed && replay.payment?.id) {
+      if (replay.payment.status === 'void') return notRecorded('This payment was corrected and is no longer recorded. Start a new entry if funds were received.', 409, false)
       return NextResponse.json({ payment: replay.payment, allocations: replay.allocations, replayed: true })
     }
 

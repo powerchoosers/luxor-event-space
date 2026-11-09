@@ -1,7 +1,5 @@
-import { RevenueCollectionsView } from '@/components/portal/RevenueCollectionsView'
-import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { redirect } from 'next/navigation'
 
-export default async function RevenueDashboardPage() {
-  const session = await getLuxorPortalSession()
-  return <RevenueCollectionsView view="revenue" actorEmail={session?.email || null} />
+export default function RevenueDashboardPage() {
+  redirect('/portal/finances?view=revenue')
 }

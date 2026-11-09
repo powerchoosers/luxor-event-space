@@ -704,26 +704,20 @@ export default function LeadsPage() {
                     <td className="px-4 py-3">
                       <Link
                         href={`/portal/leads/${lead.id}`}
-                        className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60"
+                        className="group/contact flex items-center gap-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
                       >
-                        <div className="relative">
+                        <div className="relative shrink-0 transition-transform duration-200 hover:scale-105 group-focus-visible/contact:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:group-focus-visible/contact:scale-100">
                           <PortalContactAvatar
                             name={lead.full_name}
                             avatarUrl={lead.metadata?.avatar_url as string | null}
                             size="md"
-                            className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent"
                           />
                         </div>
                         <div>
-                          <p className="mb-0.5 text-sm font-semibold leading-tight text-[color:var(--portal-text)] group-hover:translate-x-0.5 transition-transform">
+                          <p className="mb-0.5 text-sm font-semibold leading-tight text-[color:var(--portal-text)] group-hover/contact:text-[#a8792f] group-focus-visible/contact:text-[#a8792f] dark:group-hover/contact:text-[#e6c77f] dark:group-focus-visible/contact:text-[#e6c77f]">
                             <span className="inline-flex items-center gap-1.5">{lead.full_name}{isMarketingLead(lead) ? <Star className="h-3.5 w-3.5 fill-[#caa24c] text-[#caa24c]" aria-label="Marketing lead" /> : null}</span>
                           </p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            {lead.email ? (
-                              <p className="text-[10px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">
-                                {lead.email}
-                              </p>
-                            ) : null}
                             {lead.metadata?.emailBounce ? (
                               <span
                                 className="inline-flex items-center rounded border border-rose-500/25 bg-rose-500/8 px-1.5 py-0.5 text-[9px] font-semibold text-rose-600 dark:text-rose-300"
@@ -733,11 +727,6 @@ export default function LeadsPage() {
                               >
                                 {bouncedAddressMatchesCurrentEmail(lead) ? 'Email bounced · review address' : 'Earlier email address bounced'}
                               </span>
-                            ) : null}
-                            {lead.phone ? (
-                              <p className="text-[10px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">
-                                {lead.email ? '• ' : ''}{formatPhoneDisplay(lead.phone)}
-                              </p>
                             ) : null}
                             {!lead.email && !lead.phone ? (
                               <p className="text-[10px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">
@@ -1445,10 +1434,10 @@ function LeadsDashboard({
             ) : recentLeads.map((lead) => (
               <tr key={lead.id} className="group transition-colors hover:bg-[#caa24c]/7">
                 <td className="px-8 py-3.5">
-                  <Link href={`/portal/leads/${lead.id}`} className="flex items-center gap-4 rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-blue-500/60">
-                    <PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="md" className="group-hover:border-[#caa24c]/50 group-hover:bg-[#caa24c]/20 group-hover:from-transparent group-hover:to-transparent" />
+                  <Link href={`/portal/leads/${lead.id}`} className="group/contact flex items-center gap-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+                    <span className="shrink-0 transition-transform duration-200 hover:scale-105 group-focus-visible/contact:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:group-focus-visible/contact:scale-100"><PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="md" /></span>
                     <div>
-                      <p className="mb-0.5 text-sm font-semibold leading-tight text-[color:var(--portal-text)] transition-transform group-hover:translate-x-0.5">{lead.full_name}</p>
+                      <p className="mb-0.5 text-sm font-semibold leading-tight text-[color:var(--portal-text)] group-hover/contact:text-[#a8792f] group-focus-visible/contact:text-[#a8792f] dark:group-hover/contact:text-[#e6c77f] dark:group-focus-visible/contact:text-[#e6c77f]">{lead.full_name}</p>
                       <p className="text-[11px] font-medium text-[color:var(--portal-muted)] group-hover:text-[color:var(--portal-text)]">{lead.email || 'No email registered'}</p>
                     </div>
                   </Link>
@@ -1710,14 +1699,13 @@ function PinnedTestLeadTableRow({ lead }: { lead: LuxorInquiry }) {
         <span className="text-[9px] font-black uppercase tracking-[0.16em] text-[#a8792f] dark:text-[#f1d27a]">TEST</span>
       </td>
       <td className="px-4 py-3">
-        <Link href={`/portal/leads/${lead.id}`} className="flex items-center gap-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
-          <PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="md" />
+        <Link href={`/portal/leads/${lead.id}`} className="group/contact flex items-center gap-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+          <span className="shrink-0 transition-transform duration-200 hover:scale-105 group-focus-visible/contact:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:group-focus-visible/contact:scale-100"><PortalContactAvatar name={lead.full_name} avatarUrl={lead.metadata?.avatar_url as string | null} size="md" /></span>
           <span className="min-w-0">
             <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[color:var(--portal-text)]">
-              {lead.full_name}
+              <span className="group-hover/contact:text-[#a8792f] group-focus-visible/contact:text-[#a8792f] dark:group-hover/contact:text-[#e6c77f] dark:group-focus-visible/contact:text-[#e6c77f]">{lead.full_name}</span>
               <span className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#8c6529] dark:text-[#f1d27a]">Test</span>
             </span>
-            <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">{lead.email || 'Permanent isolated lead'}</span>
           </span>
         </Link>
       </td>
@@ -1774,11 +1762,11 @@ function MobileLeadList({
   return (
     <div className="divide-y divide-[color:var(--portal-border)] md:hidden">
       {testLead ? (
-        <Link href={`/portal/leads/${testLead.id}`} className="flex min-w-0 items-center gap-3 border-b border-[#caa24c]/25 bg-[#caa24c]/[0.045] px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/50">
+        <Link href={`/portal/leads/${testLead.id}`} className="group/contact flex min-w-0 items-center gap-3 border-b border-[#caa24c]/25 bg-[#caa24c]/[0.045] px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/50">
           <span className="w-10 shrink-0 text-[9px] font-black uppercase tracking-[0.12em] text-[#a8792f] dark:text-[#f1d27a]">TEST</span>
-          <PortalContactAvatar name={testLead.full_name} avatarUrl={testLead.metadata?.avatar_url as string | null} size="sm" />
+          <span className="shrink-0 transition-transform duration-200 hover:scale-105 group-focus-visible/contact:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:group-focus-visible/contact:scale-100"><PortalContactAvatar name={testLead.full_name} avatarUrl={testLead.metadata?.avatar_url as string | null} size="sm" /></span>
           <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[color:var(--portal-text)]">{testLead.full_name}<span className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#8c6529] dark:text-[#f1d27a]">Test</span></span>
+            <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[color:var(--portal-text)]"><span className="group-hover/contact:text-[#a8792f] group-focus-visible/contact:text-[#a8792f] dark:group-hover/contact:text-[#e6c77f] dark:group-focus-visible/contact:text-[#e6c77f]">{testLead.full_name}</span><span className="rounded-full border border-[#caa24c]/30 bg-[#caa24c]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#8c6529] dark:text-[#f1d27a]">Test</span></span>
             <span className="mt-0.5 block truncate text-[10px] text-[color:var(--portal-muted)]">{testLead.email || 'Permanent isolated lead'} · {PIPELINE_STAGE_OPTIONS.find((option) => option.value === getPipelineStage(testLead))?.label || getPipelineStage(testLead)}</span>
           </span>
           <ExternalLink size={14} className="shrink-0 text-[color:var(--portal-muted)]" />

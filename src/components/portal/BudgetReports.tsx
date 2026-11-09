@@ -133,7 +133,7 @@ export function BudgetReports({ report, yearRows, forecastRows, revenueTargetsAv
 
   const kpis = [
     { label: 'Collection target', value: !revenueTargetsAvailable ? null : selectedYearRow?.revenueTarget ?? null, href: '#collection-target' },
-    { label: 'Collected', value: report.incomeActual, href: '/portal/finances/history' },
+    { label: 'Collected', value: report.incomeActual, href: '/portal/finances?view=payments' },
     { label: 'Expense targets', value: summary.expenseTargetTotal, href: '#expense-targets' },
     { label: 'Paid expenses', value: report.expenseActual, href: '/portal/finances/expenses' },
   ]

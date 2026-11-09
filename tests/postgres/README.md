@@ -48,3 +48,18 @@ tests/postgres/run-custom-workflows-postgres.sh
 ```
 
 The script starts a disposable PostgreSQL 16 container without publishing a host port. It runs the synthetic custom-workflow migration harness twice, each inside a transaction that rolls back: once with clean ACL defaults and once with Supabase-style table and function defaults. The checks include migration reapply, private-table and service-role ACLs, untrusted RPC denial, fail-closed controls, event/step uniqueness, immutable version pinning, legacy queue preservation, consent and Chicago SMS-window checks, acknowledgment reuse, and pause/resume/archive behavior. Fixtures use synthetic `.invalid` recipients; no hosted database or provider is contacted.
+
+## Manual installment correction
+
+Use a fresh disposable PostgreSQL database, never a production database. Run the
+fixture, migration, and synthetic transaction in order with `psql -v ON_ERROR_STOP=1`:
+
+```sh
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/postgres/manual-payment-correction.fixture.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261109035941_luxor_manual_installment_correction.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/postgres/manual-payment-correction.integration.sql
+```
+
+The fixture is a minimal model, not a full copy of the deployed schema or its
+triggers. Its synthetic test transaction rolls back after checking correction,
+receipt-email fencing, permissions, and rejection cases.

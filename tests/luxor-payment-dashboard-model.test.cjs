@@ -46,8 +46,9 @@ test('invoice collection state is shared, keeps stored lifecycle separate, and u
     installment_order: 1, amount: 1000, status: 'scheduled', due_at: '2026-10-13T12:00:00Z', metadata: {},
   }
   const now = new Date('2026-11-02T18:00:00Z')
-  const invoiceScreen = getInvoiceCollectionDisplayState(acceptedMaster, invoices, [payment], [installment], now)
-  const leadPaymentsScreen = getInvoiceCollectionDisplayState(acceptedMaster, invoices, [payment], [installment], now)
+  const booking = { status: 'confirmed', contract_status: 'signed', contract_signed_at: '2026-10-01T12:00:00Z' }
+  const invoiceScreen = getInvoiceCollectionDisplayState(acceptedMaster, invoices, [payment], [installment], now, undefined, booking)
+  const leadPaymentsScreen = getInvoiceCollectionDisplayState(acceptedMaster, invoices, [payment], [installment], now, undefined, booking)
 
   assert.equal(acceptedMaster.status, 'sent')
   assert.equal(invoiceScreen.collectionStatus, 'Overdue')

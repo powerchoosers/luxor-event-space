@@ -1,6 +1,9 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { useInView, useMotionValue, useSpring } from 'motion/react'
 import Link from 'next/link'
 import {
   ArrowUpRight,
@@ -11,7 +14,9 @@ import {
   TrendUp,
   Wallet,
 } from '@phosphor-icons/react'
-import { PortalSelect, PortalSkeleton, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { LogInstallmentPaymentDialog } from '@/components/portal/LogInstallmentPaymentDialog'
+import { RescheduleInstallmentDialog } from '@/components/portal/RevenueCollectionsView'
+import { PortalButton, PortalCloseButton, PortalContactAvatar, PortalModal, PortalSelect, PortalSkeleton, PortalStatusBadge } from '@/components/portal/PortalUI'
 import {
   getLuxorCategoryShares,
   getLuxorOverviewChart,
@@ -20,8 +25,8 @@ import {
   type getLuxorFinanceOverview,
   type getLuxorPaidExpenseBreakdown,
 } from '@/lib/luxorFinanceReporting'
-import type { LuxorBill } from '@/lib/luxorInquiryTypes'
-import { chicagoCalendarDate, installmentDisplayState, invoiceEventObligation } from '@/lib/luxorPaymentDashboardModel'
+import type { LuxorBill, LuxorPayment, LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
+import { chicagoCalendarDate, installmentDisplayState, invoiceEventObligation, isBookingPaymentMilestone, isFinalPaymentMilestone } from '@/lib/luxorPaymentDashboardModel'
 
 type Overview = ReturnType<typeof getLuxorFinanceOverview>
 type Expenses = ReturnType<typeof getLuxorPaidExpenseBreakdown>
@@ -71,9 +76,308 @@ function allocationReason(reason: string | null) {
   return messages[reason] || 'The saved payment allocation details need owner verification.'
 }
 
+function AnimatedAmount({ value }: { value: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const reduceMotion = useReducedMotion()
+  const motionValue = useMotionValue(0)
+  const springValue = useSpring(motionValue, { damping: 40, stiffness: 400 })
+  const inView = useInView(ref, { once: true, margin: '0px' })
+
+  useEffect(() => {
+    if (reduceMotion) {
+      if (ref.current) ref.current.textContent = currency(value)
+      return
+    }
+    if (inView) motionValue.set(value)
+  }, [inView, value, motionValue, reduceMotion])
+
+  useEffect(
+    () =>
+      springValue.on('change', (latest) => {
+        if (ref.current && !reduceMotion) ref.current.textContent = currency(latest)
+      }),
+    [springValue, reduceMotion]
+  )
+
+  return <span ref={ref} className="tabular-nums">{reduceMotion ? currency(value) : currency(0)}</span>
+}
+
 function Amount({ value, fallback = null }: { value: number | null | undefined; fallback?: number | null }) {
   const resolved = value !== null && value !== undefined && Number.isFinite(value) ? value : fallback
-  return <span className="tabular-nums">{resolved === null || resolved === undefined ? 'Unavailable' : currency(resolved)}</span>
+  if (resolved === null || resolved === undefined || !Number.isFinite(resolved)) {
+    return <span className="tabular-nums">Unavailable</span>
+  }
+  return <AnimatedAmount value={resolved} />
+}
+
+function InViewBar({ percent, trackClassName, barClassName }: { percent: number; trackClassName: string; barClassName: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const inView = useInView(ref, { once: true, margin: '0px' })
+  const width = `${Math.max(0, Math.min(100, percent))}%`
+  return (
+    <div ref={ref} aria-hidden="true" className={trackClassName}>
+      <div
+        className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${barClassName}`}
+        style={{ width: inView ? width : '0%' }}
+      />
+    </div>
+  )
+}
+
+function InViewGrowBar({ percent, className }: { percent: number; className: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const inView = useInView(ref, { once: true, margin: '0px' })
+  return (
+    <div
+      ref={ref}
+      className={`transition-[height] duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${className}`}
+      style={{ height: inView ? `${Math.max(0, Math.min(100, percent))}%` : '0%' }}
+    />
+  )
+}
+
+type PaymentScheduleItem = {
+  installment: LuxorPaymentInstallment
+  bookingId: string
+  invoiceId: string
+  amountDue: number
+  credited: number
+  remaining: number
+  dueDate: string | null
+  status: string
+  isPaid: boolean
+  isPartial: boolean
+  isOverdue: boolean
+  overdueDays: number
+  scheduleReconciled: boolean
+  reviewReason?: string | null
+}
+
+type PaymentSchedulePlan = {
+  bookingId: string
+  inquiryId: string | null
+  clientName: string
+  eventType: string
+  eventDate: string | null
+  totalContract: number
+  paidAmount: number
+  remainingBalance: number
+  percent: number
+  paidCount: number
+  totalInstallments: number
+  nextDueDate: string | null
+  nextAmount: number | null
+  nextLabel: string | null
+  status: string
+  reviewReason: string | null
+  schedule: PaymentScheduleItem[]
+}
+
+function PaymentScheduleDrawer({
+  plan,
+  open,
+  onClose,
+  onLogPayment,
+  payableIds,
+  correctableIds,
+  onCorrect,
+  editableIds,
+  onEditDueDate,
+  dateEdit,
+  today,
+  onDateEditClose,
+  onDateSaved,
+  dateSaving,
+  onDateSavingChange,
+  suspendDismiss,
+}: {
+  plan: PaymentSchedulePlan | null
+  open: boolean
+  onClose: () => void
+  onLogPayment: (id: string) => void
+  payableIds: Set<string>
+  correctableIds: Set<string>
+  onCorrect: (id: string) => void
+  editableIds: Set<string>
+  onEditDueDate: (id: string) => void
+  dateEdit: { row: { installmentId: string; clientName: string; label: string; dueDate: string | null; remaining: number }; expectedUpdatedAt: string } | null
+  today: string
+  onDateEditClose: () => void
+  onDateSaved: () => void
+  dateSaving: boolean
+  onDateSavingChange: (saving: boolean) => void
+  suspendDismiss: boolean
+}) {
+  const reduceMotion = useReducedMotion()
+  const [mounted, setMounted] = useState(false)
+  const [holdVisible, setHoldVisible] = useState(false)
+  const drawerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const frame = requestAnimationFrame(() => drawerRef.current?.focus())
+    return () => { cancelAnimationFrame(frame); previous?.focus() }
+  }, [open])
+
+  React.useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+
+  React.useEffect(() => {
+    if (open && !reduceMotion) {
+      const timer = setTimeout(() => setHoldVisible(true), 0)
+      return () => clearTimeout(timer)
+    }
+    if (!open) setHoldVisible(false)
+  }, [open, reduceMotion])
+
+  React.useEffect(() => {
+    if (!open) return
+
+    const originalOverflow = document.body.style.overflow
+    const originalPaddingRight = document.body.style.paddingRight
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !suspendDismiss) {
+        if (document.querySelector('[data-portal-popover="true"]')) return
+        event.preventDefault()
+        if (dateEdit) onDateEditClose()
+        else onClose()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = originalOverflow
+      document.body.style.paddingRight = originalPaddingRight
+    }
+  }, [open, onClose, suspendDismiss, dateEdit, onDateEditClose])
+
+  if (!mounted) return null
+
+  return createPortal(
+    <AnimatePresence initial={false} mode="wait">
+      {(open || holdVisible) && (
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: open ? 1 : 0 }}
+          exit={reduceMotion ? {} : { opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.26, ease: [0.23, 1, 0.32, 1] }}
+          onAnimationComplete={() => {
+            if (!open) setHoldVisible(false)
+          }}
+          aria-hidden={!open}
+          inert={!open}
+          className="fixed inset-0 z-[200]"
+        >
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
+            onClick={onClose}
+          />
+          <motion.div
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payment-schedule-title"
+            tabIndex={-1}
+            initial={reduceMotion ? false : { x: '100%' }}
+            animate={{ x: open ? 0 : '100%' }}
+            exit={reduceMotion ? {} : { x: '100%' }}
+            transition={{ duration: reduceMotion ? 0 : 0.32, ease: [0.23, 1, 0.32, 1] }}
+            className="absolute right-0 top-0 h-full w-full max-w-[600px] overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)]"
+          >
+            {plan && (
+              <div className="flex h-full flex-col">
+                {/* Header */}
+                <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    {plan.inquiryId ? (
+                      <Link href={`/portal/leads/${encodeURIComponent(plan.inquiryId)}`} aria-label={`Open ${plan.clientName} contact`} className="shrink-0 rounded-full transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 motion-reduce:transition-none motion-reduce:hover:scale-100">
+                        <PortalContactAvatar name={plan.clientName} size="lg" />
+                      </Link>
+                    ) : <PortalContactAvatar name={plan.clientName} size="lg" className="shrink-0" />}
+                    <div className="min-w-0">
+                    <h3 id="payment-schedule-title" className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">
+                      {plan.inquiryId ? <Link href={`/portal/leads/${encodeURIComponent(plan.inquiryId)}`} className="rounded-sm transition-colors hover:text-[#a87827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:hover:text-[#e6c77f]">{plan.clientName}</Link> : plan.clientName}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-[color:var(--portal-muted)]">
+                      {plan.eventType}
+                      {plan.eventDate ? ` · Event ${formatShortDate(plan.eventDate)}` : ''}
+                    </p>
+                    <p className="mt-1 text-xs text-[color:var(--portal-muted)]">
+                      Contract total: <strong className="font-semibold tabular-nums text-[color:var(--portal-text)]">{currency(plan.totalContract)}</strong>
+                      <span className="mx-2">·</span>
+                      Paid: <strong className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{currency(plan.paidAmount)}</strong>
+                      <span className="mx-2">·</span>
+                      Remaining: <strong className="font-semibold tabular-nums text-[color:var(--portal-text)]">{currency(plan.remainingBalance)}</strong>
+                    </p>
+                  </div>
+                  </div>
+                  <PortalCloseButton onClick={onClose} aria-label="Close payment schedule" className="shrink-0" />
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 portal-scrollbar sm:px-6">
+                  <h4 className="text-sm font-bold text-[color:var(--portal-text)]">Payment schedule</h4>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">Scheduled payments and recorded credits for this booking.</p>
+                  {plan.schedule.length === 0 ? (
+                    <p className="mt-6 text-sm text-[color:var(--portal-muted)]">No payment schedule available for this booking.</p>
+                  ) : (
+                    <div className="mt-4 divide-y divide-[color:var(--portal-border)] border-y border-[color:var(--portal-border)]">
+                      {plan.schedule.map((item) => (
+                        <article key={item.installment.id} className="py-4 sm:py-5">
+                          <div className="flex items-start justify-between gap-3">
+                            {editableIds.has(item.installment.id) ? (
+                              <button type="button" id={`date-trigger-${item.installment.id}`} onClick={() => onEditDueDate(item.installment.id)} disabled={dateSaving} aria-expanded={dateEdit?.row.installmentId === item.installment.id} aria-controls={`date-editor-${item.installment.id}`} aria-label={`Change due date for ${item.installment.label}`} className="group min-h-11 min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+                                <span className="block text-sm font-semibold text-[color:var(--portal-text)]">{item.installment.label}</span>
+                                <span className="mt-1 block text-xs text-[color:var(--portal-muted)] transition-colors group-hover:text-[#b66c22] group-focus-visible:text-[#b66c22] dark:group-hover:text-[#e6ae63] dark:group-focus-visible:text-[#e6ae63]">Due {item.dueDate ? formatShortDate(item.dueDate) : 'TBD'}</span>
+                              </button>
+                            ) : <div className="min-w-0">
+                              <h5 className="text-sm font-semibold text-[color:var(--portal-text)]">{item.installment.label}</h5>
+                              <p className="mt-1 text-xs text-[color:var(--portal-muted)]">Due {item.dueDate ? formatShortDate(item.dueDate) : 'TBD'}{item.installment.payment_method ? ` · ${item.installment.payment_method}` : ''}</p>
+                            </div>}
+                            {payableIds.has(item.installment.id) ? (
+                              <button type="button" onClick={() => onLogPayment(item.installment.id)} aria-label={`Log payment for ${item.installment.label}`} className="min-h-11 shrink-0 rounded-lg px-2 text-xs font-semibold text-[#94691f] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">{item.isOverdue ? 'Overdue' : item.isPartial ? 'Partial' : 'Upcoming'}</button>
+                            ) : correctableIds.has(item.installment.id) ? <button type="button" onClick={() => onCorrect(item.installment.id)} aria-label={`Correct payment for ${item.installment.label}`} className="min-h-11 shrink-0 rounded-lg px-2 text-xs font-semibold text-emerald-700 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-emerald-300">Paid</button> : <span className={`shrink-0 text-xs font-semibold ${item.isPaid ? 'text-emerald-700 dark:text-emerald-300' : item.isOverdue ? 'text-rose-700 dark:text-rose-300' : 'text-[color:var(--portal-muted)]'}`}>{item.isPaid ? 'Paid' : item.isOverdue ? 'Overdue' : item.isPartial ? 'Partial' : 'Upcoming'}</span>}
+                          </div>
+                          <AnimatePresence initial={false}>
+                            {dateEdit?.row.installmentId === item.installment.id && (
+                              <motion.div id={`date-editor-${item.installment.id}`} initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.23, 1, 0.32, 1] }} className="overflow-hidden">
+                                <div className="pt-3"><RescheduleInstallmentDialog inline editing={dateEdit} today={today} onClose={onDateEditClose} onSaved={onDateSaved} onSavingChange={onDateSavingChange} /></div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                          <dl className="mt-4 grid grid-cols-3 gap-3 text-xs">
+                            <div><dt className="text-[color:var(--portal-muted)]">Amount</dt><dd className="mt-1 font-medium tabular-nums text-[color:var(--portal-text)]">{currency(item.amountDue)}</dd></div>
+                            <div><dt className="text-[color:var(--portal-muted)]">Credited</dt><dd className="mt-1 font-medium tabular-nums text-[color:var(--portal-text)]">{currency(item.credited)}</dd></div>
+                            <div><dt className="text-[color:var(--portal-muted)]">Remaining</dt><dd className="mt-1 font-semibold tabular-nums text-[color:var(--portal-text)]">{currency(item.remaining)}</dd></div>
+                          </dl>
+                          {!item.scheduleReconciled && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{allocationReason(item.reviewReason ?? null) || 'This payment needs review.'}</p>}
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  )
 }
 
 function CategoryChart({ values, label }: { values: Array<{ category: string; amount: number }>; label: string }) {
@@ -91,15 +395,19 @@ function CategoryChart({ values, label }: { values: Array<{ category: string; am
   if (!data.total) return <p className={`${muted} mt-3`}>{refunds.length ? `Refunds exceed ${label.toLowerCase()} paid in this period.` : `No ${label.toLowerCase()} recorded for this period ($0.00).`}</p>
   return (
     <div className="mt-4 flex flex-wrap items-center gap-5">
-      <div
+      <motion.div
         aria-hidden="true"
         className="grid h-28 w-28 shrink-0 place-items-center rounded-full"
         style={{ background: `conic-gradient(${stops})` }}
+        initial={{ opacity: 0, scale: 0.8 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        viewport={{ once: true, margin: '0px' }}
+        transition={{ duration: 0.55, ease: [0.23, 1, 0.32, 1] }}
       >
         <div className="grid h-20 w-20 place-items-center rounded-full bg-[color:var(--portal-bg)] text-center text-xs font-semibold text-[color:var(--portal-text)]">
-          {currency(netTotal)}
+          <AnimatedAmount value={netTotal} />
         </div>
-      </div>
+      </motion.div>
       <ul className="min-w-0 flex-1 space-y-2">
         {data.rows.map((row, index) => (
           <li key={row.category} className="flex items-start justify-between gap-3 text-xs text-[color:var(--portal-text)]">
@@ -111,12 +419,12 @@ function CategoryChart({ values, label }: { values: Array<{ category: string; am
               />
               {row.category}
             </span>
-            <span className="shrink-0 tabular-nums">
-              {currency(row.amount)} · {Math.round(row.percent)}%
+            <span className="shrink-0">
+              <AnimatedAmount value={row.amount} /> · {Math.round(row.percent)}%
             </span>
           </li>
         ))}
-        {refunds.length ? <li className="flex items-start justify-between gap-3 border-t border-[color:var(--portal-border)] pt-2 text-xs text-[color:var(--portal-muted)]"><span>Refunds and reversals</span><span className="shrink-0 tabular-nums">{currency(refunds.reduce((sum, row) => sum + row.amount, 0))}</span></li> : null}
+        {refunds.length ? <li className="flex items-start justify-between gap-3 border-t border-[color:var(--portal-border)] pt-2 text-xs text-[color:var(--portal-muted)]"><span>Refunds and reversals</span><span className="shrink-0"><AnimatedAmount value={refunds.reduce((sum, row) => sum + row.amount, 0)} /></span></li> : null}
       </ul>
     </div>
   )
@@ -128,20 +436,104 @@ export default function FinancialOverview({
   bills,
   activity,
   openView,
+  onRefresh,
+  requestedScheduleBookingId,
+  onRequestedScheduleClosed,
   loading = false,
 }: {
   overview?: Overview
   expenses?: Expenses
   bills?: LuxorBill[] | null
   activity?: Activity[]
-  openView: (view: 'payments' | 'expenses' | 'reports') => void
+  openView: (view: 'revenue' | 'receivables' | 'payments' | 'expenses' | 'reports') => void
+  onRefresh: () => void
+  requestedScheduleBookingId?: string | null
+  onRequestedScheduleClosed?: () => void
   loading?: boolean
 }) {
+  const scrollFrame = useRef<number | null>(null)
+  useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
+  const openAllSchedules = (button: HTMLButtonElement) => {
+    if (scrollFrame.current !== null) return
+    const scrollers: Array<{ element: HTMLElement; top: number }> = []
+    for (let element = button.parentElement; element; element = element.parentElement) {
+      if (element.scrollTop > 0 && /(auto|scroll)/.test(getComputedStyle(element).overflowY)) scrollers.push({ element, top: element.scrollTop })
+    }
+    const page = document.scrollingElement as HTMLElement | null
+    if (page && page.scrollTop > 0 && !scrollers.some(({ element }) => element === page)) scrollers.push({ element: page, top: page.scrollTop })
+    if (!scrollers.length || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      scrollers.forEach(({ element }) => { element.scrollTop = 0 })
+      openView('receivables')
+      return
+    }
+    let start: number | null = null
+    const scroll = (now: number) => {
+      if (start === null) start = now
+      const progress = Math.min((now - start) / 320, 1)
+      const remaining = (1 - progress) ** 3
+      scrollers.forEach(({ element, top }) => { element.scrollTop = top * remaining })
+      if (progress < 1) scrollFrame.current = requestAnimationFrame(scroll)
+      else { scrollFrame.current = null; openView('receivables') }
+    }
+    scrollFrame.current = requestAnimationFrame(scroll)
+  }
   const today = chicagoCalendarDate()
   const [month, setMonth] = useState(today.slice(0, 7))
   const [grouping, setGrouping] = useState<'monthly' | 'quarterly' | 'annual'>('monthly')
   const [yearText, monthText] = month.split('-')
   const year = Number(yearText)
+  const [selectedSchedulePlan, setSelectedSchedulePlan] = useState<PaymentSchedulePlan | null>(null)
+  const [scheduleDrawerOpen, setScheduleDrawerOpen] = useState(false)
+  const [dateSaving, setDateSaving] = useState(false)
+  const [dateEdit, setDateEdit] = useState<{ row: { installmentId: string; clientName: string; label: string; dueDate: string | null; remaining: number }; expectedUpdatedAt: string } | null>(null)
+  const [paymentInstallmentId, setPaymentInstallmentId] = useState<string | null>(null)
+  const [correction, setCorrection] = useState<{ installmentId: string; label: string; payment: LuxorPayment } | null>(null)
+  const [correctionReason, setCorrectionReason] = useState('')
+  const [correctionBusy, setCorrectionBusy] = useState(false)
+  const [correctionError, setCorrectionError] = useState<string | null>(null)
+  const [actorEmail, setActorEmail] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    fetch('/api/portal/user-preferences').then((response) => response.ok ? response.json() : null).then((data) => { if (active && typeof data?.email === 'string') setActorEmail(data.email) }).catch(() => {})
+    return () => { active = false }
+  }, [])
+
+  const correctionPayments = useMemo(() => {
+    const grouped = new Map<string, LuxorPayment[]>()
+    for (const payment of overview?.reportingRows.payments || []) {
+      if (payment.status !== 'paid') continue
+      const allocations = payment.metadata?.installment_allocations
+      if (!Array.isArray(allocations)) continue
+      for (const allocation of allocations) {
+        if (allocation && typeof allocation === 'object' && typeof allocation.installment_id === 'string') {
+          grouped.set(allocation.installment_id, [...(grouped.get(allocation.installment_id) || []), payment])
+        }
+      }
+    }
+    const eligible = new Map<string, LuxorPayment>()
+    for (const [id, rows] of grouped) {
+      const payment = rows[0]
+      const allocations = payment.metadata?.installment_allocations
+      if (rows.length === 1 && payment.processor === 'manual' && payment.metadata?.manual_entry === true && typeof payment.metadata?.installment_entry_key === 'string' && Array.isArray(allocations) && allocations.length === 1 && Number(allocations[0]?.amount) === Number(payment.amount) && payment.updated_at) eligible.set(id, payment)
+    }
+    return eligible
+  }, [overview])
+  const submitCorrection = async () => {
+    if (!correction || correctionBusy || correctionReason.trim().length < 3) return
+    setCorrectionBusy(true)
+    setCorrectionError(null)
+    try {
+      const response = await fetch('/api/portal/payment-corrections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paymentId: correction.payment.id, installmentId: correction.installmentId, expectedUpdatedAt: correction.payment.updated_at, reason: correctionReason.trim() }) })
+      const result = await response.json().catch(() => null) as { corrected?: boolean; error?: string } | null
+      if (!response.ok || !result?.corrected) throw new Error(result?.error || 'The correction could not be confirmed. Refresh and review the payment before trying again.')
+      setCorrection(null)
+      setCorrectionReason('')
+      onRefresh()
+    } catch (error) {
+      setCorrectionError(error instanceof Error ? error.message : 'The correction could not be confirmed. Refresh and review the payment before trying again.')
+      onRefresh()
+    } finally { setCorrectionBusy(false) }
+  }
 
   const period = overview ? getLuxorOverviewPeriod(overview, month) : { actual: null, expected: null, projected: null, percent: null }
   const chart = useMemo(() => (overview ? getLuxorOverviewChart(overview, year, grouping) : []), [overview, year, grouping])
@@ -306,6 +698,12 @@ export default function FinancialOverview({
     return { active, pending }
   }, [overview])
 
+  useEffect(() => {
+    if (!requestedScheduleBookingId) return
+    const plan = clientPaymentPlans.active.find((item) => item.bookingId === requestedScheduleBookingId)
+    if (plan) { setSelectedSchedulePlan(plan); setScheduleDrawerOpen(true) }
+  }, [requestedScheduleBookingId, clientPaymentPlans.active])
+
   const revenueMonthCategories = useMemo(() => {
     if (!overview?.categoryByMonth) return []
     return Object.entries(overview.categoryByMonth[month] || {}).map(([category, amount]) => ({ category, amount }))
@@ -330,11 +728,7 @@ export default function FinancialOverview({
   return (
     <div className="h-full min-h-0 space-y-4 overflow-y-auto pb-8 pr-1 portal-scrollbar">
       {/* Top Header Controls (Always visible, does not fetch) */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold text-[color:var(--portal-text)]">Financial Overview</h2>
-          <p className={muted}>Revenue, expenses, active client payment plans, and upcoming obligations.</p>
-        </div>
+      <div className="flex flex-wrap items-end justify-end gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <PortalSelect
             aria-label="Overview month"
@@ -351,19 +745,6 @@ export default function FinancialOverview({
             onChange={(value) => setMonth(`${value}-${monthText}`)}
             options={years.sort().map((value) => ({ value, label: value }))}
           />
-          <Link
-            href="/portal/finances/schedules"
-            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
-          >
-            <CalendarBlank size={15} weight="regular" className="text-[#a8792f] dark:text-[#e6c77f]" />
-            Payment schedules
-          </Link>
-          <Link
-            href="/portal/finances/revenue"
-            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50"
-          >
-            Revenue &amp; collections
-          </Link>
         </div>
       </div>
 
@@ -469,12 +850,13 @@ export default function FinancialOverview({
               Clients actively paying toward confirmed events and upcoming scheduled installments.
             </p>
           </div>
-          <Link
-            href="/portal/finances/schedules"
+          <button
+            type="button"
+            onClick={(event) => openAllSchedules(event.currentTarget)}
             className="inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]"
           >
             All payment schedules <ArrowUpRight aria-hidden="true" size={15} weight="regular" />
-          </Link>
+          </button>
         </div>
 
         {loading ? (
@@ -519,19 +901,20 @@ export default function FinancialOverview({
                             {plan.eventDate ? ` · Event ${formatShortDate(plan.eventDate)}` : ''}
                           </p>
                         </div>
-                        <PortalStatusBadge
+                        {plan.status === 'partially_paid' ? (
+                          <span className="inline-flex items-center rounded-md bg-[#caa24c]/15 px-2 py-0.5 text-[11px] font-medium text-[#9a6d26] dark:text-[#e6c77f]">Partially paid</span>
+                        ) : <PortalStatusBadge
+                          borderless
                           status={plan.status.replaceAll('_', ' ')}
                           tone={
                             plan.status === 'paid'
                               ? 'green'
                               : plan.status === 'overdue'
                                 ? 'red'
-                                : plan.status === 'partially_paid'
-                                  ? 'gold'
-                                  : 'blue'
+                                : 'blue'
                           }
                           warning={plan.status === 'needs_review'}
-                        />
+                        />}
                       </div>
 
                       {plan.reviewReason ? (
@@ -551,12 +934,11 @@ export default function FinancialOverview({
                             {plan.percent}% · {plan.paidCount}/{plan.totalInstallments} paid
                           </span>
                         </div>
-                        <div aria-hidden="true" className="mt-1.5 h-2 overflow-hidden rounded-full bg-[color:var(--portal-soft)]">
-                          <div
-                            className="h-full rounded-full bg-[#b58b3e] transition-all"
-                            style={{ width: `${Math.max(4, plan.percent)}%` }}
-                          />
-                        </div>
+                        <InViewBar
+                          percent={Math.max(4, plan.percent)}
+                          trackClassName="mt-1.5 h-2 overflow-hidden rounded-full bg-[color:var(--portal-soft)]"
+                          barClassName="bg-[#b58b3e]"
+                        />
                       </div>
 
                       {/* Key figures */}
@@ -581,39 +963,21 @@ export default function FinancialOverview({
                         </div>
                       </dl>
 
-                      {/* Expandable inline schedule preview */}
-                      {plan.schedule.length > 0 && (
-                        <details className="mt-2 text-xs">
-                          <summary className="cursor-pointer py-1 font-medium text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">
-                            Preview {plan.schedule.length} scheduled installments
-                          </summary>
-                          <ul className="mt-1.5 space-y-1.5 rounded-lg bg-[color:var(--portal-soft)]/60 p-2.5">
-                            {plan.schedule.map((item) => (
-                              <li key={item.installment.id} className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="text-[color:var(--portal-text)]">
-                                  {item.installment.label} · {formatShortDate(item.dueDate)}
-                                </span>
-                                <span className="tabular-nums font-medium text-[color:var(--portal-text)]">
-                                  {item.isPaid
-                                    ? `${currency(item.amountDue)} (Paid${item.installment.payment_method ? ` · ${item.installment.payment_method}` : ''})`
-                                    : `${currency(item.remaining)} due`}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      )}
                     </div>
 
                     {/* Direct Actions */}
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2 pt-1">
-                      <Link
-                        href={`/portal/finances/schedules?bookingId=${encodeURIComponent(plan.bookingId)}&client=${encodeURIComponent(plan.clientName)}`}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSchedulePlan(plan)
+                          setScheduleDrawerOpen(true)
+                        }}
                         className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c]/15 px-3 py-1.5 text-xs font-semibold text-[#9a6d26] transition-colors hover:bg-[#caa24c]/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]"
                       >
                         <CalendarBlank size={14} weight="regular" />
                         View payment schedule
-                      </Link>
+                      </button>
                       {plan.inquiryId ? (
                         <Link
                           href={`/portal/leads/${encodeURIComponent(plan.inquiryId)}`}
@@ -625,6 +989,7 @@ export default function FinancialOverview({
                     </div>
                   </article>
                 ))}
+                {clientPaymentPlans.active.length % 2 === 1 && <div aria-hidden="true" className="hidden rounded-xl border-2 border-dotted border-[color:color-mix(in_srgb,var(--portal-muted)_38%,transparent)] dark:border-[#c6ad80]/35 dark:bg-[color:var(--portal-bg)]/60 xl:block" />}
               </div>
             )}
 
@@ -648,16 +1013,32 @@ export default function FinancialOverview({
                             {item.eventDate ? ` · Event ${formatShortDate(item.eventDate)}` : ''} · {currency(item.totalContract)} ({item.totalInstallments} installments)
                           </p>
                         </div>
-                        <PortalStatusBadge status="Awaiting signature" tone="gold" />
+                        <span className="inline-flex items-center rounded-md bg-[#caa24c]/15 px-2 py-0.5 text-[11px] font-medium text-[#9a6d26] dark:text-[#e6c77f]">Awaiting signature</span>
                       </div>
                       <p className="mt-2 text-[color:var(--portal-muted)]">{item.pendingReason}</p>
                       <div className="mt-2.5 flex flex-wrap items-center gap-3">
-                        <Link
-                          href={`/portal/finances/schedules?bookingId=${encodeURIComponent(item.bookingId)}&client=${encodeURIComponent(item.clientName)}`}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const plan = clientPaymentPlans.pending.find((p) => p.bookingId === item.bookingId)
+                            if (plan) {
+                              setSelectedSchedulePlan({
+                                ...plan,
+                                percent: 0,
+                                paidCount: 0,
+                                nextDueDate: plan.firstDueDate,
+                                nextAmount: plan.firstAmount,
+                                nextLabel: null,
+                                status: 'upcoming',
+                                reviewReason: null,
+                              })
+                              setScheduleDrawerOpen(true)
+                            }
+                          }}
                           className="font-semibold text-[#a8792f] hover:underline dark:text-[#e6c77f]"
                         >
                           View drafted schedule →
-                        </Link>
+                        </button>
                         {item.inquiryId ? (
                           <Link
                             href={`/portal/leads/${encodeURIComponent(item.inquiryId)}`}
@@ -669,6 +1050,7 @@ export default function FinancialOverview({
                       </div>
                     </article>
                   ))}
+                  {clientPaymentPlans.pending.length % 2 === 1 && <div aria-hidden="true" className="hidden rounded-xl border-2 border-dotted border-[color:color-mix(in_srgb,var(--portal-muted)_38%,transparent)] dark:border-[#c6ad80]/35 dark:bg-[color:var(--portal-bg)]/60 xl:block" />}
                 </div>
               </div>
             )}
@@ -736,7 +1118,7 @@ export default function FinancialOverview({
             />
           </div>
           <p className="mt-2 text-xs text-[color:var(--portal-muted)]">Gold: collected · champagne: expected</p>
-          {!loading && !overview && <p role="status" className={`${muted} mt-3`}>Collections data is unavailable. Refresh to retry.</p>}
+          {!loading && !overview && <p role="status" className={`${muted} mt-3`}>Collections data is unavailable. Reload the page to try again.</p>}
           <div className="mt-5 flex h-40 items-end gap-1 sm:gap-3">
             {loading
               ? Array.from({ length: 12 }, (_, idx) => {
@@ -758,8 +1140,8 @@ export default function FinancialOverview({
                       className="flex h-32 w-full items-end justify-center gap-0.5"
                       title={`${item.label}: collected ${item.actual === null ? 'unavailable' : currency(item.actual)}, expected ${item.expected === null ? 'unavailable' : currency(item.expected)}`}
                     >
-                      {item.actual !== null && <div className="w-2/5 max-w-8 rounded-t bg-[#b58b3e]" style={{ height: `${Math.max(0, (item.actual / max) * 100)}%` }} />}
-                      {item.expected !== null && <div className="w-2/5 max-w-8 rounded-t bg-[#e6c99d]" style={{ height: `${Math.max(0, (item.expected / max) * 100)}%` }} />}
+                      {item.actual !== null && <InViewGrowBar percent={Math.max(0, (item.actual / max) * 100)} className="w-2/5 max-w-8 rounded-t bg-[#b58b3e]" />}
+                      {item.expected !== null && <InViewGrowBar percent={Math.max(0, (item.expected / max) * 100)} className="w-2/5 max-w-8 rounded-t bg-[#e6c99d]" />}
                     </div>
                     <span className="text-[10px] text-[color:var(--portal-muted)]">{item.label}</span>
                   </div>
@@ -867,7 +1249,7 @@ export default function FinancialOverview({
         <section className={card}>
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-semibold text-[color:var(--portal-text)]">Upcoming collections</h3>
-            <Link href="/portal/finances/schedules" className="text-xs font-semibold text-[#a8792f] dark:text-[#e6c77f]">
+            <Link href="/portal/finances?view=receivables" className="text-xs font-semibold text-[#a8792f] dark:text-[#e6c77f]">
               Schedules →
             </Link>
           </div>
@@ -889,11 +1271,15 @@ export default function FinancialOverview({
                 <div key={item.label}>
                   <p className="flex justify-between gap-3 text-sm text-[color:var(--portal-text)]">
                     <span>{item.label}</span>
-                    <Amount value={item.value} />
+                    <span className="tabular-nums">{item.value === null ? 'Unavailable' : currency(item.value)}</span>
                   </p>
-                  {item.value !== null && <div aria-hidden="true" className="mt-1 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-soft)]">
-                    <div className="h-full rounded-full bg-[#c59a4d]" style={{ width: `${((item.value || 0) / upcomingMax) * 100}%` }} />
-                  </div>}
+                  {item.value !== null && (
+                    <InViewBar
+                      percent={((item.value || 0) / upcomingMax) * 100}
+                      trackClassName="mt-1 h-1.5 overflow-hidden rounded-full bg-[color:var(--portal-soft)]"
+                      barClassName="bg-[#c59a4d]"
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -921,7 +1307,7 @@ export default function FinancialOverview({
               ))}
             </ul>
           ) : unpaid === undefined ? (
-            <p className={`${muted} mt-3`}>Bills could not be loaded. Refresh to retry.</p>
+            <p className={`${muted} mt-3`}>Bills could not be loaded. Reload the page to try again.</p>
           ) : unpaid.length === 0 ? (
             <p className={`${muted} mt-3`}>No bills are marked open in the loaded list. Paid bills may still need payment review.</p>
           ) : (
@@ -976,7 +1362,7 @@ export default function FinancialOverview({
               ))}
             </ul>
           ) : !activity ? (
-            <p className={`${muted} mt-3`}>Recent activity is unavailable. Refresh to retry.</p>
+            <p className={`${muted} mt-3`}>Recent activity is unavailable. Reload the page to try again.</p>
           ) : activity.length ? (
             <ul className="mt-3 divide-y divide-[color:var(--portal-border)]">
               {activity.slice(0, 5).map((item) => (
@@ -1023,6 +1409,45 @@ export default function FinancialOverview({
       <p className="text-xs text-[color:var(--portal-muted)]">
         <CalendarDots className="mr-1 inline" weight="regular" size={14} /> Expected collections reflect saved client payment schedules. Unpaid utility or vendor bills do not reduce collected cash until paid.
       </p>
+
+      {/* Payment Schedule Drawer */}
+      <PaymentScheduleDrawer
+        plan={clientPaymentPlans.active.find((plan) => plan.bookingId === selectedSchedulePlan?.bookingId) || selectedSchedulePlan}
+        payableIds={new Set((actorEmail ? clientPaymentPlans.active.find((plan) => plan.bookingId === selectedSchedulePlan?.bookingId)?.schedule || [] : []).filter((item) => item.scheduleReconciled && !item.reviewReason && item.remaining > 0 && !item.isPaid && !isBookingPaymentMilestone(item.installment)).map((item) => item.installment.id))}
+        correctableIds={new Set((clientPaymentPlans.active.find((plan) => plan.bookingId === selectedSchedulePlan?.bookingId)?.schedule || []).filter((item) => item.isPaid && item.scheduleReconciled && !item.reviewReason && correctionPayments.has(item.installment.id)).map((item) => item.installment.id))}
+        onCorrect={(id) => { const payment = correctionPayments.get(id); const item = selectedSchedulePlan?.schedule.find((row) => row.installment.id === id); if (payment && item) { setCorrectionReason(''); setCorrectionError(null); setCorrection({ installmentId: id, label: item.installment.label, payment }) } }}
+        editableIds={new Set((clientPaymentPlans.active.find((plan) => plan.bookingId === selectedSchedulePlan?.bookingId)?.schedule || []).filter((item) => item.scheduleReconciled && !item.reviewReason && item.installment.updated_at && (item.installment.status === 'scheduled' || item.installment.status === 'sent') && item.dueDate && item.dueDate > today && item.remaining > 0 && !isBookingPaymentMilestone(item.installment) && !isFinalPaymentMilestone(item.installment)).map((item) => item.installment.id))}
+        onEditDueDate={(id) => { const plan = clientPaymentPlans.active.find((item) => item.bookingId === selectedSchedulePlan?.bookingId); const item = plan?.schedule.find((row) => row.installment.id === id); if (dateEdit?.row.installmentId === id) { setDateEdit(null); return } if (plan && item?.installment.updated_at) setDateEdit({ row: { installmentId: id, clientName: plan.clientName, label: item.installment.label, dueDate: item.dueDate, remaining: item.remaining }, expectedUpdatedAt: item.installment.updated_at }) }}
+        dateEdit={dateEdit}
+        today={today}
+        onDateEditClose={() => { const id = dateEdit?.row.installmentId; setDateEdit(null); if (id) requestAnimationFrame(() => document.getElementById(`date-trigger-${id}`)?.focus()) }}
+        onDateSaved={onRefresh}
+        dateSaving={dateSaving}
+        onDateSavingChange={setDateSaving}
+        suspendDismiss={Boolean(paymentInstallmentId || correction || dateSaving)}
+        onLogPayment={setPaymentInstallmentId}
+        open={scheduleDrawerOpen}
+        onClose={() => { if (dateSaving) return; setDateEdit(null); setScheduleDrawerOpen(false); onRequestedScheduleClosed?.() }}
+      />
+      <PortalModal isOpen={Boolean(correction)} onClose={() => { if (!correctionBusy) setCorrection(null) }} title="Correct payment" description="Use this when a manual payment was recorded by mistake." zIndex={220} animateClose>
+        {correction && <div className="space-y-4 p-5 sm:p-6">
+          <p className="text-sm text-[color:var(--portal-text)]">{correction.label} · <strong className="tabular-nums">{currency(Number(correction.payment.amount))}</strong> · {correction.payment.payment_method || 'Manual payment'}</p>
+          <p className="text-sm text-[color:var(--portal-muted)]">This removes the recorded credit and restores the amount due. The original entry and correction will remain in the audit history. No refund is issued.</p>
+          <label className="block text-sm font-medium text-[color:var(--portal-text)]">Reason for correction<textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} maxLength={500} disabled={correctionBusy} className="mt-2 min-h-24 w-full rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" /></label>
+          {correctionError && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{correctionError}</p>}
+          <div className="flex justify-end gap-2"><PortalButton disabled={correctionBusy} onClick={() => setCorrection(null)}>Cancel</PortalButton><PortalButton variant="primary" disabled={correctionBusy || correctionReason.trim().length < 3} onClick={() => void submitCorrection()}>{correctionBusy ? 'Saving…' : 'Correct payment'}</PortalButton></div>
+        </div>}
+      </PortalModal>
+      <LogInstallmentPaymentDialog
+        open={Boolean(paymentInstallmentId)}
+        onClose={() => setPaymentInstallmentId(null)}
+        bookings={selectedSchedulePlan ? [{ id: selectedSchedulePlan.bookingId, label: selectedSchedulePlan.clientName }] : []}
+        schedules={(clientPaymentPlans.active.find((plan) => plan.bookingId === selectedSchedulePlan?.bookingId)?.schedule || []).filter((item) => item.scheduleReconciled && !item.reviewReason && item.remaining > 0 && !item.isPaid && !isBookingPaymentMilestone(item.installment)).map((item) => ({ id: item.installment.id, bookingId: item.bookingId, label: item.installment.label, remainingAmount: item.remaining, dueDate: item.dueDate, eligible: true }))}
+        initialBookingId={selectedSchedulePlan?.bookingId}
+        initialInstallmentId={paymentInstallmentId}
+        actorEmail={actorEmail}
+        onRecorded={onRefresh}
+      />
     </div>
   )
 }

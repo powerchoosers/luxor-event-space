@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowUpRight, CalendarBlank, Clock, CreditCard, CurrencyCircleDollar, MagnifyingGlass, ShieldCheck, Wallet } from '@phosphor-icons/react'
-import { PortalButton, PortalDatePicker, PortalModal, PortalSelect, PortalStatusBadge } from '@/components/portal/PortalUI'
+import { ArrowUpRight, CalendarBlank, CurrencyCircleDollar, MagnifyingGlass, ShieldCheck } from '@phosphor-icons/react'
+import { PortalButton, PortalDatePicker, PortalFilterBar, PortalModal, PortalSelect, PortalSkeleton, PortalStatusBadge } from '@/components/portal/PortalUI'
 import { RevenueCollectionsShell } from '@/components/portal/RevenueCollectionsShell'
-import { FinanceEmptyState, FinanceReviewNotice, FinancialMetricCard, formatFinanceCurrency, MonthlyCollectionsBars } from '@/components/portal/RevenueCollectionsPrimitives'
+import { BorderBeam } from '@/components/ui/border-beam'
+import { FinanceEmptyState, FinanceReviewNotice, formatFinanceCurrency, MonthlyCollectionsBars } from '@/components/portal/RevenueCollectionsPrimitives'
 import { LogInstallmentPaymentDialog } from '@/components/portal/LogInstallmentPaymentDialog'
 import { useRevenueCollectionsModel } from '@/components/portal/useRevenueCollectionsModel'
 import {
@@ -20,6 +21,7 @@ import {
 } from '@/lib/luxorRevenueCollectionsModel'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
 import { isBookingPaymentMilestone } from '@/lib/luxorPaymentDashboardModel'
+import { summarizeRevenueProfit } from '@/lib/luxorRevenueProfitSummary'
 
 type RevenueView = 'revenue' | 'schedules' | 'monthly' | 'receivables' | 'history'
 
@@ -128,7 +130,7 @@ function RevenuePeriodFilter({
   endDate: string
   setEndDate: (value: string) => void
 }) {
-  return <section className={`${filterSurface} flex flex-col gap-4`} aria-label="Revenue period">
+  return <section className="flex flex-col gap-3" aria-label="Revenue period">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
       <Field label="Collection period">
         <PortalSelect aria-label="Collection period" className="mt-1" value={preset || 'this_month'} onChange={(value) => setPreset(value as NonNullable<LuxorRevenueCollectionsOptions['preset']>)} options={periodOptions} />
@@ -144,38 +146,17 @@ function RevenuePeriodFilter({
 function LoadState({ loading, error, hasModel }: { loading: boolean; error: string | null; hasModel: boolean }) {
   if (loading && !hasModel) {
     return (
-      <div className="space-y-4" role="status" aria-live="polite" aria-busy="true">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <FinancialMetricCard loading label="Total Collected" value={null} detail="Net event payments received in the selected period, after verified event refunds." icon={CurrencyCircleDollar} />
-          <FinancialMetricCard loading label="Expected Revenue" value={null} detail="Remaining saved installments due today or later within the selected period." icon={CalendarBlank} />
-          <FinancialMetricCard loading label="Outstanding Balance" value={null} detail="Lifetime balance across eligible, confirmed bookings." icon={Wallet} />
-          <FinancialMetricCard loading label="Overdue Payments" value={null} detail="Eligible scheduled balances past due as of today." icon={Clock} />
-          <FinancialMetricCard loading label="Upcoming Collections" value={null} detail="Eligible saved balances due today through the next 30 days." icon={CreditCard} />
-        </div>
+      <div className="space-y-5" role="status" aria-live="polite" aria-busy="true">
+        <span className="sr-only">Loading revenue records</span>
+        <PortalSkeleton className="h-7 w-52 rounded" /><PortalSkeleton className="h-10 w-40 rounded-xl" />
+        <div className="grid overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] md:grid-cols-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="space-y-3 border-b border-[color:var(--portal-border)] p-5 last:border-0 md:border-b-0 md:border-r"><PortalSkeleton className="h-4 w-36 rounded" /><PortalSkeleton className="h-8 w-28 rounded" /><PortalSkeleton className="h-4 w-44 rounded" /></div>)}</div>
+        <PortalSkeleton className="h-44 w-full rounded-2xl" />
       </div>
     )
   }
   if (loading && hasModel) return <p className="text-xs text-[color:var(--portal-muted)]" role="status" aria-live="polite">Refreshing verified finance records…</p>
   if (error) return <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-sm text-[color:var(--portal-text)]"><p className="font-semibold">Revenue records could not be verified.</p><p className="mt-1 text-[color:var(--portal-muted)]">{error}</p></div>
   return null
-}
-
-function ReceivablesSummary({ model }: { model: NonNullable<ReturnType<typeof useRevenueCollectionsModel>['model']> }) {
-  const openCount = model.receivables.filter((row) => row.remainingBalance !== null && row.remainingBalance > 0).length
-  const partialCount = model.receivables.filter((row) => row.status === 'partially_paid').length
-  const reviewCount = model.receivables.filter((row) => row.status === 'needs_review').length
-  return <section className={filterSurface}>
-    <div className="flex items-start justify-between gap-3">
-      <div><h2 className="font-semibold text-[color:var(--portal-text)]">Accounts receivable</h2><p className={muted}>Confirmed booking balances</p></div>
-      <Link href="/portal/finances/receivables" className="inline-flex min-h-10 shrink-0 items-center gap-1 text-sm font-semibold text-[#9a712e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">View all <ArrowUpRight aria-hidden="true" size={15} weight="regular" /></Link>
-    </div>
-    <dl className="mt-5 grid grid-cols-3 divide-x divide-[color:var(--portal-border)]">
-      <div className="pr-3"><dt className="text-xs text-[color:var(--portal-muted)]">Open</dt><dd className="mt-1 text-xl font-semibold tabular-nums text-[color:var(--portal-text)]">{model.availability.outstanding ? openCount : '—'}</dd><dd className="text-xs text-[color:var(--portal-muted)]">receivables</dd></div>
-      <div className="px-3"><dt className="text-xs text-[color:var(--portal-muted)]">Partially paid</dt><dd className="mt-1 text-xl font-semibold tabular-nums text-[color:var(--portal-text)]">{model.availability.outstanding ? partialCount : '—'}</dd><dd className="text-xs text-[color:var(--portal-muted)]">bookings</dd></div>
-      <div className="pl-3"><dt className="text-xs text-[color:var(--portal-muted)]">Needs review</dt><dd className="mt-1 text-xl font-semibold tabular-nums text-[color:var(--portal-text)]">{reviewCount}</dd><dd className="text-xs text-[color:var(--portal-muted)]">balances</dd></div>
-    </dl>
-    <p className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)]">Outstanding: <strong className="font-semibold text-[color:var(--portal-text)]">{formatFinanceCurrency(model.kpis.outstandingBalance)}</strong><span className="mx-2">·</span>Overdue: <strong className="font-semibold text-[color:var(--portal-text)]">{formatFinanceCurrency(model.kpis.overduePayments)}</strong></p>
-  </section>
 }
 
 function UpcomingPaymentsPreview({ model }: { model: NonNullable<ReturnType<typeof useRevenueCollectionsModel>['model']> }) {
@@ -186,7 +167,7 @@ function UpcomingPaymentsPreview({ model }: { model: NonNullable<ReturnType<type
     .slice(0, 5)
 
   return <section className={`${filterSurface} overflow-hidden p-0`}>
-    <div className="flex items-start justify-between gap-3 p-4 sm:p-5"><div><h2 className="font-semibold text-[color:var(--portal-text)]">Upcoming payments</h2><p className={muted}>Saved installments due next</p></div><Link href="/portal/finances/schedules" className="inline-flex min-h-10 shrink-0 items-center gap-1 text-sm font-semibold text-[#9a712e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">View all <ArrowUpRight aria-hidden="true" size={15} weight="regular" /></Link></div>
+    <div className="flex items-start justify-between gap-3 p-4 sm:p-5"><div><h2 className="font-semibold text-[color:var(--portal-text)]">Upcoming payments</h2><p className={muted}>Saved installments due next</p></div><Link href="/portal/finances?view=receivables" className="inline-flex min-h-10 shrink-0 items-center gap-1 text-sm font-semibold text-[#9a712e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">View all <ArrowUpRight aria-hidden="true" size={15} weight="regular" /></Link></div>
     {!model.availability.upcoming ? <div className="px-4 pb-4 sm:px-5 sm:pb-5"><FinanceEmptyState title="Upcoming payments unavailable" detail="Reconcile saved schedules before relying on upcoming totals." /></div>
       : !rows.length ? <div className="px-4 pb-4 sm:px-5 sm:pb-5"><FinanceEmptyState title="No upcoming payments" detail="There are no verified installments due today or later in this schedule window." /></div>
         : <>
@@ -204,49 +185,64 @@ function RecentPaymentsPreview({ model }: { model: NonNullable<ReturnType<typeof
     .slice(0, 5)
 
   return <section className={filterSurface}>
-    <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-[color:var(--portal-text)]">Recent payments</h2><p className={muted}>Verified event receipts</p></div><Link href="/portal/finances/history" className="inline-flex min-h-10 shrink-0 items-center gap-1 text-sm font-semibold text-[#9a712e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">View all <ArrowUpRight aria-hidden="true" size={15} weight="regular" /></Link></div>
+    <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-[color:var(--portal-text)]">Recent payments</h2><p className={muted}>Verified event receipts</p></div><Link href="/portal/finances?view=payments" className="inline-flex min-h-10 shrink-0 items-center gap-1 text-sm font-semibold text-[#9a712e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">View all <ArrowUpRight aria-hidden="true" size={15} weight="regular" /></Link></div>
     {!rows.length ? <div className="mt-4"><FinanceEmptyState title="No recent payments" detail="Verified event receipts will appear here when recorded." /></div> : <ul className="mt-3 divide-y divide-[color:var(--portal-border)]">{rows.map((row) => <li key={row.id} className="flex items-start justify-between gap-3 py-3"><div className="min-w-0"><p className="break-words text-sm font-medium text-[color:var(--portal-text)]">Payment received · {row.clientName}</p><p className="mt-1 text-xs capitalize text-[color:var(--portal-muted)]">{formatDate(row.date)} · {statusLabel(row.paymentType)}</p></div><p className="shrink-0 text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">+{formatFinanceCurrency(row.signedAmount)}</p></li>)}</ul>}
   </section>
 }
 
-function RevenueDashboard({ model, onPeriodChange }: { model: NonNullable<ReturnType<typeof useRevenueCollectionsModel>['model']>; onPeriodChange: React.ReactNode }) {
+type ProfitSnapshot = { events: Array<{ booking: { id: string; client_name: string | null; event_type: string | null; status: string }; collections: number | null; paidDirectCosts: number | null; cashContribution: number | null; margin: number | null; unknownExpenseCount: number }>; issues: string[] }
+
+function ProfitabilitySummary({ data, error }: { data: ProfitSnapshot | null; error: boolean }) {
+  const summary = data ? summarizeRevenueProfit(data.events, data.issues) : null
+  const { collected, paidCosts, cashProfit, margin, unknownCosts } = summary || { collected: null, paidCosts: null, cashProfit: null, margin: null, unknownCosts: false }
+  return <section className="overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)]" aria-labelledby="revenue-profit-title">
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--portal-border)] px-5 py-4 sm:px-6">
+      <div><h2 id="revenue-profit-title" className="text-base font-bold text-[color:var(--portal-text)]">Event profit so far</h2><p className="mt-1 text-xs leading-5 text-[color:var(--portal-muted)]">All-time cash for confirmed and completed events</p></div>
+      <Link href="/portal/finances/profitability" className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-[#9a712e] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">Explore events <ArrowUpRight aria-hidden="true" size={15} /></Link>
+    </div>
+    {!data ? <p className="px-5 py-6 text-sm text-[color:var(--portal-muted)]" role={error ? 'alert' : 'status'}>{error ? 'Event profit is unavailable. Open event profitability to review the records.' : 'Loading event profit…'}</p> : !summary?.count ? <p className="px-5 py-6 text-sm text-[color:var(--portal-muted)]">Profit will appear when a confirmed event has verified payments and costs.</p> : !summary.verified ? <p className="px-5 py-6 text-sm text-[color:var(--portal-muted)]">Event profit needs review before it can be calculated. Open event profitability to see which records need attention.</p> : <>
+      <div className="grid gap-5 px-5 py-5 sm:grid-cols-[1fr_2fr] sm:gap-8 sm:px-6">
+        <div><p className="text-xs font-semibold text-[color:var(--portal-muted)]">Cash margin</p><p className="mt-1 text-3xl font-bold tracking-tight tabular-nums text-[color:var(--portal-text)]">{margin === null ? '—' : `${margin.toFixed(1)}%`}</p><p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{margin === null ? 'Available when net collections are above zero.' : 'Cash profit ÷ net collected'}</p></div>
+        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3"><div><dt className="text-xs text-[color:var(--portal-muted)]">Net collected</dt><dd className="mt-1 font-bold tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(collected)}</dd></div><div><dt className="text-xs text-[color:var(--portal-muted)]">Direct costs paid</dt><dd className="mt-1 font-bold tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(paidCosts)}</dd></div><div><dt className="text-xs text-[color:var(--portal-muted)]">Cash profit</dt><dd className="mt-1 font-bold tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(cashProfit)}</dd></div></dl>
+      </div>
+      <p className="border-t border-[color:var(--portal-border)] px-5 py-3 text-xs leading-5 text-[color:var(--portal-muted)] sm:px-6">Net collected − direct costs paid. This is cash to date, not final profit; unpaid and unrecorded costs and business overhead are not included.{unknownCosts ? ' Some event costs are still unknown.' : ''}</p>
+    </>}
+  </section>
+}
+
+function RevenueDashboard({ model, onPeriodChange, profit, profitError, onRefresh, refreshing }: { model: NonNullable<ReturnType<typeof useRevenueCollectionsModel>['model']>; onPeriodChange: React.ReactNode; profit: ProfitSnapshot | null; profitError: boolean; onRefresh: () => void; refreshing: boolean }) {
   return <div className="space-y-5">
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-xl font-bold tracking-tight text-[color:var(--portal-text)]">Revenue &amp; collections</h2><p className="mt-1 text-sm text-[color:var(--portal-muted)]">See what has come in, what is due, and how events are performing.</p></div><PortalButton onClick={onRefresh} disabled={refreshing}>Refresh</PortalButton></div>
     {onPeriodChange}
     {!model.period.valid ? <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-[color:var(--portal-text)]">Choose a valid start and end date to view this period.</p> : null}
     <FinanceReviewNotice issues={model.issues} />
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-      <FinancialMetricCard label="Total Collected" value={model.kpis.totalCollected} detail="Net event payments received in the selected period, after verified event refunds." icon={CurrencyCircleDollar} href="/portal/finances/history" />
-      <FinancialMetricCard label="Expected Revenue" value={model.kpis.expectedRevenue} detail="Remaining saved installments due today or later within the selected period." icon={CalendarBlank} href="/portal/finances/schedules" />
-      <FinancialMetricCard label="Outstanding Balance" value={model.kpis.outstandingBalance} detail="Lifetime balance across eligible, confirmed bookings." icon={Wallet} href="/portal/finances/receivables" />
-      <FinancialMetricCard label="Overdue Payments" value={model.kpis.overduePayments} detail="Eligible scheduled balances past due as of today." icon={Clock} href="/portal/finances/receivables" />
-      <FinancialMetricCard label="Upcoming Collections" value={model.kpis.upcomingCollections} detail="Eligible saved balances due today through the next 30 days." icon={CreditCard} href="/portal/finances/schedules" />
-    </div>
-    <section className={`${filterSurface} flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between`}>
-      <div><p className="text-sm font-semibold text-[color:var(--portal-text)]">Collected after refunds</p><p className={muted}>Net is shown above. These are the verified gross receipts and event refunds for this period.</p></div>
-      <p className="text-sm tabular-nums text-[color:var(--portal-text)]"><span className="font-semibold">{formatFinanceCurrency(model.kpis.grossCollected)}</span><span className="mx-2 text-[color:var(--portal-muted)]">gross</span><span className="text-[color:var(--portal-muted)]">− {formatFinanceCurrency(model.kpis.eventRefunds)} refunds</span></p>
+    <section className="relative overflow-hidden rounded-2xl border border-[#caa24c]/30 bg-[color:var(--portal-card)]" aria-label="Collection summary">
+      <BorderBeam size={140} duration={16} borderWidth={1.2} colorFrom="#f1d27a" colorTo="#caa24c" />
+      <div className="grid grid-cols-2 gap-0 md:grid-cols-[1.15fr_1fr_1fr]"><div className="col-span-2 border-b border-[color:var(--portal-border)] px-5 py-5 md:col-span-1 md:border-b-0 md:border-r sm:px-6"><p className="text-sm font-semibold text-[color:var(--portal-muted)]">Collected in this period</p><p className="mt-2 text-3xl font-bold tracking-tight tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(model.kpis.totalCollected)}</p><p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">{formatFinanceCurrency(model.kpis.grossCollected)} received · {formatFinanceCurrency(model.kpis.eventRefunds)} refunded</p><Link href="/portal/finances?view=payments" className="mt-3 inline-flex min-h-9 items-center text-xs font-semibold text-[#9a712e] hover:underline dark:text-[#e6c77f]">View payments →</Link></div>
+        <div className="border-r border-[color:var(--portal-border)] px-4 py-5 sm:px-6"><p className="text-sm font-semibold text-[color:var(--portal-muted)]">Expected in this period</p><p className="mt-2 text-2xl font-bold tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(model.kpis.expectedRevenue)}</p><p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Unpaid scheduled installments due in the selected period.</p></div>
+        <div className="px-4 py-5 sm:px-6"><p className="text-sm font-semibold text-[color:var(--portal-muted)]">Outstanding balance</p><p className="mt-2 text-2xl font-bold tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(model.kpis.outstandingBalance)}</p><p className="mt-2 text-xs leading-5 text-[color:var(--portal-muted)]">Across confirmed bookings · {formatFinanceCurrency(model.kpis.overduePayments)} overdue</p><Link href="/portal/finances?view=receivables" className="mt-3 inline-flex min-h-9 items-center text-xs font-semibold text-[#9a712e] hover:underline dark:text-[#e6c77f]">View payment schedules →</Link></div></div>
     </section>
-    <div className="grid gap-4 xl:grid-cols-2">
-      <MonthlyCollectionsBars rows={model.selectedPeriodSeries.map((row) => ({ key: row.key, label: row.label, collected: row.collected, expected: row.expected }))} title="Collections in the selected period" />
-      <ReceivablesSummary model={model} />
-    </div>
+    <ProfitabilitySummary data={profit} error={profitError} />
+    <section id="monthly-collections" className="scroll-mt-4" aria-label="Monthly collections"><MonthlyView model={model} /></section>
     <div className="grid gap-4 xl:grid-cols-2"><UpcomingPaymentsPreview model={model} /><RecentPaymentsPreview model={model} /></div>
-    <section className={`${filterSurface} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
-      <div className="flex items-start gap-3"><ShieldCheck aria-hidden="true" size={19} weight="regular" className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#e6c77f]" /><div><h2 className="font-semibold text-[color:var(--portal-text)]">Security deposits</h2><p className={muted}>Refundable deposits are tracked separately from event revenue.</p></div></div>
-      <div className="flex items-center gap-4"><p className="text-lg font-semibold tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(model.securityDeposits.held)} <span className="text-xs font-normal text-[color:var(--portal-muted)]">held</span></p><Link href="/portal/finances/history" className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-[#9a712e] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">Deposit history <ArrowUpRight aria-hidden="true" size={15} weight="regular" /></Link></div>
-    </section>
+    <section className={`${filterSurface} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}><div className="flex items-start gap-3"><ShieldCheck aria-hidden="true" size={19} className="mt-0.5 shrink-0 text-[#a8792f] dark:text-[#e6c77f]" /><div><h2 className="font-semibold text-[color:var(--portal-text)]">Security deposits</h2><p className={muted}>Refundable deposits are tracked separately from event revenue.</p></div></div><p className="text-lg font-semibold tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(model.securityDeposits.held)} <span className="text-xs font-normal text-[color:var(--portal-muted)]">held</span></p></section>
   </div>
 }
 
-function RescheduleInstallmentDialog({
+export function RescheduleInstallmentDialog({
   editing,
   today,
   onClose,
   onSaved,
+  inline = false,
+  onSavingChange,
 }: {
-  editing: { row: LuxorRevenueScheduleRow; expectedUpdatedAt: string } | null
+  editing: { row: Pick<LuxorRevenueScheduleRow, 'installmentId' | 'clientName' | 'label' | 'dueDate' | 'remaining'>; expectedUpdatedAt: string } | null
   today: string
   onClose: () => void
   onSaved: () => void
+  inline?: boolean
+  onSavingChange?: (saving: boolean) => void
 }) {
   const [dueDate, setDueDate] = useState('')
   const [saving, setSaving] = useState(false)
@@ -254,12 +250,13 @@ function RescheduleInstallmentDialog({
   const open = Boolean(editing)
 
   useEffect(() => {
-    if (editing) setDueDate(editing.row.dueDate || '')
+    if (editing) { setDueDate(editing.row.dueDate || ''); setError(null) }
   }, [editing])
 
   const save = async () => {
     if (!editing || saving || !dueDate || dueDate <= today || dueDate === editing.row.dueDate) return
     setSaving(true)
+    onSavingChange?.(true)
     setError(null)
     try {
       const response = await fetch('/api/portal/payment-installments', {
@@ -282,17 +279,22 @@ function RescheduleInstallmentDialog({
       setError('The save result could not be confirmed. Refresh the schedule before trying again.')
     } finally {
       setSaving(false)
+      onSavingChange?.(false)
     }
   }
 
-  return <PortalModal isOpen={open} onClose={() => { if (!saving) onClose() }} title="Change payment date" description="Only the due date will change. The signed payment amounts remain the same." maxWidth="max-w-lg" fullScreenOnMobile animateClose>
-    {editing ? <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void save() }}>
-      <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm text-[color:var(--portal-text)]"><p className="font-medium">{editing.row.clientName} · {editing.row.label}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Current due date: {formatDate(editing.row.dueDate)} · Remaining: {formatFinanceCurrency(editing.row.remaining)}</p></div>
+  const form = editing ? <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void save() }}>
+      {!inline && <div className="rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-3 text-sm text-[color:var(--portal-text)]"><p className="font-medium">{editing.row.clientName} · {editing.row.label}</p><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Current due date: {formatDate(editing.row.dueDate)} · Remaining: {formatFinanceCurrency(editing.row.remaining)}</p></div>}
       <Field label="New due date"><div className="mt-1"><PortalDatePicker value={dueDate} onChange={setDueDate} timeZone="America/Chicago" minDate={shiftCalendarDate(today, 1)} placeholder="Choose a future date" /></div></Field>
-      <p className="text-xs leading-relaxed text-[color:var(--portal-muted)]">The date must remain on or before the signed plan’s final-payment deadline. The server checks the saved agreement and current schedule version before applying the change.</p>
+      <p className="text-xs leading-relaxed text-[color:var(--portal-muted)]">The date must remain on or before the signed plan’s final-payment deadline. When installment reminders are enabled, the worker adjusts eligible reminders on its next scan. Saving does not send an email.</p>
       {error ? <p role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-[color:var(--portal-text)]">{error}</p> : null}
       <div className="flex flex-wrap justify-end gap-2 border-t border-[color:var(--portal-border)] pt-4"><PortalButton onClick={onClose} disabled={saving}>Cancel</PortalButton><PortalButton variant="primary" type="submit" disabled={saving || !dueDate || dueDate <= today || dueDate === editing.row.dueDate}>{saving ? 'Saving…' : 'Save date change'}</PortalButton></div>
-    </form> : null}
+    </form> : null
+
+  if (inline) return form
+
+  return <PortalModal isOpen={open} onClose={() => { if (!saving) onClose() }} title="Change payment date" description="Only the due date will change. The signed payment amounts remain the same." maxWidth="max-w-lg" zIndex={220} fullScreenOnMobile animateClose>
+    {form}
   </PortalModal>
 }
 
@@ -410,16 +412,15 @@ function ScheduleView({ model, scheduleRows, actorEmail, onRefresh }: { model: N
 function MonthlyView({ model }: { model: NonNullable<ReturnType<typeof useRevenueCollectionsModel>['model']> }) {
   return <div className="space-y-5">
     <section className={`${filterSurface} flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between`}><div><h2 className="font-semibold text-[color:var(--portal-text)]">Rolling 12 months</h2><p className={muted}>Collected uses recorded event payments. Expected uses future saved installments. Projected combines those two figures only when both are verified.</p></div><p className="shrink-0 text-xs text-[color:var(--portal-muted)]">As of {formatDate(model.asOfDate)}</p></section>
-    <FinanceReviewNotice issues={model.issues} />
     <MonthlyCollectionsBars rows={model.rolling12Months.map((row) => ({ key: row.month, label: formatMonth(row.month), collected: row.collected, expected: row.expected }))} title="Monthly actual and expected collections" />
-    <section className={`${filterSurface} overflow-hidden p-0`} aria-label="Monthly revenue detail">
+    <details className={`${filterSurface} overflow-hidden p-0`} aria-label="Monthly revenue detail"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-[color:var(--portal-text)]">View all monthly totals</summary>
       <div className="hidden md:block"><table className="w-full text-left text-sm"><thead className="bg-[color:var(--portal-soft)] text-xs text-[color:var(--portal-muted)]"><tr><th className="px-5 py-3 font-medium">Month</th><th className="px-4 py-3 text-right font-medium">Collected</th><th className="px-4 py-3 text-right font-medium">Expected</th><th className="px-5 py-3 text-right font-medium">Projected</th></tr></thead><tbody className="divide-y divide-[color:var(--portal-border)]">{model.rolling12Months.map((row) => <tr key={row.month} className="text-[color:var(--portal-text)]"><th scope="row" className="px-5 py-3 font-medium">{formatMonth(row.month, true)}</th><td className="px-4 py-3 text-right tabular-nums">{formatFinanceCurrency(row.collected)}</td><td className="px-4 py-3 text-right tabular-nums">{formatFinanceCurrency(row.expected)}</td><td className="px-5 py-3 text-right font-semibold tabular-nums">{formatFinanceCurrency(row.projected)}</td></tr>)}</tbody></table></div>
       <div className="divide-y divide-[color:var(--portal-border)] md:hidden">{model.rolling12Months.map((row) => <article key={row.month} className="p-4"><h3 className="font-semibold text-[color:var(--portal-text)]">{formatMonth(row.month, true)}</h3><dl className="mt-3 grid grid-cols-2 gap-3 text-xs"><div><dt className="text-[color:var(--portal-muted)]">Collected</dt><dd className="mt-1 tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(row.collected)}</dd></div><div><dt className="text-[color:var(--portal-muted)]">Expected</dt><dd className="mt-1 tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(row.expected)}</dd></div><div className="col-span-2 border-t border-[color:var(--portal-border)] pt-2"><dt className="text-[color:var(--portal-muted)]">Projected</dt><dd className="mt-1 font-semibold tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(row.projected)}</dd></div></dl></article>)}</div>
-    </section>
+    </details>
   </div>
 }
 
-function ReceivablesView({ model }: { model: NonNullable<ReturnType<typeof useRevenueCollectionsModel>['model']> }) {
+export function ReceivablesView({ model, onOpenSchedule }: { model: NonNullable<ReturnType<typeof useRevenueCollectionsModel>['model']>; onOpenSchedule?: (bookingId: string) => void }) {
   const [search, setSearch] = useState('')
   const [client, setClient] = useState('')
   const [status, setStatus] = useState<LuxorRevenueRecordStatus | ''>('')
@@ -437,10 +438,35 @@ function ReceivablesView({ model }: { model: NonNullable<ReturnType<typeof useRe
   }), [model.receivables, search, client, status, eventStart, eventEnd, dueStart, dueEnd, minimum, maximum])
 
   return <div className="space-y-5">
-    <section className={`${filterSurface} space-y-4`}><div><h2 className="font-semibold text-[color:var(--portal-text)]">Confirmed booking balances</h2><p className={muted}>Amounts on rows marked Needs review are provisional and unverified until the source is reconciled.</p></div>
-      <div className="flex flex-col gap-3 lg:flex-row"><SearchField value={search} onChange={setSearch} /><Field label="Client"><input className={`${inputClass} mt-1`} value={client} onChange={(event) => setClient(event.target.value)} placeholder="Filter by client" /></Field><Field label="Status"><PortalSelect aria-label="Receivable status" className="mt-1" value={status} onChange={(value) => setStatus(value as LuxorRevenueRecordStatus | '')} options={recordStatuses} /></Field></div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Field label="Event from"><div className="mt-1"><PortalDatePicker value={eventStart} onChange={setEventStart} timeZone="America/Chicago" placeholder="Any date" /></div></Field><Field label="Event through"><div className="mt-1"><PortalDatePicker value={eventEnd} onChange={setEventEnd} timeZone="America/Chicago" placeholder="Any date" /></div></Field><Field label="Next payment due from"><div className="mt-1"><PortalDatePicker value={dueStart} onChange={setDueStart} timeZone="America/Chicago" placeholder="Any date" /></div></Field><Field label="Next payment due through"><div className="mt-1"><PortalDatePicker value={dueEnd} onChange={setDueEnd} timeZone="America/Chicago" placeholder="Any date" /></div></Field></div>
-      <div className="grid max-w-xl gap-3 sm:grid-cols-2"><Field label="Minimum remaining balance"><input className={`${inputClass} mt-1 tabular-nums`} type="number" min="0" step="0.01" inputMode="decimal" value={minimum} onChange={(event) => setMinimum(event.target.value)} placeholder="$0" /></Field><Field label="Maximum remaining balance"><input className={`${inputClass} mt-1 tabular-nums`} type="number" min="0" step="0.01" inputMode="decimal" value={maximum} onChange={(event) => setMaximum(event.target.value)} placeholder="No maximum" /></Field></div>
+    <section className={filterSurface}>
+      <PortalFilterBar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search clients, bookings, or references"
+        resultLabel={`${rows.length} ${rows.length === 1 ? 'booking' : 'bookings'}`}
+        activeFilters={[
+          ...(client ? [{ id: 'client', label: `Client: ${client}`, onRemove: () => setClient('') }] : []),
+          ...(status ? [{ id: 'status', label: recordStatuses.find((item) => item.value === status)?.label || status, onRemove: () => setStatus('') }] : []),
+          ...(eventStart ? [{ id: 'event-start', label: `Event from ${formatDate(eventStart)}`, onRemove: () => setEventStart('') }] : []),
+          ...(eventEnd ? [{ id: 'event-end', label: `Event through ${formatDate(eventEnd)}`, onRemove: () => setEventEnd('') }] : []),
+          ...(dueStart ? [{ id: 'due-start', label: `Due from ${formatDate(dueStart)}`, onRemove: () => setDueStart('') }] : []),
+          ...(dueEnd ? [{ id: 'due-end', label: `Due through ${formatDate(dueEnd)}`, onRemove: () => setDueEnd('') }] : []),
+          ...(minimum !== '' ? [{ id: 'minimum', label: `Minimum ${formatFinanceCurrency(Number(minimum))}`, onRemove: () => setMinimum('') }] : []),
+          ...(maximum !== '' ? [{ id: 'maximum', label: `Maximum ${formatFinanceCurrency(Number(maximum))}`, onRemove: () => setMaximum('') }] : []),
+        ]}
+        onClearFilters={() => { setClient(''); setStatus(''); setEventStart(''); setEventEnd(''); setDueStart(''); setDueEnd(''); setMinimum(''); setMaximum('') }}
+      >
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Field label="Client"><input className={`${inputClass} mt-1`} value={client} onChange={(event) => setClient(event.target.value)} placeholder="Filter by client" /></Field>
+          <Field label="Status"><PortalSelect aria-label="Receivable status" className="mt-1" value={status} onChange={(value) => setStatus(value as LuxorRevenueRecordStatus | '')} options={recordStatuses} /></Field>
+          <Field label="Event from"><div className="mt-1"><PortalDatePicker value={eventStart} onChange={setEventStart} timeZone="America/Chicago" placeholder="Any date" /></div></Field>
+          <Field label="Event through"><div className="mt-1"><PortalDatePicker value={eventEnd} onChange={setEventEnd} timeZone="America/Chicago" placeholder="Any date" /></div></Field>
+          <Field label="Next payment due from"><div className="mt-1"><PortalDatePicker value={dueStart} onChange={setDueStart} timeZone="America/Chicago" placeholder="Any date" /></div></Field>
+          <Field label="Next payment due through"><div className="mt-1"><PortalDatePicker value={dueEnd} onChange={setDueEnd} timeZone="America/Chicago" placeholder="Any date" /></div></Field>
+          <Field label="Minimum remaining balance"><input className={`${inputClass} mt-1 tabular-nums`} type="number" min="0" step="0.01" inputMode="decimal" value={minimum} onChange={(event) => setMinimum(event.target.value)} placeholder="$0" /></Field>
+          <Field label="Maximum remaining balance"><input className={`${inputClass} mt-1 tabular-nums`} type="number" min="0" step="0.01" inputMode="decimal" value={maximum} onChange={(event) => setMaximum(event.target.value)} placeholder="No maximum" /></Field>
+        </div>
+      </PortalFilterBar>
     </section>
     <FinanceReviewNotice issues={model.issues} />
     {!rows.length ? <FinanceEmptyState title="No receivables match" detail="Adjust the filters or review the saved contracts and payment schedules." /> : <div className="grid gap-3 xl:grid-cols-2">{rows.map((row) => <article key={row.bookingId} className={filterSurface}>
@@ -449,10 +475,9 @@ function ReceivablesView({ model }: { model: NonNullable<ReturnType<typeof useRe
       {row.status === 'needs_review' ? <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Values below are provisional and unverified.</p> : null}
       <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-[color:var(--portal-border)] py-3 sm:grid-cols-3"><div><dt className="text-xs text-[color:var(--portal-muted)]">Remaining balance</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(row.remainingBalance)}</dd></div><div><dt className="text-xs text-[color:var(--portal-muted)]">Paid</dt><dd className="mt-1 font-medium tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(row.paid)}</dd></div><div><dt className="text-xs text-[color:var(--portal-muted)]">Next payment</dt><dd className="mt-1 font-medium tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(row.nextPaymentAmount)}</dd><dd className="text-xs text-[color:var(--portal-muted)]">{formatDate(row.nextPaymentDue)}</dd></div></dl>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <Link href={`/portal/finances/schedules?bookingId=${encodeURIComponent(row.bookingId)}&client=${encodeURIComponent(row.clientName)}`} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c]/15 px-3 py-1.5 text-xs font-semibold text-[#9a6d26] hover:bg-[#caa24c]/25 dark:text-[#e6c77f]"><CalendarBlank size={14} weight="regular" /> View payment schedule</Link>
+        {onOpenSchedule ? <button type="button" onClick={() => onOpenSchedule(row.bookingId)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c]/15 px-3 py-1.5 text-xs font-semibold text-[#9a6d26] hover:bg-[#caa24c]/25 dark:text-[#e6c77f]"><CalendarBlank size={14} weight="regular" /> View payment schedule</button> : <Link href={`/portal/finances?view=receivables&bookingId=${encodeURIComponent(row.bookingId)}`} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#caa24c]/15 px-3 py-1.5 text-xs font-semibold text-[#9a6d26] hover:bg-[#caa24c]/25 dark:text-[#e6c77f]"><CalendarBlank size={14} weight="regular" /> View payment schedule</Link>}
         {row.inquiryId ? <Link href={`/portal/leads/${encodeURIComponent(row.inquiryId)}`} className="inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">Open lead <ArrowUpRight aria-hidden="true" size={14} weight="regular" /></Link> : null}
       </div>
-      {row.schedule.length ? <details className="mt-2 border-t border-[color:var(--portal-border)] pt-2"><summary className="min-h-10 cursor-pointer py-2 text-sm font-medium text-[color:var(--portal-text)]">View {row.schedule.length} saved payment {row.schedule.length === 1 ? 'item' : 'items'}</summary><ul className="space-y-2 pb-2">{row.schedule.map((item) => <li key={item.installmentId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[color:var(--portal-soft)] px-3 py-2 text-xs"><span className="min-w-0 flex-1 text-[color:var(--portal-text)]">{item.label} · {formatDate(item.dueDate)}</span><span className="font-medium tabular-nums text-[color:var(--portal-text)]">{formatFinanceCurrency(item.remaining)}</span><Status value={item.status} warning={item.reviewRequired} /></li>)}</ul></details> : null}
     </article>)}</div>}
   </div>
 }
@@ -464,7 +489,7 @@ function historyDateSource(value: LuxorRevenueHistoryRow['dateSource']) {
   return labels[value]
 }
 
-function PaymentHistoryDetails({ row, onClose }: { row: LuxorRevenueHistoryRow | null; onClose: () => void }) {
+export function PaymentHistoryDetails({ row, onClose }: { row: LuxorRevenueHistoryRow | null; onClose: () => void }) {
   if (!row) return null
   return <PortalModal isOpen={Boolean(row)} onClose={onClose} title="Payment record" description="Saved payment and refund references for this transaction." maxWidth="max-w-2xl" animateClose>
     <div className="space-y-4">
@@ -518,24 +543,44 @@ function PaymentHistoryView({ model }: { model: NonNullable<ReturnType<typeof us
   </div>
 }
 
-export function RevenueCollectionsView({ view, actorEmail }: { view: RevenueView; actorEmail: string | null }) {
+export function RevenueCollectionsView({ view, actorEmail, embedded = false }: { view: RevenueView; actorEmail: string | null; embedded?: boolean }) {
+  const monthlyAnchorHandled = useRef(false)
+  const [profit, setProfit] = useState<ProfitSnapshot | null>(null)
+  const [profitError, setProfitError] = useState(false)
+  const [profitRevision, setProfitRevision] = useState(0)
+  useEffect(() => {
+    if (view !== 'revenue') return
+    const controller = new AbortController()
+    fetch('/api/portal/event-profitability', { cache: 'no-store', signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error('Unavailable')
+      const result = await response.json() as ProfitSnapshot
+      if (!Array.isArray(result.events) || !Array.isArray(result.issues)) throw new Error('Unavailable')
+      if (!controller.signal.aborted) { setProfit(result); setProfitError(false) }
+    }).catch(() => { if (!controller.signal.aborted) { setProfit(null); setProfitError(true) } })
+    return () => controller.abort()
+  }, [view, profitRevision])
   const [preset, setPreset] = useState<NonNullable<LuxorRevenueCollectionsOptions['preset']>>('this_month')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const options = { preset, startDate, endDate }
   const { model, loading, error, refresh, scheduleRows } = useRevenueCollectionsModel(options)
   const periodFilter = <RevenuePeriodFilter preset={preset} setPreset={setPreset} startDate={startDate} setStartDate={setStartDate} endDate={endDate} setEndDate={setEndDate} />
+  useEffect(() => {
+    if (embedded && view === 'revenue' && model && !monthlyAnchorHandled.current && window.location.hash === '#monthly-collections') {
+      monthlyAnchorHandled.current = true
+      requestAnimationFrame(() => document.getElementById('monthly-collections')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' }))
+    }
+  }, [embedded, view, model])
 
-  return <RevenueCollectionsShell view={view} onRefresh={() => { void refresh() }} refreshing={loading}>
-    <main className="space-y-5 p-4 sm:p-6" aria-busy={loading}>
+  const content = <main className={embedded ? "space-y-5" : "space-y-5 p-4 sm:p-6"} aria-busy={loading}>
       <LoadState loading={loading} error={error} hasModel={Boolean(model)} />
       {!error && model ? <>
-        {view === 'revenue' ? <RevenueDashboard model={model} onPeriodChange={periodFilter} /> : null}
+        {view === 'revenue' ? <RevenueDashboard model={model} onPeriodChange={periodFilter} profit={profit} profitError={profitError} onRefresh={() => { void refresh(); setProfitRevision((value) => value + 1) }} refreshing={loading} /> : null}
         {view === 'schedules' ? <ScheduleView model={model} scheduleRows={scheduleRows} actorEmail={actorEmail} onRefresh={() => { void refresh() }} /> : null}
         {view === 'monthly' ? <MonthlyView model={model} /> : null}
         {view === 'receivables' ? <ReceivablesView model={model} /> : null}
         {view === 'history' ? <PaymentHistoryView model={model} /> : null}
       </> : null}
     </main>
-  </RevenueCollectionsShell>
+  return embedded ? content : <RevenueCollectionsShell view={view} onRefresh={() => { void refresh() }} refreshing={loading}>{content}</RevenueCollectionsShell>
 }

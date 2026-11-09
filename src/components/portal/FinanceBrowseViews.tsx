@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -67,44 +67,20 @@ const links: BrowseItem[] = [
     icon: <CalendarDots size={16} weight="regular" />,
   },
   {
-    id: 'schedules',
-    label: 'Payment Schedules',
-    description: 'Client installment plans, due dates, and manual payment logging',
-    href: '/portal/finances/schedules',
-    group: 'Revenue & Collections',
-    icon: <CalendarBlank size={16} weight="regular" />,
-  },
-  {
     id: 'receivables',
-    label: 'Accounts Receivable',
+    label: 'Payment Schedules',
     description: 'Confirmed booking balances and remaining client obligations',
-    href: '/portal/finances/receivables',
+    href: '/portal/finances?view=receivables',
     group: 'Revenue & Collections',
     icon: <Wallet size={16} weight="regular" />,
   },
   {
     id: 'revenue',
-    label: 'Revenue Dashboard',
+    label: 'Revenue',
     description: 'Collected payments, expected revenue, and period performance',
-    href: '/portal/finances/revenue',
+    href: '/portal/finances?view=revenue',
     group: 'Revenue & Collections',
     icon: <CurrencyCircleDollar size={16} weight="regular" />,
-  },
-  {
-    id: 'monthly',
-    label: 'Monthly Collections',
-    description: 'Rolling 12-month collected and expected schedule breakdown',
-    href: '/portal/finances/monthly',
-    group: 'Revenue & Collections',
-    icon: <CalendarDots size={16} weight="regular" />,
-  },
-  {
-    id: 'history',
-    label: 'Payment History',
-    description: 'Recorded incoming payments, refunds, and processor references',
-    href: '/portal/finances/history',
-    group: 'Revenue & Collections',
-    icon: <CreditCard size={16} weight="regular" />,
   },
   {
     id: 'invoices',
@@ -163,14 +139,6 @@ const links: BrowseItem[] = [
     icon: <FileText size={16} weight="regular" />,
   },
   {
-    id: 'reports',
-    label: 'Financial Reports',
-    description: 'Revenue summaries, collection status, and ledger breakdowns',
-    href: '/portal/finances?view=reports',
-    group: 'Ledgers & Reports',
-    icon: <Eye size={16} weight="regular" />,
-  },
-  {
     id: 'books',
     label: 'Books & records',
     description: 'Review reconciliation items and download accountant records',
@@ -198,18 +166,12 @@ const links: BrowseItem[] = [
 
 const groups = ['Overview', 'Revenue & Collections', 'Ledgers & Reports', 'Expense Management', 'Bills & Vendors']
 
-function getFinanceGroup(view: FinanceBrowseView) {
-  if (view === 'bills') return 'Bills & Vendors'
-  if (view === 'expenses') return 'Expense Management'
-  return links.find((item) => item.id === view)?.group ?? 'Overview'
-}
-
 export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
   overview: 'Financial Overview',
-  revenue: 'Revenue Dashboard',
-  schedules: 'Payment Schedules',
+  revenue: 'Revenue',
+  schedules: 'Schedule details',
   monthly: 'Monthly Collections',
-  receivables: 'Accounts Receivable',
+  receivables: 'Payment Schedules',
   history: 'Payment History',
   invoices: 'Invoices Ledger',
   payments: 'Payments Log',
@@ -236,15 +198,9 @@ export function FinanceBrowseViews({
   open: boolean
   close: () => void
   currentView: FinanceBrowseView
-  onLegacySelect?: (view: 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports') => void
+  onLegacySelect?: (view: 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'reports') => void
 }) {
-  const currentGroup = getFinanceGroup(currentView)
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
-  const activeExpandedGroup = expandedGroup ?? currentGroup
-  const handleClose = useCallback(() => {
-    setExpandedGroup(null)
-    close()
-  }, [close])
+  const handleClose = useCallback(() => close(), [close])
 
   useEffect(() => {
     if (!open) return
@@ -297,23 +253,11 @@ export function FinanceBrowseViews({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-6 portal-scrollbar">
-              <nav aria-label="Financial Center views" className="space-y-2">
-                {[currentGroup, ...groups.filter((group) => group !== currentGroup)].map((group) => {
-                  const expanded = activeExpandedGroup === group
-                  const groupLinks = links.filter((item) => item.group === group)
-                  return (
-                  <section key={group} className="overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
-                    <button
-                      type="button"
-                      aria-expanded={expanded}
-                      aria-controls={expanded ? `finance-views-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : undefined}
-                      onClick={() => setExpandedGroup(expanded ? '' : group)}
-                      className="flex min-h-12 w-full items-center justify-between gap-3 bg-[color:var(--portal-card)] px-3.5 py-3 text-left text-sm font-semibold text-[color:var(--portal-text)] transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45"
-                    >
-                      <span>{group}</span>
-                      <ChevronRight size={16} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`} aria-hidden="true" />
-                    </button>
-                    {expanded ? <div id={`finance-views-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} className="divide-y divide-[color:var(--portal-border)] border-t border-[color:var(--portal-border)]">
+              <nav aria-label="Financial Center views" className="space-y-4">
+                {groups.map((group) => (
+                  <section key={group}>
+                    <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group}</h3>
+                    <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
                       {group === 'Bills & Vendors' ? (
                         <Link
                           href="/portal/finances/bills"
@@ -328,7 +272,8 @@ export function FinanceBrowseViews({
                           </span>
                           <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
                         </Link>
-                      ) : groupLinks.map((item) => {
+                      ) : (
+                        links.filter((item) => item.group === group).map((item) => {
                           const isCurrent = item.id === currentView
                           const itemClass = `flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${
                             isCurrent
@@ -339,14 +284,7 @@ export function FinanceBrowseViews({
                             <>
                               <span className="shrink-0">{item.icon}</span>
                               <span className="min-w-0 flex-1">
-                                <span className="flex items-center gap-2 text-sm font-bold">
-                                  <span>{item.label}</span>
-                                  {isCurrent ? (
-                                    <span className="rounded-full bg-[#caa24c]/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#9a6d26] dark:text-[#f1d27a]">
-                                      Current
-                                    </span>
-                                  ) : null}
-                                </span>
+                                <span className="block text-sm font-bold">{item.label}</span>
                                 <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">
                                   {item.description}
                                 </span>
@@ -358,6 +296,8 @@ export function FinanceBrowseViews({
                           if (
                             onLegacySelect &&
                             (item.id === 'overview' ||
+                              item.id === 'revenue' ||
+                              item.id === 'receivables' ||
                               item.id === 'invoices' ||
                               item.id === 'payments' ||
                               item.id === 'expenses' ||
@@ -391,10 +331,11 @@ export function FinanceBrowseViews({
                               {content}
                             </Link>
                           )
-                        })}
-                    </div> : null}
+                        })
+                      )}
+                    </div>
                   </section>
-                )})}
+                ))}
               </nav>
             </div>
           </motion.section>

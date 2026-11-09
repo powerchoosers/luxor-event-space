@@ -75,8 +75,8 @@ function pushIssue(issues: BooksHealthIssue[], seen: Set<string>, row: Omit<Book
 function hrefForOverviewIssue(message: string): string {
   const lower = message.toLowerCase()
   if (lower.includes('payment') && (lower.includes('classif') || lower.includes('allocation') || lower.includes('unallocated'))) return '/portal/finances?view=payments'
-  if (lower.includes('refund')) return '/portal/finances/history'
-  if (lower.includes('schedule') || lower.includes('installment')) return '/portal/finances/schedules'
+  if (lower.includes('refund')) return '/portal/finances?view=payments'
+  if (lower.includes('schedule') || lower.includes('installment')) return '/portal/finances?view=receivables'
   if (lower.includes('invoice') || lower.includes('contract')) return '/portal/finances/receivables'
   return '/portal/finances'
 }

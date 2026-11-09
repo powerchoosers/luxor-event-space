@@ -25,6 +25,6 @@ export function FinancialPlanningReadOnly({ snapshot, today }: { snapshot: Plann
       <span>Difference: <strong>{difference === null ? 'Unavailable' : money(difference)}</strong></span>
     </div>
     {month && month >= today.slice(0, 7) ? <p className="mt-2 text-sm text-[color:var(--portal-muted)]">Current and future totals need an as-of-today source.</p> : null}
-    <Link href="/portal/finances/history" className="mt-3 inline-block text-sm font-semibold underline underline-offset-4">View payment records</Link>
+    <Link href="/portal/finances?view=payments" className="mt-3 inline-block text-sm font-semibold underline underline-offset-4">View payment records</Link>
   </section>
 }

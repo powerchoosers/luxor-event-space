@@ -670,7 +670,9 @@ export function inspectLuxorFinanceOverviewSources(input: {
   else {
     const table = new Map<string, number>()
     const paymentIds = new Set(payments.filter((row) => row.status === 'paid').map((row) => row.id))
+    const correctedPaymentIds = new Set(payments.filter((row) => row.status === 'void' && row.metadata?.manual_correction === true).map((row) => row.id))
     for (const row of input.allocations) {
+      if (correctedPaymentIds.has(row.payment_id)) continue
       const amount = Number(row.amount)
       if (!paymentIds.has(row.payment_id) || !installmentIds.has(row.installment_id) || !Number.isFinite(amount) || amount <= 0) { issues.push('Invalid allocation table row'); continue }
       const key = JSON.stringify([row.payment_id, row.installment_id])

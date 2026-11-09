@@ -3,22 +3,37 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import Link from 'next/link'
-import { ArrowClockwise, CreditCard, CurrencyDollar, Eye, FileText, List, MagnifyingGlass, Plus, TrendDown, TrendUp, X } from '@phosphor-icons/react'
+import { useSearchParams } from 'next/navigation'
+import {
+  CreditCard,
+  CurrencyDollar,
+  Eye,
+  FileText,
+  List,
+  MagnifyingGlass,
+  Plus,
+  TrendDown,
+  TrendUp,
+  X,
+} from '@phosphor-icons/react'
 import { Menu, ChevronDown } from '@/lib/icons/phosphor-compat'
 import {
   PortalPageFrame,
   PortalPageHeader,
-  PortalAnimatedTabs,
   PortalTabTransition,
   PortalStickyTable,
   PortalStickyThead,
   PortalTableCard,
   PortalStatusBadge,
   PortalSelect,
-  PortalButton,
-  PortalSkeleton
+  PortalSkeleton,
+  PortalContactAvatar,
 } from '@/components/portal/PortalUI'
 import FinancialOverview from '@/components/portal/FinancialOverview'
+import { PaymentHistoryDetails, ReceivablesView, RevenueCollectionsView } from '@/components/portal/RevenueCollectionsView'
+import { getLuxorRevenueCollectionsModel, type LuxorRevenueHistoryRow } from '@/lib/luxorRevenueCollectionsModel'
+import { BooksRecordsPage } from '@/components/portal/BooksRecordsPage'
+import { FinanceMainTabs } from '@/components/portal/FinanceMainTabs'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView, LuxorBill } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
@@ -46,11 +61,14 @@ function refundKindDisplay(kind: LuxorPaymentRefundView['refund_kind']) {
   }
 }
 
-type Tab = 'dashboard' | 'invoices' | 'payments' | 'expenses' | 'reports'
+type Tab = 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'reports' | 'books'
 
 export default function FinancesPage() {
   const reduceMotion = useReducedMotion()
+  const routeSearchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+  const [selectedPaymentRecord, setSelectedPaymentRecord] = useState<LuxorRevenueHistoryRow | null>(null)
+  const [paymentScheduleBookingId, setPaymentScheduleBookingId] = useState<string | null>(null)
   const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
@@ -98,12 +116,14 @@ type LuxorBookingExpense = {
   const [showCancelledExpenses, setShowCancelledExpenses] = useState(false)
   const [expenses, setExpenses] = useState<LuxorBookingExpense[]>([])
 
-  const fetchFinanceData = async () => {
+  const fetchFinanceData = async (silent = false) => {
     const generation = ++refreshGeneration.current
     try {
-      setLoading(true)
+      if (!silent) {
+        setLoading(true)
+        setTestClassificationVerified(false)
+      }
       setError(null)
-      setTestClassificationVerified(false)
       const [ledgerRes, sourcesRes] = await Promise.all([
         fetch('/api/portal/finance-overview-ledgers'),
         fetch('/api/portal/finance-overview-sources'),
@@ -160,7 +180,7 @@ type LuxorBookingExpense = {
     } catch (err) {
       if (generation !== refreshGeneration.current) return
       console.error(err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch financial metrics.')
+      if (!silent) setError(err instanceof Error ? err.message : 'Failed to fetch financial metrics.')
     } finally {
       if (generation === refreshGeneration.current) setLoading(false)
     }
@@ -171,19 +191,46 @@ type LuxorBookingExpense = {
   }, [])
 
   useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') void fetchFinanceData(true)
+    }
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    window.addEventListener('focus', refreshIfVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+      window.removeEventListener('focus', refreshIfVisible)
+    }
+  }, [])
+
+  useEffect(() => {
     const syncViewFromUrl = () => {
-      const view = new URLSearchParams(window.location.search).get('view')
-      setActiveTab(view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'reports' ? view : 'dashboard')
+      const params = new URLSearchParams(window.location.search)
+      const view = params.get('view')
+      const bookingId = params.get('bookingId')
+      if (view === 'receivables' && bookingId) {
+        setPaymentScheduleBookingId(bookingId)
+        const url = new URL(window.location.href)
+        url.searchParams.delete('bookingId')
+        url.searchParams.delete('client')
+        window.history.replaceState(window.history.state, '', url)
+      }
+      setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'books' ? view : 'dashboard')
     }
     syncViewFromUrl()
     window.addEventListener('popstate', syncViewFromUrl)
     return () => window.removeEventListener('popstate', syncViewFromUrl)
   }, [])
 
+  useEffect(() => {
+    const view = routeSearchParams.get('view')
+    setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'books' ? view : 'dashboard')
+  }, [routeSearchParams])
+
   const selectLegacyView = (tab: Tab) => {
     setActiveTab(tab)
     setSearchTerm('')
     const url = new URL(window.location.href)
+    url.hash = ''
     if (tab === 'dashboard') url.searchParams.delete('view')
     else url.searchParams.set('view', tab)
     window.history.pushState({}, '', url)
@@ -267,8 +314,11 @@ type LuxorBookingExpense = {
   const overview = useMemo(() => getLuxorFinanceOverview({ invoices, bookings, payments, installments, refunds, testInquiryIds: businessRows.testInquiryIds, testBookingIds: businessRows.testBookingIds, testInvoiceIds: businessRows.testInvoiceIds, allocations }), [invoices, bookings, payments, installments, refunds, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, allocations])
 
   // Payments extraction
-  const allPayments = payments.filter((payment) => payment.status === 'paid' || payment.status === 'refunded')
-    .filter((payment) => payment.metadata?.is_test_record !== true)
+  const receivablesModel = useMemo(() => {
+    if (!testClassificationVerified || error) return null
+    return getLuxorRevenueCollectionsModel({ invoices, bookings, payments, installments, refunds, testInquiryIds: businessRows.testInquiryIds, testBookingIds: businessRows.testBookingIds, testInvoiceIds: businessRows.testInvoiceIds, allocations }, { preset: 'this_month' })
+  }, [testClassificationVerified, error, invoices, bookings, payments, installments, refunds, businessRows.testInquiryIds, businessRows.testBookingIds, businessRows.testInvoiceIds, allocations])
+  const allPayments = payments.filter((payment) => payment.metadata?.is_test_record !== true)
     .filter((payment) => !(payment.booking_id && businessRows.testBookingIds.has(payment.booking_id.toLowerCase())))
     .filter((payment) => !(payment.inquiry_id && businessRows.testInquiryIds.has(payment.inquiry_id.toLowerCase())))
     .filter((payment) => !(payment.invoice_id && businessRows.testInvoiceIds.has(payment.invoice_id.toLowerCase())))
@@ -296,10 +346,13 @@ type LuxorBookingExpense = {
 
   const FINANCE_TAB_LABELS: Record<Tab, string> = {
     dashboard: 'Financial Overview',
+    revenue: 'Revenue',
+    receivables: 'Payment Schedules',
     invoices: 'Invoices Ledger',
     payments: 'Payments Log',
     expenses: 'Expenses Tracking',
     reports: 'Financial Reports',
+    books: 'Books & records',
   }
 
   return (
@@ -328,10 +381,6 @@ type LuxorBookingExpense = {
               </span>
               <ChevronDown size={15} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
             </button>
-
-            <PortalButton onClick={fetchFinanceData}>
-              <ArrowClockwise size={15} weight="regular" /> Refresh Ledger
-            </PortalButton>
           </div>
         }
       />
@@ -369,24 +418,11 @@ type LuxorBookingExpense = {
         onLegacySelect={selectLegacyView}
       />
 
-      {/* Desktop rectangular sliding tabs */}
-      <div className="hidden shrink-0 xl:flex">
-        <PortalAnimatedTabs
-          variant="slider"
-          ariaLabel="Finances sections"
-          tabs={[
-            { id: 'dashboard', label: 'Financial Overview', icon: <TrendUp size={16} weight="regular" /> },
-            { id: 'invoices', label: 'Invoices Ledger', icon: <FileText size={16} weight="regular" /> },
-            { id: 'payments', label: 'Payments Log', icon: <CreditCard size={16} weight="regular" /> },
-            { id: 'expenses', label: 'Expenses Tracking', icon: <TrendDown size={16} weight="regular" /> },
-            { id: 'reports', label: 'Financial Reports', icon: <Eye size={16} weight="regular" /> },
-          ]}
-          activeTab={activeTab}
-          onTabChange={(tab) => selectLegacyView(tab as Tab)}
-        />
-      </div>
+      <FinanceMainTabs activeTab={activeTab} onLocalSelect={selectLegacyView} />
 
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
+      {activeTab === 'revenue' && <div className="h-full overflow-y-auto pb-6 portal-scrollbar"><RevenueCollectionsView view="revenue" actorEmail={null} embedded /></div>}
+      {activeTab === 'books' && <div className="h-full overflow-y-auto pb-6 portal-scrollbar"><BooksRecordsPage embedded /></div>}
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (loading || (!error && testClassificationVerified)) && (
         <FinancialOverview
@@ -395,6 +431,7 @@ type LuxorBookingExpense = {
           expenses={expenseBreakdown}
           bills={bills}
           openView={selectLegacyView}
+          onRefresh={() => { void fetchFinanceData(true) }}
           activity={allLedgerTransactions.flatMap((transaction) => {
             if (transaction.kind === 'payment') {
               const payment = transaction.payment
@@ -409,8 +446,14 @@ type LuxorBookingExpense = {
         />
       )}
       {activeTab === 'dashboard' && !loading && !testClassificationVerified && (
-        <p role="status" className="p-4 text-sm text-[color:var(--portal-muted)]">Business metrics are unavailable until test records are verified. Refresh the ledger to retry.</p>
+        <p role="status" className="p-4 text-sm text-[color:var(--portal-muted)]">Business metrics are unavailable until test records are verified. Reload the page to try again.</p>
       )}
+
+        {activeTab === 'receivables' && (
+          <div className="h-full overflow-y-auto pb-6 portal-scrollbar">
+            {loading && !receivablesModel ? <p role="status" className="p-4 text-sm text-[color:var(--portal-muted)]">Loading receivables…</p> : receivablesModel ? <ReceivablesView model={receivablesModel} onOpenSchedule={setPaymentScheduleBookingId} /> : <p role="alert" className="p-4 text-sm text-[color:var(--portal-muted)]">Receivables are unavailable until financial records are verified.</p>}
+          </div>
+        )}
 
         {/* INVOICES TAB */}
         {activeTab === 'invoices' && (
@@ -513,6 +556,11 @@ type LuxorBookingExpense = {
         )}
 
         {/* PAYMENTS TAB */}
+        {(activeTab === 'payments' || activeTab === 'receivables') && !loading && !error && testClassificationVerified && (
+          <div hidden>
+            <FinancialOverview overview={overview} expenses={expenseBreakdown} bills={bills} openView={selectLegacyView} onRefresh={() => { void fetchFinanceData(true) }} requestedScheduleBookingId={paymentScheduleBookingId} onRequestedScheduleClosed={() => setPaymentScheduleBookingId(null)} />
+          </div>
+        )}
         {activeTab === 'payments' && (
           <PortalTableCard
             controls={
@@ -532,10 +580,10 @@ type LuxorBookingExpense = {
                 <PortalStickyThead>
                   <tr className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em] border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/80">
                     <th className="px-8 py-5">Transaction Ref</th>
-                    <th className="px-6 py-5">Source Detail</th>
+                    <th className="px-6 py-5">Client & Event</th>
                     <th className="px-6 py-5">Payment Method</th>
                     <th className="px-6 py-5">Received / Completed Date</th>
-                    <th className="px-8 py-5 text-right">Settled Amount</th>
+                    <th className="px-8 py-5 text-right">Amount</th>
                   </tr>
                 </PortalStickyThead>
                 <tbody className="divide-y divide-[color:var(--portal-border)]/50">
@@ -565,20 +613,39 @@ type LuxorBookingExpense = {
                       const status = isRefund ? transaction.refund.status : transaction.payment.status
                       const amount = isRefund ? Number(transaction.refund.amount || 0) : Number(transaction.payment.amount || 0)
                       const at = isRefund ? transaction.refund.completed_at || transaction.refund.requested_at : getLuxorPaymentCalendarDateKey({ received_date: transaction.payment.received_date, paid_at: transaction.payment.paid_at || transaction.payment.created_at })
+                      const historyRow = receivablesModel?.paymentHistory.find((row) => row.id === `${transaction.kind}:${id}`)
                       const refundDisplay = isRefund ? refundKindDisplay(transaction.refund.refund_kind) : null
                       const refundStatus = status === 'succeeded' ? 'Refund completed' : `Refund ${status}`
                       const label = isRefund
                         ? `${refundDisplay?.needsReview ? 'Needs review · ' : ''}${refundStatus}`
-                        : status === 'refunded' ? 'Legacy refund needs review' : 'Payment recorded'
-                      return <tr key={`${transaction.kind}-${id || idx}`} className="hover:bg-[color:var(--portal-soft)]/50 transition-colors">
+                        : status === 'refunded' ? 'Legacy refund needs review' : status === 'paid' ? 'Payment recorded' : `Payment ${status}`
+
+                      const transactionBookingId = isRefund ? transaction.refund.booking_id : transaction.payment.booking_id
+                      const invoiceId = isRefund ? transaction.refund.invoice_id : transaction.payment.invoice_id
+                      const bookingId = transactionBookingId || (invoiceId ? invoices.find((invoice) => invoice.id === invoiceId)?.booking_id : null)
+                      const booking = bookingId ? bookings.find((b) => b.id === bookingId) : null
+                      const hasSchedule = Boolean(bookingId && overview.reportingRows.acceptedInvoiceRows.some((row) => row.invoice.booking_id === bookingId) && overview.reportingRows.scheduleRows.some((row) => row.bookingId === bookingId))
+                      const clientName = booking?.client_name || null
+                      const eventType = booking?.event_type || null
+                      const inquiryId = booking?.inquiry_id || (invoiceId ? invoices.find((invoice) => invoice.id === invoiceId)?.inquiry_id : null) || (isRefund ? transaction.refund.inquiry_id : transaction.payment.inquiry_id)
+
+                      return <tr key={`${transaction.kind}-${id || idx}`} onClick={hasSchedule ? () => setPaymentScheduleBookingId(bookingId!) : undefined} className={hasSchedule ? 'cursor-pointer transition-colors hover:bg-[color:var(--portal-soft)] focus-visible:bg-[color:var(--portal-soft)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#caa24c]' : ''}>
                         <td className="px-8 py-5 tabular-nums font-bold text-xs text-[color:var(--portal-muted)]">#{id?.slice(0, 10) || `TX-00${idx}`}</td>
                         <td className="px-6 py-5">
-                          <p className="text-xs font-bold text-[color:var(--portal-text)] leading-none">{refundDisplay?.transactionTitle || (transaction.kind === 'payment' ? transaction.payment.notes || 'Event Booking Retainer' : 'Refund')}</p>
+                          {inquiryId && clientName ? (
+                            <Link href={`/portal/leads/${encodeURIComponent(inquiryId)}?from=${encodeURIComponent('/portal/finances?view=payments')}`} onClick={(event) => event.stopPropagation()} className="group inline-flex min-h-10 max-w-full items-start gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50" aria-label={`Open ${clientName} contact`}>
+                              <span className="shrink-0 transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100 motion-reduce:group-focus-visible:scale-100"><PortalContactAvatar name={clientName} size="sm" className="h-8 w-8 text-[10px]" /></span>
+                              <span className="min-w-0"><span className="block text-xs font-bold leading-none text-[color:var(--portal-text)] transition-colors group-hover:text-[#a8792f] group-focus-visible:text-[#a8792f] dark:group-hover:text-[#e6c77f] dark:group-focus-visible:text-[#e6c77f]">{clientName}</span>{eventType && <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">{eventType}</span>}</span>
+                            </Link>
+                          ) : <div className="flex items-start gap-3">{clientName && <PortalContactAvatar name={clientName} size="sm" className="h-8 w-8 shrink-0 text-[10px]" />}<div className="min-w-0"><p className="text-xs font-bold leading-none text-[color:var(--portal-text)]">{clientName || refundDisplay?.transactionTitle || (transaction.kind === 'payment' ? transaction.payment.notes || 'Event Booking Retainer' : 'Refund')}</p>{eventType && <p className="mt-0.5 text-[11px] text-[color:var(--portal-muted)]">{eventType}</p>}</div></div>}
+                          {hasSchedule && <button type="button" onClick={(event) => { event.stopPropagation(); setPaymentScheduleBookingId(bookingId!) }} className="sr-only focus:not-sr-only focus:mt-2 focus:inline-flex focus:min-h-10 focus:items-center focus:rounded focus:px-2 focus:text-xs focus:text-[#a8792f] focus:outline-none focus:ring-2 focus:ring-[#caa24c]/50">View {clientName || 'client'} payment schedule</button>}
+                        </td>
+                        <td className="px-6 py-5">
+                          <p className="text-xs text-[color:var(--portal-muted)] font-medium">{isRefund ? transaction.refund.processor || 'Not recorded' : transaction.payment.payment_method || 'Not recorded'}</p>
                           <p className={`text-[9px] font-bold uppercase tracking-widest mt-1 ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-[#caa24c]'}`}>{label}</p>
                         </td>
-                        <td className="px-6 py-5 text-xs text-[color:var(--portal-muted)] font-medium">{isRefund ? 'Stripe' : transaction.payment.payment_method || 'Bank Transfer'}</td>
                         <td className="px-6 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">{formatLuxorDate(at) || 'N/A'}</td>
-                        <td className={`px-8 py-5 text-right tabular-nums font-bold ${isRefund || status === 'refunded' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{isRefund ? status === 'succeeded' ? '-' : '' : status === 'refunded' ? '-' : '+'}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="px-8 py-5 text-right tabular-nums font-bold text-[color:var(--portal-text)]">{isRefund && status === 'succeeded' ? '-' : !isRefund && status === 'paid' ? '+' : ''}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}{historyRow && <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedPaymentRecord(historyRow) }} onKeyDown={(event) => event.stopPropagation()} className="ml-3 inline-flex min-h-10 items-center rounded-lg px-2 text-xs font-semibold text-[#9a712e] hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]">Details</button>}</td>
                       </tr>
                     })
                   )}
@@ -587,6 +654,8 @@ type LuxorBookingExpense = {
             </div>
           </PortalTableCard>
         )}
+
+        <PaymentHistoryDetails row={selectedPaymentRecord} onClose={() => setSelectedPaymentRecord(null)} />
 
         {/* EXPENSES TAB */}
         {activeTab === 'expenses' && (
@@ -749,39 +818,6 @@ type LuxorBookingExpense = {
           </div>
         )}
 
-        {/* REPORTS TAB */}
-        {activeTab === 'reports' && (
-          <div className="flex-1 min-h-0 space-y-4 overflow-y-auto portal-scrollbar pr-1 pb-8">
-            <section className="max-w-3xl rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
-              <h2 className="text-base font-semibold text-[color:var(--portal-text)]">Financial reports</h2>
-              <p className="mt-2 text-sm leading-relaxed text-[color:var(--portal-muted)]">Review recorded collections, expenses, budgets, and payment history in Finances.</p>
-              <div className="mt-5 border-t border-[color:var(--portal-border)] pt-4">
-                <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">All-time cash and payment review</h3>
-                <p className="mt-1 text-xs leading-relaxed text-[color:var(--portal-muted)]">A verified all-time summary is not available yet. Open payment history to review recorded payments and refunds.</p>
-              </div>
-              <div className="mt-5 divide-y divide-[color:var(--portal-border)] border-t border-[color:var(--portal-border)]">
-                <button type="button" onClick={() => selectLegacyView('dashboard')} className="block w-full rounded px-1 py-4 text-left hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
-                  <span className="block text-sm font-semibold text-[color:var(--portal-text)]">Financial overview</span>
-                  <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">Collections, paid expenses, balances, and monthly trends.</span>
-                </button>
-                {[
-                  { href: '/portal/finances/monthly', label: 'Monthly collections', description: 'Recorded and scheduled client payments by month.' },
-                  { href: '/portal/finances/budgets', label: 'Monthly plan', description: 'Set collection and spending targets; compare to recorded payments.' },
-                  { href: '/portal/finances/history', label: 'Payment history', description: 'Review incoming payments and refunds.' },
-                  { href: '/portal/finances/books', label: 'Books & records', description: 'Review issues, export records, and preview statement matching.' },
-                ].map((item) => <Link key={item.href} href={item.href} className="block rounded px-1 py-4 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45">
-                  <span className="block text-sm font-semibold text-[color:var(--portal-text)]">{item.label}</span>
-                  <span className="mt-1 block text-xs text-[color:var(--portal-muted)]">{item.description}</span>
-                </Link>)}
-              </div>
-            </section>
-            <section className="max-w-3xl rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-5 sm:p-6">
-              <h2 className="text-base font-semibold text-[color:var(--portal-text)]">Books & records</h2>
-              <p className="mt-1 text-sm leading-relaxed text-[color:var(--portal-muted)]">Review reconciliation items, download accountant CSVs, and preview bank statement matching in one place.</p>
-              <Link href="/portal/finances/books" className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-[color:var(--portal-border)] px-4 text-sm font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#caa24c]">Open Books & records</Link>
-            </section>
-          </div>
-        )}
       </PortalTabTransition>
     </PortalPageFrame>
   )

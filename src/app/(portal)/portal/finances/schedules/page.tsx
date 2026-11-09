@@ -1,7 +1,8 @@
-import { RevenueCollectionsView } from '@/components/portal/RevenueCollectionsView'
-import { getLuxorPortalSession } from '@/lib/luxorPortalAuth'
+import { redirect } from 'next/navigation'
 
-export default async function PaymentSchedulesPage() {
-  const session = await getLuxorPortalSession()
-  return <RevenueCollectionsView view="schedules" actorEmail={session?.email || null} />
+export default async function LegacyPaymentSchedulesPage({ searchParams }: { searchParams: Promise<{ bookingId?: string; client?: string }> }) {
+  const params = await searchParams
+  const query = new URLSearchParams({ view: 'receivables' })
+  if (params.bookingId) query.set('bookingId', params.bookingId)
+  redirect(`/portal/finances?${query.toString()}`)
 }

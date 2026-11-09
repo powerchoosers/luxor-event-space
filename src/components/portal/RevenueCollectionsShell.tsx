@@ -4,23 +4,21 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowClockwise, CreditCard } from '@phosphor-icons/react'
 import { ChevronDown, Menu } from '@/lib/icons/phosphor-compat'
+import { FinanceMainTabs } from '@/components/portal/FinanceMainTabs'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
 
 export const REVENUE_COLLECTION_VIEWS: Record<Extract<FinanceBrowseView, 'revenue' | 'schedules' | 'monthly' | 'receivables' | 'history'>, { title: string; description: string }> = {
-  revenue: { title: 'Revenue Dashboard', description: 'Collected payments, remaining obligations, and upcoming collections.' },
+  revenue: { title: 'Revenue', description: 'Collected payments, remaining obligations, and upcoming collections.' },
   schedules: { title: 'Payment Schedules', description: 'Contractual payment obligations for eligible bookings.' },
   monthly: { title: 'Monthly Collections', description: 'Collected and expected payments by month.' },
-  receivables: { title: 'Accounts Receivable', description: 'Remaining balances tied to valid, due payment obligations.' },
+  receivables: { title: 'Payment Schedules', description: 'Remaining balances tied to valid, due payment obligations.' },
   history: { title: 'Payment History', description: 'Recorded incoming payments, refunds, and their references.' },
 }
 
 const revenueCollectionLinks: Array<{ view: keyof typeof REVENUE_COLLECTION_VIEWS; href: string }> = [
   { view: 'revenue', href: '/portal/finances/revenue' },
-  { view: 'schedules', href: '/portal/finances/schedules' },
-  { view: 'monthly', href: '/portal/finances/monthly' },
   { view: 'receivables', href: '/portal/finances/receivables' },
-  { view: 'history', href: '/portal/finances/history' },
 ]
 
 export function RevenueCollectionsShell({
@@ -41,7 +39,7 @@ export function RevenueCollectionsShell({
       <PortalPageHeader
         icon={<CreditCard size={18} weight="regular" />}
         title={currentTitle}
-        description={REVENUE_COLLECTION_VIEWS[view].description}
+        description={view === 'receivables' ? undefined : REVENUE_COLLECTION_VIEWS[view].description}
         mobileActionsInline
         actions={(
           <div className="flex flex-wrap items-center justify-end gap-2.5">
@@ -92,7 +90,7 @@ export function RevenueCollectionsShell({
       </div>
 
       <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView={view} />
-      <nav aria-label="Revenue and collections views" className="hidden overflow-x-auto border-b border-[color:var(--portal-border)] px-4 lg:block lg:px-6">
+      {view === 'receivables' ? <FinanceMainTabs activeTab="receivables" /> : <nav aria-label="Revenue and collections views" className="hidden overflow-x-auto border-b border-[color:var(--portal-border)] px-4 lg:block lg:px-6">
         <div className="flex min-w-max items-stretch gap-1">
           <Link
             href="/portal/finances"
@@ -111,7 +109,7 @@ export function RevenueCollectionsShell({
             >{label}</Link>
           })}
         </div>
-      </nav>
+      </nav>}
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-6 portal-scrollbar">
         {children}
       </div>

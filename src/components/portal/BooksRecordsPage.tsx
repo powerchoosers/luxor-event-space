@@ -2,8 +2,10 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowClockwise, CaretDown, CaretUp } from '@phosphor-icons/react'
-import { PortalButton, PortalPageFrame, PortalPageHeader } from '@/components/portal/PortalUI'
+import { ArrowClockwise, CaretDown, CaretUp, List } from '@phosphor-icons/react'
+import { PortalButton, PortalPageHeader } from '@/components/portal/PortalUI'
+import { FinanceMainTabs } from '@/components/portal/FinanceMainTabs'
+import { FinanceBrowseViews } from '@/components/portal/FinanceBrowseViews'
 import { AccountantSourceExports } from '@/components/portal/AccountantSourceExports'
 import { AccountingReviewSection } from '@/components/portal/AccountingReviewSection'
 import { getLuxorReferenceChartOfAccounts, suggestReferenceExpenseAccount } from '@/lib/luxorReferenceChartOfAccounts'
@@ -70,7 +72,8 @@ function CollapsibleSection({ title, description, children, defaultOpen = false 
   )
 }
 
-export function BooksRecordsPage() {
+export function BooksRecordsPage({ embedded = false }: { embedded?: boolean }) {
+  const [browseOpen, setBrowseOpen] = useState(false)
   const [data, setData] = useState<LuxorBooksHealth | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
@@ -104,10 +107,15 @@ export function BooksRecordsPage() {
   }, [])
   const chart = getLuxorReferenceChartOfAccounts()
   return (
-    <PortalPageFrame className="max-md:pt-4 space-y-5">
-      <PortalPageHeader title="Books & records" description="See what needs review, download records for your accountant, and preview bank statement matching." />
+    <div className="space-y-5">
+      {!embedded && <>
+        <PortalPageHeader title="Books & records" description="See what needs review, download records for your accountant, and preview bank statement matching." actions={<button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} className="hidden min-h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)] md:inline-flex"><List size={16} /> Browse views</button>} />
+        <button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 text-left text-sm font-semibold text-[color:var(--portal-text)] md:hidden"><List size={18} /> Browse views · Books &amp; records</button>
+        <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView="books" />
+        <FinanceMainTabs activeTab="books" />
+      </>}
       <div className="flex flex-wrap items-center gap-3">
-        <Link href="/portal/finances" className="text-sm font-semibold text-[#9a712e] underline-offset-4 hover:underline dark:text-[#e6c77f]">Financial Center</Link>
+        {!embedded && <Link href="/portal/finances" className="text-sm font-semibold text-[#9a712e] underline-offset-4 hover:underline dark:text-[#e6c77f]">Financial Center</Link>}
         <PortalButton type="button" onClick={() => setRevision((value) => value + 1)}><ArrowClockwise size={15} weight="regular" /> Refresh</PortalButton>
       </div>
       {error ? (
@@ -207,6 +215,6 @@ export function BooksRecordsPage() {
           </section>
         </>
       )}
-    </PortalPageFrame>
+    </div>
   )
 }

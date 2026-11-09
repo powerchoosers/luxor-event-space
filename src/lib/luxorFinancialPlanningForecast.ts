@@ -56,7 +56,7 @@ export function planningDatedFlows(input: {
     if (!row.scheduleReconciled || !validMoney(row.remaining)) { issueIn('A collection schedule needs review.'); continue }
     if (row.remaining === 0) continue
     if (!validDate(row.dueDate) || row.dueDate < input.today) { issueIn('An overdue or undated collection has no forecast date.'); continue }
-    flows.push({ source: 'installment', id: row.installment.id, kind: 'inflow', date: row.dueDate, amount: row.remaining, href: `/portal/finances/schedules?bookingId=${encodeURIComponent(row.bookingId)}` })
+    flows.push({ source: 'installment', id: row.installment.id, kind: 'inflow', date: row.dueDate, amount: row.remaining, href: `/portal/finances?view=receivables&bookingId=${encodeURIComponent(row.bookingId)}` })
   }
   for (const expense of input.expenses || []) {
     if (!expense.id || duplicateExpenses.has(expense.id)) { issueOut('An expense identity needs review.'); continue }

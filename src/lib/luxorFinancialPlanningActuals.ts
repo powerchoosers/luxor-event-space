@@ -26,7 +26,7 @@ export function planningActualsFromBudgetMonth(items: StoredPlanningItem[], repo
     // The monthly report can include future-dated entries. Use it only after
     // the period ends until its source supplies a verified through-today total.
     if (end < report.today) {
-      if (item.payload.metric === 'event_collections' && valid(report.incomeActual)) { value = report.incomeActual; href = '/portal/finances/history' }
+      if (item.payload.metric === 'event_collections' && valid(report.incomeActual)) { value = report.incomeActual; href = '/portal/finances?view=payments' }
       else if (item.payload.metric === 'paid_expenses' && valid(report.expenseActual)) { value = report.expenseActual; href = '/portal/finances/expenses' }
       else if (item.payload.metric === 'net_recorded_flows' && valid(report.incomeActual) && valid(report.expenseActual)) { value = (Math.round((report.incomeActual as number) * 100) - Math.round((report.expenseActual as number) * 100)) / 100; href = '/portal/finances' }
     }

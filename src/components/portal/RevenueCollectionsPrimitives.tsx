@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useId } from 'react'
 import type { Icon } from '@phosphor-icons/react'
 import { PortalSkeleton } from '@/components/portal/PortalUI'
 
@@ -58,10 +59,11 @@ export function FinanceReviewNotice({ issues }: { issues: string[] }) {
 export type CollectionChartRow = { key: string; label: string; collected: number | null; expected: number | null }
 
 export function MonthlyCollectionsBars({ rows, title = 'Collections by month' }: { rows: CollectionChartRow[]; title?: string }) {
+  const titleId = useId()
   const max = Math.max(0, ...rows.flatMap((row) => [row.collected, row.expected]).filter((value): value is number => value !== null && Number.isFinite(value)))
-  return <section className={card} aria-labelledby="monthly-collections-chart-title">
+  return <section className={card} aria-labelledby={titleId}>
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h2 id="monthly-collections-chart-title" className="font-semibold text-[color:var(--portal-text)]">{title}</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Collected is actual. Expected is the unpaid scheduled balance.</p></div>
+      <div><h2 id={titleId} className="font-semibold text-[color:var(--portal-text)]">{title}</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Collected is actual. Expected is the unpaid scheduled balance.</p></div>
       <div className="flex gap-3 text-xs text-[color:var(--portal-muted)]"><span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-[#a8792f]" />Collected</span><span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-[#e6c99d]" />Expected</span></div>
     </div>
     {rows.length ? <>
@@ -78,10 +80,6 @@ export function MonthlyCollectionsBars({ rows, title = 'Collections by month' }:
           </div>
         })}
       </div>
-      <details className="mt-4 border-t border-[color:var(--portal-border)] pt-3 text-xs text-[color:var(--portal-muted)]">
-        <summary className="min-h-9 cursor-pointer py-2 font-medium text-[color:var(--portal-text)]">View monthly amounts</summary>
-        <ul className="grid gap-x-5 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">{rows.map((row) => <li key={row.key} className="flex justify-between gap-3"><span>{row.label}</span><span className="text-right tabular-nums">{formatFinanceCurrency(row.collected)} collected · {formatFinanceCurrency(row.expected)} expected</span></li>)}</ul>
-      </details>
     </> : <p className="mt-4 text-sm text-[color:var(--portal-muted)]">No monthly collection data is available.</p>}
   </section>
 }
