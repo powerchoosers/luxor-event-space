@@ -297,7 +297,7 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   return <div className="rounded-2xl border border-dashed border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/35 px-5 py-10 text-center"><p className="font-semibold text-[color:var(--portal-text)]">{title}</p><p className="mx-auto mt-1 max-w-md text-sm leading-6 text-[color:var(--portal-muted)]">{detail}</p></div>
 }
 
-export default function ExpenseManagement({ view, expenseId }: { view: ExpenseManagementView; expenseId?: string }) {
+export default function ExpenseManagement({ view, expenseId, embedded = false }: { view: ExpenseManagementView; expenseId?: string; embedded?: boolean }) {
   const router = useRouter()
   const [data, setData] = useState<ExpenseManagementData>({ expenses: [], templates: [], categories: [], bookings: [], bills: [], receipts: [] })
   const [ledger, setLedger] = useState<FinanceLedgerData>({ payments: [], invoices: [], bookings: [], installments: [], refunds: [], eventPaymentsReceivedByBooking: null, eventPaymentsVerified: false })
@@ -921,18 +921,19 @@ export default function ExpenseManagement({ view, expenseId }: { view: ExpenseMa
   const detailName = selectedExpense?.description || 'Expense detail'
 
   return <PortalPageFrame className="flex h-full min-h-0 flex-col gap-4 overflow-hidden max-md:pt-4">
-    <PortalPageHeader icon={page.icon} title={view === 'detail' ? detailName : page.title} description={page.description} mobileActionsInline actions={headerActions} />
-    <div className="md:hidden">
+    {!embedded && <PortalPageHeader icon={page.icon} title={view === 'detail' ? detailName : page.title} description={page.description} mobileActionsInline actions={headerActions} />}
+    {!embedded && <div className="md:hidden">
       <button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} className="flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45">
         <CalendarBlank size={18} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
         <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.14em] text-[color:var(--portal-faint)]">Browse views</span><span className="mt-0.5 block truncate text-sm font-bold">{page.title}</span></span>
         <span aria-hidden="true" className="text-[color:var(--portal-muted)]">⌄</span>
       </button>
-    </div>
+    </div>}
     <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView={page.browse} />
-    <nav aria-label="Expense management views" className="hidden xl:block">
+    {embedded && <div className="flex justify-end">{headerActions}</div>}
+    {!embedded && <nav aria-label="Expense management views" className="hidden xl:block">
       <PortalAnimatedTabs tabs={EXPENSE_TABS} activeTab={activeView as Exclude<ExpenseManagementView, 'detail'>} onTabChange={navigateTab} ariaLabel="Expense management views" className="flex min-w-max items-center gap-1 overflow-x-auto portal-scrollbar" />
-    </nav>
+    </nav>}
     <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-6 portal-scrollbar">
       {notice ? <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] px-4 py-3 text-sm text-[color:var(--portal-text)]"><span>{notice}</span><button type="button" aria-label="Dismiss message" onClick={() => setNotice(null)} className="rounded p-1 text-[color:var(--portal-muted)] hover:bg-[color:var(--portal-card)]"><X size={14} /></button></div> : null}
       {error ? <div role="alert" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-700 dark:text-rose-300"><p className="font-semibold">Expense records are unavailable</p><p className="mt-1">{error}</p><button type="button" onClick={refresh} className="mt-3 font-semibold underline underline-offset-2">Try again</button></div> : null}
@@ -1095,7 +1096,7 @@ function DashboardView({
     <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(20rem,1fr)]">
       <div className={`${CARD_CLASS} p-4 sm:p-5`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="font-sans text-base font-bold text-[color:var(--portal-text)]">Expense trends</h2><p className="mt-1 text-xs text-[color:var(--portal-muted)]">Paid outflows and unpaid balances are shown separately.</p></div><PortalSelect value={trendPeriod} onChange={setTrendPeriod} options={[{ value: 'monthly', label: 'Monthly' }, { value: 'quarterly', label: 'Quarterly' }, { value: 'annual', label: 'Annual' }]} buttonClassName="min-h-9 w-full sm:w-36" /></div>
-        <div role="img" aria-label={`${trendPeriod} expenses with paid, refunded, and unpaid amounts`} className="mt-5 grid h-52 grid-flow-col auto-cols-fr items-end gap-2 border-b border-[color:var(--portal-border)] pb-2 sm:gap-4">
+        <div className="mt-5 flex gap-2"><div className="relative h-[calc(13rem-1.75rem)] w-12 shrink-0 text-right text-[10px] text-[color:var(--portal-muted)]">{[maxTrend, maxTrend / 2, 0].map((value, index) => <span key={index} className="absolute right-0 -translate-y-1/2 whitespace-nowrap" style={{ top: `${index * 50}%` }}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(value)}</span>)}</div><div role="img" aria-label={`${trendPeriod} expenses with paid, refunded, and unpaid amounts`} className="relative grid h-52 min-w-0 flex-1 grid-flow-col auto-cols-fr items-end gap-2 pb-2 sm:gap-4"><div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-7 top-0 flex flex-col justify-between">{[0, 1, 2].map((line) => <div key={line} className="border-t border-[color:var(--portal-border)]" />)}</div>
           {trendBuckets.map((bucket) => {
             const paidHeight = bucket.paid / maxTrend * 100
             const refundHeight = bucket.refunds / maxTrend * 100
@@ -1108,6 +1109,7 @@ function DashboardView({
               </div><span className="max-w-full truncate text-[10px] text-[color:var(--portal-muted)]">{bucket.label}</span>
             </div>
           })}
+        </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-4 text-xs text-[color:var(--portal-muted)]"><span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-[#b98a3e]" /> Paid</span><span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-700/60 dark:bg-emerald-300/60" /> Refunded</span><span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-[#b98a3e]/30 dark:bg-[#e6c77f]/30" /> Unpaid</span></div>
       </div>

@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   CalendarBlank,
   CalendarDots,
+  CaretDown,
   CreditCard,
   CurrencyCircleDollar,
   TrendUp,
@@ -440,20 +441,22 @@ export default function FinancialOverview({
   requestedScheduleBookingId,
   onRequestedScheduleClosed,
   loading = false,
+  selectedMonth,
 }: {
   overview?: Overview
   expenses?: Expenses
   bills?: LuxorBill[] | null
   activity?: Activity[]
-  openView: (view: 'revenue' | 'receivables' | 'payments' | 'expenses' | 'reports') => void
+  openView: (view: 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'reports') => void
   onRefresh: () => void
   requestedScheduleBookingId?: string | null
   onRequestedScheduleClosed?: () => void
   loading?: boolean
+  selectedMonth?: string
 }) {
   const scrollFrame = useRef<number | null>(null)
   useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
-  const openAllSchedules = (button: HTMLButtonElement) => {
+  const scrollToView = (button: HTMLButtonElement, view: 'receivables' | 'revenue' | 'invoices') => {
     if (scrollFrame.current !== null) return
     const scrollers: Array<{ element: HTMLElement; top: number }> = []
     for (let element = button.parentElement; element; element = element.parentElement) {
@@ -463,7 +466,7 @@ export default function FinancialOverview({
     if (page && page.scrollTop > 0 && !scrollers.some(({ element }) => element === page)) scrollers.push({ element: page, top: page.scrollTop })
     if (!scrollers.length || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       scrollers.forEach(({ element }) => { element.scrollTop = 0 })
-      openView('receivables')
+      openView(view)
       return
     }
     let start: number | null = null
@@ -473,13 +476,15 @@ export default function FinancialOverview({
       const remaining = (1 - progress) ** 3
       scrollers.forEach(({ element, top }) => { element.scrollTop = top * remaining })
       if (progress < 1) scrollFrame.current = requestAnimationFrame(scroll)
-      else { scrollFrame.current = null; openView('receivables') }
+      else { scrollFrame.current = null; openView(view) }
     }
     scrollFrame.current = requestAnimationFrame(scroll)
   }
   const today = chicagoCalendarDate()
-  const [month, setMonth] = useState(today.slice(0, 7))
+  const month = selectedMonth ?? today.slice(0, 7)
   const [grouping, setGrouping] = useState<'monthly' | 'quarterly' | 'annual'>('monthly')
+  const [amountsOpen, setAmountsOpen] = useState(false)
+  const reduceAmountsMotion = useReducedMotion()
   const [yearText, monthText] = month.split('-')
   const year = Number(yearText)
   const [selectedSchedulePlan, setSelectedSchedulePlan] = useState<PaymentSchedulePlan | null>(null)
@@ -568,8 +573,6 @@ export default function FinancialOverview({
     year: 'numeric',
     timeZone: 'UTC',
   })
-  const years = Array.from({ length: 11 }, (_, i) => String(Number(today.slice(0, 4)) - 5 + i))
-  if (!years.includes(yearText)) years.push(yearText)
 
   // Real calculated metrics for the 4 KPI cards
   const periodRevenue = period.actual
@@ -727,26 +730,6 @@ export default function FinancialOverview({
 
   return (
     <div className="h-full min-h-0 space-y-4 overflow-y-auto pb-8 pr-1 portal-scrollbar">
-      {/* Top Header Controls (Always visible, does not fetch) */}
-      <div className="flex flex-wrap items-end justify-end gap-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <PortalSelect
-            aria-label="Overview month"
-            value={monthText}
-            onChange={(value) => setMonth(`${yearText}-${value}`)}
-            options={Array.from({ length: 12 }, (_, i) => ({
-              value: String(i + 1).padStart(2, '0'),
-              label: new Date(Date.UTC(2020, i, 1)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }),
-            }))}
-          />
-          <PortalSelect
-            aria-label="Overview year"
-            value={yearText}
-            onChange={(value) => setMonth(`${value}-${monthText}`)}
-            options={years.sort().map((value) => ({ value, label: value }))}
-          />
-        </div>
-      </div>
 
       {/* Warnings & Notices (Only shown if a genuine discrepancy exists) */}
       {!loading && overview && overview.issues.length > 0 && (
@@ -852,7 +835,7 @@ export default function FinancialOverview({
           </div>
           <button
             type="button"
-            onClick={(event) => openAllSchedules(event.currentTarget)}
+            onClick={(event) => scrollToView(event.currentTarget, 'receivables')}
             className="inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]"
           >
             All payment schedules <ArrowUpRight aria-hidden="true" size={15} weight="regular" />
@@ -1094,12 +1077,13 @@ export default function FinancialOverview({
               <span className={muted}>Collected</span>
             </div>
           </div>
-          <Link
-            href="/portal/finances/monthly"
-            className="mt-4 inline-flex min-h-10 items-center font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]"
+          <button
+            type="button"
+            onClick={(event) => scrollToView(event.currentTarget, 'revenue')}
+            className="mt-4 ml-auto flex min-h-10 w-fit items-center gap-1 font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]"
           >
-            View monthly collections <span aria-hidden="true" className="ml-1">→</span>
-          </Link>
+            View revenue <ArrowUpRight aria-hidden="true" size={15} weight="regular" />
+          </button>
         </section>
 
         {/* Collections · Year Chart */}
@@ -1119,7 +1103,17 @@ export default function FinancialOverview({
           </div>
           <p className="mt-2 text-xs text-[color:var(--portal-muted)]">Gold: collected · champagne: expected</p>
           {!loading && !overview && <p role="status" className={`${muted} mt-3`}>Collections data is unavailable. Reload the page to try again.</p>}
-          <div className="mt-5 flex h-40 items-end gap-1 sm:gap-3">
+          <div className="mt-5 flex h-40 items-end gap-2">
+            {!loading && overview && <div aria-label="Chart scale in dollars" className="flex w-12 shrink-0 flex-col justify-end gap-1 text-right text-[10px] text-[color:var(--portal-muted)]">
+              <div className="relative h-32">
+                {[max, max / 2, 0].map((value, index) => <span key={index} className="absolute right-0 -translate-y-1/2 whitespace-nowrap" style={{ top: `${index * 50}%` }}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(value)}</span>)}
+              </div>
+              <span aria-hidden="true" className="invisible text-[10px]">Jan</span>
+            </div>}
+            <div className="relative flex min-w-0 flex-1 items-end gap-1 sm:gap-3">
+            {!loading && overview && <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-[19px] flex h-32 flex-col justify-between">
+              {[0, 1, 2].map((line) => <div key={line} className="border-t border-[color:var(--portal-border)]" />)}
+            </div>}
             {loading
               ? Array.from({ length: 12 }, (_, idx) => {
                   const monthLabel = new Date(Date.UTC(year, idx, 1)).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
@@ -1140,24 +1134,29 @@ export default function FinancialOverview({
                       className="flex h-32 w-full items-end justify-center gap-0.5"
                       title={`${item.label}: collected ${item.actual === null ? 'unavailable' : currency(item.actual)}, expected ${item.expected === null ? 'unavailable' : currency(item.expected)}`}
                     >
-                      {item.actual !== null && <InViewGrowBar percent={Math.max(0, (item.actual / max) * 100)} className="w-2/5 max-w-8 rounded-t bg-[#b58b3e]" />}
-                      {item.expected !== null && <InViewGrowBar percent={Math.max(0, (item.expected / max) * 100)} className="w-2/5 max-w-8 rounded-t bg-[#e6c99d]" />}
+                      {item.actual !== null && item.actual > 0 && <InViewGrowBar percent={Math.max(0, (item.actual / max) * 100)} className="w-2/5 max-w-8 rounded-t bg-[#b58b3e]" />}
+                      {item.expected !== null && item.expected > 0 && <InViewGrowBar percent={Math.max(0, (item.expected / max) * 100)} className="w-2/5 max-w-8 rounded-t bg-[#e6c99d]" />}
                     </div>
                     <span className="text-[10px] text-[color:var(--portal-muted)]">{item.label}</span>
                   </div>
                 ))}
+            </div>
           </div>
           {!loading && overview && (
-            <details className="mt-3 text-xs text-[color:var(--portal-muted)]">
-              <summary className="cursor-pointer">View amounts</summary>
-              <div className="mt-2 space-y-1">
-                {chart.map((item) => (
-                  <p key={item.label}>
-                    {item.label}: collected <Amount value={item.actual} /> · expected <Amount value={item.expected} />
-                  </p>
-                ))}
-              </div>
-            </details>
+            <div className="mt-3 border-t border-[color:var(--portal-border)]">
+              <button type="button" aria-expanded={amountsOpen} aria-controls="collections-amounts" onClick={() => setAmountsOpen((open) => !open)} className="flex min-h-11 w-full items-center justify-end gap-2 text-right text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:text-[#a8792f] dark:hover:text-[#e6c77f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50">
+                {amountsOpen ? 'Hide amounts' : 'View amounts'}
+                <CaretDown aria-hidden="true" size={15} className={`text-[color:var(--portal-muted)] transition-transform duration-200 motion-reduce:transition-none ${amountsOpen ? 'rotate-180' : ''}`} />
+              </button>
+              <AnimatePresence initial={false}>
+                {amountsOpen && <motion.div id="collections-amounts" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduceAmountsMotion ? 0 : 0.22 }} className="overflow-hidden">
+                  <table className="mb-2 w-full table-fixed text-xs tabular-nums">
+                    <thead className="text-[color:var(--portal-muted)]"><tr><th scope="col" className="py-2 text-left font-medium">Period</th><th scope="col" className="py-2 text-right font-medium">Collected</th><th scope="col" className="py-2 text-right font-medium">Expected</th></tr></thead>
+                    <tbody className="divide-y divide-[color:var(--portal-border)]">{chart.map((item) => <tr key={item.label}><th scope="row" className="py-2.5 text-left font-medium text-[color:var(--portal-text)]">{item.label}</th><td className="py-2.5 text-right text-[color:var(--portal-text)]"><Amount value={item.actual} /></td><td className="py-2.5 text-right text-[color:var(--portal-text)]"><Amount value={item.expected} /></td></tr>)}</tbody>
+                  </table>
+                </motion.div>}
+              </AnimatePresence>
+            </div>
           )}
         </section>
       </div>
@@ -1198,8 +1197,8 @@ export default function FinancialOverview({
               )}
             </>
           )}
-          <button type="button" className="mt-4 text-sm font-semibold text-[#a8792f] dark:text-[#e6c77f]" onClick={() => openView('payments')}>
-            Open payment ledger
+          <button type="button" className="mt-4 ml-auto flex min-h-10 w-fit items-center gap-1 text-sm font-semibold text-[#a8792f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 dark:text-[#e6c77f]" onClick={(event) => scrollToView(event.currentTarget, 'invoices')}>
+            Open invoices ledger <ArrowUpRight aria-hidden="true" size={15} weight="regular" />
           </button>
         </section>
 

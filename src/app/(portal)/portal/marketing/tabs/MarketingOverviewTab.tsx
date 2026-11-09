@@ -286,7 +286,7 @@ function InquiryChart({ points }: { points: MarketingOverviewData['inquiriesByDa
         aria-label={`Daily non-test inquiries from ${formatDate(points[0]?.date || '')} through ${formatDate(points[points.length - 1]?.date || '')}`}
         className="h-44 w-full overflow-visible"
       >
-        <line x1="0" y1="99" x2="100" y2="99" stroke="var(--portal-border)" strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
+        {[16, 57, 98].map((y) => <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="var(--portal-border)" strokeWidth="0.7" vectorEffect="non-scaling-stroke" />)}
         {points.map((point, index) => {
           const barHeight = point.count ? Math.max(1.5, (point.count / max) * 82) : 0
           const x = index * bandWidth + (bandWidth - barWidth) / 2

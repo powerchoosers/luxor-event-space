@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AlertCircle, ArrowUpRight, Check, CheckCircle2, ChevronRight, CircleDollarSign,
@@ -113,6 +113,7 @@ export function BillsPayableLedger({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const [tab, setTab] = useState<LedgerTab>('all')
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get('bill'))
   const [query, setQuery] = useState('')
@@ -204,7 +205,7 @@ export function BillsPayableLedger({
     const params = new URLSearchParams(searchParams.toString())
     if (id) params.set('bill', id)
     else params.delete('bill')
-    router.replace(`/portal/operations?${params.toString()}`, { scroll: false })
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   async function review(action: 'approve' | 'flag' | 'mark_paid' | 'confirm_distinct') {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { BookOpen, CreditCard, CurrencyDollar, FileText, TrendDown, TrendUp, Wallet } from '@phosphor-icons/react'
+import { BookOpen, CreditCard, CurrencyDollar, FileText, TrendUp, Wallet } from '@phosphor-icons/react'
 import { PortalAnimatedTabs } from '@/components/portal/PortalUI'
 
 export type FinanceMainTab = 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'reports' | 'books'
@@ -12,7 +12,6 @@ const tabs = [
   { id: 'receivables', label: 'Payment Schedules', icon: <Wallet size={16} weight="regular" /> },
   { id: 'invoices', label: 'Invoices Ledger', icon: <FileText size={16} weight="regular" /> },
   { id: 'payments', label: 'Payments Log', icon: <CreditCard size={16} weight="regular" /> },
-  { id: 'expenses', label: 'Expenses Tracking', icon: <TrendDown size={16} weight="regular" /> },
   { id: 'books', label: 'Books & records', icon: <BookOpen size={16} weight="regular" /> },
 ] as const
 

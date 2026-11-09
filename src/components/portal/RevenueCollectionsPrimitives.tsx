@@ -67,7 +67,8 @@ export function MonthlyCollectionsBars({ rows, title = 'Collections by month' }:
       <div className="flex gap-3 text-xs text-[color:var(--portal-muted)]"><span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-[#a8792f]" />Collected</span><span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-[#e6c99d]" />Expected</span></div>
     </div>
     {rows.length ? <>
-      <div className="mt-5 grid min-h-40 grid-cols-4 items-end gap-2 sm:grid-cols-6 lg:grid-cols-12" role="img" aria-label={`${title}; each month separates collected and expected amounts`}>
+      <div className="mt-5 overflow-x-auto"><div className="flex min-w-[600px] items-end gap-2"><div className="relative h-28 w-12 shrink-0 self-start text-right text-[10px] text-[color:var(--portal-muted)]">{[max, max / 2, 0].map((value, index) => <span key={index} className="absolute right-0 -translate-y-1/2 whitespace-nowrap" style={{ top: `${index * 50}%` }}>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(value)}</span>)}</div><div className="relative grid flex-1 grid-cols-12 items-end gap-2" role="img" aria-label={`${title}; each month separates collected and expected amounts`}>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 flex h-28 flex-col justify-between">{[0, 1, 2].map((line) => <div key={line} className="border-t border-[color:var(--portal-border)]" />)}</div>
         {rows.map((row) => {
           const actualHeight = max ? Math.max(0, (row.collected ?? 0) / max * 100) : 0
           const expectedHeight = max ? Math.max(0, (row.expected ?? 0) / max * 100) : 0
@@ -79,7 +80,7 @@ export function MonthlyCollectionsBars({ rows, title = 'Collections by month' }:
             <span className="max-w-full truncate text-[10px] text-[color:var(--portal-muted)]">{row.label}</span>
           </div>
         })}
-      </div>
+      </div></div></div>
     </> : <p className="mt-4 text-sm text-[color:var(--portal-muted)]">No monthly collection data is available.</p>}
   </section>
 }

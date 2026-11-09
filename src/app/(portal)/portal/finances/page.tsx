@@ -6,6 +6,11 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
   CreditCard,
+  Repeat,
+  Briefcase,
+  CalendarDots,
+  Receipt,
+  Buildings,
   CurrencyDollar,
   Eye,
   FileText,
@@ -18,6 +23,7 @@ import {
 } from '@phosphor-icons/react'
 import { Menu, ChevronDown } from '@/lib/icons/phosphor-compat'
 import {
+  PortalAnimatedTabs,
   PortalPageFrame,
   PortalPageHeader,
   PortalTabTransition,
@@ -30,6 +36,10 @@ import {
   PortalContactAvatar,
 } from '@/components/portal/PortalUI'
 import FinancialOverview from '@/components/portal/FinancialOverview'
+import ExpenseManagement from '@/components/portal/expenses/ExpenseManagement'
+import FinancialBills from '@/components/portal/FinancialBills'
+import { OperationsPageContent } from '@/components/portal/OperationsWorkspace'
+import { chicagoCalendarDate } from '@/lib/luxorPaymentDashboardModel'
 import { PaymentHistoryDetails, ReceivablesView, RevenueCollectionsView } from '@/components/portal/RevenueCollectionsView'
 import { getLuxorRevenueCollectionsModel, type LuxorRevenueHistoryRow } from '@/lib/luxorRevenueCollectionsModel'
 import { BooksRecordsPage } from '@/components/portal/BooksRecordsPage'
@@ -61,11 +71,12 @@ function refundKindDisplay(kind: LuxorPaymentRefundView['refund_kind']) {
   }
 }
 
-type Tab = 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'reports' | 'books'
+type Tab = 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'bill-review' | 'bill-providers' | 'expense-recurring' | 'expense-business' | 'expense-events' | 'expense-receipts' | 'reports' | 'books'
 
 export default function FinancesPage() {
   const reduceMotion = useReducedMotion()
   const routeSearchParams = useSearchParams()
+  const [overviewMonth, setOverviewMonth] = useState(() => chicagoCalendarDate().slice(0, 7))
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [selectedPaymentRecord, setSelectedPaymentRecord] = useState<LuxorRevenueHistoryRow | null>(null)
   const [paymentScheduleBookingId, setPaymentScheduleBookingId] = useState<string | null>(null)
@@ -214,7 +225,7 @@ type LuxorBookingExpense = {
         url.searchParams.delete('client')
         window.history.replaceState(window.history.state, '', url)
       }
-      setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'books' ? view : 'dashboard')
+      setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'bill-review' || view === 'bill-providers' || view === 'expense-recurring' || view === 'expense-business' || view === 'expense-events' || view === 'expense-receipts' || view === 'books' ? view : 'dashboard')
     }
     syncViewFromUrl()
     window.addEventListener('popstate', syncViewFromUrl)
@@ -223,7 +234,7 @@ type LuxorBookingExpense = {
 
   useEffect(() => {
     const view = routeSearchParams.get('view')
-    setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'books' ? view : 'dashboard')
+    setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'bill-review' || view === 'bill-providers' || view === 'expense-recurring' || view === 'expense-business' || view === 'expense-events' || view === 'expense-receipts' || view === 'books' ? view : 'dashboard')
   }, [routeSearchParams])
 
   const selectLegacyView = (tab: Tab) => {
@@ -231,6 +242,7 @@ type LuxorBookingExpense = {
     setSearchTerm('')
     const url = new URL(window.location.href)
     url.hash = ''
+    if (tab !== 'bill-review') { url.searchParams.delete('bill'); url.searchParams.delete('company') }
     if (tab === 'dashboard') url.searchParams.delete('view')
     else url.searchParams.set('view', tab)
     window.history.pushState({}, '', url)
@@ -350,10 +362,30 @@ type LuxorBookingExpense = {
     receivables: 'Payment Schedules',
     invoices: 'Invoices Ledger',
     payments: 'Payments Log',
-    expenses: 'Expenses Tracking',
+    expenses: 'Expense dashboard',
+    'bill-review': 'Bill review',
+    'bill-providers': 'Bills and providers',
+    'expense-recurring': 'Recurring expenses',
+    'expense-business': 'Business expenses',
+    'expense-events': 'Event expenses',
+    'expense-receipts': 'Receipts and records',
     reports: 'Financial Reports',
     books: 'Books & records',
   }
+
+  const [overviewYear, overviewMonthNumber] = overviewMonth.split('-')
+  const currentYear = Number(chicagoCalendarDate().slice(0, 4))
+  const overviewYears = Array.from({ length: 11 }, (_, i) => String(currentYear - 5 + i))
+  if (!overviewYears.includes(overviewYear)) overviewYears.push(overviewYear)
+  const periodControls = <div className="flex w-full items-center gap-2">
+    <PortalSelect className="!min-w-0 flex-1 md:w-[140px] md:flex-none" buttonClassName="max-sm:px-2 max-md:!border-[color:var(--portal-border)]" aria-label="Overview month" value={overviewMonthNumber} onChange={(value) => setOverviewMonth(`${overviewYear}-${value}`)} options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1).padStart(2, '0'), label: new Date(Date.UTC(2020, i, 1)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }) }))} />
+    <PortalSelect className="!min-w-0 flex-1 md:w-[140px] md:flex-none" buttonClassName="max-sm:px-2 max-md:!border-[color:var(--portal-border)]" aria-label="Overview year" value={overviewYear} onChange={(value) => setOverviewMonth(`${value}-${overviewMonthNumber}`)} options={overviewYears.sort().map((value) => ({ value, label: value }))} />
+  </div>
+
+  const isPayables = ['expenses', 'bill-review', 'bill-providers', 'expense-recurring', 'expense-business', 'expense-events', 'expense-receipts'].includes(activeTab)
+  const workspaceSwitcher = <div className="flex h-10 w-fit rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1" role="group" aria-label="Finance workspace">
+        {([{ label: 'Receivables', tab: 'dashboard' }, { label: 'Payables', tab: 'expenses' }] as const).map(({ label, tab }) => <button key={tab} type="button" aria-pressed={tab === 'expenses' ? isPayables : !isPayables} onClick={() => selectLegacyView(tab)} className={`h-full rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${(tab === 'expenses' ? isPayables : !isPayables) ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-sm' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{label}</button>)}
+      </div>
 
   return (
     <PortalPageFrame className="h-full min-h-0 overflow-hidden flex flex-col gap-6 max-md:pt-4">
@@ -363,6 +395,8 @@ type LuxorBookingExpense = {
         mobileActionsInline
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2.5">
+            {activeTab === 'dashboard' && <div className="hidden md:block">{periodControls}</div>}
+            <div className="md:hidden">{workspaceSwitcher}</div>
             {/* iPad/Tablet Browse Views button (positioned immediately to the left of action buttons) */}
             <button
               type="button"
@@ -381,12 +415,13 @@ type LuxorBookingExpense = {
               </span>
               <ChevronDown size={15} className="shrink-0 text-[color:var(--portal-muted)]" aria-hidden="true" />
             </button>
+            <div className="hidden md:block">{workspaceSwitcher}</div>
           </div>
         }
       />
 
       {/* Mobile-only condensed view picker button (matches Leads, Marketing, and Planner) */}
-      <div className="md:hidden">
+      <div className="md:hidden space-y-3">
         <button
           type="button"
           onClick={() => setIsViewPickerOpen(true)}
@@ -418,14 +453,26 @@ type LuxorBookingExpense = {
         onLegacySelect={selectLegacyView}
       />
 
-      <FinanceMainTabs activeTab={activeTab} onLocalSelect={selectLegacyView} />
+      {activeTab === 'dashboard' && <div className="md:hidden">{periodControls}</div>}
+      {!isPayables && <FinanceMainTabs activeTab={activeTab as 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'books'} onLocalSelect={selectLegacyView} />}
 
+      {isPayables && <div className="min-w-0 shrink-0 overflow-x-auto"><PortalAnimatedTabs variant="slider" ariaLabel="Payables sections" tabs={[
+        { id: 'expenses', label: 'Expense Dashboard', icon: <TrendDown size={15} /> }, { id: 'bill-review', label: 'Bill Review', icon: <FileText size={15} /> }, { id: 'bill-providers', label: 'Bills and Providers', icon: <Buildings size={15} /> }, { id: 'expense-recurring', label: 'Recurring Expenses', icon: <Repeat size={15} /> }, { id: 'expense-business', label: 'Business Expenses', icon: <Briefcase size={15} /> }, { id: 'expense-events', label: 'Event Expenses', icon: <CalendarDots size={15} /> }, { id: 'expense-receipts', label: 'Receipts & Records', icon: <Receipt size={15} /> },
+      ]} activeTab={activeTab} onTabChange={(tab) => selectLegacyView(tab)} /></div>}
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
       {activeTab === 'revenue' && <div className="h-full overflow-y-auto pb-6 portal-scrollbar"><RevenueCollectionsView view="revenue" actorEmail={null} embedded /></div>}
       {activeTab === 'books' && <div className="h-full overflow-y-auto pb-6 portal-scrollbar"><BooksRecordsPage embedded /></div>}
+      {activeTab === 'expenses' && <ExpenseManagement view="dashboard" embedded />}
+      {activeTab === 'expense-recurring' && <ExpenseManagement view="recurring" embedded />}
+      {activeTab === 'expense-business' && <ExpenseManagement view="business" embedded />}
+      {activeTab === 'expense-events' && <ExpenseManagement view="events" embedded />}
+      {activeTab === 'expense-receipts' && <ExpenseManagement view="receipts" embedded />}
+      {activeTab === 'bill-providers' && <div className="h-full overflow-y-auto portal-scrollbar"><FinancialBills embedded /></div>}
+      {activeTab === 'bill-review' && <OperationsPageContent embeddedBills />}
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (loading || (!error && testClassificationVerified)) && (
         <FinancialOverview
+          selectedMonth={overviewMonth}
           loading={loading}
           overview={overview}
           expenses={expenseBreakdown}
@@ -657,168 +704,9 @@ type LuxorBookingExpense = {
 
         <PaymentHistoryDetails row={selectedPaymentRecord} onClose={() => setSelectedPaymentRecord(null)} />
 
-        {/* EXPENSES TAB */}
-        {activeTab === 'expenses' && (
-          <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-[color:var(--portal-text)]">Operations expense ledger</h3>
-              <div className="flex flex-wrap items-center gap-3">
-                <Link href="/portal/finances/expenses" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--portal-border)] px-3 text-xs font-semibold text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]">Open Expense Management</Link>
-                {cancelledExpenseCount > 0 && <button type="button" onClick={() => setShowCancelledExpenses((show) => !show)} className="text-xs font-semibold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]">{showCancelledExpenses ? 'Hide' : 'Show'} removed ({cancelledExpenseCount})</button>}
-                <button
-                  type="button"
-                  onClick={() => { setExpenseActionError(null); setIsAddingExpense(!isAddingExpense) }}
-                  className="luxor-gold-raised inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold !text-white"
-                >
-                  {isAddingExpense ? <X size={16} weight="regular" /> : <Plus size={16} weight="regular" />} {isAddingExpense ? 'Close form' : 'Log expense'}
-                </button>
-              </div>
-            </div>
-
-            {expenseActionError && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs text-rose-700 dark:text-rose-300">{expenseActionError}</p>}
-
-            {isAddingExpense && (
-              <form onSubmit={handleAddExpense} className="luxor-glass-card rounded-2xl p-6 border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] space-y-4 max-w-md">
-                <h4 className="text-xs font-extrabold uppercase tracking-[0.16em] text-[color:var(--portal-text)]">Log Operational Expense</h4>
-                <p className="text-xs text-[color:var(--portal-muted)]">Payments must be recorded separately from the expense. Use Expense Management for payment history, receipts, and recurring costs.</p>
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Booking (optional)</label>
-                    <PortalSelect
-                      value={expenseBookingId}
-                      onChange={setExpenseBookingId}
-                      options={[
-                        { value: '', label: 'General overhead (not linked to a booking)' },
-                        ...businessRows.bookings.map((booking) => ({
-                          value: booking.id,
-                          label: `${booking.client_name} - ${booking.event_date || 'Date not set'} - ${booking.event_type || 'Event'}`,
-                        })),
-                      ]}
-                      aria-label="Expense booking"
-                    />
-                    <p className="text-[10px] text-[color:var(--portal-muted)]">Leave this set to general overhead for costs that are not tied to one event.</p>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Category</label>
-                    <PortalSelect
-                      aria-label="Expense category"
-                      value={expenseCategory}
-                      onChange={setExpenseCategory}
-                      options={[
-                        { value: 'Rent', label: 'Rent / Venue Lease' },
-                        { value: 'Maintenance', label: 'Maintenance / Repairs' },
-                        { value: 'Utilities', label: 'Utilities (Electric/Water)' },
-                        { value: 'Supplies', label: 'Cleaning & Hospitality Supplies' },
-                        { value: 'Marketing', label: 'Marketing & Ad Spend' }
-                      ]}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[color:var(--portal-muted)]">Expense status</label>
-                    <PortalSelect
-                      value={expenseStatus}
-                      onChange={setExpenseStatus}
-                      options={[
-                        { value: 'planned', label: 'Planned - not incurred' },
-                        { value: 'incurred', label: 'Incurred - unpaid' },
-                      ]}
-                      aria-label="Expense status"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label htmlFor="expense-amount" className="text-xs font-semibold text-[color:var(--portal-muted)]">Cost (USD)</label>
-                    <input
-                      id="expense-amount"
-                      type="number"
-                      required
-                      value={expenseAmount}
-                      onChange={(e) => setExpenseAmount(e.target.value)}
-                      placeholder="120.00"
-                      className="w-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label htmlFor="expense-description" className="text-xs font-semibold text-[color:var(--portal-muted)]">Description</label>
-                    <input
-                      id="expense-description"
-                      type="text"
-                      required
-                      value={expenseDesc}
-                      onChange={(e) => setExpenseDesc(e.target.value)}
-                      placeholder="HVAC Air Filter replacement..."
-                      className="w-full bg-[color:var(--portal-soft)] border border-[color:var(--portal-border)] rounded-md px-3 py-2 text-xs text-[color:var(--portal-text)] outline-none"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2 justify-end pt-2">
-                  <button type="button" onClick={() => setIsAddingExpense(false)} className="px-3 py-2 border border-transparent text-xs font-bold text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)] cursor-pointer">Cancel</button>
-                  <button type="submit" className="luxor-gold-raised min-h-10 rounded-lg px-4 py-2 text-xs font-bold !text-white">Save Cost</button>
-                </div>
-              </form>
-            )}
-
-            <PortalTableCard>
-              <div className="overflow-x-auto">
-                <PortalStickyTable minWidth="980px">
-                  <caption className="sr-only">{loading ? 'Loading expenses' : 'Expenses'}</caption>
-                  <PortalStickyThead>
-                    <tr className="text-[10px] uppercase font-bold text-[color:var(--portal-muted)] tracking-[0.16em] border-b border-[color:var(--portal-border)] bg-[color:var(--portal-soft)]/80">
-                      <th className="px-8 py-5">Date</th>
-                      <th className="px-6 py-5">Description</th>
-                      <th className="px-6 py-5">Category</th>
-                      <th className="px-6 py-5">Status</th>
-                      <th className="px-8 py-5 text-right">Expense (USD)</th>
-                      <th className="px-6 py-5 text-right">Actions</th>
-                    </tr>
-                  </PortalStickyThead>
-                  <tbody className="divide-y divide-[color:var(--portal-border)]/50">
-                    {loading ? (
-                      Array.from({ length: 5 }, (_, row) => (
-                        <tr key={row} aria-hidden="true">
-                          <td className="px-8 py-5"><PortalSkeleton className="h-3.5 w-20 rounded" /></td>
-                          <td className="px-6 py-5"><PortalSkeleton className="h-3.5 w-44 rounded" /></td>
-                          <td className="px-6 py-5"><PortalSkeleton className="h-4 w-20 rounded-full" /></td>
-                          <td className="px-6 py-5"><PortalSkeleton className="h-3.5 w-24 rounded" /></td>
-                          <td className="px-8 py-5 text-right"><PortalSkeleton className="ml-auto h-4 w-16 rounded" /></td>
-                          <td className="px-6 py-5 text-right"><PortalSkeleton className="ml-auto h-3.5 w-14 rounded" /></td>
-                        </tr>
-                      ))
-                    ) : (
-                      visibleExpenses.map((exp) => (
-                        <tr key={exp.id} className={`hover:bg-[color:var(--portal-soft)]/50 transition-colors ${exp.status === 'cancelled' ? 'opacity-60' : ''}`}>
-                          <td className="px-8 py-5 tabular-nums text-xs text-[color:var(--portal-muted)]">
-                            {formatLuxorDate(exp.incurred_on) || 'N/A'}
-                          </td>
-                          <td className="px-6 py-5 font-bold text-[color:var(--portal-text)]">
-                            {exp.description || 'General Operational Expense'}
-                          </td>
-                          <td className="px-6 py-5 font-bold uppercase tracking-wider text-[10px] text-[#a37d2c] dark:text-[#caa24c]">{exp.category}</td>
-                          <td className="px-6 py-5 text-xs capitalize text-[color:var(--portal-muted)]">{exp.payment_status === 'cancelled' || exp.status === 'cancelled' ? 'Canceled' : exp.payment_status === 'needs_review' || exp.paid_amount == null || exp.remaining_balance == null ? 'Needs review' : exp.payment_status === 'overdue' ? 'Overdue' : exp.payment_status === 'due_today' ? 'Due today' : exp.payment_status === 'partially_paid' ? 'Partially paid' : exp.payment_status === 'paid' ? 'Paid' : exp.status === 'incurred' ? 'Incurred - unpaid' : 'Expected'}</td>
-                          <td className="px-8 py-5 text-right tabular-nums font-bold text-rose-600 dark:text-rose-400">
-                            {(() => {
-                              const state = expenseAmountState(exp.amount, exp.metadata)
-                              if (!state.known || state.amount === null) return exp.metadata?.amount_state === 'variable' ? 'Variable amount' : exp.metadata?.amount_state === 'unknown' ? 'Unknown amount' : 'Amount pending'
-                              return `${exp.status === 'cancelled' ? '' : '-'}${state.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`
-                            })()}
-                          </td>
-                          <td className="px-6 py-5 text-right">
-                            <div className="flex items-center justify-end gap-3">
-                              {exp.status !== 'cancelled' && <Link href={`/portal/finances/expenses/${encodeURIComponent(exp.id)}`} className="text-xs font-semibold text-[#9a712e] underline decoration-[color:var(--portal-border)] underline-offset-4 dark:text-[#e6c77f]">Details</Link>}
-                              {exp.status !== 'cancelled' && exp.payment_status !== 'needs_review' && expenseAmountState(exp.amount, exp.metadata).known && exp.paid_amount === 0 && exp.remaining_balance != null && Array.isArray(exp.payments) && exp.payments.length === 0 && <button type="button" onClick={() => void handleRemoveExpense(exp)} disabled={expenseActionBusyId === exp.id} aria-label={`Cancel ${exp.description || 'expense'}`} className="text-xs font-semibold text-[color:var(--portal-muted)] underline decoration-[color:var(--portal-border)] underline-offset-4 hover:text-rose-700 dark:hover:text-rose-300 disabled:opacity-50">{expenseActionBusyId === exp.id ? 'Canceling...' : 'Cancel'}</button>}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                    {!loading && visibleExpenses.length === 0 && <tr><td colSpan={6} className="px-6 py-10 text-center text-xs text-[color:var(--portal-muted)]">No expenses are recorded in this view.</td></tr>}
-                  </tbody>
-                </PortalStickyTable>
-              </div>
-            </PortalTableCard>
-          </div>
-        )}
-
       </PortalTabTransition>
     </PortalPageFrame>
   )
 }
+
+
