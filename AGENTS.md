@@ -133,6 +133,8 @@ For visual QA, use Cursor's in-app browser first. Do not switch to another brows
 
 Only commit or push when Lewis explicitly asks.
 
+Luxor ships on a single branch: `main`. Do not create `cursor/`, feature, or side branches for routine work. Commit on `main` locally and push `git push origin main` when Lewis authorizes release. Skip Cursor diff-tab **create-branch-and-commit**, draft-PR flows, and branch pushes unless he explicitly asks for a branch or PR. If an agent or tool already created a side branch, merge or cherry-pick onto `main`, push `main`, then delete the extra local and remote branches so only `main` remains.
+
 1. Confirm the branch with `git status -sb`.
 2. Run `npm run typecheck` and `npm run lint -- --quiet`.
 3. Stage only the files in the requested change.
