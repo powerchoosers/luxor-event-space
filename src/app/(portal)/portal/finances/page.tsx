@@ -32,6 +32,7 @@ import {
   PortalTableCard,
   PortalStatusBadge,
   PortalSelect,
+  PortalDatePicker,
   PortalSkeleton,
   PortalContactAvatar,
 } from '@/components/portal/PortalUI'
@@ -47,7 +48,7 @@ import { FinanceMainTabs } from '@/components/portal/FinanceMainTabs'
 import { FinanceBrowseViews, type FinanceBrowseView } from '@/components/portal/FinanceBrowseViews'
 import type { LuxorInvoice, LuxorBooking, LuxorPayment, LuxorPaymentRefundView, LuxorBill } from '@/lib/luxorInquiryTypes'
 import type { LuxorPaymentInstallment } from '@/lib/luxorInquiryTypes'
-import { getLuxorBusinessFinanceRows, getLuxorFinanceOverview, getLuxorPaidExpenseBreakdown, getLuxorPaymentCalendarDateKey, type LuxorFinanceAllocationRow } from '@/lib/luxorFinanceReporting'
+import { getLuxorBusinessFinanceRows, getLuxorFinanceOverview, getLuxorPaidExpenseBreakdown, getLuxorExpenseCashActivityInPeriod, getLuxorPaymentCalendarDateKey, type LuxorFinanceAllocationRow } from '@/lib/luxorFinanceReporting'
 import { formatLuxorDate } from '@/lib/luxorDateFormatting'
 import { expenseAmountState } from '@/lib/luxorExpenseAmount'
 
@@ -71,16 +72,17 @@ function refundKindDisplay(kind: LuxorPaymentRefundView['refund_kind']) {
   }
 }
 
-type Tab = 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'bill-review' | 'bill-providers' | 'expense-recurring' | 'expense-business' | 'expense-events' | 'expense-receipts' | 'reports' | 'books'
+type Tab = 'dashboard' | 'revenue' | 'receivables' | 'invoices' | 'payments' | 'expenses' | 'bill-review' | 'bill-providers' | 'expense-recurring' | 'expense-business' | 'expense-events' | 'expense-receipts' | 'expense-detail' | 'reports' | 'books'
 
 export default function FinancesPage() {
   const reduceMotion = useReducedMotion()
   const routeSearchParams = useSearchParams()
-  const [overviewMonth, setOverviewMonth] = useState(() => chicagoCalendarDate().slice(0, 7))
+  const [overviewRange, setOverviewRange] = useState(() => { const today = chicagoCalendarDate(); const [year, month] = today.split('-').map(Number); return { start: `${today.slice(0, 7)}-01`, end: new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10) } })
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [selectedPaymentRecord, setSelectedPaymentRecord] = useState<LuxorRevenueHistoryRow | null>(null)
   const [paymentScheduleBookingId, setPaymentScheduleBookingId] = useState<string | null>(null)
   const [isViewPickerOpen, setIsViewPickerOpen] = useState(false)
+  const [isDateRangeOpen, setIsDateRangeOpen] = useState(false)
   const [invoices, setInvoices] = useState<LuxorInvoice[]>([])
   const [payments, setPayments] = useState<LuxorPayment[]>([])
   const [refunds, setRefunds] = useState<LuxorPaymentRefundView[]>([])
@@ -95,6 +97,25 @@ export default function FinancesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+
+  useEffect(() => {
+    if (!isDateRangeOpen) return
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('[data-finance-date-range-control="true"]') || target.closest('[data-portal-popover="true"]') || target.closest('[aria-label="Close calendar"]')) return
+      setIsDateRangeOpen(false)
+    }
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsDateRangeOpen(false)
+    }
+    document.addEventListener('pointerdown', dismissOutside)
+    document.addEventListener('keydown', dismissOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside)
+      document.removeEventListener('keydown', dismissOnEscape)
+    }
+  }, [isDateRangeOpen])
 
 type LuxorBookingExpense = {
   id: string
@@ -225,7 +246,7 @@ type LuxorBookingExpense = {
         url.searchParams.delete('client')
         window.history.replaceState(window.history.state, '', url)
       }
-      setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'bill-review' || view === 'bill-providers' || view === 'expense-recurring' || view === 'expense-business' || view === 'expense-events' || view === 'expense-receipts' || view === 'books' ? view : 'dashboard')
+      setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'bill-review' || view === 'bill-providers' || view === 'expense-recurring' || view === 'expense-business' || view === 'expense-events' || view === 'expense-receipts' || view === 'expense-detail' || view === 'books' ? view : 'dashboard')
     }
     syncViewFromUrl()
     window.addEventListener('popstate', syncViewFromUrl)
@@ -234,7 +255,7 @@ type LuxorBookingExpense = {
 
   useEffect(() => {
     const view = routeSearchParams.get('view')
-    setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'bill-review' || view === 'bill-providers' || view === 'expense-recurring' || view === 'expense-business' || view === 'expense-events' || view === 'expense-receipts' || view === 'books' ? view : 'dashboard')
+    setActiveTab(view === 'revenue' || view === 'receivables' || view === 'invoices' || view === 'payments' || view === 'expenses' || view === 'bill-review' || view === 'bill-providers' || view === 'expense-recurring' || view === 'expense-business' || view === 'expense-events' || view === 'expense-receipts' || view === 'expense-detail' || view === 'books' ? view : 'dashboard')
   }, [routeSearchParams])
 
   const selectLegacyView = (tab: Tab) => {
@@ -243,6 +264,7 @@ type LuxorBookingExpense = {
     const url = new URL(window.location.href)
     url.hash = ''
     if (tab !== 'bill-review') { url.searchParams.delete('bill'); url.searchParams.delete('company') }
+    if (tab !== 'expense-detail') url.searchParams.delete('expense')
     if (tab === 'dashboard') url.searchParams.delete('view')
     else url.searchParams.set('view', tab)
     window.history.pushState({}, '', url)
@@ -320,6 +342,19 @@ type LuxorBookingExpense = {
   }), [invoices, bookings, expenses, verifiedTestInquiryIds, verifiedTestBookingIds])
   const { expenses: businessExpenses } = businessRows
   const expenseBreakdown = useMemo(() => getLuxorPaidExpenseBreakdown(businessExpenses), [businessExpenses])
+  const rangeExpenses = useMemo(() => {
+    if (!expenseBreakdown.available) return null
+    const totals = new Map<string, number>()
+    for (const expense of businessExpenses) {
+      if (Number(expense.metadata?.legacy_paid_amount || 0) > 0 && (typeof expense.metadata?.legacy_paid_at !== 'string' || !getLuxorPaymentCalendarDateKey({ received_date: null, paid_at: expense.metadata.legacy_paid_at }))) return null
+      const activity = getLuxorExpenseCashActivityInPeriod(expense, overviewRange.start, overviewRange.end)
+      if (!activity.available) return null
+      const category = expense.category?.trim() || 'Uncategorized'
+      totals.set(category, (totals.get(category) || 0) + activity.net)
+    }
+    const categories = [...totals].map(([category, amount]) => ({ category, amount: Math.round(amount * 100) / 100 })).filter((item) => item.amount !== 0)
+    return { total: Math.round(categories.reduce((sum, item) => sum + item.amount, 0) * 100) / 100, categories }
+  }, [businessExpenses, expenseBreakdown, overviewRange])
   const cancelledExpenseCount = businessExpenses.filter((expense) => expense.status === 'cancelled').length
   const visibleExpenses = businessExpenses.filter((expense) => showCancelledExpenses || expense.status !== 'cancelled')
 
@@ -369,20 +404,47 @@ type LuxorBookingExpense = {
     'expense-business': 'Business expenses',
     'expense-events': 'Event expenses',
     'expense-receipts': 'Receipts and records',
+    'expense-detail': 'Expense detail',
     reports: 'Financial Reports',
     books: 'Books & records',
   }
 
-  const [overviewYear, overviewMonthNumber] = overviewMonth.split('-')
-  const currentYear = Number(chicagoCalendarDate().slice(0, 4))
-  const overviewYears = Array.from({ length: 11 }, (_, i) => String(currentYear - 5 + i))
-  if (!overviewYears.includes(overviewYear)) overviewYears.push(overviewYear)
-  const periodControls = <div className="flex w-full items-center gap-2">
-    <PortalSelect className="!min-w-0 flex-1 md:w-[140px] md:flex-none" buttonClassName="max-sm:px-2 max-md:!border-[color:var(--portal-border)]" aria-label="Overview month" value={overviewMonthNumber} onChange={(value) => setOverviewMonth(`${overviewYear}-${value}`)} options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1).padStart(2, '0'), label: new Date(Date.UTC(2020, i, 1)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }) }))} />
-    <PortalSelect className="!min-w-0 flex-1 md:w-[140px] md:flex-none" buttonClassName="max-sm:px-2 max-md:!border-[color:var(--portal-border)]" aria-label="Overview year" value={overviewYear} onChange={(value) => setOverviewMonth(`${value}-${overviewMonthNumber}`)} options={overviewYears.sort().map((value) => ({ value, label: value }))} />
+  const periodDateFields = <>
+    <div className="min-w-0 flex-1 md:w-[176px] md:flex-none" aria-label="From date"><PortalDatePicker value={overviewRange.start} onChange={(value) => { if (value) setOverviewRange((range) => ({ start: value, end: value > range.end ? value : range.end })) }} placeholder="From date" label="From date" triggerPrefix="From" triggerClassName="!min-h-10 !justify-start !gap-1.5 !px-2.5 !text-xs !border-[color:var(--portal-border)]" omitWeekday timeZone="America/Chicago" /></div>
+    <div className="min-w-0 flex-1 md:w-[176px] md:flex-none" aria-label="To date"><PortalDatePicker value={overviewRange.end} onChange={(value) => { if (value) setOverviewRange((range) => ({ start: value < range.start ? value : range.start, end: value })) }} placeholder="To date" label="To date" triggerPrefix="To" triggerClassName="!min-h-10 !justify-start !gap-1.5 !px-2.5 !text-xs !border-[color:var(--portal-border)]" omitWeekday timeZone="America/Chicago" /></div>
+  </>
+  const periodControls = <div className="flex w-full items-center gap-2">{periodDateFields}</div>
+  const dateRangePopover = (alignment: 'left' | 'right') => <AnimatePresence initial={false}>
+    {isDateRangeOpen && <motion.div
+      key="finance-date-range-popover"
+      role="dialog"
+      aria-label="Choose finance date range"
+      aria-modal="false"
+      initial={reduceMotion ? false : { opacity: 0, y: -5, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.99 }}
+      transition={{ duration: reduceMotion ? 0.01 : 0.16, ease: [0.22, 1, 0.36, 1] }}
+      className={`absolute ${alignment === 'left' ? 'left-0' : 'right-0'} top-full z-50 mt-2 w-max max-w-[calc(100vw-2rem)] rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] p-4 shadow-[0_18px_48px_-24px_rgba(55,37,19,0.48)]`}
+    >
+      <div className="flex w-max max-w-[calc(100vw-4rem)] items-center gap-2">{periodDateFields}</div>
+    </motion.div>}
+  </AnimatePresence>
+  const dateRangeButton = (className: string, alignment: 'left' | 'right') => <div className={`relative ${className}`} data-finance-date-range-control="true">
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      aria-expanded={isDateRangeOpen}
+      onClick={() => setIsDateRangeOpen((open) => !open)}
+      className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-xs font-semibold text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+    >
+      <CalendarDots aria-hidden="true" size={16} className="shrink-0 text-[#a8792f] dark:text-[#e6c77f]" />
+      <span>Date range</span>
+      <ChevronDown aria-hidden="true" size={14} className={`shrink-0 text-[color:var(--portal-muted)] transition-transform ${isDateRangeOpen ? 'rotate-180' : ''}`} />
+    </button>
+    {dateRangePopover(alignment)}
   </div>
 
-  const isPayables = ['expenses', 'bill-review', 'bill-providers', 'expense-recurring', 'expense-business', 'expense-events', 'expense-receipts'].includes(activeTab)
+  const isPayables = ['expenses', 'bill-review', 'bill-providers', 'expense-recurring', 'expense-business', 'expense-events', 'expense-receipts', 'expense-detail'].includes(activeTab)
   const workspaceSwitcher = <div className="flex h-10 w-fit rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-soft)] p-1" role="group" aria-label="Finance workspace">
         {([{ label: 'Receivables', tab: 'dashboard' }, { label: 'Payables', tab: 'expenses' }] as const).map(({ label, tab }) => <button key={tab} type="button" aria-pressed={tab === 'expenses' ? isPayables : !isPayables} onClick={() => selectLegacyView(tab)} className={`h-full rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/50 ${(tab === 'expenses' ? isPayables : !isPayables) ? 'bg-[color:var(--portal-card)] text-[color:var(--portal-text)] shadow-sm' : 'text-[color:var(--portal-muted)] hover:text-[color:var(--portal-text)]'}`}>{label}</button>)}
       </div>
@@ -392,10 +454,10 @@ type LuxorBookingExpense = {
       <PortalPageHeader
         icon={<CurrencyDollar size={18} weight="regular" />}
         title="Finances"
+        titleAccessory={activeTab === 'dashboard' ? dateRangeButton('ml-2 hidden md:block', 'left') : undefined}
         mobileActionsInline
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2.5">
-            {activeTab === 'dashboard' && <div className="hidden md:block">{periodControls}</div>}
             <div className="md:hidden">{workspaceSwitcher}</div>
             {/* iPad/Tablet Browse Views button (positioned immediately to the left of action buttons) */}
             <button
@@ -458,7 +520,7 @@ type LuxorBookingExpense = {
 
       {isPayables && <div className="min-w-0 shrink-0 overflow-x-auto"><PortalAnimatedTabs variant="slider" ariaLabel="Payables sections" tabs={[
         { id: 'expenses', label: 'Expense Dashboard', icon: <TrendDown size={15} /> }, { id: 'bill-review', label: 'Bill Review', icon: <FileText size={15} /> }, { id: 'bill-providers', label: 'Bills and Providers', icon: <Buildings size={15} /> }, { id: 'expense-recurring', label: 'Recurring Expenses', icon: <Repeat size={15} /> }, { id: 'expense-business', label: 'Business Expenses', icon: <Briefcase size={15} /> }, { id: 'expense-events', label: 'Event Expenses', icon: <CalendarDots size={15} /> }, { id: 'expense-receipts', label: 'Receipts & Records', icon: <Receipt size={15} /> },
-      ]} activeTab={activeTab} onTabChange={(tab) => selectLegacyView(tab)} /></div>}
+      ]} activeTab={activeTab === 'expense-detail' ? 'expense-business' : activeTab} onTabChange={(tab) => selectLegacyView(tab)} /></div>}
       <PortalTabTransition activeKey={activeTab} className="flex-1 min-h-0 overflow-hidden">
       {activeTab === 'revenue' && <div className="h-full overflow-y-auto pb-6 portal-scrollbar"><RevenueCollectionsView view="revenue" actorEmail={null} embedded /></div>}
       {activeTab === 'books' && <div className="h-full overflow-y-auto pb-6 portal-scrollbar"><BooksRecordsPage embedded /></div>}
@@ -467,12 +529,14 @@ type LuxorBookingExpense = {
       {activeTab === 'expense-business' && <ExpenseManagement view="business" embedded />}
       {activeTab === 'expense-events' && <ExpenseManagement view="events" embedded />}
       {activeTab === 'expense-receipts' && <ExpenseManagement view="receipts" embedded />}
+      {activeTab === 'expense-detail' && <ExpenseManagement view="detail" expenseId={routeSearchParams.get('expense') || undefined} embedded />}
       {activeTab === 'bill-providers' && <div className="h-full overflow-y-auto portal-scrollbar"><FinancialBills embedded /></div>}
       {activeTab === 'bill-review' && <OperationsPageContent embeddedBills />}
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (loading || (!error && testClassificationVerified)) && (
         <FinancialOverview
-          selectedMonth={overviewMonth}
+          selectedRange={overviewRange}
+          rangeExpenses={rangeExpenses}
           loading={loading}
           overview={overview}
           expenses={expenseBreakdown}

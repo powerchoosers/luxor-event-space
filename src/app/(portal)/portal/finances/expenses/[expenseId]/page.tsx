@@ -1,6 +1,6 @@
-import ExpenseManagement from '@/components/portal/expenses/ExpenseManagement'
+import { redirect } from 'next/navigation'
 
-export default async function ExpenseDetailPage({ params }: { params: Promise<{ expenseId: string }> }) {
+export default async function LegacyExpenseDetail({ params }: { params: Promise<{ expenseId: string }> }) {
   const { expenseId } = await params
-  return <ExpenseManagement view="detail" expenseId={expenseId} />
+  redirect(`/portal/finances?view=expense-detail&expense=${encodeURIComponent(expenseId)}`)
 }

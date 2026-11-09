@@ -1456,12 +1456,16 @@ export function PortalSelect({
 }
 
 export function PortalDatePicker({
-  value, onChange, className = '', placeholder = 'Select Date...', theme = 'portal', minDate, maxMonths, availableDates, allowPastDates = true, timeZone,
+  value, onChange, className = '', placeholder = 'Select Date...', theme = 'portal', minDate, maxMonths, availableDates, allowPastDates = true, timeZone, label = 'Date', omitWeekday = false, triggerPrefix, triggerClassName,
 }: {
   value: string
   onChange: (val: string) => void
   className?: string
   placeholder?: string
+  label?: string
+  omitWeekday?: boolean
+  triggerPrefix?: string
+  triggerClassName?: string
   theme?: 'portal' | 'light'
   minDate?: string
   maxMonths?: number
@@ -1473,7 +1477,7 @@ export function PortalDatePicker({
   const effectiveTimeZone = timeZone === undefined
     ? (maxMonths === undefined ? undefined : 'America/Chicago')
     : timeZone ?? undefined
-  return <LuxorDatePicker value={value} onChange={onChange} className={className} placeholder={placeholder} theme={theme} minDate={minDate} maxMonths={maxMonths} availableDates={availableDates} timeZone={effectiveTimeZone} allowPastDates={allowPastDates} openToValue label="Date" />
+  return <LuxorDatePicker value={value} onChange={onChange} className={className} placeholder={placeholder} theme={theme} minDate={minDate} maxMonths={maxMonths} availableDates={availableDates} timeZone={effectiveTimeZone} allowPastDates={allowPastDates} openToValue label={label} omitWeekday={omitWeekday} triggerPrefix={triggerPrefix} triggerClassName={triggerClassName} />
 }
 
 export function PortalContactAvatar({

@@ -21,7 +21,6 @@ import { PortalButton, PortalCloseButton, PortalContactAvatar, PortalModal, Port
 import {
   getLuxorCategoryShares,
   getLuxorOverviewChart,
-  getLuxorOverviewPeriod,
   getLuxorPaymentCalendarDateKey,
   type getLuxorFinanceOverview,
   type getLuxorPaidExpenseBreakdown,
@@ -441,7 +440,8 @@ export default function FinancialOverview({
   requestedScheduleBookingId,
   onRequestedScheduleClosed,
   loading = false,
-  selectedMonth,
+  selectedRange,
+  rangeExpenses,
 }: {
   overview?: Overview
   expenses?: Expenses
@@ -452,7 +452,8 @@ export default function FinancialOverview({
   requestedScheduleBookingId?: string | null
   onRequestedScheduleClosed?: () => void
   loading?: boolean
-  selectedMonth?: string
+  selectedRange?: { start: string; end: string }
+  rangeExpenses?: { total: number; categories: Array<{ category: string; amount: number }> } | null
 }) {
   const scrollFrame = useRef<number | null>(null)
   useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
@@ -481,7 +482,8 @@ export default function FinancialOverview({
     scrollFrame.current = requestAnimationFrame(scroll)
   }
   const today = chicagoCalendarDate()
-  const month = selectedMonth ?? today.slice(0, 7)
+  const month = (selectedRange?.start || today).slice(0, 7)
+  const range = selectedRange ?? { start: `${month}-01`, end: new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10) }
   const [grouping, setGrouping] = useState<'monthly' | 'quarterly' | 'annual'>('monthly')
   const [amountsOpen, setAmountsOpen] = useState(false)
   const reduceAmountsMotion = useReducedMotion()
@@ -540,7 +542,14 @@ export default function FinancialOverview({
     } finally { setCorrectionBusy(false) }
   }
 
-  const period = overview ? getLuxorOverviewPeriod(overview, month) : { actual: null, expected: null, projected: null, percent: null }
+  const period = useMemo(() => {
+    if (!overview) return { actual: null, expected: null, projected: null, percent: null }
+    const actual = overview.actualByMonth ? Math.round(overview.reportingRows.eventPaymentRows.filter((row) => { const day = getLuxorPaymentCalendarDateKey(row); return day >= range.start && day <= range.end }).reduce((sum, row) => sum + row.amount, 0) * 100) / 100 : null
+    const expected = overview.expectedByMonth ? Math.round(overview.reportingRows.scheduleRows.filter((row) => row.dueDate && row.dueDate >= range.start && row.dueDate <= range.end && row.dueDate >= today).reduce((sum, row) => sum + row.remaining, 0) * 100) / 100 : null
+    const projected = actual === null || expected === null ? null : Math.round((actual + expected) * 100) / 100
+    const percent = projected !== null && actual !== null && actual >= 0 ? projected > 0 ? Math.round(actual / projected * 100) : 0 : null
+    return { actual, expected, projected, percent }
+  }, [overview, range.start, range.end, today])
   const chart = useMemo(() => (overview ? getLuxorOverviewChart(overview, year, grouping) : []), [overview, year, grouping])
   const max = Math.max(1, ...chart.map((item) => (item.actual || 0) + (item.expected || 0)))
 
@@ -563,16 +572,9 @@ export default function FinancialOverview({
     .sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'))
     .slice(0, 5)
 
-  const monthName = new Date(Date.UTC(year, Number(monthText) - 1, 1)).toLocaleString('en-US', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  })
-  const monthShort = new Date(Date.UTC(year, Number(monthText) - 1, 1)).toLocaleString('en-US', {
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  })
+  const formatPeriodDate = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+  const monthName = `${formatPeriodDate(range.start)} – ${formatPeriodDate(range.end)}`
+  const monthShort = 'the selected period'
 
   // Real calculated metrics for the 4 KPI cards
   const periodRevenue = period.actual
@@ -580,7 +582,7 @@ export default function FinancialOverview({
     () => (overview?.actualByMonth ? overview.reportingRows.eventPaymentRows.reduce((sum, row) => sum + row.amount, 0) : null),
     [overview],
   )
-  const periodExpenses = expenses?.available ? expenses.byMonth?.[month] ?? 0 : null
+  const periodExpenses = rangeExpenses ? rangeExpenses.total : null
   const allTimeExpenses = expenses?.available && expenses.total !== null ? expenses.total : null
   const periodNetProfit = periodRevenue === null || periodExpenses === null ? null : periodRevenue - periodExpenses
   const allTimeNetProfit = allTimeRevenue === null || allTimeExpenses === null ? null : allTimeRevenue - allTimeExpenses
@@ -709,8 +711,13 @@ export default function FinancialOverview({
 
   const revenueMonthCategories = useMemo(() => {
     if (!overview?.categoryByMonth) return []
-    return Object.entries(overview.categoryByMonth[month] || {}).map(([category, amount]) => ({ category, amount }))
-  }, [overview?.categoryByMonth, month])
+    const totals = new Map<string, number>()
+    for (const row of overview.reportingRows.eventPaymentRows) {
+      const day = getLuxorPaymentCalendarDateKey(row)
+      if (day >= range.start && day <= range.end && row.amount > 0) totals.set(row.category || 'Unclassified', (totals.get(row.category || 'Unclassified') || 0) + row.amount)
+    }
+    return [...totals].map(([category, amount]) => ({ category, amount }))
+  }, [overview, range.start, range.end])
 
   const allTimeRevenueCategories = useMemo(() => {
     if (!overview?.categoryByMonth) return []
@@ -723,10 +730,7 @@ export default function FinancialOverview({
     return [...totals.entries()].map(([category, amount]) => ({ category, amount }))
   }, [overview?.categoryByMonth])
 
-  const expenseMonthCategories = useMemo(() => {
-    if (!expenses?.available) return []
-    return expenses.categoriesByMonth?.[month] || []
-  }, [expenses, month])
+  const expenseMonthCategories = rangeExpenses?.categories || []
 
   return (
     <div className="h-full min-h-0 space-y-4 overflow-y-auto pb-8 pr-1 portal-scrollbar">
@@ -781,7 +785,7 @@ export default function FinancialOverview({
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[
           {
-            title: 'Event payments received',
+            title: 'Payments received',
             value: periodRevenue,
             detail: `${monthName} · ${allTimeRevenue === null ? 'All-time collections unavailable' : `${currency(allTimeRevenue)} collected all time`}`,
             icon: CurrencyCircleDollar,
@@ -799,15 +803,17 @@ export default function FinancialOverview({
             icon: TrendUp,
           },
           {
-            title: 'Outstanding balance',
+            title: 'Outstanding',
             value: outstandingBalance,
             detail: outstandingBalance !== null ? `${activeContractCount} active signed ${activeContractCount === 1 ? 'agreement' : 'agreements'} · ${period.expected === null ? 'Scheduled amount unavailable' : `${currency(period.expected)} due in ${monthShort}`}` : 'Agreement balances unavailable',
             icon: Wallet,
           },
         ].map(({ title, value, detail, icon: Icon }) => (
           <section key={title} className={card}>
-            <Icon aria-hidden="true" className="mb-3 text-[#a8792f] dark:text-[#e6c77f]" size={20} weight="regular" />
-            <h3 className={muted}>{title}</h3>
+            <div className="flex flex-col items-start md:mb-3 md:flex-row md:items-center md:gap-2">
+              <Icon aria-hidden="true" className="mb-2 text-[#a8792f] dark:text-[#e6c77f] md:mb-0 md:shrink-0" size={20} weight="regular" />
+              <h3 className={muted}>{title}</h3>
+            </div>
             <div className="mt-1 flex min-h-[32px] items-center">
               {loading ? (
                 <PortalSkeleton className="my-0.5 h-7 w-28 rounded-md" />
@@ -1045,7 +1051,7 @@ export default function FinancialOverview({
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         {/* Monthly Revenue & Collections */}
         <section className={card}>
-          <h3 className="text-base font-semibold text-[color:var(--portal-text)]">Monthly Revenue &amp; Collections</h3>
+          <h3 className="text-base font-semibold text-[color:var(--portal-text)]">Revenue &amp; Collections</h3>
           <p className={muted}>{monthName}</p>
           <div className="mt-5 flex min-h-[36px] items-center">
             {loading ? (
@@ -1056,7 +1062,7 @@ export default function FinancialOverview({
               </p>
             )}
           </div>
-          <p className={muted}>Projected collections (collected + expected this month)</p>
+          <p className={muted}>Projected collections (collected + expected in this period)</p>
           <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
             <div>
               <strong className="flex min-h-[22px] items-center text-[color:var(--portal-text)]">
@@ -1218,7 +1224,7 @@ export default function FinancialOverview({
                 ))}
               </div>
             </div>
-          ) : !expenses?.available ? (
+          ) : !rangeExpenses ? (
             <p className={`${muted} mt-3`}>Paid expense details are unavailable until the records are verified.</p>
           ) : expenseMonthCategories.length > 0 ? (
             <>

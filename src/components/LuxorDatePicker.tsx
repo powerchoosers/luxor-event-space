@@ -14,9 +14,9 @@ function parseDateKey(value: string) {
   return date
 }
 
-function dateLabel(value: string, locale: string) {
+function dateLabel(value: string, locale: string, omitWeekday = false) {
   const date = parseDateKey(value)
-  return date ? new Intl.DateTimeFormat(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(date) : ''
+  return date ? new Intl.DateTimeFormat(locale, { ...(omitWeekday ? {} : { weekday: 'short' as const }), month: 'short', day: 'numeric', year: 'numeric' }).format(date) : ''
 }
 
 function currentDateKey(timeZone?: string) {
@@ -45,6 +45,9 @@ export function LuxorDatePicker({
   maxDate,
   allowPastDates = false,
   openToValue = false,
+  omitWeekday = false,
+  triggerPrefix,
+  triggerClassName = '',
 }: {
   value: string
   onChange: (value: string) => void
@@ -60,6 +63,9 @@ export function LuxorDatePicker({
   maxDate?: string
   allowPastDates?: boolean
   openToValue?: boolean
+  omitWeekday?: boolean
+  triggerPrefix?: string
+  triggerClassName?: string
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -463,7 +469,7 @@ export function LuxorDatePicker({
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={value ? `${label}, ${dateLabel(value, locale)}. Change date` : placeholder}
+        aria-label={value ? `${label}, ${dateLabel(value, locale, omitWeekday)}. Change date` : placeholder}
         onClick={() => {
           if (!open) {
             const now = new Date()
@@ -479,10 +485,11 @@ export function LuxorDatePicker({
             setOpen(true)
           } else closeAndReturnFocus()
         }}
-        className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-sm transition hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/20 ${isPortal ? 'border-transparent bg-[color:var(--portal-soft,#171310)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]'}`}
+        className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-sm transition hover:border-[#caa24c]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/20 ${isPortal ? 'border-transparent bg-[color:var(--portal-soft,#171310)] text-[color:var(--portal-text,#f7efe3)]' : 'border-[#d8c4a4] bg-[#fffdfa] text-[#3b2b1d]'} ${triggerClassName}`}
       >
-        <span className={value ? (isPortal ? 'text-[color:var(--portal-text,#f7efe3)]' : 'text-[#3b2b1d]') : (isPortal ? 'text-[color:var(--portal-muted,#b9ad9f)]' : 'text-[#827567]')}>{value ? dateLabel(value, locale) : placeholder}</span>
-        <CalendarDays aria-hidden="true" className="h-4 w-4 shrink-0 text-[#8d672b]" />
+        {triggerPrefix && <span className="shrink-0 text-xs font-medium text-[color:var(--portal-muted)]">{triggerPrefix}</span>}
+        <span className={value ? (isPortal ? 'text-[color:var(--portal-text,#f7efe3)]' : 'text-[#3b2b1d]') : (isPortal ? 'text-[color:var(--portal-muted,#b9ad9f)]' : 'text-[#827567]')}>{value ? dateLabel(value, locale, omitWeekday) : placeholder}</span>
+        <CalendarDays aria-hidden="true" className={`h-4 w-4 shrink-0 text-[#8d672b] ${triggerPrefix ? 'ml-auto' : ''}`}  />
       </button>
 
       {typeof document !== 'undefined' ? createPortal(
