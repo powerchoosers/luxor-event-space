@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     if (!enrollments.length) return NextResponse.json({ review: null, audit }, { headers })
     const ids = enrollments.map((enrollment) => enrollment.id).filter((id) => UUID.test(id)).join(',')
     if (!ids) return NextResponse.json({ review: null, audit }, { headers })
-    const states = await supabaseRest<Array<{ enrollment_id: string; reason: string }>>(`luxor_ordered_brochure_recovery_state?select=enrollment_id,reason&enrollment_id=in.(${ids})&limit=10`)
+    const states = await supabaseRestStrict<Array<{ enrollment_id: string; reason: string }>>(`luxor_ordered_brochure_recovery_state?select=enrollment_id,reason&enrollment_id=in.(${ids})&limit=10`)
     const reason = states.find((state) => ['identity_review', 'legacy_work_present'].includes(state.reason))?.reason
     const review = reason === 'identity_review'
       ? 'This contact needs identity review before the workflow can continue.'

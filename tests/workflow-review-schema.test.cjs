@@ -7,7 +7,7 @@ const Module = require('node:module')
 const ts = require('typescript')
 const root = path.resolve(__dirname, '..')
 const inquiryId = '11111111-1111-4111-8111-111111111111'
-let rows = [], calls = [], failDeferred = false, readOnly = { slots: [], customHolds: [], audit: [] }
+let rows = [], calls = [], failDeferred = false, failRecoveryState = false, activeEnrollments = [], readOnly = { slots: [], customHolds: [], audit: [] }
 function loadRoute() {
   const source = fs.readFileSync(path.join(root, 'src/app/api/workflow-review/route.ts'), 'utf8')
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
@@ -38,6 +38,8 @@ function loadRoute() {
         if (query.includes('select=status') || query.includes('&status=')) throw new Error('missing status column')
         return rows
       }
+      if (query.startsWith('luxor_follow_up_enrollments?')) return activeEnrollments
+      if (query.startsWith('luxor_ordered_brochure_recovery_state?') && failRecoveryState) throw new Error('missing recovery-state table')
       return []
     } },
   }
@@ -50,7 +52,7 @@ function loadRoute() {
 }
 const route = loadRoute()
 async function get(input, enabled=true, readOnlyInput={}) {
-  rows=input;calls=[];failDeferred=false;readOnly={ slots: [], customHolds: [], audit: [], ...readOnlyInput }
+  rows=input;calls=[];failDeferred=false;failRecoveryState=Boolean(readOnlyInput.failRecoveryState);activeEnrollments=readOnlyInput.orderedEnrollments || [];readOnly={ slots: [], customHolds: [], audit: [], ...readOnlyInput }
   process.env.LUXOR_ORDERED_WORKFLOWS_ENABLED=enabled ? 'true' : 'false'
   const response = await route.GET({ nextUrl: new URL(`https://example.invalid/?inquiryId=${inquiryId}`) })
   return { response, body: await response.json() }
@@ -96,4 +98,10 @@ test('database failures remain visible', async () => {
   process.env.LUXOR_ORDERED_WORKFLOWS_ENABLED='true'; failDeferred=true
   const response = await route.GET({ nextUrl: new URL(`https://example.invalid/?inquiryId=${inquiryId}`) })
   assert.equal(response.status, 503)
+})
+test('enabled ordering fails closed when required recovery-state schema is missing', async () => {
+  const { response, body } = await get([], true, { orderedEnrollments: [{ id: '22222222-2222-4222-8222-222222222222' }], failRecoveryState: true })
+  assert.equal(response.status, 503)
+  assert.match(body.error, /could not be loaded/)
+  assert.ok(calls.some((query) => query.startsWith('luxor_ordered_brochure_recovery_state?')))
 })
