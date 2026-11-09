@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLuxorPortalSession, getVerifiedLuxorPortalSession, isAuthorizedLuxorPortalEmail } from '@/lib/luxorPortalAuth'
-import { supabaseRestStrict as supabaseRest } from '@/lib/supabaseRestServer'
+import { supabaseRest, supabaseRestStrict } from '@/lib/supabaseRestServer'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const headers = { 'Cache-Control': 'no-store' }
@@ -15,19 +15,31 @@ export async function GET(request: NextRequest) {
   const inquiryId = request.nextUrl.searchParams.get('inquiryId') || ''
   if (!UUID.test(inquiryId)) return NextResponse.json({ error: 'Invalid inquiry.' }, { status: 400, headers })
   try {
+    if (!enabled) {
+      // Review remains read-only while ordered workflows are disabled. Use the
+      // tolerant GET helper only for optional review tables; unrelated database
+      // errors still reach the 503 below.
+      const [slots, customHolds, audit] = await Promise.all([
+        supabaseRest<Array<{ id: string }>>(`luxor_workflow_contact_slots?select=id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.held&limit=2`),
+        supabaseRest<Array<{ id: string }>>(`luxor_custom_workflow_enrollments?select=id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.held&limit=2`),
+        supabaseRest<Array<{ actor_email: string; action_kind: string; action_status: string; reason: string; created_at: string }>>(`luxor_workflow_resolution_audit?select=actor_email,action_kind,action_status,reason,created_at&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=5`),
+      ])
+      const review = slots.length || customHolds.length ? 'A workflow action needs review before it can continue.' : null
+      return NextResponse.json({ review, resolution: null, audit }, { headers })
+    }
     const [slots, enrollments, customHolds, audit, deferred] = await Promise.all([
-      supabaseRest<Array<{ id: string; workflow_kind: string; enrollment_id: string; action_kind: 'call' | 'email' | 'text'; action_id: string | null }>>(`luxor_workflow_contact_slots?select=id,workflow_kind,enrollment_id,action_kind,action_id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.held&limit=2`),
-      supabaseRest<Array<{ id: string }>>(`luxor_follow_up_enrollments?select=id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&ordered_progression_required=eq.true&status=eq.active&limit=10`),
-      supabaseRest<Array<{ id: string; current_step_id: string }>>(`luxor_custom_workflow_enrollments?select=id,current_step_id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&call_completion_required=eq.true&status=eq.held&limit=2`),
-      supabaseRest<Array<{ actor_email: string; action_kind: string; action_status: string; reason: string; created_at: string }>>(`luxor_workflow_resolution_audit?select=actor_email,action_kind,action_status,reason,created_at&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=5`),
+      supabaseRestStrict<Array<{ id: string; workflow_kind: string; enrollment_id: string; action_kind: 'call' | 'email' | 'text'; action_id: string | null }>>(`luxor_workflow_contact_slots?select=id,workflow_kind,enrollment_id,action_kind,action_id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&status=eq.held&limit=2`),
+      supabaseRestStrict<Array<{ id: string }>>(`luxor_follow_up_enrollments?select=id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&ordered_progression_required=eq.true&status=eq.active&limit=10`),
+      supabaseRestStrict<Array<{ id: string; current_step_id: string }>>(`luxor_custom_workflow_enrollments?select=id,current_step_id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&call_completion_required=eq.true&status=eq.held&limit=2`),
+      supabaseRestStrict<Array<{ actor_email: string; action_kind: string; action_status: string; reason: string; created_at: string }>>(`luxor_workflow_resolution_audit?select=actor_email,action_kind,action_status,reason,created_at&inquiry_id=eq.${encodeURIComponent(inquiryId)}&order=created_at.desc&limit=5`),
       // The initial drain-fence table has no status column. The optional replay
       // migration adds it later, so selecting/filtering by status breaks review
       // as soon as ordered workflows are enabled on the initial schema.
-      enabled ? supabaseRest<Array<{ status?: unknown }>>(`luxor_ordered_deferred_enrollment_draft?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&limit=1000`) : Promise.resolve([]),
+      enabled ? supabaseRestStrict<Array<{ status?: unknown }>>(`luxor_ordered_deferred_enrollment_draft?select=*&inquiry_id=eq.${encodeURIComponent(inquiryId)}&limit=1000`) : Promise.resolve([]),
     ])
     if (!slots.length && customHolds.length === 1 && customHolds[0].current_step_id) {
       const held = customHolds[0]
-      slots.push(...await supabaseRest<typeof slots>(`luxor_workflow_contact_slots?select=id,workflow_kind,enrollment_id,action_kind,action_id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&workflow_kind=eq.custom&enrollment_id=eq.${encodeURIComponent(held.id)}&step_key=eq.${encodeURIComponent(held.current_step_id)}&status=eq.completed&limit=2`))
+        slots.push(...await supabaseRestStrict<typeof slots>(`luxor_workflow_contact_slots?select=id,workflow_kind,enrollment_id,action_kind,action_id&inquiry_id=eq.${encodeURIComponent(inquiryId)}&workflow_kind=eq.custom&enrollment_id=eq.${encodeURIComponent(held.id)}&step_key=eq.${encodeURIComponent(held.current_step_id)}&status=eq.completed&limit=2`))
     }
     if (slots.length || customHolds.length) {
       let resolution: { slotId?: string; enrollmentId?: string; workflowKind?: string; canStop: boolean; detail: string } | null = null
@@ -35,7 +47,7 @@ export async function GET(request: NextRequest) {
       if (slot && UUID.test(slot.id) && ['call','email','text'].includes(slot.action_kind)) {
         const table = slot.action_kind === 'call' ? 'luxor_tasks' : slot.action_kind === 'email' ? 'luxor_email_jobs' : 'luxor_text_jobs'
         const [action] = slot.action_id && UUID.test(slot.action_id)
-          ? await supabaseRest<Array<{ status: string }>>(`${table}?select=status&id=eq.${encodeURIComponent(slot.action_id)}&inquiry_id=eq.${encodeURIComponent(inquiryId)}&limit=1`)
+          ? await supabaseRestStrict<Array<{ status: string }>>(`${table}?select=status&id=eq.${encodeURIComponent(slot.action_id)}&inquiry_id=eq.${encodeURIComponent(inquiryId)}&limit=1`)
           : []
         const status = slot.action_id ? action?.status : 'not_created'
         const terminal = slot.action_kind === 'call' ? ['completed','cancelled'] : slot.action_kind === 'email' ? ['sent','failed','cancelled'] : ['sent','delivered','undelivered','failed','cancelled','skipped']
