@@ -31,35 +31,23 @@ function routeFixture() {
 function request(body) { return new Request('http://localhost/api/expenses/templates/template', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) }
 const context = { params: Promise.resolve({ id: 'template' }) }
 
-test('linking a reviewed schedule fences its version and does not generate expenses', async () => {
+test('new vendor links and reassignments are rejected without a write', async () => {
   const { PATCH, state } = routeFixture()
-  const response = await PATCH(request({ vendor_id: 'provider', expected_updated_at: state.current.updated_at }), context)
-  assert.equal(response.status, 200)
-  assert.equal(state.generated, 0)
-  assert.equal(state.writes.length, 1)
-  assert.match(state.writes[0].url, /vendor_id=is\.null/)
-  assert.match(state.writes[0].url, /updated_at=eq\./)
-  assert.equal(state.writes[0].body.vendor_id, 'provider')
-  assert.equal(state.writes[0].body.vendor_name, 'Utility')
-})
-
-test('stale schedule links and provider reassignment fail before writing', async () => {
-  const { PATCH, state } = routeFixture()
-  assert.equal((await PATCH(request({ vendor_id: 'provider', expected_updated_at: 'stale' }), context)).status, 409)
+  assert.equal((await PATCH(request({ vendor_id: 'provider', expected_updated_at: state.current.updated_at }), context)).status, 400)
   state.current.vendor_id = 'other-provider'
-  assert.equal((await PATCH(request({ vendor_id: 'provider' }), context)).status, 409)
+  assert.equal((await PATCH(request({ vendor_id: 'provider', expected_updated_at: state.current.updated_at, confirm_provider_change: true }), context)).status, 400)
   assert.equal(state.writes.length, 0)
   assert.equal(state.generated, 0)
 })
 
-test('a confirmed provider correction is fenced to the reviewed schedule', async () => {
+test('ordinary updates preserve existing historical vendor links', async () => {
   const { PATCH, state } = routeFixture()
   state.current.vendor_id = 'other-provider'
-  const response = await PATCH(request({ vendor_id: 'provider', expected_updated_at: state.current.updated_at, confirm_provider_change: true }), context)
+  const response = await PATCH(request({ is_active: false }), context)
   assert.equal(response.status, 200)
-  assert.match(state.writes[0].url, /vendor_id=eq\.other-provider/)
-  assert.match(state.writes[0].url, /updated_at=eq\./)
-  assert.equal(state.generated, 0)
+  assert.equal(state.writes.length, 1)
+  assert.equal(state.writes[0].body.vendor_id, undefined)
+  assert.equal(state.current.vendor_id, 'other-provider')
 })
 
 function occurrenceFixture() {

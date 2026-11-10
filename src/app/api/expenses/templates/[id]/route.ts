@@ -41,6 +41,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const patch: Partial<LuxorExpenseTemplate> = { updated_by: session.email }
     if (body.vendor_id !== undefined) {
       const vendorId = body.vendor_id === '' ? null : body.vendor_id
+      if (vendorId !== null && vendorId !== current.vendor_id) throw new LuxorExpenseRequestError('Recurring costs are managed separately from event vendors.')
       if (current.vendor_id && current.vendor_id !== vendorId && (body.confirm_provider_change !== true || body.expected_updated_at === undefined)) throw new LuxorExpenseRequestError('Review and confirm the provider change after refreshing this schedule.', 409)
       if (vendorId !== null) {
         if (!isExpenseUuid(vendorId)) throw new LuxorExpenseRequestError('Choose a valid provider.')

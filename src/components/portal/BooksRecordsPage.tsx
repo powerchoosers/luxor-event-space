@@ -120,8 +120,8 @@ export function BooksRecordsPage({ embedded = false, active = true }: { embedded
   return (
     <div className="space-y-5">
       {!embedded && <>
-        <PortalPageHeader title="Books & records" description="See what needs review, download records for your accountant, and preview bank statement matching." actions={<button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} className="hidden min-h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)] md:inline-flex"><List size={16} /> Browse views</button>} />
-        <button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 text-left text-sm font-semibold text-[color:var(--portal-text)] md:hidden"><List size={18} /> Browse views · Books &amp; records</button>
+        <PortalPageHeader title="Books & records" description="See what needs review, download records for your accountant, and preview bank statement matching." actions={<button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} className="hidden min-h-10 items-center gap-2 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3 text-sm text-[color:var(--portal-text)] shadow-xs md:inline-flex"><List size={16} /> Browse views</button>} />
+        <button type="button" onClick={() => setBrowseOpen(true)} aria-haspopup="dialog" aria-expanded={browseOpen} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 text-left text-sm font-semibold text-[color:var(--portal-text)] shadow-xs md:hidden"><List size={18} /> Browse views · Books &amp; records</button>
         <FinanceBrowseViews open={browseOpen} close={() => setBrowseOpen(false)} currentView="books" />
         <FinanceMainTabs activeTab="books" />
       </>}

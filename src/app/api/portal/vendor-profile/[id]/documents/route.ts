@@ -2,19 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { postgrestSchemaUnavailable } from '@/lib/luxorPostgrestSchema'
 import { supabaseRestCount, supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { inspectLuxorExpenseReceipt } from '@/lib/luxorExpenseReceiptsServer'
+import { verifyDocumentTicket } from '@/lib/luxorProviderDocumentAnalysis'
+import { claimProviderUploadDestination } from '@/lib/luxorProviderUploadDestination'
 import { VENDOR_UUID, vendorDocumentPath, vendorFinanceSession, vendorStorage, vendorStorageObjectMissing } from '@/lib/luxorVendorDocumentsServer'
 
 type Claim = { id: string; vendor_id: string; file_name: string; content_type: string; size_bytes: number; sha256: string; kind: string; created_by: string; created_at: string }
 const claimSelect = 'id,vendor_id,file_name,content_type,size_bytes,sha256,kind,created_by,created_at'
 function publicClaim(row: Claim) { return { id: row.id, file_name: row.file_name, size_bytes: row.size_bytes, kind: row.kind, created_at: row.created_at } }
 async function readClaim(vendorId: string, documentId: string) { const [row] = await supabaseRestStrict<Claim[]>(`luxor_vendor_document_claims?select=${claimSelect}&id=eq.${documentId}&vendor_id=eq.${vendorId}&limit=1`); return row || null }
-type Doc = { id: string; vendor_id: string; file_name: string; content_type: string; size_bytes: number; storage_path: string; sha256: string; kind: string; created_at: string }
+type Doc = { id: string; vendor_id: string; file_name: string; content_type: string; size_bytes: number; storage_path: string; sha256: string; kind: string; created_at: string; scan_metadata?: { contract_end_date?: string | null } | null }
 const select = 'id,vendor_id,file_name,content_type,size_bytes,storage_path,sha256,kind,created_at'
 async function readExisting(vendorId: string, documentId: string) {
   const [row] = await supabaseRestStrict<Doc[]>(`luxor_vendor_documents?select=${select}&id=eq.${documentId}&vendor_id=eq.${vendorId}&limit=1`)
   return row || null
 }
-function publicDoc(row: Doc) { return { id: row.id, file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, kind: row.kind, created_at: row.created_at } }
+function publicDoc(row: Doc) { return { id: row.id, file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, kind: row.kind, created_at: row.created_at, scan_metadata: row.scan_metadata || null } }
 function documentsUnavailable(error: unknown) {
   return postgrestSchemaUnavailable(error)
 }
@@ -32,7 +34,15 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
       }
       throw error
     }
-    const path = `luxor_vendor_documents?select=${select}&vendor_id=eq.${id}&order=created_at.desc,id.asc`
+    let documentFields = select
+    let analysisAvailable = false
+    try {
+      await supabaseRestStrict('luxor_vendor_documents?select=scan_metadata&limit=1')
+      documentFields += ',scan_metadata'
+      await supabaseRestStrict('luxor_provider_upload_destinations?select=id&limit=1')
+      analysisAvailable = true
+    } catch (error) { if (!postgrestSchemaUnavailable(error)) throw error }
+    const path = `luxor_vendor_documents?select=${documentFields}&vendor_id=eq.${id}&order=created_at.desc,id.asc`
     const count = await supabaseRestCount(path); const rows: Doc[] = []
     for (let offset = 0; offset < count; offset += 500) { const page = await supabaseRestStrict<Doc[]>(`${path}&limit=500&offset=${offset}`); if (page.length !== Math.min(500, count-offset)) throw new Error('Incomplete documents'); rows.push(...page) }
     if (rows.length !== count || new Set(rows.map((row) => row.id)).size !== count || await supabaseRestCount(path) !== count) throw new Error('Documents changed while loading')
@@ -47,7 +57,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     } catch (error) {
       if (!postgrestSchemaUnavailable(error)) throw error
     }
-    return NextResponse.json({ documents: rows.map(publicDoc), pendingUploads }, { headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json({ documents: rows.map(publicDoc), pendingUploads, analysisAvailable }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     if (documentsUnavailable(error)) {
       return NextResponse.json({ documents: [], pendingUploads: [], unavailable: true }, { headers: { 'Cache-Control': 'no-store' } })
@@ -71,9 +81,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       throw error
     }
     const form = await request.formData(); const file = form.get('file'); const documentId = String(form.get('request_id') || '').toLowerCase(); const kind = String(form.get('kind') || '')
-    if (!(file instanceof File) || !VENDOR_UUID.test(documentId) || !['contract','other'].includes(kind) || form.get('no_tax_identifiers') !== 'true' || /(?:^|[^a-z])(?:w[\s_-]*9|ssn|tax[\s_-]*id|ein)(?:[^a-z]|$)/i.test(file.name)) return NextResponse.json({ error: 'Choose a supported document and confirm it has no tax or government identification numbers.' }, { status: 400 })
+    if (!(file instanceof File) || !VENDOR_UUID.test(documentId) || !['contract','other'].includes(kind) || (!form.get('analysis_ticket') && form.get('no_tax_identifiers') !== 'true') || /(?:^|[^a-z])(?:w[\s_-]*9|ssn|tax[\s_-]*id|ein)(?:[^a-z]|$)/i.test(file.name)) return NextResponse.json({ error: 'Choose a supported document and confirm it has no tax or government identification numbers.' }, { status: 400 })
     let inspected: Awaited<ReturnType<typeof inspectLuxorExpenseReceipt>>
     try { inspected = await inspectLuxorExpenseReceipt(file) } catch { return NextResponse.json({ error: 'Choose a valid PDF, JPG, or PNG smaller than 20 MB.' }, { status: 400 }) }
+    const ticket = String(form.get('analysis_ticket') || '')
+    if (ticket) { try { await supabaseRestStrict('luxor_vendor_documents?select=scan_metadata&limit=1') } catch (error) { if (postgrestSchemaUnavailable(error)) return NextResponse.json({ error: 'Automatic document storage is not available yet.' }, { status: 503 }); throw error } }
+    const analysis = ticket ? verifyDocumentTicket(ticket, inspected.sha256, id, session.email) : null
+    if (ticket && (!analysis || analysis.sensitive !== 'none' || (analysis.kind !== 'uncertain' && analysis.kind !== kind))) return NextResponse.json({ error: 'The document analysis expired or does not match this file. Please analyze it again.' }, { status: 400 })
+    try {
+      if (!await claimProviderUploadDestination({ id: documentId, vendor_id: id, sha256: inspected.sha256, created_by: session.email, kind: kind as 'contract' | 'other' })) return NextResponse.json({ error: 'This upload was already started for another document or destination. Retry the original upload.' }, { status: 409 })
+    } catch (error) {
+      // Keep the attested legacy upload path usable on the old schema; AI uploads
+      // require the shared destination claim and must fail closed without it.
+      if (analysis || !postgrestSchemaUnavailable(error)) throw error
+    }
     const matches = (row: Doc) => row.id === documentId && row.vendor_id === id && row.sha256 === inspected.sha256 && row.kind === kind && row.file_name === inspected.safeName && row.content_type === inspected.contentType && row.size_bytes === inspected.bytes.length && row.storage_path === vendorDocumentPath(id, documentId)
     const existing = await readExisting(id, documentId)
     if (existing) {
@@ -126,7 +147,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (bytes.length !== claim.size_bytes || digest !== claim.sha256) return NextResponse.json({ error: 'Stored document does not match this upload request. Contact an administrator.' }, { status: 409 })
     let created: Doc | undefined
     try {
-      ;[created] = await supabaseRestStrict<Doc[]>('luxor_vendor_documents?select=id,vendor_id,file_name,content_type,size_bytes,storage_path,sha256,kind,created_at', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ id: documentId, vendor_id: id, file_name: inspected.safeName, storage_path: path, content_type: inspected.contentType, size_bytes: inspected.bytes.length, created_by: claim.created_by, finalized_by: session.email, sha256: inspected.sha256, kind, no_tax_identifiers_confirmed: true }) })
+      ;[created] = await supabaseRestStrict<Doc[]>(`luxor_vendor_documents?select=${select}${analysis ? ',scan_metadata' : ''}`, { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ id: documentId, vendor_id: id, file_name: inspected.safeName, storage_path: path, content_type: inspected.contentType, size_bytes: inspected.bytes.length, created_by: claim.created_by, finalized_by: session.email, sha256: inspected.sha256, kind, no_tax_identifiers_confirmed: analysis ? null : true, ...(analysis ? { scan_metadata: { kind: analysis.kind, sensitive: analysis.sensitive, confidence: analysis.confidence, contract_end_date: analysis.contractEndDate, source: 'ai_unverified' } } : {}) }) })
     } catch (error) {
       // An insert may have committed even if its response was lost, or another retry won.
       const replay = await readExisting(id, documentId)

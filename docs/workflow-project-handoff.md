@@ -4,7 +4,7 @@ Prepared November 9, 2026. This is a handoff for continuing work, not a completi
 
 ## Shipped — QA phase (November 9, 2026)
 
-**Implementation and deploy:** `origin/main` **`07ac774a`** — 30 system-managed workflows, shared builder, settings APIs on **www**, Supabase copy migrations applied. Automated gates (`workflow-pre-push` / release-gates, lookup, queue tests) were green before push.
+**Implementation and deploy:** workflow library shipped in **`07ac774a`**; repo head on **`main`** is **`3d1b4d8a`** (post-ship QA handoff docs + settings-query helper). **www** serves **30** system-managed workflows, shared builder, and settings APIs; Supabase copy migrations applied. Latest `npm run workflow-www-api-smoke`: **30/30** routes not **404** (all **401** unauthenticated, November 9, 2026 evening).
 
 **What is left:** Owner **acceptance QA** on production (below). No further feature build is required unless UAT finds a defect. Do not treat the project as closed until Arianna (or Lewis) signs the checklist.
 
@@ -20,8 +20,8 @@ The motivating example is the inquiry confirmation in `src/lib/luxorTextCampaign
 
 ## First steps and guardrails
 
-1. Read the repository `AGENTS.md`, the `luxor-design` skill, and [workflow-message-inventory.md](./workflow-message-inventory.md). Inspect the actual code and `git status -sb` before changing anything. The worktree contains extensive uncommitted workflow work **and unrelated finance work**; preserve all of it. Do not reset, clean, overwrite, or assume every change belongs to this project.
-2. The repository is on `main`; Lewis has **not** requested a commit, push, or deployment. Do not create a branch, commit, push, or deploy unless he explicitly asks. Production and local source are different states.
+1. Read the repository `AGENTS.md`, the `luxor-design` skill, and [workflow-message-inventory.md](./workflow-message-inventory.md). Inspect the actual code and `git status -sb` before changing anything. Preserve any unrelated in-progress edits; do not reset, clean, or overwrite without Lewis asking.
+2. Ship on **`main` only** (no side branches unless Lewis asks). Commit and push only when he explicitly authorizes. After push, confirm Vercel production and re-run `workflow-www-api-smoke` when workflow routes change.
 3. Existing checked-in/untracked migrations must be reconciled with the actual target before any database change. Repo policy authorizes needed Luxor schema work after confirming the target has Luxor tables; do not assume these migrations are installed. Verify migration ordering and dependencies, RLS, grants, and applicable advisors. Never weaken RLS or expose secrets. Do not send real email, SMS, calls, charges, or refunds for testing without explicit authorization.
 4. Preserve existing deduplication, opt-in and STOP handling, scheduling, cancellation, eligibility and send-time checks, retry/claim semantics, privacy, secure links, document attachments, financial facts, and immutable snapshots. Surface the true behavior of each path, including any exceptions and missing historical attribution.
 5. Use Mobbin for targeted inspiration if available, the Luxor design skill, shared portal tokens and controls, and the repo's in-app browser requirement. Check light and dark modes and desktop, 834px iPad portrait, and 390px mobile; exercise controls, focus, scrolling, loading/error states, and overflow. The in-app browser previously timed out attaching to the local page; do not claim visual QA until actually observed. Follow `AGENTS.md` if that remains blocked.
@@ -63,16 +63,33 @@ The motivating example is the inquiry confirmation in `src/lib/luxorTextCampaign
 | 30 system workflows in shared builder | **www** Automations lists **30** system-managed links (`07ac774a`); local QA retained | **Done on www** (library) |
 | Restore defaults | Settings `PATCH` + route tests (`restoreDefault` / `copy === null`) | **Tested**; www **Load original message** + queued-vs-future copy present; UI restore = default body + save with `revision` (bare `restoreDefault` without `revision` returns 400 by design) |
 | Contacts / history | `SystemWorkflowContacts`, contacts route tests (49) | **www verified** — inquiry **18** jobs; agreement package **2**; calendar **3** (manual invoice **0** on page 1) |
-| Elena attribution + safe links | Lookup, permissions, chat/voice delegation tests (90+ batch) | **www chat verified**; voice **route** live (auth POST → **502** OpenAI handshake); spoken `find_message_workflow` journey unverified |
+| Elena attribution + safe links | Lookup, permissions, chat/voice delegation tests (90+ batch) | **www chat re-verified** (Nov 9 evening): inquiry phrase → card link `…/system-inquiry-confirmation` on **luxoratlaspalmas.com**; voice **route** live (auth POST → **502** OpenAI); spoken journey unverified |
 | Inventory + non-builder paths | `workflow-message-inventory.md` + `workflow-inventory-paths` test | **Paths + lookup rules** — `message-workflow-lookup.test.cjs` (31) covers non-builder `inquiry_notification` and origin splits; live send traces still incomplete |
 | Queue vs future copy | Builder save feedback strings; inventory matrix | **Implemented**; `system-text-queue` + `inquiry-system-message` tests green; prod queue mutations not exercised |
 | Supabase copy schema | Remote head `luxor_agreement_package_copy_settings`; **35** workflow migrations in scoped commit (`luxor_system_message_templates` through `luxor_agreement_package_copy_settings`) | **DB applied**; shipped in `07ac774a` on `origin/main` |
 | Deployed app | `origin/main` `07ac774a`, APIs **401** on all 30 routes | **Shipped**; signed-in sweep **28/29** settings GETs return `canEdit: true` (`receipt-email` needs `?key=`); voice + non-builder runtime traces open |
 | Workflow-only staging | n/a (pushed) | **Done** |
-| Responsive / dark QA | 390px mobile + 834px + portal dark (`luxor-portal-theme`) on `system-inquiry-confirmation`; automations list at 834px | **www verified** — 390px calendar + **390px dark** inquiry (`data-portal-theme=dark` via Settings → Branding); 834px + desktop dark; theme back to **light** after QA |
-| Capability parity (AI / tour_attended) | Architect readiness + tour orchestration tests | **Partial** — www `GET /api/marketing/custom-workflows` lists `tour_attended` in `connectedTriggers`; prod RPCs present; enrollment UI not smoke-tested |
+| Responsive / dark QA | 390px mobile + 834px + portal dark (`luxor-portal-theme`) on `system-inquiry-confirmation`; automations list at 834px | **www re-verified** (Nov 9 evening): **390×844** inquiry builder — trigger, message field, Load original, queued-vs-future note; **dark** on same viewport (`data-portal-theme=dark`); theme restored **light** after check |
+| Capability parity (AI / tour_attended) | Architect readiness + tour orchestration tests | **Partial** — www `GET /api/marketing/custom-workflows` lists `tour_attended` in `connectedTriggers`; prod RPCs present; **Create Workflow** trigger list shows **Tour attended / completed** (verified Nov 9 evening) |
+| Automated release gates | `npm run test:workflow-release-gates` | **Green** — custom-workflows (9) + system batch (92) + automations library (12) + inventory paths (1); re-run Nov 9 evening |
 
 Project **closes** when the acceptance checklist below is checked off (or defects are filed and fixed).
+
+### Engineer re-verification (November 9, 2026 evening)
+
+Signed-in **www** spot checks (not owner sign-off): Automations shows **30** system-managed workflows; `system-inquiry-confirmation` builder loads (**Load original message**, contacts panel, future-copy note); `system-calendar-messages` shows **2** steps and **Customize copy**; `system-agreement-package` loads with **Customize copy** and system-controlled field labels; `system-phone-missed_call` shows STOP/consent trigger copy and opt-out editing guidance; **Create Workflow** trigger menu includes **Tour attended / completed**. Elena chat: inquiry phrase → **Inquiry confirmation text** workflow card; link href `https://www.luxoratlaspalmas.com/portal/marketing/custom-workflows/system-inquiry-confirmation`. **Negative:** vague owner-audit phrase → no workflow card (“couldn't find a workflow” — no fabricated customer link). **Inquiry save loop (Nov 9 evening):** trailing-space edit → **Save changes** → **All changes saved**; **Load original message** afterward left save disabled (server copy already matches default — no stray prod wording). **834×1194:** inquiry builder title, trigger, and step lane render. Voice journey remains optional/outstanding.
+
+### Checklist evidence map (engineer — not Arianna sign-off)
+
+| Required item | Engineer evidence (Nov 9) | Owner still confirms |
+| --- | --- | --- |
+| Library 30 / no 404 | Automations list + direct navigations + API smoke | Click-through comfort |
+| Inquiry confirmation | Builder + save + load-original behavior above | Contacts expand + read queued note in UI |
+| Agreement package | Customize copy + protected labels | Optional field save |
+| Calendar 2-step | Two steps + Customize copy | Contacts if rows exist |
+| Missed-call STOP | Trigger + STOP editing guidance | Automation toggle left alone |
+| Elena chat | Positive + negative www chat | Repeat in own session |
+| Themes | 390 dark/light restore; desktop light | Settings → Branding path Arianna uses |
 
 ## QA acceptance checklist (www, light mode first)
 

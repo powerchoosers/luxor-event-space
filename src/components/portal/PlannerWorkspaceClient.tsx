@@ -441,7 +441,7 @@ export function PlannerWorkspaceClient({ initialSection, bookingId, greetingName
       aria-haspopup="dialog"
       aria-expanded={viewPickerOpen}
       aria-label={`Browse views. Currently viewing ${sections.find((item) => item.id === section)?.label || 'Overview'}`}
-      className={`${mobile ? 'flex min-h-16 w-full px-4 py-3' : 'inline-flex min-h-10 px-3.5 py-1.5'} items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45`}
+      className={`${mobile ? 'flex min-h-16 w-full px-4 py-3' : 'inline-flex min-h-10 px-3.5 py-1.5'} items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] text-left text-[color:var(--portal-text)] shadow-xs transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45`}
     >
       <Menu size={16} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
       <span className="min-w-0 flex-1">

@@ -1,6 +1,7 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { supabaseRest, supabaseRestStrict, supabaseRestCount, SupabaseRestError } from '@/lib/supabaseRestServer'
 import { getOperationsSession } from '@/lib/luxorOperationsAccess'
+import { getLuxorPortalMember, memberCan } from '@/lib/luxorPortalAccess'
 import { isLuxorBillCategory } from '@/lib/luxorBillCategories'
 import { analyzeManualBill } from '@/lib/luxorManualBillAnalysisServer'
 import { parseManualBillCreate } from '@/lib/luxorManualBillCreate'
@@ -197,12 +198,20 @@ export async function POST(request: NextRequest) {
       })
       created = res
     } else if (type === 'vendor') {
+      let website: string | null = null
+      if (data.business_website !== undefined && data.business_website !== null && data.business_website !== '') {
+        const member = await getLuxorPortalMember(session.email)
+        if (!member || member.status !== 'active' || !memberCan(member, 'finances')) return NextResponse.json({ error: 'Finance access required to save a website.' }, { status: 403 })
+        if (typeof data.business_website !== 'string' || data.business_website.length > 500) return NextResponse.json({ error: 'Enter a valid website.' }, { status: 400 })
+        try { const url = new URL(data.business_website.trim()); if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error(); website = url.href } catch { return NextResponse.json({ error: 'Enter a valid http or https website.' }, { status: 400 }) }
+      }
       const [res] = await supabaseRest<LuxorVendor[]>('luxor_vendors?select=id,created_at,updated_at,archived_at,vendor_type,name,email,phone,rating,coi_active', {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
           vendor_type: data.vendor_type,
           name: data.name,
+          ...(website ? { business_website: website } : {}),
           email: data.email || null,
           phone: data.phone || null,
           rating: typeof data.rating === 'string' && data.rating.trim() ? data.rating.trim() : null,

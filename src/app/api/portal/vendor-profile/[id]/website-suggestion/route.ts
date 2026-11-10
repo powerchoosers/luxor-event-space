@@ -14,7 +14,6 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   if (!member || member.status !== 'active' || !memberCan(member, 'finances')) return NextResponse.json({ error: 'Finance access required.' }, { status: 403 })
   const { id } = await context.params
   if (!uuid.test(id)) return NextResponse.json({ error: 'Invalid provider.' }, { status: 400 })
-  if (!process.env.OPEN_ROUTER_API_KEY) return NextResponse.json({ error: 'Website lookup is not configured.' }, { status: 503 })
   try {
     const [vendor] = await supabaseRestStrict<LuxorVendor[]>(`luxor_vendors?id=eq.${id}&select=id,name,vendor_type,archived_at&limit=1`)
     if (!vendor || vendor.archived_at) return NextResponse.json({ error: 'Provider is unavailable.' }, { status: 404 })

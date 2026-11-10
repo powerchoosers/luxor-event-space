@@ -4,7 +4,8 @@ import type { LuxorVendor } from '@/lib/luxorInquiryTypes'
 
 export type WebsiteSuggestion = { website: string; source: string }
 const lookupCache = new Map<string, { promise: Promise<WebsiteSuggestion | null>; expiresAt: number }>()
-const CACHE_PREFIX = 'luxor:provider-website:v4:'
+// Old session-only entries must not prevent the first persistent server lookup.
+const CACHE_PREFIX = 'luxor:provider-website:v5:'
 const CACHE_TTL = 6 * 60 * 60 * 1000
 
 function validSuggestion(value: unknown): value is WebsiteSuggestion {
@@ -49,7 +50,7 @@ function lookupWebsite(key: string, url: string, retry = false, missingIsEmpty =
   if (!pending) {
     const stored = readStored(key)
     if (stored) return Promise.resolve(stored.value)
-    pending = fetch(url, { method: 'POST' }).then(async (response) => {
+    pending = fetch(url, { method: 'POST', ...(retry ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ retry: true }) } : {}) }).then(async (response) => {
       const result = await response.json() as { website?: string | null; source?: string; error?: string }
       if (!response.ok && !(missingIsEmpty && response.status === 404)) throw new Error(result.error || 'Website lookup failed.')
       const suggestion = response.ok && validSuggestion(result) ? { website: result.website!, source: result.source! } : null
@@ -69,10 +70,10 @@ export function lookupProviderWebsite(vendor: LuxorVendor, retry = false): Promi
   return lookupWebsite(JSON.stringify(['v4', vendor.id, vendor.name, vendor.vendor_type]), `/api/portal/vendor-profile/${encodeURIComponent(vendor.id)}/website-suggestion`, retry)
 }
 
-export function lookupBillProviderWebsite(id: string, name: string, updatedAt: string | null | undefined): Promise<WebsiteSuggestion | null> {
-  return lookupWebsite(JSON.stringify(['v4', 'bill', id, name, updatedAt]), `/api/operations/bills/${encodeURIComponent(id)}/website-suggestion`, false, true)
+export function lookupBillProviderWebsite(id: string, name: string, updatedAt: string | null | undefined, retry = false): Promise<WebsiteSuggestion | null> {
+  return lookupWebsite(JSON.stringify(['v4', 'bill', id, name, updatedAt]), `/api/operations/bills/${encodeURIComponent(id)}/website-suggestion`, retry, true)
 }
 
-export function lookupScheduleProviderWebsite(id: string, name: string, updatedAt: string | null | undefined): Promise<WebsiteSuggestion | null> {
-  return lookupWebsite(JSON.stringify(['v4', 'schedule', id, name, updatedAt]), `/api/expenses/templates/${encodeURIComponent(id)}/website-suggestion`, false, true)
+export function lookupScheduleProviderWebsite(id: string, name: string, updatedAt: string | null | undefined, retry = false): Promise<WebsiteSuggestion | null> {
+  return lookupWebsite(JSON.stringify(['v4', 'schedule', id, name, updatedAt]), `/api/expenses/templates/${encodeURIComponent(id)}/website-suggestion`, retry, true)
 }

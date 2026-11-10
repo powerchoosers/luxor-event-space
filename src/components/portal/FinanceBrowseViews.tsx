@@ -116,6 +116,14 @@ const links: BrowseItem[] = [
     icon: <FileText size={16} weight="regular" />,
   },
   {
+    id: 'recurring-expenses',
+    label: 'Recurring costs',
+    description: 'Set up repeating costs and see each expected bill',
+    href: '/portal/finances?view=expense-recurring',
+    group: 'Expense Management',
+    icon: <CalendarDots size={16} weight="regular" />,
+  },
+  {
     id: 'business-expenses',
     label: 'Business Expenses',
     description: 'Record and manage general operating costs',
@@ -165,7 +173,7 @@ const links: BrowseItem[] = [
   },
 ]
 
-const groups = ['Overview', 'Revenue & Collections', 'Ledgers & Reports', 'Expense Management', 'Bills & Vendors']
+const groups = ['Overview', 'Revenue & Collections', 'Expense Management', 'Ledgers & Reports']
 
 export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
   overview: 'Financial Overview',
@@ -179,8 +187,8 @@ export const FINANCE_VIEW_LABELS: Record<FinanceBrowseView, string> = {
   expenses: 'Expenses Tracking',
   'expense-dashboard': 'Expense Dashboard',
   'bill-review': 'Bills',
-  'bill-providers': 'Providers',
-  'recurring-expenses': 'Recurring Expenses',
+  'bill-providers': 'Recurring costs',
+  'recurring-expenses': 'Recurring costs',
   'business-expenses': 'Business Expenses',
   'event-expenses': 'Event Expenses',
   'expense-receipts': 'Receipts & Records',
@@ -261,19 +269,7 @@ export function FinanceBrowseViews({
                   <section key={group}>
                     <h3 className="mb-2 px-1 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--portal-faint)]">{group}</h3>
                     <div className="divide-y divide-[color:var(--portal-border)] overflow-hidden rounded-xl border border-[color:var(--portal-border)]">
-                      {group === 'Bills & Vendors' ? (() => {
-                        const isCurrent = currentView === 'bill-providers'
-                        const itemClass = `flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${isCurrent ? 'bg-[#caa24c]/10 text-[#9a6d26] dark:text-[#e0bd67]' : 'text-[color:var(--portal-text)] hover:bg-[color:var(--portal-soft)]'}`
-                        const content = <>
-                          <FileText size={16} weight="regular" aria-hidden="true" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-bold">Providers</span>
-                            <span className="mt-0.5 block text-[11px] text-[color:var(--portal-muted)]">Provider details, bills, documents, and recurring schedules</span>
-                          </span>
-                          <ChevronRight size={16} className="shrink-0 text-[color:var(--portal-faint)]" aria-hidden="true" />
-                        </>
-                        return onLegacySelect ? <button type="button" aria-current={isCurrent ? 'page' : undefined} onClick={() => { onLegacySelect('bill-providers'); handleClose() }} className={itemClass}>{content}</button> : <Link href="/portal/finances?view=bill-providers" onClick={handleClose} aria-current={currentView === 'bill-providers' ? 'page' : undefined} className={itemClass}>{content}</Link>
-                      })() : (
+                      {
                         links.filter((item) => item.group === group).map((item) => {
                           const isCurrent = item.id === currentView
                           const itemClass = `flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#caa24c]/45 ${
@@ -335,7 +331,7 @@ export function FinanceBrowseViews({
                             </Link>
                           )
                         })
-                      )}
+                      }
                     </div>
                   </section>
                 ))}

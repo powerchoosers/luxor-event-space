@@ -54,6 +54,7 @@ import {
 import type { LuxorBill, LuxorInventoryItem, LuxorVendor, LuxorUtilityReading, LuxorCleaningLog, LuxorMaintenanceTask } from '@/app/api/operations/route'
 import type { LuxorBillIntake } from '@/lib/luxorInquiryTypes'
 import { BillsPayableLedger } from '@/components/portal/BillsPayableLedger'
+import ExpenseManagement from '@/components/portal/expenses/ExpenseManagement'
 import { OperationsArchivePanel } from '@/components/portal/OperationsArchivePanel'
 import { LUXOR_BILL_CATEGORIES, isLuxorBillCategory, type LuxorBillCategory } from '@/lib/luxorBillCategories'
 import { useToast } from '@/components/portal/ToastProvider'
@@ -158,6 +159,9 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
 
   // Database states
   const [bills, setBills] = useState<LuxorBill[]>([])
+  const [billExpenseId, setBillExpenseId] = useState<string | null>(null)
+  const [importBillId, setImportBillId] = useState<string | null>(null)
+  const [billRefreshKey, setBillRefreshKey] = useState(0)
   const [billIntakes, setBillIntakes] = useState<LuxorBillIntake[]>([])
   const [invoiceAnalysisConfigured, setInvoiceAnalysisConfigured] = useState<boolean | null>(null)
   const [resendReceivingConfigured, setResendReceivingConfigured] = useState<boolean | null>(null)
@@ -838,12 +842,15 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
         <BillsPayableLedger
           bills={bills}
           intakes={billIntakes}
+          onOpenExpense={setBillExpenseId}
+          onCreateExpense={setImportBillId}
+          refreshKey={billRefreshKey}
           invoiceAnalysisConfigured={invoiceAnalysisConfigured}
           resendReceivingConfigured={resendReceivingConfigured}
           vendors={vendors}
           onVendorChanged={(vendor) => setVendors((current) => current.some((item) => item.id === vendor.id) ? current.map((item) => item.id === vendor.id ? vendor : item) : [...current, vendor])}
           onAddBill={() => setIsBillModalOpen(true)}
-          onBillChanged={(bill) => setBills((current) => current.map((item) => item.id === bill.id ? bill : item))}
+          onBillChanged={(bill) => setBills((current) => current.some((item) => item.id === bill.id) ? current.map((item) => item.id === bill.id ? bill : item) : [bill, ...current])}
           onIntakeChanged={(intake) => setBillIntakes((current) => current.map((item) => item.id === intake.id ? intake : item))}
           onEditBill={(bill) => setEditingItem({ type: 'bill', data: bill })}
         />
@@ -1171,10 +1178,17 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
       ) : null}
 
       {/* 1. New Bill Modal */}
+      {importBillId ? <ExpenseManagement key={importBillId} view="business" embedded panelOnly initialBillId={importBillId} onBack={() => { setImportBillId(null); setBillRefreshKey(value => value + 1); void loadOperationsData(false) }} /> : null}
+      <PortalModal isOpen={Boolean(billExpenseId)} onClose={() => { setBillExpenseId(null); setBillRefreshKey(value => value + 1); void loadOperationsData(false) }} title="Expense & payments" sidePanel headerBack animateClose maxWidth="max-w-[600px]">
+        {billExpenseId ? <ExpenseManagement view="detail" expenseId={billExpenseId} embedded onBack={() => { setBillExpenseId(null); setBillRefreshKey(value => value + 1); void loadOperationsData(false) }} /> : null}
+      </PortalModal>
       <PortalModal
         isOpen={isBillModalOpen}
         onClose={() => setIsBillModalOpen(false)}
-        title="Log Operational Bill"
+        title="Add bill"
+        sidePanel
+        animateClose
+        maxWidth="max-w-[600px]"
       >
         <form onSubmit={handleAddBillSubmit} className="space-y-4">
           <section className="rounded-xl border border-[#caa24c]/20 bg-[#caa24c]/[0.07] p-4">
@@ -1568,9 +1582,12 @@ export function OperationsPageContent({ embeddedBills = false }: { embeddedBills
         <PortalModal
           isOpen={!!editingItem}
           onClose={() => setEditingItem(null)}
+          sidePanel={editingItem.type === 'bill'}
+          headerBack={editingItem.type === 'bill'}
+          animateClose
           title={`Edit ${
             editingItem.type === 'bill'
-              ? 'Operational Bill'
+              ? 'bill details'
               : editingItem.type === 'task'
               ? 'Maintenance Ticket'
               : editingItem.type === 'inventory'

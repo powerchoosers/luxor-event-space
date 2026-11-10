@@ -28,16 +28,16 @@ function fixture() {
   return { POST: loaded.exports.POST, state }
 }
 
-test('a recurring cost is saved once and retries preserve the provider and request identity', async () => {
+test('a standalone recurring cost is saved once and retries preserve request identity', async () => {
   const { POST, state } = fixture()
-  const body = { client_request_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Water', category: 'Utilities', vendor_id: '11111111-1111-4111-8111-111111111111', vendor_name: 'Sample Water', expected_amount: 75, is_variable: false, frequency: 'monthly', first_due_date: '2026-11-15', start_date: '2026-11-01' }
+  const body = { client_request_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Water', category: 'Utilities', vendor_name: 'Sample Water', expected_amount: 75, is_variable: false, frequency: 'monthly', first_due_date: '2026-11-15', start_date: '2026-11-01' }
   const request = (payload) => new Request('http://localhost', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
   state.generationFails = true
   const first = await POST(request(body)), firstBody = await first.json()
   assert.equal(first.status, 201)
   assert.equal(firstBody.generation_pending, true)
   assert.equal(state.rows.length, 1)
-  assert.equal(state.rows[0].vendor_id, body.vendor_id)
+  assert.equal(state.rows[0].vendor_id, undefined)
   state.generationFails = false
   const retry = await POST(request(body)), retryBody = await retry.json()
   assert.equal(retry.status, 201)
@@ -50,7 +50,7 @@ test('a recurring cost is saved once and retries preserve the provider and reque
 
 test('concurrent identical requests resolve to the same recurring cost', async () => {
   const { POST, state } = fixture()
-  const body = { client_request_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Phone', category: 'Utilities', vendor_id: '11111111-1111-4111-8111-111111111111', vendor_name: 'Sample Water', expected_amount: 50, is_variable: false, frequency: 'monthly', first_due_date: '2026-11-15', start_date: '2026-11-01' }
+  const body = { client_request_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Phone', category: 'Utilities', vendor_name: 'Sample Water', expected_amount: 50, is_variable: false, frequency: 'monthly', first_due_date: '2026-11-15', start_date: '2026-11-01' }
   const request = () => new Request('http://localhost', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
   const responses = await Promise.all([POST(request()), POST(request())])
   const results = await Promise.all(responses.map((response) => response.json()))
@@ -61,10 +61,20 @@ test('concurrent identical requests resolve to the same recurring cost', async (
 
 test('a variable recurring cost keeps the amount unknown until an actual bill arrives', async () => {
   const { POST, state } = fixture()
-  const body = { client_request_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'Water', category: 'Utilities', vendor_id: '11111111-1111-4111-8111-111111111111', is_variable: true, expected_amount: null, frequency: 'monthly', first_due_date: '2026-11-15', start_date: '2026-11-01' }
+  const body = { client_request_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'Water', category: 'Utilities', is_variable: true, expected_amount: null, frequency: 'monthly', first_due_date: '2026-11-15', start_date: '2026-11-01' }
   const response = await POST(new Request('http://localhost', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))
   assert.equal(response.status, 201)
   assert.equal(state.rows[0].expected_amount, null)
   assert.equal(state.rows[0].is_variable, true)
-  assert.equal(state.rows[0].vendor_id, body.vendor_id)
+  assert.equal(state.rows[0].vendor_id, undefined)
+})
+
+
+test('a new recurring cost cannot be linked to an event vendor', async () => {
+  const { POST, state } = fixture()
+  const body = { name: 'Water', category: 'Utilities', vendor_id: '11111111-1111-4111-8111-111111111111', expected_amount: 75, is_variable: false, frequency: 'monthly', first_due_date: '2026-11-15', start_date: '2026-11-01' }
+  const response = await POST(new Request('http://localhost', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))
+  assert.equal(response.status, 400)
+  assert.equal(state.rows.length, 0)
+  assert.equal(state.generationCalls, 0)
 })

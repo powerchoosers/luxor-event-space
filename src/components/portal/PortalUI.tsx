@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useAnimate, useReducedMotion } from 'framer-motion'
 const LUXOR_PORTAL_EASE = [0.22, 1, 0.36, 1] as const
 import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Pencil, Loader2, ArrowLeft, Check, Search, SlidersHorizontal, Menu } from '@/lib/icons/phosphor-compat'
 import Link from 'next/link'
@@ -572,6 +572,118 @@ export function PortalTabTransition({
   )
 }
 
+/** Height spring between panels; keeps a locked pixel height so collapse can animate from the old size. */
+export function PortalExpandTransition({ activeKey, children }: { activeKey: string; children: React.ReactNode }) {
+  const reduced = useReducedMotion()
+  const [, animate] = useAnimate<HTMLDivElement>()
+  const outerRef = React.useRef<HTMLDivElement>(null)
+  const innerRef = React.useRef<HTMLDivElement>(null)
+  const lockedHeightRef = React.useRef<number | null>(null)
+
+  React.useLayoutEffect(() => {
+    const outer = outerRef.current
+    const inner = innerRef.current
+    if (!outer || !inner) return
+
+    if (reduced) {
+      lockedHeightRef.current = null
+      outer.style.removeProperty('height')
+      return
+    }
+
+    const target = Math.ceil(inner.scrollHeight)
+    const start = lockedHeightRef.current
+
+    if (start === null) {
+      lockedHeightRef.current = target
+      outer.style.height = `${target}px`
+      outer.style.overflow = 'hidden'
+      return
+    }
+
+    if (Math.abs(start - target) < 2) {
+      lockedHeightRef.current = target
+      outer.style.height = `${target}px`
+      return
+    }
+
+    outer.style.height = `${start}px`
+    outer.style.overflow = 'hidden'
+
+    let cancelled = false
+    const controls = animate(outer, { height: target }, {
+      type: 'tween',
+      duration: 0.3,
+      ease: [0.22, 1, 0.36, 1]
+    })
+    void controls.then(() => {
+      if (cancelled) return
+      lockedHeightRef.current = target
+      outer.style.height = `${target}px`
+    })
+
+    return () => {
+      cancelled = true
+      controls.stop()
+    }
+  }, [activeKey, reduced, animate])
+
+  React.useEffect(() => {
+    const outer = outerRef.current
+    const inner = innerRef.current
+    if (!outer || !inner || reduced) return
+
+    let frame = 0
+    let disposed = false
+    let generation = 0
+    let observerControls: { stop: () => void } | null = null
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const next = Math.ceil(inner.scrollHeight)
+        const locked = lockedHeightRef.current
+        if (locked === null || Math.abs(locked - next) < 3) return
+        const currentGeneration = ++generation
+        observerControls?.stop()
+        outer.style.height = `${locked}px`
+        outer.style.overflow = 'hidden'
+        const controls = animate(outer, { height: next }, {
+          type: 'tween',
+          duration: 0.25,
+          ease: [0.22, 1, 0.36, 1]
+        })
+        observerControls = controls
+        void controls.then(() => {
+          if (disposed || currentGeneration !== generation) return
+          lockedHeightRef.current = next
+          outer.style.height = `${next}px`
+        })
+      })
+    })
+    observer.observe(inner)
+    return () => {
+      disposed = true
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+      observerControls?.stop()
+    }
+  }, [activeKey, reduced, animate])
+
+  return (
+    <div ref={outerRef} style={{ overflow: 'hidden', overflowAnchor: 'none' }}>
+      <motion.div
+        key={activeKey}
+        ref={innerRef}
+        initial={reduced ? false : { opacity: 0.94 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: reduced ? 0 : 0.26, ease: LUXOR_PORTAL_EASE }}
+      >
+        {children}
+      </motion.div>
+    </div>
+  )
+}
+
 export function PortalTableCard({
   controls,
   children,
@@ -1049,6 +1161,18 @@ function getPortalModalCompactLayoutSnapshot() {
   return window.matchMedia(PORTAL_MODAL_COMPACT_QUERY).matches
 }
 
+function getPortalDialogFocusableElements(dialog: HTMLElement) {
+  return Array.from(dialog.querySelectorAll<HTMLElement>(
+    'button, [href], input, select, textarea, [tabindex]'
+  )).filter((element) => {
+    // Collapsed disclosures remain mounted for their exit animation. Their
+    // controls must not become the first or last stop in the dialog's tab loop.
+    if (element.tabIndex < 0 || element.matches(':disabled') || element.closest('[inert], [hidden], [aria-hidden="true"]') || element.getClientRects().length === 0) return false
+    const visibility = window.getComputedStyle(element).visibility
+    return visibility !== 'hidden' && visibility !== 'collapse'
+  })
+}
+
 export function PortalModal({
   isOpen,
   onClose,
@@ -1063,6 +1187,9 @@ export function PortalModal({
   fullScreenOnCompact = false,
   fullScreenOnMobile = false,
   animateClose = false,
+  sidePanel = false,
+  headerIcon,
+  headerBack = false,
 }: {
   isOpen: boolean
   onClose: () => void
@@ -1077,6 +1204,9 @@ export function PortalModal({
   fullScreenOnCompact?: boolean
   fullScreenOnMobile?: boolean
   animateClose?: boolean
+  sidePanel?: boolean
+  headerIcon?: React.ReactNode
+  headerBack?: boolean
 }) {
   const depth = React.useContext(ModalDepthContext)
   const computedZIndex = zIndex ?? (200 + depth * 10)
@@ -1100,13 +1230,13 @@ export function PortalModal({
 
   const isCompactFullScreen = (fullScreenOnCompact && isCompactMatch) || (fullScreenOnMobile && isMobileMatch)
 
-  const dialogInitial = isCompactFullScreen
+  const dialogInitial = isCompactFullScreen || sidePanel
     ? reduceMotion ? { opacity: 0 } : { x: '100%' }
     : { opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }
-  const dialogAnimate = isCompactFullScreen
+  const dialogAnimate = isCompactFullScreen || sidePanel
     ? { opacity: 1, x: 0 }
     : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
-  const dialogExit = isCompactFullScreen
+  const dialogExit = isCompactFullScreen || sidePanel
     ? reduceMotion ? { opacity: 0 } : { x: '100%' }
     : { opacity: 0, scale: 0.95, y: 8, filter: 'blur(8px)' }
 
@@ -1137,9 +1267,7 @@ export function PortalModal({
     }
 
     const focusFrame = window.requestAnimationFrame(() => {
-      const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      )
+      const firstFocusable = dialogRef.current ? getPortalDialogFocusableElements(dialogRef.current)[0] : null
       ;(firstFocusable ?? dialogRef.current)?.focus()
     })
 
@@ -1158,11 +1286,7 @@ export function PortalModal({
 
       if (event.key !== 'Tab' || !dialogRef.current) return
 
-      const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-      )
+      const focusable = getPortalDialogFocusableElements(dialogRef.current)
       if (focusable.length === 0) {
         event.preventDefault()
         dialogRef.current.focus()
@@ -1171,7 +1295,11 @@ export function PortalModal({
 
       const first = focusable[0]
       const last = focusable[focusable.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
+      const activeIsFocusable = focusable.some((element) => element === document.activeElement)
+      if (!activeIsFocusable) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first).focus()
+      } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault()
         last.focus()
       } else if (!event.shiftKey && document.activeElement === last) {
@@ -1197,22 +1325,21 @@ export function PortalModal({
     <AnimatePresence initial={false} mode="wait">
       {(isOpen || (animateClose && holdVisible)) && (
         <motion.div
-          initial={isCompactFullScreen ? false : { opacity: 0 }}
+          initial={isCompactFullScreen || sidePanel ? false : { opacity: 0 }}
           animate={{ opacity: isOpen ? 1 : 0 }}
-          exit={animateClose || isCompactFullScreen ? {} : { opacity: 0 }}
+          exit={animateClose || isCompactFullScreen || sidePanel ? {} : { opacity: 0 }}
           transition={{ duration: reduceMotion ? 0 : 0.26, ease: [0.23, 1, 0.32, 1] }}
-          onAnimationComplete={() => { if (animateClose && !isOpen) setHoldVisible(false) }}
           aria-hidden={!isOpen}
           inert={!isOpen}
           style={{ zIndex: computedZIndex }}
-          className={`fixed inset-0 flex items-center justify-center p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4 ${fullScreenOnCompact ? 'max-lg:!p-0' : ''} ${fullScreenOnMobile ? 'max-md:!p-0' : ''}`}
+          className={sidePanel ? 'fixed inset-0 flex justify-end' : `fixed inset-0 flex items-center justify-center p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-4 ${fullScreenOnCompact ? 'max-lg:!p-0' : ''} ${fullScreenOnMobile ? 'max-md:!p-0' : ''}`}
         >
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className={`absolute inset-0 cursor-default ${isCompactFullScreen ? 'bg-transparent' : 'bg-black/75 backdrop-blur-md'}`}
+            transition={{ duration: reduceMotion ? 0 : sidePanel ? 0.3 : 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className={`absolute inset-0 cursor-default ${sidePanel ? depth > 0 ? 'bg-transparent' : 'bg-black/45 backdrop-blur-[2px]' : isCompactFullScreen ? 'bg-transparent' : 'bg-black/75 backdrop-blur-md'}`}
             onClick={onClose}
           />
           <motion.div
@@ -1226,17 +1353,21 @@ export function PortalModal({
             initial={dialogInitial}
             animate={isOpen ? dialogAnimate : dialogExit}
             exit={dialogExit}
-            transition={{ duration: reduceMotion ? 0 : isCompactFullScreen ? 0.36 : 0.26, ease: [0.23, 1, 0.32, 1] }}
-            className={`relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full ${maxWidth} ${className} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''} ${fullScreenOnMobile ? 'max-md:!h-dvh max-md:!max-h-dvh max-md:!rounded-none max-md:!border-0 max-md:!shadow-none' : ''}`}
+            onAnimationComplete={() => { if (animateClose && !isOpen) setHoldVisible(false) }}
+            transition={{ duration: reduceMotion ? 0 : sidePanel ? 0.32 : isCompactFullScreen ? 0.36 : 0.26, ease: [0.23, 1, 0.32, 1] }}
+            className={sidePanel ? `relative z-10 flex h-dvh w-full ${maxWidth} ${className} flex-col overflow-hidden border-l border-[color:var(--portal-border)] bg-[color:var(--portal-card)] shadow-[-18px_0_48px_rgba(0,0,0,0.22)] outline-none` : `relative z-10 flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full ${maxWidth} ${className} transform-gpu flex-col overflow-hidden rounded-2xl border border-[color:var(--portal-border)] bg-[color:var(--portal-bg)] shadow-2xl outline-none sm:max-h-[90vh] ${fullScreenOnCompact ? 'max-lg:!h-dvh max-lg:!max-h-dvh max-lg:!rounded-none max-lg:!border-0 max-lg:!shadow-none' : ''} ${fullScreenOnMobile ? 'max-md:!h-dvh max-md:!max-h-dvh max-md:!rounded-none max-md:!border-0 max-md:!shadow-none' : ''}`}
           >
             <ModalDepthContext.Provider value={depth + 1}>
               {title ? (
                 <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''} ${fullScreenOnMobile ? 'max-md:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
-                  <div className="min-w-0">
-                    <h3 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">{title}</h3>
-                    {description ? <p className="mt-0.5 max-w-xl text-xs leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
+                  <div className="flex min-w-0 items-center gap-3">
+                    {headerBack ? <button type="button" onClick={onClose} aria-label="Back to previous panel" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><ArrowLeft size={18} /></button> : headerIcon}
+                    <div className="min-w-0">
+                      <h3 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">{title}</h3>
+                      {description ? <p className="mt-0.5 max-w-xl text-xs leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}
+                    </div>
                   </div>
-                  <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} />
+                  {!headerBack ? <PortalCloseButton onClick={onClose} aria-label={`Close ${title}`} /> : null}
                 </div>
               ) : null}
               {title || footer ? (

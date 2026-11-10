@@ -519,7 +519,7 @@ export default function LeadsPage() {
               aria-haspopup="dialog"
               aria-expanded={isTabMenuOpen}
               aria-label={`Browse views. Currently viewing ${LEADS_TAB_LABELS[activeTab] || 'views'}`}
-              className="hidden md:inline-flex xl:hidden min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
+              className="hidden md:inline-flex xl:hidden min-h-10 items-center gap-2.5 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-3.5 py-1.5 text-left text-[color:var(--portal-text)] shadow-xs transition-colors hover:border-[#caa24c]/45 hover:bg-[color:var(--portal-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"
             >
               <Menu size={16} className="shrink-0 text-[#a8792f]" aria-hidden="true" />
               <span className="min-w-0 flex-1">
@@ -544,7 +544,7 @@ export default function LeadsPage() {
           onClick={() => setIsTabMenuOpen(true)}
           aria-haspopup="dialog"
           aria-expanded={isTabMenuOpen}
-          className="flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-[color:var(--portal-text)] transition-colors hover:border-[#caa24c]/45"
+          className="flex w-full items-center gap-3 rounded-xl border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3 text-left text-[color:var(--portal-text)] shadow-xs transition-colors hover:border-[#caa24c]/45"
         >
           <Menu size={18} className="text-[#a8792f] shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1">

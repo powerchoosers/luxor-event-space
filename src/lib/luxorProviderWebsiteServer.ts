@@ -1,4 +1,6 @@
 import 'server-only'
+import { createHash, randomUUID } from 'node:crypto'
+import { supabaseRestStrict } from './supabaseRestServer'
 
 function publicHost(value: string): URL | null {
   try {
@@ -29,8 +31,9 @@ function publicServiceHint(value: string | null | undefined): string | null {
   return null
 }
 
-/** Find a cited website without saving it or transmitting billing details. */
-export async function findProviderWebsite(name: string, category: string | null | undefined, serviceContext?: string | null) {
+/** Find a cited website without transmitting billing details. */
+async function searchProviderWebsite(name: string, category: string | null | undefined, serviceContext?: string | null) {
+  if (!process.env.OPEN_ROUTER_API_KEY) throw new Error('Website lookup is not configured.')
   const service = publicServiceHint(serviceContext)
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST', signal: AbortSignal.timeout(50_000),
@@ -48,4 +51,41 @@ export async function findProviderWebsite(name: string, category: string | null 
   const citations = (message?.annotations || []).map((item) => typeof item.url_citation?.url === 'string' ? publicHost(item.url_citation.url) : null).filter((item): item is URL => Boolean(item))
   const source = candidate && hostnameMatchesProvider(name, candidate.hostname) && citations.find((item) => item.hostname === candidate.hostname || item.hostname.endsWith(`.${candidate.hostname}`) || candidate.hostname.endsWith(`.${item.hostname}`))
   return candidate && source ? { website: candidate.origin, source: source.href } : { website: null }
+}
+
+/** Persist both a cited suggestion and a completed no-result search. */
+export async function findProviderWebsite(name: string, category: string | null | undefined, serviceContext?: string | null, retry = false) {
+  const key = createHash('sha256').update(JSON.stringify([name.trim().toLocaleLowerCase(), (category || '').trim().toLocaleLowerCase(), publicServiceHint(serviceContext)])).digest('hex')
+  const claim = randomUUID()
+  const table = 'luxor_provider_website_suggestions'
+  type Row = { state: 'pending' | 'complete'; claim_id: string; updated_at: string; website: string | null; source: string | null }
+  if (retry) {
+    const [previous] = await supabaseRestStrict<Row[]>(`${table}?lookup_key=eq.${key}&state=eq.complete&select=*&limit=1`)
+    if (previous) {
+      const result = await searchProviderWebsite(name, category, serviceContext)
+      // A failed or inconclusive recheck must not erase a previously found site.
+      if (!result.website && previous.website && previous.source) return { website: previous.website, source: previous.source }
+      const [saved] = await supabaseRestStrict<Row[]>(`${table}?lookup_key=eq.${key}&state=eq.complete&updated_at=eq.${encodeURIComponent(previous.updated_at)}&select=*`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ website: result.website, source: result.source || null, updated_at: new Date().toISOString() }) })
+      if (!saved) throw new Error('Website suggestion changed. Try again.')
+      return result
+    }
+  }
+  let [owned] = await supabaseRestStrict<Row[]>(`${table}?on_conflict=lookup_key&select=*`, { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify({ lookup_key: key, state: 'pending', claim_id: claim }) })
+  if (!owned) {
+    const [existing] = await supabaseRestStrict<Row[]>(`${table}?lookup_key=eq.${key}&select=*&limit=1`)
+    if (!existing) throw new Error('Website lookup state unavailable.')
+    if (existing.state === 'complete') return existing.website && existing.source ? { website: existing.website, source: existing.source } : { website: null }
+    if (Date.now() - Date.parse(existing.updated_at) < 120_000) throw new Error('Website lookup is already in progress.')
+    ;[owned] = await supabaseRestStrict<Row[]>(`${table}?lookup_key=eq.${key}&state=eq.pending&claim_id=eq.${existing.claim_id}&updated_at=eq.${encodeURIComponent(existing.updated_at)}&select=*`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ claim_id: claim, updated_at: new Date().toISOString() }) })
+    if (!owned) throw new Error('Website lookup is already in progress.')
+  }
+  try {
+    const result = await searchProviderWebsite(name, category, serviceContext)
+    const [saved] = await supabaseRestStrict<Row[]>(`${table}?lookup_key=eq.${key}&claim_id=eq.${claim}&state=eq.pending&select=*`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ state: 'complete', website: result.website, source: result.source || null, updated_at: new Date().toISOString() }) })
+    if (!saved) throw new Error('Website lookup claim expired.')
+    return result
+  } catch (error) {
+    await supabaseRestStrict(`${table}?lookup_key=eq.${key}&claim_id=eq.${claim}&state=eq.pending`, { method: 'DELETE' }).catch(() => undefined)
+    throw error
+  }
 }

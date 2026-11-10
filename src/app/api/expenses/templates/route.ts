@@ -120,18 +120,15 @@ export async function POST(request: NextRequest) {
         return await finish(prior)
       }
     }
-    let provider: { id: string; name: string; archived_at: string | null } | undefined
     if (payload.vendor_id != null && payload.vendor_id !== '') {
-      if (!isExpenseUuid(payload.vendor_id)) throw new LuxorExpenseRequestError('Choose a valid provider.')
-      ;[provider] = await supabaseRestStrict<Array<{ id: string; name: string; archived_at: string | null }>>(`luxor_vendors?select=id,name,archived_at&id=eq.${encodeURIComponent(payload.vendor_id)}&limit=1`)
-      if (!provider || provider.archived_at) throw new LuxorExpenseRequestError('Choose an active provider.')
+      throw new LuxorExpenseRequestError('Recurring costs are managed separately from event vendors.')
     }
     const category = await getLuxorExpenseCategoryByName(fields.category)
     if (!category) throw new LuxorExpenseRequestError('That category is inactive or unavailable. Refresh the category list.')
     const [created] = await supabaseRestStrict<LuxorExpenseTemplate[]>('luxor_expense_templates?select=*', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ ...fields, ...(provider ? { vendor_id: provider.id, vendor_name: provider.name } : {}), ...(requestId ? { client_request_id: requestId, client_request_fingerprint: fingerprint } : {}), category_id: category.id, created_by: session.email, updated_by: session.email }),
+      body: JSON.stringify({ ...fields, ...(requestId ? { client_request_id: requestId, client_request_fingerprint: fingerprint } : {}), category_id: category.id, created_by: session.email, updated_by: session.email }),
     })
     if (!created) throw new Error('Recurring expense template was not saved.')
     return await finish(created)
