@@ -1,0 +1,1 @@
+create index luxor_recurring_cost_ai_summaries_source_bill_idx on public.luxor_recurring_cost_ai_summaries(source_bill_id) where source_bill_id is not null;

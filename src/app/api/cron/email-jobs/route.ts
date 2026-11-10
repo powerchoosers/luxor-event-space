@@ -6,6 +6,7 @@ import { isLuxorZohoAuthorizationError, verifyLuxorMailConnection } from '@/lib/
 import { processPendingLuxorResendEvents } from '@/lib/luxorResendWebhookServer'
 import { luxorMailProvider } from '@/lib/luxorMailConfig'
 import { processPendingLuxorBillIntakes } from '@/lib/luxorBillIntakeServer'
+import { processRecurringCostSummaries } from '@/lib/luxorRecurringCostSummaryServer'
 import { processPendingManualBillAnalyses } from '@/lib/luxorManualBillAnalysisServer'
 import { supabaseRestStrict } from '@/lib/supabaseRestServer'
 import { generateLuxorExpenseOccurrences } from '@/lib/luxorExpensesServer'
@@ -95,6 +96,9 @@ export async function POST(request: NextRequest) {
     try {
       if (process.env.OPEN_ROUTER_API_KEY) await processPendingLuxorBillIntakes(1)
     } catch { console.warn('[bill-intake] background recovery failed; pending records retained') }
+    try {
+      if (process.env.OPEN_ROUTER_API_KEY) await processRecurringCostSummaries(1)
+    } catch { console.warn('[recurring-summaries] background update failed; pending work will retry') }
     try {
       if (luxorMailProvider() === 'zoho') await syncPendingLuxorEmailBodies(3)
     } catch { console.warn('[email-archive] background sync failed; pending records retained') }

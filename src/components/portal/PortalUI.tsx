@@ -1362,6 +1362,7 @@ export function PortalModal({
                 <div className={`sticky top-0 z-10 flex shrink-0 items-start justify-between gap-4 border-b border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-4 py-3.5 sm:px-6 sm:py-4 ${fullScreenOnCompact ? 'max-lg:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''} ${fullScreenOnMobile ? 'max-md:!pt-[calc(env(safe-area-inset-top)+0.75rem)]' : ''}`}>
                   <div className="flex min-w-0 items-center gap-3">
                     {headerBack ? <button type="button" onClick={onClose} aria-label="Back to previous panel" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--portal-muted)] transition-colors hover:bg-[color:var(--portal-soft)] hover:text-[color:var(--portal-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#caa24c]/45"><ArrowLeft size={18} /></button> : headerIcon}
+                    {headerBack && headerIcon ? headerIcon : null}
                     <div className="min-w-0">
                       <h3 id={titleId} className="text-base font-semibold tracking-tight text-[color:var(--portal-text)]">{title}</h3>
                       {description ? <p className="mt-0.5 max-w-xl text-xs leading-5 text-[color:var(--portal-muted)]">{description}</p> : null}

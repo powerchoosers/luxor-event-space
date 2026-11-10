@@ -41,10 +41,11 @@ test('intake produces a reviewable recurring bill without creating a provider or
   const { processPendingLuxorBillIntakes } = load('src/lib/luxorBillIntakeServer.ts', stubs)
   const oldFetch = global.fetch, oldKey = process.env.OPEN_ROUTER_API_KEY
   process.env.OPEN_ROUTER_API_KEY = 'test-key'
-  global.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ classification: 'vendor_bill', vendor_name: 'Sample Water', service: 'Water service', category_suggestion: 'Utilities', frequency: 'Monthly', invoice_number: 'SAMPLE-1', due_date: '2026-11-30', currency: 'USD', total_amount: 75, confidence: 0.98, line_items: [{ description: 'Water', amount: 75 }], evidence: [] }) } }] }), { status: 200 })
+  global.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ classification: 'vendor_bill', vendor_name: 'Sample Water', vendor_phone: '(214) 555-0123', vendor_email: 'billing@example.invalid', vendor_website: 'https://example.invalid/contact', service: 'Water service', category_suggestion: 'Utilities', frequency: 'Monthly', invoice_number: 'SAMPLE-1', due_date: '2026-11-30', currency: 'USD', total_amount: 75, confidence: 0.98, line_items: [{ description: 'Water', amount: 75 }], evidence: [] }) } }] }), { status: 200 })
   try {
     assert.deepEqual(await processPendingLuxorBillIntakes(), [{ id: 'intake', status: 'processed' }])
     const created = writes.find((item) => item.url === 'rpc/luxor_insert_intake_bill').data.p_bill
+    assert.deepEqual([created.extracted_fields.vendor_phone, created.extracted_fields.vendor_email, created.extracted_fields.vendor_website], ['(214) 555-0123', 'billing@example.invalid', 'https://example.invalid'])
     assert.equal(created.vendor_id, null)
     assert.equal(created.extraction_status, 'needs_review')
     assert.equal(created.payment_ready_at, null)
