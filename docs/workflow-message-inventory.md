@@ -67,7 +67,7 @@ Reconcile any remaining direct sends against this table before calling the inven
 | `tour_attended` trigger | N/A | N/A | Gated by `luxor_custom_workflow_attended_tour_capability` RPC | AI architect lists trigger | Same delegation as chat |
 | Queued vs future edits | Documented per workflow in builder sidebar | Step saves affect future scheduling | Versioned enrollments keep prior snapshots | Explained in tool notes | Spoken + on-screen cards |
 
-Production Supabase has the workflow copy migrations applied (November 9, 2026); live editing and `installed: true` checks still require the workflow app build on Vercel production (`www`).
+Production Supabase has the workflow copy migrations applied (November 9, 2026). Vercel production (`www`, commit `07ac774a`) serves the workflow routes; signed-in checks report `installed: true` and `canEdit: true` for representative system-message APIs. Per-path delivery, cancellation, and non-builder sends still need runtime verification.
 
 Elena's local progress tool now recognizes the system-message workflows in the
 same catalog as the Workflows page, subject to the channel and domain access

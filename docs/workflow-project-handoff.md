@@ -2,6 +2,14 @@
 
 Prepared November 9, 2026. This is a handoff for continuing work, not a completion report. Recheck the current worktree, database, application, and test results before relying on any status below.
 
+## Shipped — QA phase (November 9, 2026)
+
+**Implementation and deploy:** `origin/main` **`07ac774a`** — 30 system-managed workflows, shared builder, settings APIs on **www**, Supabase copy migrations applied. Automated gates (`workflow-pre-push` / release-gates, lookup, queue tests) were green before push.
+
+**What is left:** Owner **acceptance QA** on production (below). No further feature build is required unless UAT finds a defect. Do not treat the project as closed until Arianna (or Lewis) signs the checklist.
+
+**Quick smoke (anyone):** `npm run workflow-www-api-smoke` (routes live). Signed-in: Marketing → Automations → **30** system links open.
+
 ## Lewis's intended outcome
 
 Bring system-managed messages into the same workflow builder as custom workflows. Lewis wants applicable system workflows to be fully editable, with real triggers, recipients, timing, consent requirements, status, and steps; a way to restore defaults; and a clear explanation of whether edits affect existing queued messages or future ones. Make capabilities available to manually and AI-created workflows and Elena chat wherever applicable. Show contacts, their current stage, and meaningful workflow analytics.
@@ -45,34 +53,52 @@ The motivating example is the inquiry confirmation in `src/lib/luxorTextCampaign
 2. `npm run typecheck` and `npm run lint -- --quiet`.
 3. Run `npm run workflow-pre-push` (coverage + typecheck + lint + release-gates) or run those steps individually. Run `npm run build` before push. **Local gates (November 9, 2026):** typecheck, lint, build, and release-gates all green; build includes all `system-messages` API routes. `workflow-adopted-preview-admission.test.cjs` stays skipped until `docs/reconciliation/adopted-preview-admission-draft.sql` ships (optional `@electric-sql/pglite`).
 4. Commit on `main`, `git push origin main`, confirm Vercel production serves the new commit. Suggested message: `Ship system-managed workflow library, settings APIs, and shared builder for catalog automations` (workflow-only; omit finance paths unless Lewis includes them).
-5. `npm run workflow-post-push` (API smoke + next-step reminder). On **www** (production): Marketing → Automations → **System-managed workflows**; open inquiry confirmation, agreement package, calendar messages; confirm `installed: true`, **Restore default**, save (requires `canControlLiveLuxorAutomations` on Vercel production). **Pre-release baseline (November 9, 2026):** production still serves `02f5c2bc` — no system-managed library; `/portal/marketing/custom-workflows/system-inquiry-confirmation` shows “Invalid custom workflow id”; `GET /api/marketing/system-messages/inquiry-confirmation` returns **404**.
-6. QA light then dark; desktop, ~834px iPad, ~390px mobile; Elena chat/voice `find_message_workflow` on a known sent message. `scripts/workflow-www-qa-urls.ps1` prints all 30 builder URLs for spot checks after deploy. `scripts/workflow-www-api-smoke.ps1` reports whether production APIs still return **404** (pre-deploy) vs **401/403** (routes live).
+5. `npm run workflow-post-push` (API smoke + next-step reminder). On **www** (production): Marketing → Automations → **System-managed workflows**; open inquiry confirmation, agreement package, calendar messages; confirm `installed: true`, **Load original message** + save (or **Restore default** with `revision` on template routes), save. **Post-release (November 9, 2026):** `origin/main` **`07ac774a`** — `npm run workflow-www-api-smoke` reports **30/30** routes return **401** (not 404). **Signed-in www QA (same day):** inquiry/agreement-package/calendar-messages APIs return `installed: true` and `canEdit: true`; PATCH save on inquiry-confirmation returned **200** (reverted to default body immediately); Elena chat `find_message_workflow` resolved inquiry copy to `system-inquiry-confirmation` with internal workflow link; voice and contacts-with-live-rows still open.
+6. QA light then dark; desktop, ~834px iPad, ~390px mobile; Elena chat/voice `find_message_workflow` on a known sent message. `scripts/workflow-www-qa-urls.ps1` prints all 30 builder URLs for spot checks after deploy. `scripts/workflow-www-api-smoke.ps1` reports whether production APIs still return **404** (pre-deploy) vs **401/403** (routes live). Signed-in `installed` sweep: `scripts/workflow-www-settings-queries.ps1` (includes `receipt-email?key=` and `phone-text?kind=`).
 
 ## Completion audit snapshot (November 9, 2026)
 
 | Requirement | Evidence | Status |
 | --- | --- | --- |
-| 30 system workflows in shared builder | `SYSTEM_WORKFLOWS`, Automations tab lists **30** system-managed links (local 834px light/dark); builders QA’d | **Done locally**; not on `www` |
-| Restore defaults | Settings `PATCH` + route tests (`restoreDefault` / `copy === null`) | **Tested**; production save unverified |
-| Contacts / history | `SystemWorkflowContacts`, contacts route tests (49) | **Tested** |
-| Elena attribution + safe links | Lookup, permissions, chat/voice delegation tests (90+ batch) | **Tested**; live chat unverified |
-| Inventory + non-builder paths | `workflow-message-inventory.md` + `workflow-inventory-paths` test | **Paths verified in repo**; runtime traces incomplete |
-| Queue vs future copy | Builder save feedback strings; inventory matrix | **Implemented**; not prod-tested |
-| Supabase copy schema | Remote head `luxor_agreement_package_copy_settings`; **35** workflow migrations in scoped commit (`luxor_system_message_templates` through `luxor_agreement_package_copy_settings`) | **DB applied**; SQL still needs repo commit |
-| Deployed app | `origin/main` `02f5c2bc`, APIs **404**, invalid `system-*` URL | **Blocked on push** |
-| Workflow-only staging | `workflow-release-scoping.ps1`, **282** paths, `npm run workflow-pre-push` green | **Ready locally**; no commit yet |
-| Responsive / dark QA | 390px mobile + 834px + portal dark (`luxor-portal-theme`) on `system-inquiry-confirmation`; automations list at 834px | **Partial** (local); www after deploy |
-| Capability parity (AI / tour_attended) | Architect readiness + tour orchestration tests | **Partial**; gated where documented |
+| 30 system workflows in shared builder | **www** Automations lists **30** system-managed links (`07ac774a`); local QA retained | **Done on www** (library) |
+| Restore defaults | Settings `PATCH` + route tests (`restoreDefault` / `copy === null`) | **Tested**; www **Load original message** + queued-vs-future copy present; UI restore = default body + save with `revision` (bare `restoreDefault` without `revision` returns 400 by design) |
+| Contacts / history | `SystemWorkflowContacts`, contacts route tests (49) | **www verified** — inquiry **18** jobs; agreement package **2**; calendar **3** (manual invoice **0** on page 1) |
+| Elena attribution + safe links | Lookup, permissions, chat/voice delegation tests (90+ batch) | **www chat verified**; voice **route** live (auth POST → **502** OpenAI handshake); spoken `find_message_workflow` journey unverified |
+| Inventory + non-builder paths | `workflow-message-inventory.md` + `workflow-inventory-paths` test | **Paths + lookup rules** — `message-workflow-lookup.test.cjs` (31) covers non-builder `inquiry_notification` and origin splits; live send traces still incomplete |
+| Queue vs future copy | Builder save feedback strings; inventory matrix | **Implemented**; `system-text-queue` + `inquiry-system-message` tests green; prod queue mutations not exercised |
+| Supabase copy schema | Remote head `luxor_agreement_package_copy_settings`; **35** workflow migrations in scoped commit (`luxor_system_message_templates` through `luxor_agreement_package_copy_settings`) | **DB applied**; shipped in `07ac774a` on `origin/main` |
+| Deployed app | `origin/main` `07ac774a`, APIs **401** on all 30 routes | **Shipped**; signed-in sweep **28/29** settings GETs return `canEdit: true` (`receipt-email` needs `?key=`); voice + non-builder runtime traces open |
+| Workflow-only staging | n/a (pushed) | **Done** |
+| Responsive / dark QA | 390px mobile + 834px + portal dark (`luxor-portal-theme`) on `system-inquiry-confirmation`; automations list at 834px | **www verified** — 390px calendar + **390px dark** inquiry (`data-portal-theme=dark` via Settings → Branding); 834px + desktop dark; theme back to **light** after QA |
+| Capability parity (AI / tour_attended) | Architect readiness + tour orchestration tests | **Partial** — www `GET /api/marketing/custom-workflows` lists `tour_attended` in `connectedTriggers`; prod RPCs present; enrollment UI not smoke-tested |
 
-Goal stays **open** until production deploy and post-release QA in step 5–6 pass with evidence.
+Project **closes** when the acceptance checklist below is checked off (or defects are filed and fixed).
 
-## Arianna UAT (after www deploy, light mode first)
+## QA acceptance checklist (www, light mode first)
 
-1. Marketing → Automations → expand **System-managed workflows**; open **Inquiry confirmation text** — trigger, contacts, message field; **Restore default** and save one small copy change; confirm queued-vs-future note.
-2. Open **Event Agreement package** and **Calendar cancellation and updates** — multi-step save; contacts show history when present.
-3. Phone **Missed-call reply** — confirm STOP/consent copy; toggle only if production editing is enabled.
-4. Elena: paste a distinctive phrase from a recent customer text or email subject → **find message workflow** → safe link opens the right builder (no external URLs).
-5. Repeat step 1 in **dark mode** on phone-width layout.
+Use [https://www.luxoratlaspalmas.com/portal/marketing?tab=automations](https://www.luxoratlaspalmas.com/portal/marketing?tab=automations). Helpers: `scripts/workflow-www-qa-urls.ps1` (all builder links), `scripts/workflow-www-settings-queries.ps1` (optional DevTools `installed` sweep).
+
+### Required (sign-off)
+
+- [ ] **Library** — System-managed workflows shows **30** entries; each link opens a builder (no 404).
+- [ ] **Inquiry confirmation text** — Trigger copy, contacts/history, message field; **Load original message** → small edit → **Save changes** → load original again → save; read queued-vs-future note.
+- [ ] **Event Agreement package** — Multi-step lane; **Customize copy**; save one field if comfortable (or confirm read-only protected fields are labeled).
+- [ ] **Calendar cancellation and updates** — Two steps; save feedback; contacts if any rows exist.
+- [ ] **Missed-call reply** — STOP/consent trigger text; do not toggle automation off/on unless intentional.
+- [ ] **Elena chat** — Paste a phrase from a recent inquiry confirmation text → workflow card → link stays on `luxoratlaspalmas.com` and opens the right builder.
+- [ ] **Themes** — Light pass on desktop; **Settings → Branding → Light/Dark** (or account **Appearance** on desktop); quick phone-width check on one builder.
+
+### Optional (nice to have before “fully verified”)
+
+- [ ] **Elena voice** — Ask which workflow sent a known text; confirm on-screen workflow card (if voice fails to start, note OpenAI/voice config — not a workflow-builder bug).
+- [ ] **Spot tour** — Open 5 more system workflows from the list (your highest-volume messages); confirm triggers and contacts panels load.
+- [ ] **Custom workflow** — Create Workflow → confirm **Tour was completed** (`tour_attended`) appears as a trigger (connected on production).
+- [ ] **Elena negative** — Ask about an internal staff alert subject; Elena should **not** invent a customer workflow link.
+
+### Out of scope for UAT (engineers only unless Lewis authorizes)
+
+- Live SMS/email sends, queue cancellation drills, STOP keyword tests on real numbers.
+- Editing production copy you do not intend to keep (use load-original + save to revert).
 
 ## Useful entry points
 
