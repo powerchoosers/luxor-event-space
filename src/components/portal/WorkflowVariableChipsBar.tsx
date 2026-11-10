@@ -7,9 +7,11 @@ import { DYNAMIC_VARIABLE_CHIPS } from '@/lib/luxorCustomWorkflowDefinition'
 export interface WorkflowVariableChipsBarProps {
   onInsert: (token: string) => void
   className?: string
+  tokens?: readonly string[]
+  disabled?: boolean
 }
 
-export function WorkflowVariableChipsBar({ onInsert, className = '' }: WorkflowVariableChipsBarProps) {
+export function WorkflowVariableChipsBar({ onInsert, className = '', tokens, disabled = false }: WorkflowVariableChipsBarProps) {
   return (
     <div className={`space-y-1.5 ${className}`}>
       <div className="flex items-center justify-between">
@@ -21,14 +23,15 @@ export function WorkflowVariableChipsBar({ onInsert, className = '' }: WorkflowV
         </span>
       </div>
       <div className="-mx-1 flex flex-wrap gap-1.5 px-1">
-        {DYNAMIC_VARIABLE_CHIPS.map((chip) => (
+        {DYNAMIC_VARIABLE_CHIPS.filter((chip) => !tokens || tokens.includes(chip.token)).map((chip) => (
           <button
             key={chip.token}
             type="button"
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => onInsert(chip.token)}
+            disabled={disabled}
             title={`Preview: ${chip.preview}`}
-            className="group inline-flex !min-h-9 items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-0 text-[11px] font-medium text-[color:var(--portal-text)] transition hover:border-[#caa24c]/60 hover:bg-[#caa24c]/10 hover:text-[#8c6424] dark:hover:text-[#f1d27a] sm:!min-h-0 sm:py-1"
+            className="group inline-flex !min-h-9 items-center gap-1 rounded-lg border border-[color:var(--portal-border)] bg-[color:var(--portal-card)] px-2 py-0 text-[11px] font-medium text-[color:var(--portal-text)] transition hover:border-[#caa24c]/60 hover:bg-[#caa24c]/10 hover:text-[#8c6424] dark:hover:text-[#f1d27a] disabled:cursor-not-allowed disabled:opacity-45 sm:!min-h-0 sm:py-1"
           >
             <Plus size={10} className="text-[#a8792f] transition group-hover:scale-125" />
             <span>{chip.label}</span>
