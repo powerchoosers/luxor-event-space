@@ -32,7 +32,7 @@ type PhoneCall = { id: string; twilio_call_sid: string; metadata: Record<string,
 type IncomingVoiceEvent = { id: string; type: string; created_at: number; data: { type: string; session_id: string; sip_headers: Array<{ name: string; value: string }> } }
 class PhoneActionError extends Error {}
 export class ElenaPhoneTestDiagnosticError extends Error {
-  constructor(readonly diagnostic: 'invalid_incoming_event' | 'twilio_number_lookup_failed' | 'test_number_not_bound' | 'public_number_guard' | 'twilio_call_sid_missing' | 'twilio_call_lookup_failed' | 'twilio_call_mismatch' | 'openai_acceptance_rejected', readonly providerStatus?: number, readonly providerCode?: number) {
+  constructor(readonly diagnostic: 'invalid_incoming_event' | 'twilio_number_lookup_failed' | 'test_number_not_bound' | 'public_number_guard' | 'twilio_call_sid_missing' | 'twilio_call_lookup_failed' | 'twilio_call_mismatch' | 'openai_acceptance_rejected', readonly providerStatus?: number, readonly providerCode?: number | 'not_found' | 'session_not_found' | 'invalid_request_error' | 'decision_already_made') {
     super(diagnostic)
   }
 }
@@ -214,29 +214,29 @@ export async function acceptElenaPhoneTestEvent(raw: unknown): Promise<PhoneAcce
   const sidHeaders = event.data.sip_headers.filter((header) => header.name.toLowerCase() === 'x-twilio-callsid')
   const callSid = sidHeaders.length === 1 ? sidHeaders[0].value.trim() : ''
   if (!/^CA[0-9a-f]{32}$/i.test(callSid)) throw new ElenaPhoneTestDiagnosticError('twilio_call_sid_missing')
-  const prior = await readCall(callSid)
-  if (prior) {
-    if (prior?.metadata.scope === SCOPE && prior.metadata.openai_session_id === sessionId && prior.metadata.accepted === true) return { duplicate: true }
-    if (prior.metadata.scope !== SCOPE || prior.metadata.openai_session_id !== sessionId) throw new ElenaPhoneTestDiagnosticError('twilio_call_mismatch')
-  }
-
-  let owned: Awaited<ReturnType<typeof ownedTestNumber>>
-  try { owned = await ownedTestNumber() } catch (error) {
-    if (error instanceof ElenaPhoneTestDiagnosticError) throw error
-    throw new ElenaPhoneTestDiagnosticError('twilio_number_lookup_failed')
-  }
+  // Accept immediately after validating the signed OpenAI event. Slow Twilio/Supabase
+  // ownership checks can outlive the short incoming SIP setup window. The session
+  // remains silent and its tools stay locked until those checks pass below.
+  const config = phoneConfig()
   const claim: PhoneToken = { kind: 'call', sessionId, callSid, exp: Math.floor(Date.now() / 1000) + 1200 }
+  const voice = await getElenaPhoneTestVoice()
   const response = await fetch(`https://api.openai.com/v1/live/sessions/${encodeURIComponent(sessionId)}/accept`, {
-    method: 'POST', headers: { Authorization: `Bearer ${owned.config.apiKey}`, 'OpenAI-Project': owned.config.projectId, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session: { type: 'live', model: 'gpt-live-1', store: false, instructions: `${PHONE_VERIFICATION_HOLD}\n\n${await buildElenaVoiceInstructions('phone')}`, audio: { output: { voice: await getElenaPhoneTestVoice() } }, delegation: { type: 'responses', responses: { model: process.env.LUXOR_ELENA_PHONE_BACKEND_MODEL || 'gpt-6-luna', instructions: backendInstructions, parallel_tool_calls: false, tools: [{ type: 'mcp', server_label: 'luxor_phone_test', server_url: `${PUBLIC_BASE}/api/elena-phone-test/mcp`, authorization: signElenaPhoneToken(claim, owned.config.webhookSecret), require_approval: 'never', allowed_tools: PHONE_TOOLS.map((tool) => tool.name) }] } } } }),
+    method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}`, 'OpenAI-Project': config.projectId, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session: { type: 'live', model: 'gpt-live-1', store: false, instructions: PHONE_VERIFICATION_HOLD, audio: { output: { voice } }, delegation: { type: 'responses', responses: { model: process.env.LUXOR_ELENA_PHONE_BACKEND_MODEL || 'gpt-6-luna', instructions: backendInstructions, parallel_tool_calls: false, tools: [{ type: 'mcp', server_label: 'luxor_phone_test', server_url: `${PUBLIC_BASE}/api/elena-phone-test/mcp`, authorization: signElenaPhoneToken(claim, config.webhookSecret), require_approval: 'never', allowed_tools: PHONE_TOOLS.map((tool) => tool.name) }] } } } }),
     signal: AbortSignal.timeout(25_000), cache: 'no-store',
   })
   if (!response.ok) {
     const payload = await response.json().catch(() => ({})) as { error?: { code?: string } }
-    if (payload.error?.code !== 'decision_already_made') throw new ElenaPhoneTestDiagnosticError('openai_acceptance_rejected', response.status)
+    const safeCodes = ['not_found', 'session_not_found', 'invalid_request_error', 'decision_already_made'] as const
+    const providerCode = safeCodes.find((code) => payload.error?.code === code)
+    if (providerCode !== 'decision_already_made') throw new ElenaPhoneTestDiagnosticError('openai_acceptance_rejected', response.status, providerCode)
   }
   try {
     // Acceptance establishes the SIP leg. Then Twilio's call resource can be verified and recorded before speech/tools unlock.
+    const owned = await ownedTestNumber()
+    const prior = await readCall(callSid)
+    if (prior?.metadata.scope === SCOPE && prior.metadata.openai_session_id === sessionId && prior.metadata.accepted === true) return { duplicate: true }
+    if (prior && (prior.metadata.scope !== SCOPE || prior.metadata.openai_session_id !== sessionId)) throw new ElenaPhoneTestDiagnosticError('twilio_call_mismatch')
     return await persistVerifiedPhoneCall(callSid, event, sessionId, owned)
   } catch (error) {
     await hangupUnverifiedPhoneSession(sessionId)
@@ -247,6 +247,7 @@ export async function acceptElenaPhoneTestEvent(raw: unknown): Promise<PhoneAcce
 /** Short-lived control connection for the opening only. Hosted MCP owns ongoing tool execution. */
 export async function greetElenaPhoneTest(sessionId: string, callSid: string) {
   const config = phoneConfig()
+  const instructions = await buildElenaVoiceInstructions('phone')
   const row = await verifiedSession({ kind: 'call', sessionId, callSid, exp: 0 })
   const [claimed] = await patchCall(row, { greeting_requested: true }, '&metadata->>greeting_requested=is.null')
   if (!claimed) return
@@ -266,7 +267,7 @@ export async function greetElenaPhoneTest(sessionId: string, callSid: string) {
     }
     const timer = setTimeout(finish, 10_000)
     socket.on('open', () => {
-      socket.send(JSON.stringify({ type: 'session.instructions.append', event_id: randomUUID(), delegation_id: null, content: 'Trusted verification is complete for this call. You may now speak and use the approved Luxor phone-test tools. Start with the next system greeting.' }))
+      socket.send(JSON.stringify({ type: 'session.instructions.append', event_id: randomUUID(), delegation_id: null, content: `Trusted verification is complete for this call. You may now speak and use the approved Luxor phone-test tools. Start with the next system greeting.\n\n${instructions}` }))
       socket.send(JSON.stringify({ type: 'session.commentary.append', event_id: randomUUID(), delegation_id: null, content: PHONE_GREETING }))
     })
     socket.on('message', (bytes) => {
