@@ -399,7 +399,12 @@ export async function queueInquiryTextJobs(inquiry: LuxorInquiry) {
       name: inquiry.full_name,
       inquiryId: inquiry.id,
       automationKey: `inquiry_confirmation:${inquiry.id}`,
-      body: renderInquiryConfirmation(template.body, { fullName: inquiry.full_name, eventType: inquiry.event_type }),
+      body: renderInquiryConfirmation(template.body, {
+        fullName: inquiry.full_name,
+        eventType: inquiry.event_type,
+        guestCount: inquiry.guest_count,
+        targetDate: inquiry.target_date,
+      }),
       metadata: template.unavailable ? { copy_settings_unavailable: true } : undefined,
     }))
   }

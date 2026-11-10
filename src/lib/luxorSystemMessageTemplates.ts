@@ -1,4 +1,18 @@
 export const INQUIRY_CONFIRMATION_DEFAULT = 'Hi {{first_name}}, we received your {{event_type}} inquiry and will follow up with availability and next steps.'
+export const INQUIRY_CONFIRMATION_VARIABLES = /\{\{(first_name|full_name|event_type|guest_count|target_date)\}\}/g
+export const INQUIRY_CONFIRMATION_CHIP_TOKENS = ['{{first_name}}', '{{full_name}}', '{{event_type}}', '{{guest_count}}', '{{target_date}}'] as const
+
+function formatInquiryTargetDate(value: string | null | undefined) {
+  if (!value) return 'your requested date'
+  const parsed = new Date(`${value}T12:00:00`)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed)
+}
+
+function inquiryGuestCountLabel(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return 'your group'
+  return String(value)
+}
 export const SYSTEM_TEXT_PREFIX = 'Luxor Event Space: '
 export const SYSTEM_TEXT_FOOTER = 'Reply STOP to opt out.'
 export const PAYMENT_CONFIRMATION_DEFAULT = 'Hi {{first_name}}, we received your payment of {{amount}}. Thank you. Reply with any questions.'
@@ -87,14 +101,29 @@ export function validateInquiryConfirmationTemplate(value: unknown) {
   if (typeof value !== 'string') throw new Error('Enter the inquiry confirmation message.')
   const body = value.trim()
   if (!body || body.length > 300) throw new Error('Keep the message between 1 and 300 characters.')
-  const stripped = body.replace(/\{\{(?:first_name|event_type)\}\}/g, '')
-  if (stripped.includes('{{') || stripped.includes('}}')) throw new Error('Use only {{first_name}} and {{event_type}} as variables.')
+  const stripped = body.replace(INQUIRY_CONFIRMATION_VARIABLES, '')
+  if (stripped.includes('{{') || stripped.includes('}}')) throw new Error('Use only the listed inquiry confirmation variables.')
   return body
 }
 
-export function renderInquiryConfirmation(template: string, input: { fullName: string; eventType: string | null | undefined }) {
+export function renderInquiryConfirmation(
+  template: string,
+  input: {
+    fullName: string
+    eventType: string | null | undefined
+    guestCount?: number | null
+    targetDate?: string | null
+  },
+) {
   const body = validateInquiryConfirmationTemplate(template)
-  const name = input.fullName.trim().split(/\s+/)[0] || 'there'
-  const rendered = body.replace(/\{\{(first_name|event_type)\}\}/g, (_, key: string) => key === 'first_name' ? name : input.eventType || 'event')
+  const trimmedName = input.fullName.trim()
+  const values: Record<string, string> = {
+    first_name: trimmedName ? trimmedName.split(/\s+/)[0] || 'there' : 'there',
+    full_name: trimmedName || 'Guest',
+    event_type: input.eventType || 'event',
+    guest_count: inquiryGuestCountLabel(input.guestCount),
+    target_date: formatInquiryTargetDate(input.targetDate),
+  }
+  const rendered = body.replace(INQUIRY_CONFIRMATION_VARIABLES, (_, key: string) => values[key])
   return `${SYSTEM_TEXT_PREFIX}${rendered} ${SYSTEM_TEXT_FOOTER}`
 }

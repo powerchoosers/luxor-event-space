@@ -28,6 +28,22 @@ test('rejects unsupported variables and empty or oversized content', () => {
   assert.throws(() => model.validateInquiryConfirmationTemplate('x'.repeat(301)))
   assert.match(model.renderInquiryConfirmation('Hello {{first_name}}', { fullName: 'Guest', eventType: null }), /^Luxor Event Space: Hello Guest Reply STOP to opt out\.$/)
 })
+test('inquiry confirmation supports guest count, target date, and full name', () => {
+  const body = 'Hi {{full_name}}, thanks for your {{event_type}} inquiry for {{guest_count}} on {{target_date}}.'
+  assert.match(
+    model.renderInquiryConfirmation(body, {
+      fullName: 'Sarah Jenkins',
+      eventType: 'Quinceañera',
+      guestCount: 120,
+      targetDate: '2026-10-24',
+    }),
+    /Sarah Jenkins.*Quinceañera.*120.*Oct 24, 2026/,
+  )
+  assert.match(
+    model.renderInquiryConfirmation(body, { fullName: 'Guest', eventType: null, guestCount: null, targetDate: null }),
+    /your group.*your requested date/,
+  )
+})
 test('payment confirmation preserves the existing copy and requires the amount', () => {
   assert.equal(model.renderPaymentConfirmation(model.PAYMENT_CONFIRMATION_DEFAULT, { name: 'Sarah Jenkins', amount: '$125.00' }), 'Luxor Event Space: Hi Sarah, we received your payment of $125.00. Thank you. Reply with any questions. Reply STOP to opt out.')
   assert.throws(() => model.validatePaymentConfirmationTemplate('Thank you {{first_name}}'), /amount/)

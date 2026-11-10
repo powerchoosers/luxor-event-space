@@ -25,7 +25,18 @@ export async function GET() {
   try {
     await authorize()
     const { template, installed } = await readInquiryConfirmationTemplate()
-    return NextResponse.json({ template, installed, canEdit: installed && canControlLiveLuxorAutomations(), defaultBody: INQUIRY_CONFIRMATION_DEFAULT, preview: renderInquiryConfirmation(template.body_template, { fullName: 'Sample guest', eventType: 'celebration' }) }, { headers })
+    return NextResponse.json({
+      template,
+      installed,
+      canEdit: installed && canControlLiveLuxorAutomations(),
+      defaultBody: INQUIRY_CONFIRMATION_DEFAULT,
+      preview: renderInquiryConfirmation(template.body_template, {
+        fullName: 'Sarah Jenkins',
+        eventType: 'Wedding Reception',
+        guestCount: 150,
+        targetDate: '2026-10-24',
+      }),
+    }, { headers })
   } catch (error) { return errorResponse(error) }
 }
 export async function PATCH(request: NextRequest) {
